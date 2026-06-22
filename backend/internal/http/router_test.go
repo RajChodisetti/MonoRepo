@@ -78,6 +78,51 @@ func TestRecoveryReturnsSafeInternalError(t *testing.T) {
 	}
 }
 
+func TestHealthzForbiddenForNonDeveloperRole(t *testing.T) {
+	router := testRouterWithRole(t, fakeReadiness{}, "admin")
+
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusForbidden, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "You are not a developer") {
+		t.Fatalf("body = %s, want not developer message", rec.Body.String())
+	}
+}
+
+func TestReadyzForbiddenForNonDeveloperRole(t *testing.T) {
+	router := testRouterWithRole(t, fakeReadiness{}, "user")
+
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusForbidden, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "You are not a developer") {
+		t.Fatalf("body = %s, want not developer message", rec.Body.String())
+	}
+}
+
+func testRouterWithRole(t *testing.T, readiness fakeReadiness, role string) http.Handler {
+	t.Helper()
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load() error = %v", err)
+	}
+	cfg.App.Env = config.EnvTest
+	cfg.App.Role = role
+	cfg.Logging.Format = "text"
+	cfg.Logging.Level = "error"
+
+	return NewRouter(logger.NewWithWriter(cfg.Logging, io.Discard), readiness, cfg)
+}
+
 func testRouter(t *testing.T, readiness fakeReadiness) http.Handler {
 	t.Helper()
 
@@ -86,6 +131,7 @@ func testRouter(t *testing.T, readiness fakeReadiness) http.Handler {
 		t.Fatalf("config.Load() error = %v", err)
 	}
 	cfg.App.Env = config.EnvTest
+	cfg.App.Role = "developer"
 	cfg.Logging.Format = "text"
 	cfg.Logging.Level = "error"
 

@@ -18,7 +18,7 @@ type ReadinessChecker interface {
 func NewRouter(log *slog.Logger, readiness ReadinessChecker, cfg config.Config) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthz(cfg))
-	mux.HandleFunc("GET /readyz", readyz(readiness))
+	mux.HandleFunc("GET /readyz", readyz(readiness, cfg))
 
 	var handler http.Handler = mux
 	handler = Recovery(log)(handler)
@@ -31,6 +31,10 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, cfg config.Config) 
 
 func healthz(cfg config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if !allowHealthEndpoints(cfg, w) {
+			return
+		}
+
 		writeJSON(w, http.StatusOK, map[string]any{
 			"status":  "ok",
 			"service": cfg.App.Name,
@@ -40,8 +44,12 @@ func healthz(cfg config.Config) http.HandlerFunc {
 	}
 }
 
-func readyz(readiness ReadinessChecker) http.HandlerFunc {
+func readyz(readiness ReadinessChecker, cfg config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if !allowHealthEndpoints(cfg, w) {
+			return
+		}
+
 		if readiness == nil {
 			writeError(w, http.StatusServiceUnavailable, "database_not_configured", "Database readiness is not configured.")
 			return

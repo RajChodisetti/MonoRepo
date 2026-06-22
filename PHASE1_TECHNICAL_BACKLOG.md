@@ -8,18 +8,20 @@
 
 ## 1. Epic Summary
 
-| Epic | Name | Priority | Main Owner |
-|---|---|---:|---|
-| P1-E01 | Backend Foundation and Infrastructure | Critical | Dev 1 |
-| P1-E02 | Auth, Roles, and Tenant Safety | Critical | Dev 1 |
-| P1-E03 | Restaurant, Profile, and Menu Management | Critical | Dev 1 |
-| P1-E04 | Demo Website Generator | Critical | Dev 1 |
-| P1-E05 | Reservation System | Critical | Dev 1 |
-| P1-E06 | Email Outreach and Tracking | Critical | Dev 2 |
-| P1-E07 | Analytics and Funnel Metrics | High | Dev 2 |
-| P1-E08 | AI Receptionist MVP | High | Dev 2 |
-| P1-E09 | Content Automation MVP | Medium | Dev 2 |
-| P1-E10 | Dashboards, QA, Deployment, and Runbook | High | Dev 1 + Dev 2 |
+
+| Epic   | Name                                     | Priority | Main Owner    |
+| ------ | ---------------------------------------- | -------- | ------------- |
+| P1-E01 | Backend Foundation and Infrastructure    | Critical | Dev 1         |
+| P1-E02 | Auth, Roles, and Tenant Safety           | Critical | Dev 1         |
+| P1-E03 | Restaurant, Profile, and Menu Management | Critical | Dev 1         |
+| P1-E04 | Demo Website Generator                   | Critical | Dev 1         |
+| P1-E05 | Reservation System                       | Critical | Dev 1         |
+| P1-E06 | Email Outreach and Tracking              | Critical | Dev 2         |
+| P1-E07 | Analytics and Funnel Metrics             | High     | Dev 2         |
+| P1-E08 | AI Receptionist MVP                      | High     | Dev 2         |
+| P1-E09 | Content Automation MVP                   | Medium   | Dev 2         |
+| P1-E10 | Dashboards, QA, Deployment, and Runbook  | High     | Dev 1 + Dev 2 |
+
 
 ---
 
@@ -87,9 +89,9 @@ Every ticket must satisfy these unless explicitly not applicable:
 
 **Story:** As a developer, I need a reliable database layer so domain repositories can query PostgreSQL safely.
 
-**Acceptance criteria:**
+**Acceptance criteria:**   
 
-- DB connection pool is initialized once.
+-  DB connection pool is initialized once.
 - Health check verifies database connection.
 - Repository pattern or generated SQL pattern is established.
 - Tests can run with a test database or mocked repository.

@@ -11,12 +11,14 @@ import (
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/config"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/db"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/logger"
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/store"
 )
 
 type WorkerApp struct {
 	cfg    config.Config
 	log    *slog.Logger
 	db     *db.DB
+	store  *store.Store
 	queue  *jobs.InMemoryQueue
 	worker *jobs.Worker
 }
@@ -28,8 +30,14 @@ func NewWorker(ctx context.Context) (*WorkerApp, error) {
 	}
 
 	log := logger.New(cfg.Logging)
-	database, err := db.Connect(ctx, cfg.Database)
+	database, err := db.ConnectRequiredLogged(ctx, log, cfg.Database, databaseReadyTimeout)
 	if err != nil {
+		return nil, err
+	}
+
+	dataStore := store.New(database)
+	if err := dataStore.VerifyStartup(ctx); err != nil {
+		db.CloseLogged(ctx, log, database)
 		return nil, err
 	}
 
@@ -43,6 +51,7 @@ func NewWorker(ctx context.Context) (*WorkerApp, error) {
 		cfg:    cfg,
 		log:    log,
 		db:     database,
+		store:  dataStore,
 		queue:  queue,
 		worker: worker,
 	}, nil
@@ -62,7 +71,7 @@ func (w *WorkerApp) Run(ctx context.Context) error {
 
 	w.log.InfoContext(ctx, "worker_starting", "env", w.cfg.App.Env)
 	err = w.worker.Run(ctx)
-	w.db.Close()
+	db.CloseLogged(ctx, w.log, w.db)
 	if errors.Is(err, context.Canceled) {
 		w.log.InfoContext(ctx, "worker_stopped")
 		return nil

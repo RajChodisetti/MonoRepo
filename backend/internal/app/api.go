@@ -2,24 +2,27 @@ package app
 
 import (
 	"context"
-	"errors"
 	"log/slog"
-	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/adaptor"
 	httpapi "github.com/rajchodisetti/restaurant-platform/backend/internal/http"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/config"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/db"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/logger"
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/store"
 )
 
 type API struct {
-	cfg    config.Config
-	log    *slog.Logger
-	db     *db.DB
-	server *http.Server
+	cfg      config.Config
+	log      *slog.Logger
+	database *db.DB
+	store    *store.Store
+	fiberApp *fiber.App
 }
 
 func NewAPI(ctx context.Context) (*API, error) {
@@ -29,52 +32,58 @@ func NewAPI(ctx context.Context) (*API, error) {
 	}
 
 	log := logger.New(cfg.Logging)
-	database, err := db.Connect(ctx, cfg.Database)
+	database, err := db.ConnectRequiredLogged(ctx, log, cfg.Database, databaseReadyTimeout)
 	if err != nil {
 		return nil, err
 	}
 
-	router := httpapi.NewRouter(log, database, cfg)
-	server := &http.Server{
-		Addr:              cfg.HTTP.Addr,
-		Handler:           router,
-		ReadHeaderTimeout: 5 * time.Second,
+	dataStore := store.New(database)
+	if err := dataStore.VerifyStartup(ctx); err != nil {
+		db.CloseLogged(ctx, log, database)
+		return nil, err
 	}
 
+	router := httpapi.NewRouter(log, database, cfg)
+	fiberApp := fiber.New()
+	fiberApp.Use(adaptor.HTTPHandler(router))
+
 	return &API{
-		cfg:    cfg,
-		log:    log,
-		db:     database,
-		server: server,
+		cfg:      cfg,
+		log:      log,
+		database: database,
+		store:    dataStore,
+		fiberApp: fiberApp,
 	}, nil
 }
 
-func (a *API) Run(ctx context.Context) error {
-	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-
-	errs := make(chan error, 1)
+func (api *API) Run(ctx context.Context) error {
+	listenErr := make(chan error, 1)
 	go func() {
-		a.log.InfoContext(ctx, "api_starting", "addr", a.cfg.HTTP.Addr, "env", a.cfg.App.Env)
-		errs <- a.server.ListenAndServe()
+		api.log.InfoContext(ctx, "api_starting", "addr", api.cfg.HTTP.Addr, "env", api.cfg.App.Env)
+		listenErr <- api.fiberApp.Listen(api.cfg.HTTP.Addr)
 	}()
 
+	shutdownSignals := make(chan os.Signal, 1)
+	signal.Notify(shutdownSignals, os.Interrupt, syscall.SIGTERM)
+
 	select {
-	case <-ctx.Done():
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if err := a.server.Shutdown(shutdownCtx); err != nil {
-			a.log.ErrorContext(ctx, "api_shutdown_failed", "error", err)
-			return err
-		}
-		a.db.Close()
-		a.log.InfoContext(ctx, "api_stopped")
-		return nil
-	case err := <-errs:
-		a.db.Close()
-		if errors.Is(err, http.ErrServerClosed) {
-			return nil
-		}
+	case sig := <-shutdownSignals:
+		api.log.InfoContext(ctx, "api_shutting_down", "signal", sig.String())
+	case err := <-listenErr:
+		db.CloseLogged(ctx, api.log, api.database)
 		return err
 	}
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := api.fiberApp.ShutdownWithContext(shutdownCtx); err != nil {
+		api.log.ErrorContext(ctx, "api_shutdown_failed", "error", err)
+		db.CloseLogged(ctx, api.log, api.database)
+		return err
+	}
+
+	db.CloseLogged(ctx, api.log, api.database)
+	api.log.InfoContext(ctx, "api_stopped")
+	return nil
 }

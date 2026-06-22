@@ -72,3 +72,35 @@ discipline and handoff quality for every subsequent epic.
 
 **Risks / Follow-ups:** Future agents must keep `docs/SESSION_SUMMARY.md`
 concise and overwritten, while keeping this file as the detailed running log.
+
+## 2026-06-22 — P1-E01 Foundation Completion + Auth Prep
+
+**Role:** Backend Agent
+
+**Delivered:** Completed P1-001 through P1-005 and early P1-E02 prep. Fiber API
+with graceful shutdown; strict typed config (`env.go`); Docker Compose for
+PostgreSQL 16; migrations 000001 (foundation) and 000002 (users); repository
+pattern for metadata and users with Postgres + Mock implementations; `store`
+package with startup verification; required DB connect before API/worker start;
+`APP_ROLE` gating on health endpoints; aligned `.env.example` and `backend/.env`;
+work log at `docs/work-log/2026-06-22-backend-foundation-session.md`; README
+command updates.
+
+**Why:** The sales MVP needs a reliable, testable backend base before auth,
+restaurant CRUD, demos, reservations, outreach, and AI workflows can be built.
+Each P1-E01 ticket unblocks the next layer of product work.
+
+**Business Value:** Developers can run `make dev` and get a working API against
+real PostgreSQL with migrations, health checks, structured logging, and a clean
+path to add domain APIs. Reduces integration risk for the lead-to-demo loop.
+
+**Plan Fit:** Finishes Phase 1 build-order items 1–5 (foundation through HTTP
+layer). Unblocks P1-007 login, P1-008 auth middleware, and P1-E03 restaurant
+CRUD.
+
+**Checks Run:** `make test`, `go test ./backend/...`, `make migrate-up`,
+`make api` smoke with `/healthz` and `/readyz`.
+
+**Risks / Follow-ups:** No Postgres integration tests for repositories yet
+(mocks only). P1-006 durable jobs not wired to `job_runs` table. Login API and
+JWT/session still pending. `APP_ROLE` is a dev gate, not production RBAC.

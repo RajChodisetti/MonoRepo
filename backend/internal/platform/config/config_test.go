@@ -22,7 +22,7 @@ func TestLoadUsesSafeLocalDefaults(t *testing.T) {
 	if cfg.Token.Secret == "" {
 		t.Fatal("Token.Secret is empty")
 	}
-	if cfg.Email.Provider != "disabled" {
+	if cfg.Email.Provider != providerDisabled {
 		t.Fatalf("Email.Provider = %q, want disabled", cfg.Email.Provider)
 	}
 }
@@ -31,7 +31,8 @@ func TestLoadProductionRequiresDatabaseAndExplicitToken(t *testing.T) {
 	clearEnv(t)
 	t.Setenv("APP_ENV", EnvProduction)
 	t.Setenv("DATABASE_URL", "")
-	t.Setenv("TOKEN_SECRET", "local-dev-token-secret-change-me-32chars")
+	t.Setenv("REDIS_URL", "")
+	t.Setenv("TOKEN_SECRET", localDevToken)
 
 	_, err := Load()
 	if err == nil {
@@ -39,7 +40,176 @@ func TestLoadProductionRequiresDatabaseAndExplicitToken(t *testing.T) {
 	}
 
 	msg := err.Error()
-	for _, want := range []string{"DATABASE_URL", "TOKEN_SECRET"} {
+	for _, want := range []string{"DATABASE_URL", "TOKEN_SECRET", "REDIS_URL"} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("Load() error = %q, want it to contain %q", msg, want)
+		}
+	}
+}
+
+func TestLoadStagingRequiresExplicitSecrets(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("APP_ENV", EnvStaging)
+	t.Setenv("DATABASE_URL", "")
+	t.Setenv("REDIS_URL", "")
+	t.Setenv("TOKEN_SECRET", localDevToken)
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() error = nil, want validation error")
+	}
+
+	msg := err.Error()
+	for _, want := range []string{"DATABASE_URL", "TOKEN_SECRET", "REDIS_URL"} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("Load() error = %q, want it to contain %q", msg, want)
+		}
+	}
+}
+
+func TestHTTPLoadPortFromEnv(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("HTTP_ADDR", "")
+	t.Setenv("HTTP_PORT", "9090")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.HTTP.Addr != ":9090" {
+		t.Fatalf("HTTP.Addr = %q, want %q", cfg.HTTP.Addr, ":9090")
+	}
+}
+
+func TestHTTPLoadAddrFromEnv(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("HTTP_ADDR", ":3001")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.HTTP.Addr != ":3001" {
+		t.Fatalf("HTTP.Addr = %q, want %q", cfg.HTTP.Addr, ":3001")
+	}
+}
+
+func TestLoadRejectsMalformedInteger(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("DATABASE_MAX_CONNS", "not-a-number")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() error = nil, want parse error")
+	}
+	if !strings.Contains(err.Error(), "DATABASE_MAX_CONNS must be a valid integer") {
+		t.Fatalf("Load() error = %q, want DATABASE_MAX_CONNS parse error", err.Error())
+	}
+}
+
+func TestLoadRejectsMalformedDuration(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("JOB_RETRY_DELAY", "soon")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() error = nil, want parse error")
+	}
+	if !strings.Contains(err.Error(), "JOB_RETRY_DELAY must be a valid duration") {
+		t.Fatalf("Load() error = %q, want JOB_RETRY_DELAY parse error", err.Error())
+	}
+}
+
+func TestLoadRejectsMalformedBoolean(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("EMAIL_DISABLE_SENDING", "maybe")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() error = nil, want parse error")
+	}
+	if !strings.Contains(err.Error(), "EMAIL_DISABLE_SENDING must be true or false") {
+		t.Fatalf("Load() error = %q, want EMAIL_DISABLE_SENDING parse error", err.Error())
+	}
+}
+
+func TestLoadRejectsMalformedHTTPPort(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("HTTP_ADDR", "")
+	t.Setenv("HTTP_PORT", "abc")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() error = nil, want parse error")
+	}
+	if !strings.Contains(err.Error(), "HTTP_PORT must be a valid TCP port") {
+		t.Fatalf("Load() error = %q, want HTTP_PORT parse error", err.Error())
+	}
+}
+
+func TestLoadRejectsEnabledEmailWithoutCredentials(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("EMAIL_PROVIDER", "resend")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() error = nil, want validation error")
+	}
+
+	msg := err.Error()
+	for _, want := range []string{"EMAIL_API_KEY", "EMAIL_FROM_ADDRESS"} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("Load() error = %q, want it to contain %q", msg, want)
+		}
+	}
+}
+
+func TestLoadRejectsEnabledLLMWithoutCredentials(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("LLM_PROVIDER", "openai")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() error = nil, want validation error")
+	}
+
+	msg := err.Error()
+	for _, want := range []string{"LLM_API_KEY", "LLM_MODEL"} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("Load() error = %q, want it to contain %q", msg, want)
+		}
+	}
+}
+
+func TestLoadRejectsEnabledVoiceWithoutWebhookSecret(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("VOICE_PROVIDER", "twilio")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() error = nil, want validation error")
+	}
+	if !strings.Contains(err.Error(), "VOICE_WEBHOOK_SECRET") {
+		t.Fatalf("Load() error = %q, want VOICE_WEBHOOK_SECRET validation error", err.Error())
+	}
+}
+
+func TestLoadRejectsEnabledStorageWithoutCredentials(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("STORAGE_PROVIDER", "s3")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() error = nil, want validation error")
+	}
+
+	msg := err.Error()
+	for _, want := range []string{
+		"STORAGE_BUCKET",
+		"STORAGE_ACCESS_KEY_ID",
+		"STORAGE_SECRET_ACCESS_KEY",
+		"STORAGE_REGION or STORAGE_ENDPOINT",
+	} {
 		if !strings.Contains(msg, want) {
 			t.Fatalf("Load() error = %q, want it to contain %q", msg, want)
 		}
@@ -59,7 +229,7 @@ func TestValidateRejectsInvalidDatabasePoolSettings(t *testing.T) {
 		t.Fatal("Validate() error = nil, want validation error")
 	}
 	if !strings.Contains(err.Error(), "DATABASE_MIN_CONNS") {
-		t.Fatalf("Validate() error = %q, want DATABASE_MIN_CONNS", err)
+		t.Fatalf("Validate() error = %q, want DATABASE_MIN_CONNS", err.Error())
 	}
 }
 
@@ -70,7 +240,10 @@ func clearEnv(t *testing.T) {
 		"APP_NAME",
 		"APP_ENV",
 		"APP_VERSION",
+		"APP_ROLE",
 		"HTTP_ADDR",
+		"HTTP_PORT",
+		"PORT",
 		"CORS_ALLOWED_ORIGINS",
 		"LOG_LEVEL",
 		"LOG_FORMAT",
