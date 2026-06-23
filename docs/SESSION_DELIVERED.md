@@ -102,5 +102,160 @@ CRUD.
 `make api` smoke with `/healthz` and `/readyz`.
 
 **Risks / Follow-ups:** No Postgres integration tests for repositories yet
-(mocks only). P1-006 durable jobs not wired to `job_runs` table. Login API and
-JWT/session still pending. `APP_ROLE` is a dev gate, not production RBAC.
+(mocks only). P1-006 durable jobs not wired to `job_runs` table. Restrict
+signup roles in staging/production. Health endpoints behind JWT may need
+separate probe path for load balancers later.
+
+## 2026-06-22 — JWT Auth + Protected Health Endpoints
+
+**Role:** Backend Agent
+
+**Delivered:** JWT-based signup/login (`POST /api/v1/auth/signup`, `POST /api/v1/auth/login`),
+bcrypt password hashing, `TokenManager` with `JWT_ACCESS_TOKEN_TTL`, auth service layer,
+`RequireAuth` and `RequireRole` middleware, developer-only `/healthz` and `/readyz`.
+Removed `APP_ROLE` env gating and `health_access.go`. Migration `000003` drops
+`users_role_check` DB constraint. Updated README, `.env.example`, and `backend/.env`.
+
+**Why:** PM requested roles not be hardcoded in schema; authorization should come from
+JWT issued at login with role stored in the database.
+
+**Checks Run:** `go test ./backend/...`
+
+**Follow-ups:** Restrict public signup role selection in production; add restaurant-scoped
+RBAC (P1-008/P1-009).
+
+## 2026-06-23 — Melbourne Food Image Scraper (automation/)
+
+**Role:** Backend / Automation Agent
+
+**Delivered:** Python pipeline under `automation/` that scrapes food images for
+50 curated Melbourne restaurant dishes (Australian, Thai, Indian, Italian, and
+other cuisines). Saves images to `automation/images/` by SHA-256 hash and writes
+metadata to `automation/data/catalog.json`.
+
+**Why:** Pre-builds demo menu image assets for P1-013 menus and P1-048 seed data
+so sales demos look realistic without manual photo hunting per lead.
+
+**Checks Run:** `python -m py_compile automation/scrape.py`; live scrape test
+with `--limit 3` (3 images saved via Bing fallback).
+
+**Business Value:** Reusable food catalog with hash-based image storage for
+Melbourne-focused demo restaurants.
+
+**Plan Fit:** Upstream content work for P1-E03 menu items (`image_url`) and
+P1-048 seed/demo data.
+
+**Risks / Follow-ups:** Google Images requires a browser and may CAPTCHA; Bing
+fallback used when Google times out. Review image licensing before production.
+Run full scrape with `python scrape.py --skip-google` for speed or default mode
+for Google-first.
+
+## 2026-06-22 — P1-009 Restaurant-Scoped Access Checks
+
+**Role:** Backend Agent
+
+**Delivered:** Hardened restaurant access layer with `RestaurantID` in request
+context, extended `access.Service` (list/create/members), reusable
+`protectRestaurantScoped` / `protectRestaurantAdmin` middleware, restaurant list
+and member APIs, migration `000005_demo_sites`, public demo route
+`GET /api/public/v1/demo/{slug}?token=...` with allowlisted `PublicDemoPayload`
+DTO, admin `POST /api/v1/restaurants/{id}/demo-sites`, `make seed-demo-fixture`,
+Postman collection updates, and table-driven isolation tests.
+
+**Why:** P1-009 requires tenant isolation before restaurant CRUD, profiles, and
+demo generator work can safely scale.
+
+**Checks Run:** `go test ./backend/...`
+
+**Business Value:** Restaurant owners cannot read another tenant's data; public
+demo links expose only sales-safe payload fields.
+
+**Plan Fit:** Completes P1-009 acceptance criteria; unblocks P1-010 full
+restaurant CRUD and P1-015+ demo payload builder.
+
+**Risks / Follow-ups:** Demo token in query string may appear in proxy logs;
+P1-016 can move to header/path. Full restaurant lead fields deferred to P1-010.
+
+## 2026-06-22 — Restaurant Lead Fields (sales scope)
+
+**Role:** Backend Agent
+
+**Delivered:** Migration `000006_restaurant_lead_fields` adding `email`,
+`is_contacted`, and `shown_interest` to `restaurants`. API create/list/get now
+return lead fields plus `created_at`/`updated_at`. Create requires `name` and
+`email`. Repository `MarkShownInterest` added for future email click tracking.
+No image or profile fields (deferred per scope).
+
+**Why:** Aligns `restaurants` table with sales MVP lead tracking described in
+the implementation guide and product scope: outreach email → link click →
+`shown_interest = true`.
+
+**Checks Run:** `go test ./backend/...`
+
+**Follow-ups:** Wire `MarkShownInterest` from campaign/email click tracking;
+admin PATCH to set `is_contacted` when outreach is sent.
+
+## 2026-06-22 — P1-010 Restaurant CRUD + Query Filters
+
+**Role:** Backend Agent
+
+**Delivered:** Completed P1-010 with migration `000007_restaurant_status`, full
+restaurant lifecycle `status`, `PATCH /api/v1/restaurants/{id}`,
+`PATCH /api/v1/restaurants/{id}/status`, soft archive via
+`DELETE /api/v1/restaurants/{id}`, and list filters via query params
+(`?restaurant=`, `?status=`, `?is_contacted=`, `?shown_interest=`,
+`?include_archived=`). Auto-status rules: `is_contacted` moves lead to
+`emailed`; `shown_interest` moves to `interested`.
+
+**Checks Run:** `go test ./backend/...`
+
+**Plan Fit:** P1-010 acceptance criteria met; unblocks P1-011 profiles and demo
+payload builder.
+
+## 2026-06-22 — Repository Structure Alignment (Phase 1 Guide §5)
+
+**Role:** Backend Agent
+
+**Delivered:** Restructured `backend/internal` from layered `repositories/` +
+`services/` into domain packages aligned with
+`docs/phase1/PHASE1_IMPLEMENTATION_GUIDE.md`: `restaurants/` (repo + access
+service), `demos/` (repo + demo service + token helpers), `auth/` (JWT, user
+repo, signup/login service). Moved shared errors to `platform/errors/` and
+metadata repo to `platform/metadata/`. Added placeholder `doc.go` packages for
+future domains (`menus`, `reservations`, `campaigns`, `analytics`, `ai/*`,
+`providers/*`, `platform/telemetry`, `backend/tests`). Moved
+`PHASE1_IMPLEMENTATION_GUIDE.md` and `PHASE1_TECHNICAL_BACKLOG.md` to
+`docs/phase1/`.
+
+**Why:** The implementation guide defines domain-owned packages so Phase 1
+modules can grow without cross-layer import sprawl and match the documented
+monolith boundaries.
+
+**Checks Run:** `go test ./backend/...` — pass
+
+**Risks / Follow-ups:** No API behavior change intended; imports only. Add ADR
+if we later split `auth` user persistence from JWT helpers.
+
+## 2026-06-23 — Postman Full Flow Update
+
+**Role:** Documentation Agent
+
+**Delivered:** Rebuilt `postman/Restaurant-Platform.postman_collection.json`
+with ordered **01 — PM Demo Flow** folder (15 steps), fixed role names
+(`internal_admin`, `restaurant_owner`), added Auth Me, List Members, filter
+examples, owner/admin token switching, and updated environment + README.
+
+**Checks Run:** JSON validation on collection and environment files.
+
+**Plan Fit:** Supports PM demo of P1-008 through P1-010 without manual curl.
+
+## 2026-06-23 — OpenAPI / Swagger Documentation
+
+**Role:** Documentation Agent
+
+**Delivered:** OpenAPI 3.0 spec at `docs/openapi/openapi.yaml` covering all 17
+endpoints (auth, admin, restaurants, members, demo sites, public demo, health).
+Added `docs/openapi/README.md`, `make openapi` validation target, and README/Postman links.
+
+**Checks Run:** `make openapi` — pass
+

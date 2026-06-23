@@ -240,7 +240,6 @@ func clearEnv(t *testing.T) {
 		"APP_NAME",
 		"APP_ENV",
 		"APP_VERSION",
-		"APP_ROLE",
 		"HTTP_ADDR",
 		"HTTP_PORT",
 		"PORT",
@@ -271,6 +270,7 @@ func clearEnv(t *testing.T) {
 		"STORAGE_ACCESS_KEY_ID",
 		"STORAGE_SECRET_ACCESS_KEY",
 		"TOKEN_SECRET",
+		"JWT_ACCESS_TOKEN_TTL",
 		"JOB_BUFFER_SIZE",
 		"JOB_RETRY_DELAY",
 	} {

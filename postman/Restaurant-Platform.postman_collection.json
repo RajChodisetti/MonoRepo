@@ -1,0 +1,986 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "name": "Restaurant Platform API",
+    "description": "# Restaurant Platform — Phase 1 API\n\nComplete Postman collection for local testing (P1-008 auth through P1-010 restaurants + demo sites).\n\n## Before you start\n\n```bash\nmake db-up\nmake migrate-up\nmake seed-admin        # creates admin@local.test\nmake api               # http://localhost:8080\n```\n\n## Import\n\n1. Import this collection + `Restaurant-Platform-Local.postman_environment.json`\n2. Select environment **Restaurant Platform - Local**\n\n## PM demo (recommended)\n\nRun folder **01 — PM Demo Flow (in order)** top to bottom. Each step saves IDs/tokens for the next.\n\n## Roles\n\n| Role | How to get it |\n|------|----------------|\n| `internal_admin` | `make seed-admin` → Login Admin |\n| `restaurant_owner` | Signup Restaurant Owner |\n| `developer` | Signup Developer (local only) |\n\n## Status lifecycle\n\n`lead` → `demo_ready` → `emailed` → `interested` → `client_onboarding` → `active_client` | `lost` | `archived`",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Collection-level Bearer uses {{access_token}} from environment."
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8080"
+    }
+  ],
+  "item": [
+    {
+      "name": "01 — PM Demo Flow (in order)",
+      "description": "Run these requests **in sequence** for a full sales-MVP walkthrough to show your PM.\n\n**Story:** Admin adds a lead → marks contacted → creates demo → owner views their restaurant → public demo link works.\n\nPrerequisite: `make seed-admin` and API running.",
+      "item": [
+        {
+          "name": "1. Login Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('login returns 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.environment.set('access_token', body.access_token);",
+                  "pm.environment.set('admin_access_token', body.access_token);",
+                  "pm.environment.set('user_id', body.user.id);",
+                  "pm.environment.set('user_email', body.user.email);",
+                  "pm.environment.set('user_role', body.user.role);",
+                  "pm.test('role is internal_admin', () => pm.expect(body.user.role).to.eql('internal_admin'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{admin_email}}\",\n  \"password\": \"{{admin_password}}\"\n}"
+            },
+            "url": "{{base_url}}/api/v1/auth/login",
+            "description": "Login as seeded internal admin. Saves `access_token`."
+          }
+        },
+        {
+          "name": "2. Admin Me",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('internal_admin role', () => pm.expect(pm.response.json().role).to.eql('internal_admin'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/admin/me"
+          }
+        },
+        {
+          "name": "3. Create Restaurant Lead",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('created 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.environment.set('restaurant_id', body.id);",
+                  "pm.test('status is lead', () => pm.expect(body.status).to.eql('lead'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{restaurant_name}}\",\n  \"email\": \"{{restaurant_email}}\"\n}"
+            },
+            "url": "{{base_url}}/api/v1/restaurants",
+            "description": "Admin creates a new restaurant lead. Saves `restaurant_id`."
+          }
+        },
+        {
+          "name": "4. List Restaurants",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('has items', () => pm.expect(pm.response.json().items).to.be.an('array'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/restaurants"
+          }
+        },
+        {
+          "name": "5. Get Restaurant",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('correct id', () => pm.expect(pm.response.json().id).to.eql(pm.environment.get('restaurant_id')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/restaurants/{{restaurant_id}}"
+          }
+        },
+        {
+          "name": "6. Mark Contacted (PATCH)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('is_contacted true', () => pm.expect(body.is_contacted).to.eql(true));",
+                  "pm.test('auto status emailed', () => pm.expect(body.status).to.eql('emailed'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"is_contacted\": true\n}"
+            },
+            "url": "{{base_url}}/api/v1/restaurants/{{restaurant_id}}",
+            "description": "Simulates outreach sent. Auto-moves status lead/demo_ready → emailed."
+          }
+        },
+        {
+          "name": "7. Set Status demo_ready",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('demo_ready', () => pm.expect(pm.response.json().status).to.eql('demo_ready'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"demo_ready\"\n}"
+            },
+            "url": "{{base_url}}/api/v1/restaurants/{{restaurant_id}}/status"
+          }
+        },
+        {
+          "name": "8. Signup Restaurant Owner",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const body = pm.response.json();",
+                  "  pm.environment.set('owner_user_id', body.user.id);",
+                  "  pm.environment.set('owner_access_token', body.access_token);",
+                  "  pm.test('owner role', () => pm.expect(body.user.role).to.eql('restaurant_owner'));",
+                  "} else if (pm.response.code === 409) {",
+                  "  pm.test('already exists — run step 8b Login Owner', () => true);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{owner_email}}\",\n  \"password\": \"{{owner_password}}\",\n  \"full_name\": \"{{owner_full_name}}\",\n  \"role\": \"restaurant_owner\"\n}"
+            },
+            "url": "{{base_url}}/api/v1/auth/signup",
+            "description": "Creates restaurant owner account. If 409 conflict, skip to 8b Login Owner."
+          }
+        },
+        {
+          "name": "8b. Login Restaurant Owner (if signup conflict)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('login 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.environment.set('owner_user_id', body.user.id);",
+                  "pm.environment.set('owner_access_token', body.access_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{owner_email}}\",\n  \"password\": \"{{owner_password}}\"\n}"
+            },
+            "url": "{{base_url}}/api/v1/auth/login"
+          }
+        },
+        {
+          "name": "9. Add Owner as Restaurant Member",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('access_token', pm.environment.get('admin_access_token'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('member created 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"{{owner_user_id}}\",\n  \"member_role\": \"owner\"\n}"
+            },
+            "url": "{{base_url}}/api/v1/restaurants/{{restaurant_id}}/members",
+            "description": "Links owner user to restaurant. Uses admin token."
+          }
+        },
+        {
+          "name": "10. Create Demo Site",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('access_token', pm.environment.get('admin_access_token'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('demo created 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.environment.set('demo_slug', body.slug);",
+                  "pm.environment.set('demo_token', body.token);",
+                  "pm.test('token returned once', () => pm.expect(body.token).to.be.a('string').and.not.empty);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"slug\": \"{{demo_slug}}\",\n  \"status\": \"published\"\n}"
+            },
+            "url": "{{base_url}}/api/v1/restaurants/{{restaurant_id}}/demo-sites",
+            "description": "Creates signed demo link. **Save token** — shown only once in response."
+          }
+        },
+        {
+          "name": "11. Public Demo (no auth)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('public demo 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('has restaurant_name', () => pm.expect(body.restaurant_name).to.be.a('string'));",
+                  "pm.test('no lead_notes leaked', () => pm.expect(JSON.stringify(body)).to.not.include('lead_notes'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/public/v1/demo/{{demo_slug}}?token={{demo_token}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "public", "v1", "demo", "{{demo_slug}}"],
+              "query": [{ "key": "token", "value": "{{demo_token}}" }]
+            },
+            "description": "What a restaurant owner sees from email link. No JWT required."
+          }
+        },
+        {
+          "name": "12. Owner Lists Restaurants (scoped)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('access_token', pm.environment.get('owner_access_token'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('owner list 200', () => pm.response.to.have.status(200));",
+                  "const items = pm.response.json().items;",
+                  "pm.test('sees assigned restaurant only', () => {",
+                  "  const ids = items.map(i => i.id);",
+                  "  pm.expect(ids).to.include(pm.environment.get('restaurant_id'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/restaurants"
+          }
+        },
+        {
+          "name": "13. Mark Shown Interest",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('access_token', pm.environment.get('admin_access_token'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('shown_interest true', () => pm.expect(body.shown_interest).to.eql(true));",
+                  "pm.test('status interested', () => pm.expect(body.status).to.eql('interested'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"shown_interest\": true\n}"
+            },
+            "url": "{{base_url}}/api/v1/restaurants/{{restaurant_id}}",
+            "description": "Simulates owner clicked demo link / showed interest."
+          }
+        },
+        {
+          "name": "14. List Members",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('access_token', pm.environment.get('admin_access_token'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('members 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/restaurants/{{restaurant_id}}/members"
+          }
+        },
+        {
+          "name": "15. Archive Restaurant (soft delete)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('access_token', pm.environment.get('admin_access_token'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('archived 200', () => pm.response.to.have.status(200));",
+                  "pm.test('status archived', () => pm.expect(pm.response.json().status).to.eql('archived'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/api/v1/restaurants/{{restaurant_id}}",
+            "description": "Optional end-of-demo cleanup. Archived restaurants hidden from default list."
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 — Auth",
+      "description": "Public auth endpoints. Tokens saved to `access_token` unless noted.",
+      "item": [
+        {
+          "name": "Signup Developer (local)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const b = pm.response.json();",
+                  "  pm.environment.set('access_token', b.access_token);",
+                  "  pm.environment.set('user_id', b.user.id);",
+                  "  pm.environment.set('user_role', b.user.role);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{developer_email}}\",\n  \"password\": \"{{developer_password}}\",\n  \"full_name\": \"{{developer_full_name}}\",\n  \"role\": \"developer\"\n}"
+            },
+            "url": "{{base_url}}/api/v1/auth/signup"
+          }
+        },
+        {
+          "name": "Login Developer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const b = pm.response.json();",
+                  "  pm.environment.set('access_token', b.access_token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{developer_email}}\",\n  \"password\": \"{{developer_password}}\"\n}"
+            },
+            "url": "{{base_url}}/api/v1/auth/login"
+          }
+        },
+        {
+          "name": "Signup Restaurant Owner",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const b = pm.response.json();",
+                  "  pm.environment.set('access_token', b.access_token);",
+                  "  pm.environment.set('owner_user_id', b.user.id);",
+                  "  pm.environment.set('owner_access_token', b.access_token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{owner_email}}\",\n  \"password\": \"{{owner_password}}\",\n  \"full_name\": \"{{owner_full_name}}\",\n  \"role\": \"restaurant_owner\"\n}"
+            },
+            "url": "{{base_url}}/api/v1/auth/signup"
+          }
+        },
+        {
+          "name": "Login Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const b = pm.response.json();",
+                  "  pm.environment.set('access_token', b.access_token);",
+                  "  pm.environment.set('admin_access_token', b.access_token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{admin_email}}\",\n  \"password\": \"{{admin_password}}\"\n}"
+            },
+            "url": "{{base_url}}/api/v1/auth/login"
+          }
+        },
+        {
+          "name": "Auth Me",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/auth/me"
+          }
+        },
+        {
+          "name": "Signup Internal Admin Blocked",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('forbidden 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"hacker@example.com\",\n  \"password\": \"password123\",\n  \"full_name\": \"Hacker\",\n  \"role\": \"internal_admin\"\n}"
+            },
+            "url": "{{base_url}}/api/v1/auth/signup"
+          }
+        },
+        {
+          "name": "Login Invalid Credentials",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('unauthorized 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"wrong@example.com\",\n  \"password\": \"wrongpassword\"\n}"
+            },
+            "url": "{{base_url}}/api/v1/auth/login"
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 — Admin",
+      "item": [
+        {
+          "name": "Admin Me",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('internal_admin', () => pm.expect(pm.response.json().role).to.eql('internal_admin'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/admin/me"
+          }
+        },
+        {
+          "name": "Admin Me Without Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('unauthorized 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/admin/me"
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 — Restaurants",
+      "description": "Requires `internal_admin` for create/update/archive/members. Owners can list/get assigned restaurants only.",
+      "item": [
+        {
+          "name": "List All",
+          "request": { "method": "GET", "url": "{{base_url}}/api/v1/restaurants" }
+        },
+        {
+          "name": "List — filter by name",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/restaurants?restaurant=thai",
+              "query": [{ "key": "restaurant", "value": "thai", "description": "Name substring search" }]
+            }
+          }
+        },
+        {
+          "name": "List — filter by status",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/restaurants?status=lead",
+              "query": [{ "key": "status", "value": "lead" }]
+            }
+          }
+        },
+        {
+          "name": "List — is_contacted + shown_interest",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/restaurants?is_contacted=true&shown_interest=false",
+              "query": [
+                { "key": "is_contacted", "value": "true" },
+                { "key": "shown_interest", "value": "false" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List — include archived",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/restaurants?include_archived=true",
+              "query": [{ "key": "include_archived", "value": "true" }]
+            }
+          }
+        },
+        {
+          "name": "Create Restaurant",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) pm.environment.set('restaurant_id', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{restaurant_name}}\",\n  \"email\": \"{{restaurant_email}}\"\n}"
+            },
+            "url": "{{base_url}}/api/v1/restaurants"
+          }
+        },
+        {
+          "name": "Get Restaurant",
+          "request": { "method": "GET", "url": "{{base_url}}/api/v1/restaurants/{{restaurant_id}}" }
+        },
+        {
+          "name": "Update Restaurant",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Cafe Name\",\n  \"email\": \"updated@example.com\",\n  \"is_contacted\": true,\n  \"shown_interest\": false\n}"
+            },
+            "url": "{{base_url}}/api/v1/restaurants/{{restaurant_id}}"
+          }
+        },
+        {
+          "name": "Update Status",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"demo_ready\"\n}"
+            },
+            "url": "{{base_url}}/api/v1/restaurants/{{restaurant_id}}/status"
+          }
+        },
+        {
+          "name": "Archive Restaurant",
+          "request": { "method": "DELETE", "url": "{{base_url}}/api/v1/restaurants/{{restaurant_id}}" }
+        },
+        {
+          "name": "List Members",
+          "request": { "method": "GET", "url": "{{base_url}}/api/v1/restaurants/{{restaurant_id}}/members" }
+        },
+        {
+          "name": "Add Member",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"{{owner_user_id}}\",\n  \"member_role\": \"owner\"\n}"
+            },
+            "url": "{{base_url}}/api/v1/restaurants/{{restaurant_id}}/members"
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 — Demo Sites",
+      "item": [
+        {
+          "name": "Create Demo Site",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const b = pm.response.json();",
+                  "  pm.environment.set('demo_slug', b.slug);",
+                  "  pm.environment.set('demo_token', b.token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"slug\": \"{{demo_slug}}\",\n  \"status\": \"published\",\n  \"public_payload\": {\n    \"restaurant_name\": \"Demo Thai Kitchen\",\n    \"cuisine\": \"Thai\",\n    \"hero\": \"Welcome to our demo restaurant\",\n    \"reservation_cta\": \"Book a table\"\n  }\n}"
+            },
+            "url": "{{base_url}}/api/v1/restaurants/{{restaurant_id}}/demo-sites"
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 — Public Demo",
+      "item": [
+        {
+          "name": "Get Public Demo",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/public/v1/demo/{{demo_slug}}?token={{demo_token}}",
+              "query": [{ "key": "token", "value": "{{demo_token}}" }]
+            }
+          }
+        },
+        {
+          "name": "Get Public Demo — invalid token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('not found 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/public/v1/demo/{{demo_slug}}?token=wrong-token",
+              "query": [{ "key": "token", "value": "wrong-token" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 — Health (developer JWT)",
+      "description": "Run Signup/Login Developer first.",
+      "item": [
+        {
+          "name": "Healthz",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('ok', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "GET", "url": "{{base_url}}/healthz" }
+        },
+        {
+          "name": "Readyz",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('db ready', () => pm.expect(pm.response.json().database).to.eql('ready'));"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "GET", "url": "{{base_url}}/readyz" }
+        },
+        {
+          "name": "Healthz Without Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": "{{base_url}}/healthz"
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 — Quick Fixture (optional)",
+      "description": "Alternative to manual flow. Run `make seed-demo-fixture` in terminal first — then use these with default env vars.",
+      "item": [
+        {
+          "name": "Public Demo (fixture slug/token)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/public/v1/demo/{{demo_slug}}?token={{demo_token}}",
+              "query": [{ "key": "token", "value": "{{demo_token}}" }]
+            },
+            "description": "Defaults: slug=demo-fixture-cafe, token from seed-demo-fixture"
+          }
+        }
+      ]
+    }
+  ]
+}

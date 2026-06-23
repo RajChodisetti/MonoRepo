@@ -15,4 +15,4 @@ CREATE INDEX IF NOT EXISTS idx_users_role ON users (role);
 
 CREATE INDEX IF NOT EXISTS idx_users_active_email
   ON users (email)
-  WHERE is_active = true;
+  WHERE is_active = true;     

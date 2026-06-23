@@ -1,5 +1,7 @@
 # Session Summary
 
-**Date:** 2026-06-22
+**Latest (2026-06-23):** OpenAPI 3.0 spec at `docs/openapi/openapi.yaml` documents all Phase 1 API endpoints with request/response schemas. Validate with `make openapi`; view via Swagger Editor or Docker Swagger UI.
 
-Completed P1-001 through P1-005: Go API/worker/migrate commands, strict typed config, Docker PostgreSQL, SQL migrations (foundation + users), repository pattern with mock tests, Fiber graceful shutdown, and health/middleware stack. Added `APP_ROLE` gating on `/healthz`/`/readyz` and users table/repo as P1-E02 prep. Next: login API, auth middleware, restaurant CRUD.
+**Prior:** Postman PM demo flow, architecture work-log, P1-010 restaurant CRUD, domain package layout.
+
+**Next:** P1-011 profiles; keep OpenAPI in sync when routes change.

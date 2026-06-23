@@ -7,18 +7,72 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/auth"
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/demos"
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/http/handlers"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/config"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/db"
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/restaurants"
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/store"
 )
 
 type ReadinessChecker interface {
 	Ping(ctx context.Context) error
 }
 
-func NewRouter(log *slog.Logger, readiness ReadinessChecker, cfg config.Config) http.Handler {
+func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.Store, cfg config.Config) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", healthz(cfg))
-	mux.HandleFunc("GET /readyz", readyz(readiness, cfg))
+
+	tokenManager := auth.NewTokenManager(cfg.Token.Secret, cfg.Token.AccessTokenTTL)
+	authService := auth.NewService(dataStore.Users, tokenManager)
+	accessService := restaurants.NewService(dataStore.Restaurants, dataStore.Memberships)
+	demoService := demos.NewService(dataStore.Demos, accessService, cfg.Demo.TokenTTL)
+
+	authHandler := handlers.NewAuthHandler(authService, cfg.App.Env, writeJSON, writeError)
+	adminHandler := handlers.NewAdminHandler(dataStore.Users, writeJSON, writeError)
+	restaurantHandler := handlers.NewRestaurantHandler(accessService, writeJSON, writeError)
+	demoPublicHandler := handlers.NewDemoPublicHandler(demoService, writeJSON, writeError)
+	demoAdminHandler := handlers.NewDemoAdminHandler(demoService, writeJSON, writeError)
+
+	mux.HandleFunc("POST /api/v1/auth/signup", authHandler.Signup)
+	mux.HandleFunc("POST /api/v1/auth/login", authHandler.Login)
+
+	protectAuthenticated := RequireAuth(tokenManager)
+	protectDeveloper := func(next http.Handler) http.Handler {
+		return protectAuthenticated(RequireRole(auth.RoleDeveloper)(next))
+	}
+	protectInternalAdmin := func(next http.Handler) http.Handler {
+		return protectAuthenticated(RequireRole(auth.RoleInternalAdmin)(next))
+	}
+	protectRestaurantScoped := func(next http.Handler) http.Handler {
+		return protectAuthenticated(RequireAnyRole(auth.RoleInternalAdmin, auth.RoleRestaurantOwner)(
+			RequireRestaurantAccess(accessService)(next),
+		))
+	}
+	protectRestaurantAdmin := func(next http.Handler) http.Handler {
+		return protectAuthenticated(RequireRole(auth.RoleInternalAdmin)(
+			RequireRestaurantAccess(accessService)(next),
+		))
+	}
+
+	mux.Handle("GET /api/v1/auth/me", protectAuthenticated(http.HandlerFunc(authHandler.Me)))
+	mux.Handle("GET /healthz", protectDeveloper(http.HandlerFunc(healthz(cfg))))
+	mux.Handle("GET /readyz", protectDeveloper(http.HandlerFunc(readyz(readiness))))
+	mux.Handle("GET /api/v1/admin/me", protectInternalAdmin(http.HandlerFunc(adminHandler.Me)))
+
+	mux.Handle("GET /api/v1/restaurants", protectAuthenticated(RequireAnyRole(auth.RoleInternalAdmin, auth.RoleRestaurantOwner)(
+		http.HandlerFunc(restaurantHandler.List),
+	)))
+	mux.Handle("POST /api/v1/restaurants", protectInternalAdmin(http.HandlerFunc(restaurantHandler.Create)))
+	mux.Handle("GET /api/v1/restaurants/{id}", protectRestaurantScoped(http.HandlerFunc(restaurantHandler.Get)))
+	mux.Handle("PATCH /api/v1/restaurants/{id}", protectRestaurantAdmin(http.HandlerFunc(restaurantHandler.Update)))
+	mux.Handle("PATCH /api/v1/restaurants/{id}/status", protectRestaurantAdmin(http.HandlerFunc(restaurantHandler.UpdateStatus)))
+	mux.Handle("DELETE /api/v1/restaurants/{id}", protectRestaurantAdmin(http.HandlerFunc(restaurantHandler.Archive)))
+	mux.Handle("GET /api/v1/restaurants/{id}/members", protectRestaurantAdmin(http.HandlerFunc(restaurantHandler.ListMembers)))
+	mux.Handle("POST /api/v1/restaurants/{id}/members", protectRestaurantAdmin(http.HandlerFunc(restaurantHandler.AddMember)))
+	mux.Handle("POST /api/v1/restaurants/{id}/demo-sites", protectRestaurantAdmin(http.HandlerFunc(demoAdminHandler.Create)))
+
+	mux.HandleFunc("GET /api/public/v1/demo/{slug}", demoPublicHandler.Get)
 
 	var handler http.Handler = mux
 	handler = Recovery(log)(handler)
@@ -31,10 +85,6 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, cfg config.Config) 
 
 func healthz(cfg config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !allowHealthEndpoints(cfg, w) {
-			return
-		}
-
 		writeJSON(w, http.StatusOK, map[string]any{
 			"status":  "ok",
 			"service": cfg.App.Name,
@@ -44,12 +94,8 @@ func healthz(cfg config.Config) http.HandlerFunc {
 	}
 }
 
-func readyz(readiness ReadinessChecker, cfg config.Config) http.HandlerFunc {
+func readyz(readiness ReadinessChecker) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !allowHealthEndpoints(cfg, w) {
-			return
-		}
-
 		if readiness == nil {
 			writeError(w, http.StatusServiceUnavailable, "database_not_configured", "Database readiness is not configured.")
 			return
