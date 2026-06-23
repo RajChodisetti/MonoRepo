@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rajchodisetti/restaurant-platform/backend/internal/repositories/metadata"
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/metadata"
 )
 
 func TestVerifyFoundationWithMockRepository(t *testing.T) {

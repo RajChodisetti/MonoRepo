@@ -43,7 +43,7 @@ func NewAPI(ctx context.Context) (*API, error) {
 		return nil, err
 	}
 
-	router := httpapi.NewRouter(log, database, cfg)
+	router := httpapi.NewRouter(log, database, dataStore, cfg)
 	fiberApp := fiber.New()
 	fiberApp.Use(adaptor.HTTPHandler(router))
 

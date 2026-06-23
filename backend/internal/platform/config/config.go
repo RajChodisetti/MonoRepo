@@ -31,6 +31,7 @@ type Config struct {
 	Voice    VoiceConfig
 	Storage  StorageConfig
 	Token    TokenConfig
+	Demo     DemoConfig
 	Jobs     JobsConfig
 }
 
@@ -38,7 +39,6 @@ type AppConfig struct {
 	Name    string
 	Env     string
 	Version string
-	Role    string
 }
 
 type HTTPConfig struct {
@@ -95,7 +95,13 @@ type StorageConfig struct {
 }
 
 type TokenConfig struct {
-	Secret string
+	Secret         string
+	AccessTokenTTL time.Duration
+}
+
+type DemoConfig struct {
+	TokenSecret string
+	TokenTTL    time.Duration
 }
 
 type JobsConfig struct {
@@ -112,7 +118,6 @@ func Load() (Config, error) {
 			Name:    parser.string("APP_NAME", "restaurant-platform"),
 			Env:     parser.string("APP_ENV", EnvLocal),
 			Version: parser.string("APP_VERSION", "dev"),
-			Role:    parser.string("APP_ROLE", "developer"),
 		},
 		HTTP: HTTPConfig{
 			Addr:               parser.listenAddr(),
@@ -160,7 +165,12 @@ func Load() (Config, error) {
 			SecretAccessKey: parser.string("STORAGE_SECRET_ACCESS_KEY", ""),
 		},
 		Token: TokenConfig{
-			Secret: parser.string("TOKEN_SECRET", localDevToken),
+			Secret:         parser.string("TOKEN_SECRET", localDevToken),
+			AccessTokenTTL: parser.duration("JWT_ACCESS_TOKEN_TTL", 24*time.Hour),
+		},
+		Demo: DemoConfig{
+			TokenSecret: parser.string("DEMO_TOKEN_SECRET", localDevToken),
+			TokenTTL:    parser.duration("DEMO_TOKEN_TTL", 30*24*time.Hour),
 		},
 		Jobs: JobsConfig{
 			BufferSize: parser.int("JOB_BUFFER_SIZE", 32),
@@ -186,8 +196,8 @@ func (c Config) Validate() error {
 	if strings.TrimSpace(c.App.Name) == "" {
 		errs = append(errs, fmt.Errorf("APP_NAME is required"))
 	}
-	if !oneOf(c.App.Role, "admin", "user", "developer") {
-		errs = append(errs, fmt.Errorf("APP_ROLE must be one of admin, user, developer"))
+	if c.Token.AccessTokenTTL <= 0 {
+		errs = append(errs, fmt.Errorf("JWT_ACCESS_TOKEN_TTL must be positive"))
 	}
 	if strings.TrimSpace(c.HTTP.Addr) == "" {
 		errs = append(errs, fmt.Errorf("HTTP_ADDR is required"))
@@ -212,6 +222,12 @@ func (c Config) Validate() error {
 	}
 	if len(c.Token.Secret) < 32 {
 		errs = append(errs, fmt.Errorf("TOKEN_SECRET must be at least 32 characters"))
+	}
+	if len(c.Demo.TokenSecret) < 32 {
+		errs = append(errs, fmt.Errorf("DEMO_TOKEN_SECRET must be at least 32 characters"))
+	}
+	if c.Demo.TokenTTL <= 0 {
+		errs = append(errs, fmt.Errorf("DEMO_TOKEN_TTL must be positive"))
 	}
 	if c.Jobs.BufferSize < 1 {
 		errs = append(errs, fmt.Errorf("JOB_BUFFER_SIZE must be at least 1"))

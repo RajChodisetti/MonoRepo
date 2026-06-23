@@ -1,0 +1,882 @@
+openapi: 3.0.3
+info:
+  title: Restaurant Platform API
+  description: |
+    Phase 1 backend API — auth, restaurant leads, memberships, and public demo sites.
+
+    ## Authentication
+    Protected routes use `Authorization: Bearer <access_token>` from signup or login.
+
+    ## Roles
+    - `internal_admin` — full restaurant admin (seed via `make seed-admin`)
+    - `restaurant_owner` — scoped to assigned restaurants only
+    - `developer` — health endpoints (local/test signup only)
+
+    ## Postman
+    Import `postman/Restaurant-Platform.postman_collection.json` for the full PM demo flow.
+  version: 0.1.0
+  license:
+    name: Proprietary
+    url: https://github.com/rajchodisetti/restaurant-platform
+  contact:
+    name: Restaurant Platform
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+tags:
+  - name: Auth
+    description: Public signup/login and session identity
+  - name: Admin
+    description: Internal admin profile
+  - name: Restaurants
+    description: Restaurant lead CRUD, filters, and lifecycle status
+  - name: Members
+    description: Restaurant membership (tenant scoping)
+  - name: Demo Sites
+    description: Admin demo site creation
+  - name: Public Demo
+    description: Public demo payload (slug + token, no JWT)
+  - name: Health
+    description: Service and database readiness (developer role)
+
+paths:
+  /api/v1/auth/signup:
+    post:
+      tags: [Auth]
+      summary: Sign up
+      description: |
+        Self-signup for `restaurant_owner` (all envs) and `developer` (local/test only).
+        `internal_admin` cannot be self-assigned — use `make seed-admin`.
+      operationId: authSignup
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignupRequest'
+            example:
+              email: owner@local.test
+              password: password123
+              full_name: Demo Restaurant Owner
+              role: restaurant_owner
+      responses:
+        '201':
+          description: Account created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in
+      operationId: authLogin
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              email: admin@local.test
+              password: password123
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/auth/me:
+    get:
+      tags: [Auth]
+      summary: Current session identity
+      operationId: authMe
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Principal from JWT
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthMe'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/admin/me:
+    get:
+      tags: [Admin]
+      summary: Admin profile
+      operationId: adminMe
+      security:
+        - bearerAuth: []
+      description: Requires role `internal_admin`.
+      responses:
+        '200':
+          description: Admin user record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUser'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/restaurants:
+    get:
+      tags: [Restaurants]
+      summary: List accessible restaurants
+      operationId: listRestaurants
+      security:
+        - bearerAuth: []
+      description: |
+        - `internal_admin` — all restaurants (subject to filters)
+        - `restaurant_owner` — only restaurants where user is a member
+        Archived restaurants are hidden unless `include_archived=true`.
+      parameters:
+        - $ref: '#/components/parameters/restaurantNameFilter'
+        - $ref: '#/components/parameters/statusFilter'
+        - $ref: '#/components/parameters/isContactedFilter'
+        - $ref: '#/components/parameters/shownInterestFilter'
+        - $ref: '#/components/parameters/includeArchivedFilter'
+      responses:
+        '200':
+          description: Restaurant list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RestaurantList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Restaurants]
+      summary: Create restaurant lead
+      operationId: createRestaurant
+      security:
+        - bearerAuth: []
+      description: Requires role `internal_admin`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRestaurantRequest'
+            example:
+              name: PM Demo Thai Kitchen
+              email: lead@pmdemo.test
+      responses:
+        '201':
+          description: Restaurant created (status defaults to `lead`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Restaurant'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/restaurants/{id}:
+    parameters:
+      - $ref: '#/components/parameters/restaurantId'
+    get:
+      tags: [Restaurants]
+      summary: Get restaurant by ID
+      operationId: getRestaurant
+      security:
+        - bearerAuth: []
+      description: |
+        Admin or restaurant owner with membership.
+        Archived restaurants return 404 for non-admin users.
+      responses:
+        '200':
+          description: Restaurant record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Restaurant'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Restaurants]
+      summary: Update restaurant fields
+      operationId: updateRestaurant
+      security:
+        - bearerAuth: []
+      description: |
+        Requires role `internal_admin`.
+        Auto-status: `is_contacted=true` → `emailed`; `shown_interest=true` → `interested`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRestaurantRequest'
+            example:
+              is_contacted: true
+      responses:
+        '200':
+          description: Updated restaurant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Restaurant'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Restaurants]
+      summary: Archive restaurant (soft delete)
+      operationId: archiveRestaurant
+      security:
+        - bearerAuth: []
+      description: Sets `status` to `archived`. Requires role `internal_admin`.
+      responses:
+        '200':
+          description: Archived restaurant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Restaurant'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/restaurants/{id}/status:
+    parameters:
+      - $ref: '#/components/parameters/restaurantId'
+    patch:
+      tags: [Restaurants]
+      summary: Update restaurant lifecycle status
+      operationId: updateRestaurantStatus
+      security:
+        - bearerAuth: []
+      description: Requires role `internal_admin`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRestaurantStatusRequest'
+            example:
+              status: demo_ready
+      responses:
+        '200':
+          description: Updated restaurant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Restaurant'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/restaurants/{id}/members:
+    parameters:
+      - $ref: '#/components/parameters/restaurantId'
+    get:
+      tags: [Members]
+      summary: List restaurant members
+      operationId: listRestaurantMembers
+      security:
+        - bearerAuth: []
+      description: Requires role `internal_admin`.
+      responses:
+        '200':
+          description: Membership list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Members]
+      summary: Add restaurant member
+      operationId: addRestaurantMember
+      security:
+        - bearerAuth: []
+      description: |
+        Requires role `internal_admin`.
+        Links a user (e.g. restaurant owner) to a restaurant for tenant scoping.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddMemberRequest'
+            example:
+              user_id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+              member_role: owner
+      responses:
+        '201':
+          description: Member created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Member'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/restaurants/{id}/demo-sites:
+    parameters:
+      - $ref: '#/components/parameters/restaurantId'
+    post:
+      tags: [Demo Sites]
+      summary: Create demo site
+      operationId: createDemoSite
+      security:
+        - bearerAuth: []
+      description: |
+        Requires role `internal_admin`.
+        Returns a one-time `token` in the response. If `public_payload` is omitted,
+        a default template is stored server-side.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDemoSiteRequest'
+            example:
+              slug: pm-demo-thai-kitchen
+              status: published
+      responses:
+        '201':
+          description: Demo site created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateDemoSiteResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/public/v1/demo/{slug}:
+    parameters:
+      - name: slug
+        in: path
+        required: true
+        schema:
+          type: string
+        example: pm-demo-thai-kitchen
+      - name: token
+        in: query
+        required: true
+        schema:
+          type: string
+        description: Signed demo token from create demo site response
+    get:
+      tags: [Public Demo]
+      summary: Resolve public demo payload
+      operationId: getPublicDemo
+      security: []
+      description: |
+        No authentication. Validates slug + token. Returns allowlisted public fields only
+        (internal fields like `lead_notes` are stripped).
+      responses:
+        '200':
+          description: Public-safe demo payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicDemoPayload'
+        '404':
+          description: Demo not found or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: demo_not_found
+                  message: Demo site was not found.
+
+  /healthz:
+    get:
+      tags: [Health]
+      summary: Service health
+      operationId: healthz
+      security:
+        - bearerAuth: []
+      description: Requires role `developer`.
+      responses:
+        '200':
+          description: Service is running
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthzResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /readyz:
+    get:
+      tags: [Health]
+      summary: Database readiness
+      operationId: readyz
+      security:
+        - bearerAuth: []
+      description: Requires role `developer`. Pings PostgreSQL.
+      responses:
+        '200':
+          description: Database is ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadyzResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          description: Database not ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Access token from signup or login
+
+  parameters:
+    restaurantId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    restaurantNameFilter:
+      name: restaurant
+      in: query
+      schema:
+        type: string
+      description: Case-insensitive substring match on restaurant name
+    statusFilter:
+      name: status
+      in: query
+      schema:
+        $ref: '#/components/schemas/RestaurantStatus'
+    isContactedFilter:
+      name: is_contacted
+      in: query
+      schema:
+        type: boolean
+    shownInterestFilter:
+      name: shown_interest
+      in: query
+      schema:
+        type: boolean
+    includeArchivedFilter:
+      name: include_archived
+      in: query
+      schema:
+        type: boolean
+        default: false
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Missing or invalid token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: unauthorized
+              message: Authentication required.
+    Forbidden:
+      description: Insufficient role or restaurant access
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: forbidden
+              message: You do not have access to this restaurant.
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: not_found
+              message: Restaurant was not found.
+    Conflict:
+      description: Resource conflict (e.g. duplicate email)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: conflict
+              message: Email is already registered.
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              example: invalid_request
+            message:
+              type: string
+              example: Request body must be valid JSON.
+
+    SignupRequest:
+      type: object
+      required: [email, password, full_name]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+        full_name:
+          type: string
+        role:
+          $ref: '#/components/schemas/SignupRole'
+
+    SignupRole:
+      type: string
+      enum: [restaurant_owner, developer]
+      default: restaurant_owner
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+
+    AuthResult:
+      type: object
+      required: [access_token, token_type, expires_in, user]
+      properties:
+        access_token:
+          type: string
+        token_type:
+          type: string
+          example: Bearer
+        expires_in:
+          type: integer
+          format: int64
+          description: Seconds until token expiry
+        user:
+          $ref: '#/components/schemas/UserView'
+
+    UserView:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        full_name:
+          type: string
+        role:
+          $ref: '#/components/schemas/UserRole'
+
+    UserRole:
+      type: string
+      enum: [internal_admin, restaurant_owner, developer]
+
+    AuthMe:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        role:
+          $ref: '#/components/schemas/UserRole'
+
+    AdminUser:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        full_name:
+          type: string
+        role:
+          type: string
+          enum: [internal_admin]
+
+    RestaurantStatus:
+      type: string
+      enum:
+        - lead
+        - demo_ready
+        - emailed
+        - interested
+        - client_onboarding
+        - active_client
+        - lost
+        - archived
+
+    Restaurant:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        status:
+          $ref: '#/components/schemas/RestaurantStatus'
+        is_contacted:
+          type: boolean
+        shown_interest:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    RestaurantList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Restaurant'
+
+    CreateRestaurantRequest:
+      type: object
+      required: [name, email]
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+
+    UpdateRestaurantRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        is_contacted:
+          type: boolean
+        shown_interest:
+          type: boolean
+
+    UpdateRestaurantStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          $ref: '#/components/schemas/RestaurantStatus'
+
+    Member:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        restaurant_id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        member_role:
+          type: string
+          example: owner
+        created_at:
+          type: string
+          format: date-time
+
+    MemberList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Member'
+
+    AddMemberRequest:
+      type: object
+      required: [user_id]
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        member_role:
+          type: string
+          default: owner
+
+    CreateDemoSiteRequest:
+      type: object
+      required: [slug]
+      properties:
+        slug:
+          type: string
+        status:
+          type: string
+          enum: [draft, published]
+          default: published
+        public_payload:
+          type: object
+          additionalProperties: true
+          description: Stored server-side; only allowlisted keys returned on public demo
+
+    CreateDemoSiteResult:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        token:
+          type: string
+          description: Returned once; required for public demo URL
+        status:
+          type: string
+          enum: [draft, published]
+
+    PublicDemoPayload:
+      type: object
+      properties:
+        restaurant_name:
+          type: string
+        cuisine:
+          type: string
+        hero:
+          type: string
+        hours:
+          type: object
+          additionalProperties: true
+        address:
+          type: string
+        phone:
+          type: string
+        menu_sections:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        reservation_cta:
+          type: string
+        ai_receptionist_cta:
+          type: string
+
+    HealthzResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+        service:
+          type: string
+        env:
+          type: string
+        version:
+          type: string
+
+    ReadyzResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+        database:
+          type: string
+          example: ready
