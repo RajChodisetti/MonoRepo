@@ -4,9 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 	"time"
+
+	"github.com/joho/godotenv"
 )
 
 const (
@@ -14,6 +15,9 @@ const (
 	EnvTest       = "test"
 	EnvStaging    = "staging"
 	EnvProduction = "production"
+
+	providerDisabled = "disabled"
+	localDevToken    = "local-dev-token-secret-change-me-32chars"
 )
 
 type Config struct {
@@ -27,6 +31,7 @@ type Config struct {
 	Voice    VoiceConfig
 	Storage  StorageConfig
 	Token    TokenConfig
+	Demo     DemoConfig
 	Jobs     JobsConfig
 }
 
@@ -57,7 +62,8 @@ type DatabaseConfig struct {
 }
 
 type RedisConfig struct {
-	URL string
+	URL                 string
+	RequireInProduction bool
 }
 
 type EmailConfig struct {
@@ -89,7 +95,13 @@ type StorageConfig struct {
 }
 
 type TokenConfig struct {
-	Secret string
+	Secret         string
+	AccessTokenTTL time.Duration
+}
+
+type DemoConfig struct {
+	TokenSecret string
+	TokenTTL    time.Duration
 }
 
 type JobsConfig struct {
@@ -98,65 +110,77 @@ type JobsConfig struct {
 }
 
 func Load() (Config, error) {
+	loadEnvFiles()
+
+	parser := &envParser{}
 	cfg := Config{
 		App: AppConfig{
-			Name:    envString("APP_NAME", "restaurant-platform"),
-			Env:     envString("APP_ENV", EnvLocal),
-			Version: envString("APP_VERSION", "dev"),
+			Name:    parser.string("APP_NAME", "restaurant-platform"),
+			Env:     parser.string("APP_ENV", EnvLocal),
+			Version: parser.string("APP_VERSION", "dev"),
 		},
 		HTTP: HTTPConfig{
-			Addr:               envString("HTTP_ADDR", ":8080"),
-			CORSAllowedOrigins: envCSV("CORS_ALLOWED_ORIGINS", []string{"http://localhost:3000", "http://127.0.0.1:3000"}),
+			Addr:               parser.listenAddr(),
+			CORSAllowedOrigins: parser.csv("CORS_ALLOWED_ORIGINS", []string{"http://localhost:3000", "http://127.0.0.1:3000"}),
 		},
 		Logging: LoggingConfig{
-			Level:  envString("LOG_LEVEL", "info"),
-			Format: envString("LOG_FORMAT", "json"),
+			Level:  parser.string("LOG_LEVEL", "info"),
+			Format: parser.string("LOG_FORMAT", "json"),
 		},
 		Database: DatabaseConfig{
-			URL:                 envString("DATABASE_URL", ""),
-			MaxConns:            int32(envInt("DATABASE_MAX_CONNS", 5)),
-			MinConns:            int32(envInt("DATABASE_MIN_CONNS", 0)),
-			MaxConnLifetime:     envDuration("DATABASE_MAX_CONN_LIFETIME", time.Hour),
-			MaxConnIdleTime:     envDuration("DATABASE_MAX_CONN_IDLE_TIME", 30*time.Minute),
-			ConnectTimeout:      envDuration("DATABASE_CONNECT_TIMEOUT", 5*time.Second),
+			URL:                 parser.string("DATABASE_URL", ""),
+			MaxConns:            int32(parser.int("DATABASE_MAX_CONNS", 5)),
+			MinConns:            int32(parser.int("DATABASE_MIN_CONNS", 0)),
+			MaxConnLifetime:     parser.duration("DATABASE_MAX_CONN_LIFETIME", time.Hour),
+			MaxConnIdleTime:     parser.duration("DATABASE_MAX_CONN_IDLE_TIME", 30*time.Minute),
+			ConnectTimeout:      parser.duration("DATABASE_CONNECT_TIMEOUT", 5*time.Second),
 			RequireInProduction: true,
 		},
 		Redis: RedisConfig{
-			URL: envString("REDIS_URL", ""),
+			URL:                 parser.string("REDIS_URL", ""),
+			RequireInProduction: true,
 		},
 		Email: EmailConfig{
-			Provider:       envString("EMAIL_PROVIDER", "disabled"),
-			APIKey:         envString("EMAIL_API_KEY", ""),
-			FromAddress:    envString("EMAIL_FROM_ADDRESS", ""),
-			DisableSending: envBool("EMAIL_DISABLE_SENDING", true),
-			RedirectTo:     envString("EMAIL_REDIRECT_TO", ""),
+			Provider:       parser.string("EMAIL_PROVIDER", providerDisabled),
+			APIKey:         parser.string("EMAIL_API_KEY", ""),
+			FromAddress:    parser.string("EMAIL_FROM_ADDRESS", ""),
+			DisableSending: parser.bool("EMAIL_DISABLE_SENDING", true),
+			RedirectTo:     parser.string("EMAIL_REDIRECT_TO", ""),
 		},
 		LLM: LLMConfig{
-			Provider: envString("LLM_PROVIDER", "disabled"),
-			APIKey:   envString("LLM_API_KEY", ""),
-			Model:    envString("LLM_MODEL", ""),
+			Provider: parser.string("LLM_PROVIDER", providerDisabled),
+			APIKey:   parser.string("LLM_API_KEY", ""),
+			Model:    parser.string("LLM_MODEL", ""),
 		},
 		Voice: VoiceConfig{
-			Provider:      envString("VOICE_PROVIDER", "disabled"),
-			WebhookSecret: envString("VOICE_WEBHOOK_SECRET", ""),
+			Provider:      parser.string("VOICE_PROVIDER", providerDisabled),
+			WebhookSecret: parser.string("VOICE_WEBHOOK_SECRET", ""),
 		},
 		Storage: StorageConfig{
-			Provider:        envString("STORAGE_PROVIDER", "disabled"),
-			Bucket:          envString("STORAGE_BUCKET", ""),
-			Region:          envString("STORAGE_REGION", ""),
-			Endpoint:        envString("STORAGE_ENDPOINT", ""),
-			AccessKeyID:     envString("STORAGE_ACCESS_KEY_ID", ""),
-			SecretAccessKey: envString("STORAGE_SECRET_ACCESS_KEY", ""),
+			Provider:        parser.string("STORAGE_PROVIDER", providerDisabled),
+			Bucket:          parser.string("STORAGE_BUCKET", ""),
+			Region:          parser.string("STORAGE_REGION", ""),
+			Endpoint:        parser.string("STORAGE_ENDPOINT", ""),
+			AccessKeyID:     parser.string("STORAGE_ACCESS_KEY_ID", ""),
+			SecretAccessKey: parser.string("STORAGE_SECRET_ACCESS_KEY", ""),
 		},
 		Token: TokenConfig{
-			Secret: envString("TOKEN_SECRET", "local-dev-token-secret-change-me-32chars"),
+			Secret:         parser.string("TOKEN_SECRET", localDevToken),
+			AccessTokenTTL: parser.duration("JWT_ACCESS_TOKEN_TTL", 24*time.Hour),
+		},
+		Demo: DemoConfig{
+			TokenSecret: parser.string("DEMO_TOKEN_SECRET", localDevToken),
+			TokenTTL:    parser.duration("DEMO_TOKEN_TTL", 30*24*time.Hour),
 		},
 		Jobs: JobsConfig{
-			BufferSize: envInt("JOB_BUFFER_SIZE", 32),
-			RetryDelay: envDuration("JOB_RETRY_DELAY", 2*time.Second),
+			BufferSize: parser.int("JOB_BUFFER_SIZE", 32),
+			RetryDelay: parser.duration("JOB_RETRY_DELAY", 2*time.Second),
 		},
 	}
 
+	if err := parser.join(); err != nil {
+		return Config{}, err
+	}
 	if err := cfg.Validate(); err != nil {
 		return Config{}, err
 	}
@@ -171,6 +195,9 @@ func (c Config) Validate() error {
 	}
 	if strings.TrimSpace(c.App.Name) == "" {
 		errs = append(errs, fmt.Errorf("APP_NAME is required"))
+	}
+	if c.Token.AccessTokenTTL <= 0 {
+		errs = append(errs, fmt.Errorf("JWT_ACCESS_TOKEN_TTL must be positive"))
 	}
 	if strings.TrimSpace(c.HTTP.Addr) == "" {
 		errs = append(errs, fmt.Errorf("HTTP_ADDR is required"))
@@ -196,6 +223,12 @@ func (c Config) Validate() error {
 	if len(c.Token.Secret) < 32 {
 		errs = append(errs, fmt.Errorf("TOKEN_SECRET must be at least 32 characters"))
 	}
+	if len(c.Demo.TokenSecret) < 32 {
+		errs = append(errs, fmt.Errorf("DEMO_TOKEN_SECRET must be at least 32 characters"))
+	}
+	if c.Demo.TokenTTL <= 0 {
+		errs = append(errs, fmt.Errorf("DEMO_TOKEN_TTL must be positive"))
+	}
 	if c.Jobs.BufferSize < 1 {
 		errs = append(errs, fmt.Errorf("JOB_BUFFER_SIZE must be at least 1"))
 	}
@@ -209,24 +242,104 @@ func (c Config) Validate() error {
 		errs = append(errs, fmt.Errorf("LOG_FORMAT must be json or text"))
 	}
 
-	if c.App.Env == EnvProduction {
-		if strings.TrimSpace(c.Database.URL) == "" && c.Database.RequireInProduction {
-			errs = append(errs, fmt.Errorf("DATABASE_URL is required in production"))
+	errs = append(errs, c.validateProviders()...)
+	errs = append(errs, c.validateDeployedSecrets()...)
+
+	return errors.Join(errs...)
+}
+
+func (c Config) validateProviders() []error {
+	var errs []error
+
+	if providerEnabled(c.Email.Provider) {
+		if strings.TrimSpace(c.Email.APIKey) == "" {
+			errs = append(errs, fmt.Errorf("EMAIL_API_KEY is required when EMAIL_PROVIDER is enabled"))
 		}
-		if c.Token.Secret == "local-dev-token-secret-change-me-32chars" {
-			errs = append(errs, fmt.Errorf("TOKEN_SECRET must be explicit in production"))
-		}
-		if c.Email.Provider != "disabled" {
-			if strings.TrimSpace(c.Email.APIKey) == "" {
-				errs = append(errs, fmt.Errorf("EMAIL_API_KEY is required when EMAIL_PROVIDER is enabled"))
-			}
-			if strings.TrimSpace(c.Email.FromAddress) == "" {
-				errs = append(errs, fmt.Errorf("EMAIL_FROM_ADDRESS is required when EMAIL_PROVIDER is enabled"))
-			}
+		if strings.TrimSpace(c.Email.FromAddress) == "" {
+			errs = append(errs, fmt.Errorf("EMAIL_FROM_ADDRESS is required when EMAIL_PROVIDER is enabled"))
 		}
 	}
 
-	return errors.Join(errs...)
+	if providerEnabled(c.LLM.Provider) {
+		if strings.TrimSpace(c.LLM.APIKey) == "" {
+			errs = append(errs, fmt.Errorf("LLM_API_KEY is required when LLM_PROVIDER is enabled"))
+		}
+		if strings.TrimSpace(c.LLM.Model) == "" {
+			errs = append(errs, fmt.Errorf("LLM_MODEL is required when LLM_PROVIDER is enabled"))
+		}
+	}
+
+	if providerEnabled(c.Voice.Provider) {
+		if strings.TrimSpace(c.Voice.WebhookSecret) == "" {
+			errs = append(errs, fmt.Errorf("VOICE_WEBHOOK_SECRET is required when VOICE_PROVIDER is enabled"))
+		}
+	}
+
+	if providerEnabled(c.Storage.Provider) {
+		if strings.TrimSpace(c.Storage.Bucket) == "" {
+			errs = append(errs, fmt.Errorf("STORAGE_BUCKET is required when STORAGE_PROVIDER is enabled"))
+		}
+		if strings.TrimSpace(c.Storage.AccessKeyID) == "" {
+			errs = append(errs, fmt.Errorf("STORAGE_ACCESS_KEY_ID is required when STORAGE_PROVIDER is enabled"))
+		}
+		if strings.TrimSpace(c.Storage.SecretAccessKey) == "" {
+			errs = append(errs, fmt.Errorf("STORAGE_SECRET_ACCESS_KEY is required when STORAGE_PROVIDER is enabled"))
+		}
+		if strings.TrimSpace(c.Storage.Region) == "" && strings.TrimSpace(c.Storage.Endpoint) == "" {
+			errs = append(errs, fmt.Errorf("STORAGE_REGION or STORAGE_ENDPOINT is required when STORAGE_PROVIDER is enabled"))
+		}
+	}
+
+	return errs
+}
+
+func (c Config) validateDeployedSecrets() []error {
+	if !c.requiresExplicitSecrets() {
+		return nil
+	}
+
+	var errs []error
+
+	if strings.TrimSpace(c.Database.URL) == "" && c.Database.RequireInProduction {
+		errs = append(errs, fmt.Errorf("DATABASE_URL is required in %s", c.App.Env))
+	}
+	if c.Token.Secret == localDevToken {
+		errs = append(errs, fmt.Errorf("TOKEN_SECRET must be explicit in %s", c.App.Env))
+	}
+	if strings.TrimSpace(c.Redis.URL) == "" && c.Redis.RequireInProduction {
+		errs = append(errs, fmt.Errorf("REDIS_URL is required in %s", c.App.Env))
+	}
+
+	return errs
+}
+
+func (c Config) requiresExplicitSecrets() bool {
+	return c.App.Env == EnvProduction || c.App.Env == EnvStaging
+}
+
+func providerEnabled(provider string) bool {
+	provider = strings.TrimSpace(provider)
+	return provider != "" && provider != providerDisabled
+}
+
+func loadEnvFiles() {
+	for _, path := range []string{".env", "backend/.env", "../.env"} {
+		if _, err := os.Stat(path); err != nil {
+			continue
+		}
+		_ = godotenv.Load(path)
+	}
+}
+
+func normalizeListenAddr(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ":8080"
+	}
+	if strings.HasPrefix(value, ":") || strings.Contains(value, ":") {
+		return value
+	}
+	return ":" + value
 }
 
 func oneOf(value string, allowed ...string) bool {
@@ -236,66 +349,4 @@ func oneOf(value string, allowed ...string) bool {
 		}
 	}
 	return false
-}
-
-func envString(key, fallback string) string {
-	if value, ok := os.LookupEnv(key); ok {
-		value = strings.TrimSpace(value)
-		if value != "" {
-			return value
-		}
-	}
-	return fallback
-}
-
-func envCSV(key string, fallback []string) []string {
-	raw, ok := os.LookupEnv(key)
-	if !ok || strings.TrimSpace(raw) == "" {
-		return fallback
-	}
-	parts := strings.Split(raw, ",")
-	values := make([]string, 0, len(parts))
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		if part != "" {
-			values = append(values, part)
-		}
-	}
-	return values
-}
-
-func envInt(key string, fallback int) int {
-	raw, ok := os.LookupEnv(key)
-	if !ok || strings.TrimSpace(raw) == "" {
-		return fallback
-	}
-	value, err := strconv.Atoi(raw)
-	if err != nil {
-		return fallback
-	}
-	return value
-}
-
-func envBool(key string, fallback bool) bool {
-	raw, ok := os.LookupEnv(key)
-	if !ok || strings.TrimSpace(raw) == "" {
-		return fallback
-	}
-	value, err := strconv.ParseBool(raw)
-	if err != nil {
-		return fallback
-	}
-	return value
-}
-
-func envDuration(key string, fallback time.Duration) time.Duration {
-	raw, ok := os.LookupEnv(key)
-	if !ok || strings.TrimSpace(raw) == "" {
-		return fallback
-	}
-	value, err := time.ParseDuration(raw)
-	if err != nil {
-		return fallback
-	}
-	return value
 }

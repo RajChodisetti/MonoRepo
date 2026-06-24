@@ -1,0 +1,252 @@
+[
+  {
+    "name": "Chicken Parma",
+    "cuisines": ["Australian", "Pub Food"],
+    "search_query": "melbourne restaurant chicken parma plated"
+  },
+  {
+    "name": "Fish and Chips",
+    "cuisines": ["Australian", "Seafood"],
+    "search_query": "melbourne restaurant fish and chips plated"
+  },
+  {
+    "name": "Meat Pie",
+    "cuisines": ["Australian", "Bakery"],
+    "search_query": "melbourne bakery meat pie food"
+  },
+  {
+    "name": "Avocado Toast",
+    "cuisines": ["Australian", "Cafe"],
+    "search_query": "melbourne cafe avocado toast brunch"
+  },
+  {
+    "name": "Barramundi",
+    "cuisines": ["Australian", "Seafood"],
+    "search_query": "melbourne restaurant barramundi plated"
+  },
+  {
+    "name": "Lamington",
+    "cuisines": ["Australian", "Dessert"],
+    "search_query": "melbourne bakery lamington dessert"
+  },
+  {
+    "name": "Pavlova",
+    "cuisines": ["Australian", "Dessert"],
+    "search_query": "melbourne restaurant pavlova dessert"
+  },
+  {
+    "name": "Pumpkin Soup",
+    "cuisines": ["Australian", "Cafe"],
+    "search_query": "melbourne cafe pumpkin soup bowl"
+  },
+  {
+    "name": "Beef Burger",
+    "cuisines": ["Australian", "Burger"],
+    "search_query": "melbourne restaurant beef burger plated"
+  },
+  {
+    "name": "Sausage Roll",
+    "cuisines": ["Australian", "Bakery"],
+    "search_query": "melbourne bakery sausage roll food"
+  },
+  {
+    "name": "Pad Thai",
+    "cuisines": ["Thai", "Noodles"],
+    "search_query": "melbourne thai restaurant pad thai plated"
+  },
+  {
+    "name": "Green Curry",
+    "cuisines": ["Thai", "Curry"],
+    "search_query": "melbourne thai restaurant green curry bowl"
+  },
+  {
+    "name": "Red Curry",
+    "cuisines": ["Thai", "Curry"],
+    "search_query": "melbourne thai restaurant red curry bowl"
+  },
+  {
+    "name": "Tom Yum Soup",
+    "cuisines": ["Thai", "Soup"],
+    "search_query": "melbourne thai restaurant tom yum soup"
+  },
+  {
+    "name": "Massaman Curry",
+    "cuisines": ["Thai", "Curry"],
+    "search_query": "melbourne thai restaurant massaman curry"
+  },
+  {
+    "name": "Pad See Ew",
+    "cuisines": ["Thai", "Noodles"],
+    "search_query": "melbourne thai restaurant pad see ew"
+  },
+  {
+    "name": "Som Tum",
+    "cuisines": ["Thai", "Salad"],
+    "search_query": "melbourne thai restaurant som tum salad"
+  },
+  {
+    "name": "Mango Sticky Rice",
+    "cuisines": ["Thai", "Dessert"],
+    "search_query": "melbourne thai restaurant mango sticky rice"
+  },
+  {
+    "name": "Thai Fried Rice",
+    "cuisines": ["Thai", "Rice"],
+    "search_query": "melbourne thai restaurant fried rice plated"
+  },
+  {
+    "name": "Larb Gai",
+    "cuisines": ["Thai", "Salad"],
+    "search_query": "melbourne thai restaurant larb gai"
+  },
+  {
+    "name": "Butter Chicken",
+    "cuisines": ["Indian", "Curry"],
+    "search_query": "melbourne indian restaurant butter chicken"
+  },
+  {
+    "name": "Chicken Tikka Masala",
+    "cuisines": ["Indian", "Curry"],
+    "search_query": "melbourne indian restaurant chicken tikka masala"
+  },
+  {
+    "name": "Lamb Biryani",
+    "cuisines": ["Indian", "Rice"],
+    "search_query": "melbourne indian restaurant lamb biryani"
+  },
+  {
+    "name": "Palak Paneer",
+    "cuisines": ["Indian", "Vegetarian"],
+    "search_query": "melbourne indian restaurant palak paneer"
+  },
+  {
+    "name": "Garlic Naan",
+    "cuisines": ["Indian", "Bread"],
+    "search_query": "melbourne indian restaurant garlic naan bread"
+  },
+  {
+    "name": "Samosa",
+    "cuisines": ["Indian", "Street Food"],
+    "search_query": "melbourne indian restaurant samosa plated"
+  },
+  {
+    "name": "Tandoori Chicken",
+    "cuisines": ["Indian", "Grill"],
+    "search_query": "melbourne indian restaurant tandoori chicken"
+  },
+  {
+    "name": "Dal Makhani",
+    "cuisines": ["Indian", "Vegetarian"],
+    "search_query": "melbourne indian restaurant dal makhani"
+  },
+  {
+    "name": "Rogan Josh",
+    "cuisines": ["Indian", "Curry"],
+    "search_query": "melbourne indian restaurant rogan josh lamb"
+  },
+  {
+    "name": "Masala Dosa",
+    "cuisines": ["Indian", "South Indian"],
+    "search_query": "melbourne south indian restaurant masala dosa"
+  },
+  {
+    "name": "Margherita Pizza",
+    "cuisines": ["Italian", "Pizza"],
+    "search_query": "melbourne italian restaurant margherita pizza"
+  },
+  {
+    "name": "Spaghetti Carbonara",
+    "cuisines": ["Italian", "Pasta"],
+    "search_query": "melbourne italian restaurant spaghetti carbonara"
+  },
+  {
+    "name": "Lasagna",
+    "cuisines": ["Italian", "Pasta"],
+    "search_query": "melbourne italian restaurant lasagna baked"
+  },
+  {
+    "name": "Mushroom Risotto",
+    "cuisines": ["Italian", "Rice"],
+    "search_query": "melbourne italian restaurant mushroom risotto"
+  },
+  {
+    "name": "Tiramisu",
+    "cuisines": ["Italian", "Dessert"],
+    "search_query": "melbourne italian restaurant tiramisu dessert"
+  },
+  {
+    "name": "Penne Arrabbiata",
+    "cuisines": ["Italian", "Pasta"],
+    "search_query": "melbourne italian restaurant penne arrabbiata"
+  },
+  {
+    "name": "Bruschetta",
+    "cuisines": ["Italian", "Starter"],
+    "search_query": "melbourne italian restaurant bruschetta starter"
+  },
+  {
+    "name": "Gnocchi",
+    "cuisines": ["Italian", "Pasta"],
+    "search_query": "melbourne italian restaurant gnocchi plated"
+  },
+  {
+    "name": "Calzone",
+    "cuisines": ["Italian", "Pizza"],
+    "search_query": "melbourne italian restaurant calzone baked"
+  },
+  {
+    "name": "Affogato",
+    "cuisines": ["Italian", "Dessert"],
+    "search_query": "melbourne italian cafe affogato dessert"
+  },
+  {
+    "name": "Pho",
+    "cuisines": ["Vietnamese", "Soup"],
+    "search_query": "melbourne vietnamese restaurant pho bowl"
+  },
+  {
+    "name": "Banh Mi",
+    "cuisines": ["Vietnamese", "Sandwich"],
+    "search_query": "melbourne vietnamese restaurant banh mi"
+  },
+  {
+    "name": "Souvlaki",
+    "cuisines": ["Greek", "Street Food"],
+    "search_query": "melbourne greek restaurant souvlaki plated"
+  },
+  {
+    "name": "Dim Sum",
+    "cuisines": ["Chinese", "Dumplings"],
+    "search_query": "melbourne chinese restaurant dim sum basket"
+  },
+  {
+    "name": "Tonkotsu Ramen",
+    "cuisines": ["Japanese", "Noodles"],
+    "search_query": "melbourne japanese restaurant tonkotsu ramen bowl"
+  },
+  {
+    "name": "Salmon Sushi Roll",
+    "cuisines": ["Japanese", "Sushi"],
+    "search_query": "melbourne japanese restaurant salmon sushi roll"
+  },
+  {
+    "name": "Beef Tacos",
+    "cuisines": ["Mexican", "Street Food"],
+    "search_query": "melbourne mexican restaurant beef tacos"
+  },
+  {
+    "name": "Falafel Wrap",
+    "cuisines": ["Middle Eastern", "Vegetarian"],
+    "search_query": "melbourne middle eastern restaurant falafel wrap"
+  },
+  {
+    "name": "Butter Croissant",
+    "cuisines": ["French", "Bakery"],
+    "search_query": "melbourne french bakery butter croissant"
+  },
+  {
+    "name": "Greek Salad",
+    "cuisines": ["Greek", "Salad"],
+    "search_query": "melbourne greek restaurant greek salad bowl"
+  }
+]

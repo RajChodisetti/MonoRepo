@@ -1,0 +1,11 @@
+# Scraped food images (large binaries)
+images/*
+!images/.gitkeep
+
+# Python virtualenv
+.venv/
+__pycache__/
+*.pyc
+
+# Local Playwright browsers
+.playwright-browsers/

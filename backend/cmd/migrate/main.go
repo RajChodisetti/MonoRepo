@@ -6,11 +6,15 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/config"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/db"
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/logger"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/migrations"
 )
+
+const databaseReadyTimeout = 30 * time.Second
 
 func main() {
 	if len(os.Args) != 2 {
@@ -26,18 +30,20 @@ func main() {
 	if err != nil {
 		log.Fatalf("load config: %v", err)
 	}
-	if cfg.Database.URL == "" {
-		log.Fatal("DATABASE_URL is required to run migrations")
-	}
 
 	ctx := context.Background()
-	database, err := db.Connect(ctx, cfg.Database)
+	appLog := logger.New(cfg.Logging)
+	database, err := db.ConnectRequiredLogged(ctx, appLog, cfg.Database, databaseReadyTimeout)
 	if err != nil {
 		log.Fatalf("connect database: %v", err)
 	}
-	defer database.Close()
+	defer db.CloseLogged(ctx, appLog, database)
 
-	dir := filepath.Join("backend", "migrations")
+	dir, err := migrationsDir()
+	if err != nil {
+		log.Fatalf("resolve migrations dir: %v", err)
+	}
+
 	switch direction {
 	case "up":
 		err = migrations.ApplyUp(ctx, database.Pool(), dir)
@@ -49,4 +55,18 @@ func main() {
 	}
 
 	fmt.Printf("migration %s complete\n", direction)
+}
+
+func migrationsDir() (string, error) {
+	for _, candidate := range []string{
+		filepath.Join("backend", "migrations"),
+		"migrations",
+		filepath.Join("..", "migrations"),
+	} {
+		info, err := os.Stat(candidate)
+		if err == nil && info.IsDir() {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("migrations directory not found")
 }
