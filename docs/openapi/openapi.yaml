@@ -30,6 +30,8 @@ tags:
     description: Public signup/login and session identity
   - name: Admin
     description: Internal admin profile
+  - name: User
+    description: Restaurant owner and developer profile
   - name: Restaurants
     description: Restaurant lead CRUD, filters, and lifecycle status
   - name: Members
@@ -133,6 +135,43 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AdminUser'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/user/me:
+    get:
+      tags: [User]
+      summary: User profile
+      operationId: userMe
+      security:
+        - bearerAuth: []
+      description: |
+        Requires role `restaurant_owner` or `developer`.
+        Returns full user account details and restaurants where the user is a member.
+        For JWT claims only, use `GET /api/v1/auth/me`. Admins use `GET /api/v1/admin/me`.
+      responses:
+        '200':
+          description: User profile with restaurant memberships
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+              example:
+                id: 550e8400-e29b-41d4-a716-446655440000
+                email: owner@local.test
+                full_name: Demo Restaurant Owner
+                role: restaurant_owner
+                is_active: true
+                created_at: '2026-06-24T10:00:00Z'
+                updated_at: '2026-06-24T10:00:00Z'
+                restaurants:
+                  - id: 660e8400-e29b-41d4-a716-446655440001
+                    name: Demo Fixture Cafe
+                    email: owner@local.test
+                    status: lead
+                    member_role: owner
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -689,6 +728,49 @@ components:
         role:
           type: string
           enum: [internal_admin]
+
+    UserProfile:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        full_name:
+          type: string
+        role:
+          $ref: '#/components/schemas/UserRole'
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        restaurants:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserRestaurantMembership'
+
+    UserRestaurantMembership:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        status:
+          $ref: '#/components/schemas/RestaurantStatus'
+        member_role:
+          type: string
+          example: owner
 
     RestaurantStatus:
       type: string

@@ -219,7 +219,7 @@ Every ticket must satisfy these unless explicitly not applicable:
 - Admin can edit profile fields.
 - Admin can add/edit/delete menu items.
 - Form validation errors are visible.
-- Saved data appears in detail page without refresh issues. 
+- Saved data appears in detail page without refresh issues.
 
 ---
 
@@ -235,7 +235,7 @@ Every ticket must satisfy these unless explicitly not applicable:
 - Payload includes hero copy, cuisine, menu, hours, address, phone, reservation CTA, AI receptionist CTA, content automation CTA.
 - Payload excludes internal notes and raw private metadata.
 - Payload is stored as JSON snapshot in `demo_sites.payload`.
-- Unit tests cover missing menu/hours/images.
+- Unit tests cover missing menu/hours/images. 
 
 ### P1-016 — Implement slug and signed token generation
 
@@ -247,7 +247,7 @@ Every ticket must satisfy these unless explicitly not applicable:
 - Signed token validates demo site access.
 - Token secret comes from environment config.
 - Token rotation endpoint exists.
-- Expired/invalid token returns safe public error.
+- Expired/invalid token returns safe public error.    
 
 ### P1-017 — Create demo site schema and API
 

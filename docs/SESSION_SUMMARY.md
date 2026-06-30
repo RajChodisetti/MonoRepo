@@ -1,7 +1,7 @@
 # Session Summary
 
-**Latest (2026-06-23):** OpenAPI 3.0 spec at `docs/openapi/openapi.yaml` documents all Phase 1 API endpoints with request/response schemas. Validate with `make openapi`; view via Swagger Editor or Docker Swagger UI.
+**Latest (2026-06-24):** `GET /api/v1/user/me` returns full profile for `restaurant_owner` and `developer` (name, email, role, timestamps, linked restaurants). Use Bearer token after login. Admins continue using `GET /api/v1/admin/me`.
 
-**Prior:** Postman PM demo flow, architecture work-log, P1-010 restaurant CRUD, domain package layout.
+**Prior:** Scraped restaurant data import (`make seed-restaurants-data`), OpenAPI spec, P1-010 restaurant CRUD.
 
-**Next:** P1-011 profiles; keep OpenAPI in sync when routes change.
+**Next:** Profile update API; P1-011 restaurant profile HTTP routes.

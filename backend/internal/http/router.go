@@ -30,6 +30,7 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 
 	authHandler := handlers.NewAuthHandler(authService, cfg.App.Env, writeJSON, writeError)
 	adminHandler := handlers.NewAdminHandler(dataStore.Users, writeJSON, writeError)
+	userHandler := handlers.NewUserHandler(dataStore.Users, dataStore.Restaurants, dataStore.Memberships, writeJSON, writeError)
 	restaurantHandler := handlers.NewRestaurantHandler(accessService, writeJSON, writeError)
 	demoPublicHandler := handlers.NewDemoPublicHandler(demoService, writeJSON, writeError)
 	demoAdminHandler := handlers.NewDemoAdminHandler(demoService, writeJSON, writeError)
@@ -43,6 +44,9 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	}
 	protectInternalAdmin := func(next http.Handler) http.Handler {
 		return protectAuthenticated(RequireRole(auth.RoleInternalAdmin)(next))
+	}
+	protectRestaurantUser := func(next http.Handler) http.Handler {
+		return protectAuthenticated(RequireAnyRole(auth.RoleRestaurantOwner, auth.RoleDeveloper)(next))
 	}
 	protectRestaurantScoped := func(next http.Handler) http.Handler {
 		return protectAuthenticated(RequireAnyRole(auth.RoleInternalAdmin, auth.RoleRestaurantOwner)(
@@ -59,6 +63,7 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	mux.Handle("GET /healthz", protectDeveloper(http.HandlerFunc(healthz(cfg))))
 	mux.Handle("GET /readyz", protectDeveloper(http.HandlerFunc(readyz(readiness))))
 	mux.Handle("GET /api/v1/admin/me", protectInternalAdmin(http.HandlerFunc(adminHandler.Me)))
+	mux.Handle("GET /api/v1/user/me", protectRestaurantUser(http.HandlerFunc(userHandler.Me)))
 
 	mux.Handle("GET /api/v1/restaurants", protectAuthenticated(RequireAnyRole(auth.RoleInternalAdmin, auth.RoleRestaurantOwner)(
 		http.HandlerFunc(restaurantHandler.List),

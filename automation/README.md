@@ -1,4 +1,20 @@
-# Melbourne Food Image Scraper
+# Automation
+
+## Restaurant lead & outreach pipelines
+
+See **[outreach/README.md](outreach/README.md)** for Apollo lead fetch, Google Places scraping, city pipelines, and email outreach scripts.
+
+```bash
+cd automation/outreach
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+python city_pipeline.py --city Sydney --total 100
+```
+
+---
+
+## Melbourne Food Image Scraper
 
 Scrapes **Google Images** for popular Melbourne restaurant dishes, downloads the first usable photo per dish, and stores:
 

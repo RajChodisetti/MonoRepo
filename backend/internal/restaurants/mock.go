@@ -117,6 +117,28 @@ func (mock *MembershipMock) HasMembership(ctx context.Context, userID, restauran
 	return restaurants[restaurantID], nil
 }
 
+func (mock *MembershipMock) ListMembershipsByUser(ctx context.Context, userID uuid.UUID) ([]Member, error) {
+	restaurants, ok := mock.Members[userID]
+	if !ok {
+		return nil, nil
+	}
+
+	members := make([]Member, 0, len(restaurants))
+	for restaurantID, allowed := range restaurants {
+		if !allowed {
+			continue
+		}
+		members = append(members, Member{
+			ID:           uuid.New(),
+			RestaurantID: restaurantID,
+			UserID:       userID,
+			MemberRole:   "owner",
+			CreatedAt:    time.Now(),
+		})
+	}
+	return members, nil
+}
+
 func (mock *MembershipMock) ListRestaurantIDsByUser(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
 	restaurants, ok := mock.Members[userID]
 	if !ok {
