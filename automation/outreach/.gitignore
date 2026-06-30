@@ -1,0 +1,22 @@
+# Local secrets
+.env
+
+# Generated pipeline output (run locally; do not commit)
+leads/*
+!leads/.gitkeep
+data/*
+!data/.gitkeep
+output/*
+!output/.gitkeep
+drafts/*
+!drafts/.gitkeep
+reports/*
+!reports/.gitkeep
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Optional credentials
+gsheet_service_account.json

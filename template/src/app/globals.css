@@ -1,0 +1,50 @@
+@import "tailwindcss";
+@import "../templates/aurora/theme.css";
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  [data-template="1"] body {
+    background: #10100e;
+    color: #f7f0e6;
+    font-family: var(--font-cinematic-body), system-ui, sans-serif;
+  }
+
+  [data-template="2"] body {
+    background: #09090b;
+    color: #f8fafc;
+    font-family: var(--font-aurora-body), system-ui, sans-serif;
+  }
+}
+
+@layer components {
+  [data-template="1"] .btn-primary {
+    @apply inline-flex items-center justify-center rounded px-8 py-3 text-[11px] font-semibold uppercase tracking-[0.14em] bg-[#b88a44] text-[#10100e] transition hover:bg-[#d4b872] hover:-translate-y-0.5;
+  }
+
+  [data-template="1"] .btn-ghost {
+    @apply inline-flex items-center justify-center rounded border border-[#f7f0e6]/35 px-8 py-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#f7f0e6] transition hover:border-[#b88a44] hover:text-[#b88a44];
+  }
+
+  [data-template="1"] .font-display {
+    font-family: var(--font-cinematic-display);
+  }
+}
+
+[data-template="1"] .hero-ken-burns img {
+  animation: kenBurns 22s ease-in-out infinite alternate;
+  transform-origin: center center;
+}
+
+@keyframes kenBurns {
+  from { transform: scale(1.02); }
+  to { transform: scale(1.08); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  [data-template="1"] .hero-ken-burns img { animation: none; }
+  [data-template="2"] .aurora-blob { animation: none; }
+}

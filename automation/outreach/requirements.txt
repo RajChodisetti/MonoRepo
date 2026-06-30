@@ -1,0 +1,23 @@
+# Tuvi Solutions — Outreach Agent v2.0
+# Install with: pip install -r requirements.txt
+
+# ── Core ────────────────────────────────────────────────────
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+lxml>=4.9.0              # faster BS4 parser
+
+# ── LLM ─────────────────────────────────────────────────────
+openai>=1.0.0
+
+# ── Google Sheets (optional — only needed for --gsheet) ─────
+gspread>=6.0.0
+google-auth>=2.29.0
+
+# ── Slack notifications (optional) ──────────────────────────
+slack-sdk>=3.27.0
+
+# ── Dev / testing (optional) ────────────────────────────────
+python-dotenv>=1.0.0     # auto-load .env file
+
+# ── Database import ─────────────────────────────────────────
+psycopg2-binary>=2.9.0

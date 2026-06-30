@@ -286,6 +286,38 @@ func (repo *MembershipPostgres) HasMembership(ctx context.Context, userID, resta
 	return true, nil
 }
 
+func (repo *MembershipPostgres) ListMembershipsByUser(ctx context.Context, userID uuid.UUID) ([]Member, error) {
+	if repo.pool == nil {
+		return nil, fmt.Errorf("database pool is not configured")
+	}
+
+	const query = `
+		SELECT id, restaurant_id, user_id, member_role, created_at
+		FROM restaurant_members
+		WHERE user_id = $1
+		ORDER BY created_at DESC`
+
+	rows, err := repo.pool.Query(ctx, query, userID)
+	if err != nil {
+		return nil, fmt.Errorf("list memberships by user: %w", err)
+	}
+	defer rows.Close()
+
+	var members []Member
+	for rows.Next() {
+		var member Member
+		if err := rows.Scan(&member.ID, &member.RestaurantID, &member.UserID, &member.MemberRole, &member.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan membership: %w", err)
+		}
+		members = append(members, member)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list memberships by user rows: %w", err)
+	}
+
+	return members, nil
+}
+
 func (repo *MembershipPostgres) ListRestaurantIDsByUser(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
 	if repo.pool == nil {
 		return nil, fmt.Errorf("database pool is not configured")

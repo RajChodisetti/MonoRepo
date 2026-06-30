@@ -9,3 +9,17 @@ __pycache__/
 
 # Local Playwright browsers
 .playwright-browsers/
+
+# Outreach pipeline generated output
+outreach/.env
+outreach/.venv/
+outreach/leads/*
+!outreach/leads/.gitkeep
+outreach/data/*
+!outreach/data/.gitkeep
+outreach/output/*
+!outreach/output/.gitkeep
+outreach/drafts/*
+!outreach/drafts/.gitkeep
+outreach/reports/*
+!outreach/reports/.gitkeep

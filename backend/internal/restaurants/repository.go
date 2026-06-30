@@ -29,6 +29,7 @@ type Member struct {
 type MembershipRepository interface {
 	HasMembership(ctx context.Context, userID, restaurantID uuid.UUID) (bool, error)
 	ListRestaurantIDsByUser(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error)
+	ListMembershipsByUser(ctx context.Context, userID uuid.UUID) ([]Member, error)
 	ListMembersByRestaurant(ctx context.Context, restaurantID uuid.UUID) ([]Member, error)
 	AddMember(ctx context.Context, restaurantID, userID uuid.UUID, memberRole string) (Member, error)
 }

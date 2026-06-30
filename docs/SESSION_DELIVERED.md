@@ -12,6 +12,40 @@ Each entry should explain:
 - how the work fits with the rest of the Phase 1 or Phase 2 plan;
 - risks, gaps, or follow-ups.
 
+## 2026-06-24 — User Profile API (`GET /api/v1/user/me`)
+
+**Role:** Backend Agent
+
+**Delivered:** `GET /api/v1/user/me` for `restaurant_owner` and `developer` roles — returns full user profile (id, email, full_name, role, is_active, created_at, updated_at) plus linked restaurants with member_role. Parallel to existing `GET /api/v1/admin/me`. OpenAPI updated.
+
+**Why:** Normal users need a dedicated profile endpoint with complete account details, not just JWT claims from `/api/v1/auth/me`.
+
+**Tests / Checks Run:** `go test ./backend/...` — all passing
+
+**Follow-ups:** Optional PATCH `/api/v1/user/me` for profile updates
+
+## 2026-06-24 — Scraped Restaurant Data Schema and Import
+
+**Role:** Backend Agent
+
+**Delivered:** Migration `000008_restaurant_profiles_menus` with `restaurant_profiles`, `menus`, `menu_items`, `restaurant_reviews`, and `restaurant_data_imports` tables; `seed-restaurants-data` command and `make seed-restaurants-data` target; imported `data/restaurants_data.json` into PostgreSQL (8 unique restaurants, 3 duplicate `google_place_id` rows skipped).
+
+**Why:** Scraped SerpAPI restaurant payloads (menus, reviews, contact, location, images) need durable storage before P1-011 profile APIs and demo payload builder can consume them.
+
+**Business Value:** Sales and demo workflows can now query real scraped restaurant profiles, menus, and reviews locally instead of relying on the raw JSON file.
+
+**Plan Fit:** Implements the P1-011 database shape (profiles, menus, menu items) plus review storage; unblocks profile CRUD APIs and demo payload builder polish.
+
+**Tests / Checks Run:**
+- `make migrate-up` — success
+- `make seed-restaurants-data` — 8 imported, 3 skipped
+- SQL verification — menu item and review counts per restaurant confirmed
+
+**Risks / Follow-ups:**
+- No profile/menu HTTP APIs yet; data is import-only
+- Re-import is idempotent by `google_place_id` but replaces menu items and reviews
+- Add profile API routes and link demo builder to imported data
+
 ## 2026-06-17 — P1-E01 Backend Foundation
 
 **Role:** Backend Agent

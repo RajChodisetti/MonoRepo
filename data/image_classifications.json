@@ -1,0 +1,2029 @@
+{
+  "version": 1,
+  "generated_at": "2026-06-28T18:45:14Z",
+  "total": 337,
+  "classifications": {
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFQ54uHhn1ttPOHithTGQWDhrP8cgKx2-mzX6vsI-lQF_2R-kt6otAWwiFfIgmqraS19-q3DXZGe8kQmy6KXxrqz9_UriKBNwszkTlpINp_wJc4kCzAjQON9rAtHo5QKpYIoywq=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGoGOHQBiGL2n25wwY0yNtU6jUskbMwbtq6J8s7BlTFgOkJHO17qLXDM-VjD186CJGetETLj5eq7NE0qvG0LfLd8FUhDjreqylhrkgo3nvL-hyBqnsP0nXs59O_Ez6CvtCc6ujlmdjf00c=w1000-h1000-c-n": {
+      "type": "menu_list",
+      "confidence": 0.75,
+      "ocr_hint": "title:Menu",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHXpuycLUJhpCzikIeqXRQzjFpaieEU999lnArxUbucab62sdvbgHY45ZnCaxz470cI8LDrdBS9NHvDYJP9VUMmdCqx6B3zPnT4-oICmTbomvBScIjcR_jc9t9pEb9bHF2qRY0Xw8fy5lwt=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.75,
+      "ocr_hint": "title:Videos",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAF01RZLNDt4Lom8H5_YCbOh9HR6UMCzTkiWR3G-FYkdxTd8-4RyQTb3J2rrJl-7ybwF3AZIE2IMtdFSaXX1NfTSacsqX-xmhUHtOqZYlch7YWTEVKBAE8p6XSRl4sC46IGPsiqQ=w1000-h1000-c-n": {
+      "type": "food",
+      "confidence": 0.75,
+      "ocr_hint": "title:Food & drink",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGTNJ7fPI1mYNtStRspdUhWL1RJEGn-DSSzH-Lz76F_FN_hhq71_m07v75Q95Pgt2ikrallPytMryo4dv9SgIh3vgukuYcOJCuciGxkMnsDzsY4itzI5HjcBweqSE18iBAFhOUWdKuLyc4=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.75,
+      "ocr_hint": "title:Vibe",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAH2trzfEuzCPVATxgWRS_JOwxvB9whiw8CEXrxRI6yOmpW3ErdRGupaB1WFCy-4rCEoUeHgMB4MZweIht6ARiWn6ONMM3ydLmsPAKgGk9slrfg8a0ULcjUh7mxpjA5DiMa-iqE=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFX9pZYOrcF9-nkm9vO7B3aEG-qcTd8HwaaEwZApLvM7r-UyE4azeno9b7wEPkXCs-qjOWyv61tDo5cLCf1lea74FBcTLnJSmwa5r0OTAYGBboFngsB0Kxirci6Es1rZQruLQao=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://streetviewpixels-pa.googleapis.com/v1/thumbnail?panoid=Fd4V2DIaCytXvWln8Yz2fA&cb_client=maps_sv.tactile.gps&w=224&h=298&yaw=347.19122&pitch=0&thumbfov=100": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGoGOHQBiGL2n25wwY0yNtU6jUskbMwbtq6J8s7BlTFgOkJHO17qLXDM-VjD186CJGetETLj5eq7NE0qvG0LfLd8FUhDjreqylhrkgo3nvL-hyBqnsP0nXs59O_Ez6CvtCc6ujlmdjf00c=w3024-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGVQWGcDVQqQD3kBfFj53TIpJzHY9H6os9huf_dN6AQdKe-WHkL3t8xh5pO6lLMxmkUczXNX6XZ8UITiXVrBQ1lVRGA1mHZ-Rq2F1500UFazOCwj6R4zT2-z32o1LCwCLhU8uf0nIoT0uHa=w3024-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEux6t_h9XtfH-k3y0ATJYJL4VtdxTx4Mm0bN8W1TjOL-9scElYmO5QyqyJjhqW-fta6hPGCEygUn9i7GSZw9evXwFTQVvfZYycdFn4Cz8isRZWEzEVy73DRHFFHb-IbUmEQFfz7r0j7RKz=w3024-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEn0668rWWgLLtRhhh4HEsHM0nRliN_zDDHLcxqDiFuCQW3rf3dphXfs3rQbKPenfWtQjoAocgLbb0Y36MKxXDN0lHswJSMmT3x9wNVezPwasPaLLMeSYu0OLz0EdA6biQH-cOwj3d_WbAP=w3024-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAH9uj2GHybyU1yRKchbNBci8eqQq96FAv7Wahu0FtD-xu2Ze7JgvDJUl2RuC-T-LC7kbz8oIUoxm_FScYYWA-SZmsbW0d1F8Nh8nPWsgwfvQjtbHxx98MK8xdjMVu2-UnYHcPd6=w3024-h4032-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGrm3oWxsj3WyhRxpouBH2GCqG86hiFkdG_WpiIRoaVjcQ_YhSEcQEpYidtqc3aLreb9bRDpty2amslkloAKm-BMSiF0IHS7KahhA05FRnQYmndhq7bAInbKZqE8KMQJ_g9vRlkzBk57vA=w4284-h5712-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAH2trzfEuzCPVATxgWRS_JOwxvB9whiw8CEXrxRI6yOmpW3ErdRGupaB1WFCy-4rCEoUeHgMB4MZweIht6ARiWn6ONMM3ydLmsPAKgGk9slrfg8a0ULcjUh7mxpjA5DiMa-iqE=w1500-h2250-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHPLcmlNbAxAGxthdR-9dcgks9pzi6gETM70aDDH_lp7pAVOpJ4beOID7rQROL-v3qdM57B3Yv0cOXfYcdCmp7D8JlcD0e-qRNAmZXKDzPNdMbTVq-GjQaT8-LBxabOK7YazRoXURpGLbsd=w2256-h3313-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFUlfugTN-QNLVd0HsaFRFkwlAA03yGLw7pjJm1ggKu4Sfw80T1gzy-nplA0EI-Sv6O90Cbokg25Zxf8bXR_1YoR2P_u8IH6VePvldeCL4lzQCnr9kRzlh43U0fd2Eakq5_XXvF8w=w3024-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFDPrJOwqjyarkKZDgw6EHUpHejctkWkXgThctjfvI7mlZ8YSgcOAAQJ4R9abuscZ5g6POVnEcgE86FY_Lke4fookh5tN-z9CZDANQuPQfoKEZZ_vUZV9s9PB88JyFyPr7gke2_=w3024-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFZOxHLhwdK2bNpY0pK1sufe7QomxVi4n9jiZng8n3nMrEDV9do7fbamxnOffzK9krCTh_nwkoB8IouT5bV_NKWwE2l3gMEAr8ADcBgdtsYAOsnbPCOj6WLhOXGBp1FfV43CkNAbg=w3000-h4000-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFxCQM5-_-hAzPd62rxoCT590yFVkYkSmJKq8KCK9GHTJnzBscNgq-Ybx5TC-lvIG6wWRnSnLyR0Omv2lfe0xjBEm1LtESBcDRFxKUcV8S5O9TF9VhcNa1MkdXqIlP9HjVqnQX2=w1204-h1600-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGZty80NLI2NA_5UPKxUnWkH6U-82pK_BfBTJGR1qflhHdNC8GFKoMq_BrgkEyys-yqlOKAGnJ_a16MiTNN6r-RSGWd7iPgM5xuoS02ZZPAKeulGFbvfwipAObeh1NLYAjfIdo=w3024-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAG9Yv7Puq59JlTJZHhqC8ATfmaot8luSyk3e9vmsQtM1EmlGb-DGI-F46k0cIrm1J7uEAz0v-8LjEkROzNI5AHWiguTp9x-GB_88CFfJvHsCFhV8ttoG3FQeZsrDf5q-BMlTtxpttfrxBAT=w3213-h5712-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGwOCY6luuYKfznWMKp_d2EGguLvxOiAwH7AVpqPgsI8dx8LCpf_cMgGQICoNhpGVmzmUFXSmZZAqZvyQfwjXE_7rtfLJZj34GGZ0s59KB3VAUXQ0Oe65MZ3f2cYlzDN0AhZAk2=w3024-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEEPGB_hM6UYssdPg6VWlQyfiuezw6tcsfGuelYoyzL1kXe1YjKYBtGNF_BBaCgbhkmGCYwAZMlpADm4wDoFJ7fkHDaB9yvXuCRSJNL-hYgJ2boiLzYP6Iesfge7o_9DjknVHvD=w3000-h4000-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-proxy/ALd4DhEatnenndlyk1jrDIBjogdOCbc8cS8iXyGzuVV3kQNW3BJG72r6zWq42dwALuxNCUjmPGBfa0U4r2tMOOPjRYEvav39wf8k6NSmYvS5mRelKGsNsQenyeWHqyQRudmHYzlgFt6n3fc_mVSVaA9c-X7dqWe0__k5hJtdMQqfKHDc1FJXhh7IWcVRD_9KXcAGFWCAU-E=w1280-h853-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFZLSXLAu_MkxYQCDWEGPGIlb2hR5paf31qpSkHl6Nmt5sPdrodu16AZjVUNZ2Cruo4ZCL20K7YBcDF_gLMyz3V7_oV8MmH9r3VrVBZ70axiJS5uIB8iXH791HuMORfhHX7ckovGg=w3024-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.75,
+      "ocr_hint": "title:MINUTE STEAK MB3+, WINE MERCHANT’S SAUCE, FRIES",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHNqEOHJBNYt0Wbhv6-XiZnJroCqiQwazT-EsFcs1Jcmp5DqUgAejUP9fohlDoGQM_QM-SeMcdUk8CXfFx1Wb6D0jnfh1-JaaDvlqyrqrOh7mUDzYxUA2MjLRWft83GXHUmciPv=w3840-h5120-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHfSAya4Voc0PF4VsDMj2BKgcq7dgiDl8YO1uHQphMxdBjQhpcK7umKRru81jL2eIC-gjj5g2P4yQZtlu13Vt3x0Wdlc0-_N5Zo3UT7wcGjt3FBBFHpTAj8GAd_K0fPGgsbm4GnSw=w3024-h4032-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHTH_yMfaxj2XFtLYdZ6ch59zKmU4SfTvM8ZeN_ux_cZOOEuq_p3ovhHeUAYu4039Y3EU-v_JFiYpzlXXklsNTu71-8CDuqPXpQpjHjnT_jf1BLZwj1NYdFcDoVCJgxpXQV8oqm=w3024-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHxUAX7ZaAemmD-GK3NdvX9E1oRllfFw5kVCIuuWY7Oa3JSFQi5XIbXZpD23celTKe65llL8ek5-CdpKhPTIGsU8v_juX9wj1ay1oC-Kd8S5Y2Worx_lKtHTyb9MNfal37SnIuj=w3024-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHFkIjLB_ywMuTUbQkfgXgImf6D77oD7tL0iAMpp5RxDGfgz-7v7X5H3r27b35Qfa1rdkmwymNL7xnTbYWGIW3Xcrxp31wno1TEXa69T9TtxH1AmY6mDvA0oPgAUmEdb3aZdSd3=w2268-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAF3rbeiqgQScsPaKUXblw8Qi9VvxU8GTo5FKC9gwGC8WT4cIhIbhuY5FccU3ucI98oYM2qJ_Ah1Lbec8NvH6G4sCLXkeg-4PPh6z1r8clXWDYik5LwXnoLjwxjUcg2TOu4smhy5=w4032-h3024-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFkaTOVBSsns74LVnKJWjVaFBmj5aAmMYBW-Hk0QjLxLvu1y8aVuj-8Vwl3VPLGZu6V6mKIiyvJGgTc1k53qNEzP-2e-So-n7VBqd3Rm5Avh-s5v2EcJdKQ0cUA7-S4LCupqw68=w1848-h4000-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAE__zNqMezBHBExvDqP79wp109Vm6RX-E3rnEulPLd4_t2oUWm6AJjsW7N4k0ldEZoNBo3glDg1DBRO091vcl2rBV3-DxktmGddbrcY55dWLgTbjrIdVNR-XE-rtnmZpsNrg3oZpw=w1536-h2048-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAF_aV5Esd1Qw3Lg1jhD2vdb5ZUnIjZgaL6ndK-sllI5tM330lwg2lRsVi--IQ1Gs_tKLP8g0NM8Qoni5ROSezAt9aUqiD7s0r3nZHhH32_pqsWGgRxctDEQG5IkvaDmgiOR1SSrKQ=w4032-h3024-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFMO8_0fJZWwfs21lBf-qkYJKjTcFsAPv1h5xGwNAq4LvwTg7ToCCi9t532tYHAAtmsIS9B9EzNTixaX-oNE-Mjgch3a2kNbVxv8mgVfK3pXzT2MTwpCWRHlaJqOW7FPKNfVU6S=w1500-h2250-n-k-no": {
+      "type": "food",
+      "confidence": 0.75,
+      "ocr_hint": "title:Minute Steak Wine Merchants Sauce",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGH62BXbXw-aobeRZkQf_WuVChbPYgecjf-SVJqr_47KR0jg0OXzH9E3aAO-S2dr8828qnVB40pDYUu5fqzT4IMlWrsy1Sf2gJIGCpeKfR6cYJDpIe2OFRhRSCdw8I3NsGISq2C=w4032-h3024-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFTWJO32DQgfNDj9Be_XdMiyKrI3ZzkvLgSAzWo1es98chbgYnRj7NJd8Uc8nlV-rJIxP0s-2Xo_PnU_VdowJuBai4hX8WRQkuEXJR-lbjpWRuO-oQFxOYfSbtXIhY7hXO4Yqsj=w3024-h4032-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHHB8yq2cV4pMdDe9wgTE8NFX-l8-wvdkBIBjur4pT2jRmO5uAa70AiglEPqDF_DmBKwdpelim5yvAMv50untxrXt2UMsaCG9vKHYX6J0KChP4-NCePM692MKPpQMfdC0yUbAIx=w3024-h4032-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAF01RZLNDt4Lom8H5_YCbOh9HR6UMCzTkiWR3G-FYkdxTd8-4RyQTb3J2rrJl-7ybwF3AZIE2IMtdFSaXX1NfTSacsqX-xmhUHtOqZYlch7YWTEVKBAE8p6XSRl4sC46IGPsiqQ=w1500-h2250-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAH5frKA0kf4ATXxj1epqWzF14DbikQ9zxZAy0MyfUu4ulGVqo2Cfjdjl_tlwt0nnlJ3bRe0isSFqK7IizHR24U-R0MVKvsnIaaHhXbv5vRkzzz-WK0I_fTZYgCC8yL_Qfi7Zonq=w3024-h4032-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAG1DkxgCMV92w-akKrb_A8GNB07zKdzNzN9zOesL-Ti-YfX2D47BFtPHTQ5o9fprh5yzFfo54o9l6b_0gvmLa4jBen52Yi7-3nY-9KWOLJKeAJfhN2IL4Ew--d2x2-N4vEJiKGx=w3024-h4032-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEknhCpaTXxdCNpyytPw97s-0yGGhV_bNkW-MeSv8tKTAHEQLIas7u77WbuUzfXOz3_fwdvZVsYmKsvGCv0dbCJcMr3rCx3acSFeHEkVxDDXAnJjSYqNAalwU5fSq2eB6doRmAsyA=w3036-h4048-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGCZ9j93AVP19OW0vsc7VXXtKaJNbD9EVOb8Eh3d-706ybzV5LDxYlZnszaMXpCA6JpDqaAtvvh6kDykpyWUq7kn4bgrcBI8mPiB3A4MNlYO3_wlicibIpjvBVOYPE50QwUycx1=w3036-h4048-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEWVjaYa6LdchF5R7478YjkElSxH-H5W_0YOqXz8snysNahKsT5ctEuxx-jdteOvj_-qU6NBB8IAdgUkS6zP1JRni-G0D5SRwgJfe2bXIFePY4nVy9m4k7B6Kqg5cgua189Bw-j=w3024-h4032-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAF74n6bp7qTQQw7ExV281c7xXCcTM0pIf7RR3kdbrEvjgh-NdCq4MqjAHlayd4XabbZr7yMbRf9Jy88CgkcZp7rLG7W5Fy-gt-FHBDEtf9xSp7PFF-SLS_xlqWVUXCPXK_LdO0U=w4032-h3024-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAH6DwBePC_RfQh5sU94aXUdJxrVJIZQKdKfng249gfSkMWvbpauno0smQ75p7MFsrOCLFadJvui-Ms0N90HaBBq3fGFMrjIjeqzVKllTVW0Row3KjFv1B0G29i6_bM0RXZQ6gQrRw=w3024-h3024-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEsYF4sspWZCw03HnZFbuBXADujMhlbzxoB-XuSCFc76zk_AJnQcbwEVSD5x94HdQ0PQuZkKlMyZ6EiBGXoZtzuA3mvkiSnL0w0dndfeWcfLSlqKfyUC-4vVP47bECi-WVAAx_u=w2781-h3709-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEvKvRs1-InGL9dW-J8Ti9lxIWxltDep71xS1g1F-eqIDM8_E56kzYcT1TKEu8I_f-B_3JiyoZsIWra8PFqTyjkjeA4zLDiKGmazNFfgwZyIiPzVkI_dkY8WOU9j-h6Zyo1FovS3A=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGF0PzntppBt98v_gqX-2NHX-KyUGzCAI7Cuzq2ZrLtIWTdldZyqS1GSsb8ZtGCiFx8Ypb8DOW7qZB4nWfFEsMY8AIKHJOxp7TUbpBw_CuZAwb8nXZuoCgk21tSdlEEpT_KDvqbkS9yGaXn=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.75,
+      "ocr_hint": "title:Latest",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFe422YKN3FFONKunEUigZ9apYbWSLwIgGLYGep--ktX_hOFG7NWe5Za_mewgFZZFvs9N9xK3oKMCiRJX9vxO_emoTHMiQQmc1zYzO1cRKazamy8_7dSoaD1KT5B4OGPAh-3ZlqzA=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.75,
+      "ocr_hint": "title:Videos",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEHm2-SmDIfIJ02ishqucsaMNO55GIdHCo0SK6YXNGMAxRes0emsnfozyVMcCXRSVcZIBK_slPnFrD4YmKSou6QhYE8OtaIaM3gkzXrDbnF5s4gMS7q3RL8Lik7HVFM1ZbzZ7Wc=w1000-h1000-c-n": {
+      "type": "menu_list",
+      "confidence": 0.75,
+      "ocr_hint": "title:Menu",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHHs0MKupUhO6c_WT6rfNx42bSJm5J7eVVQHP-paHPMnfvAtimHxFncqMw-OuNKcPRnEbW7MkTBVb2owj0IKwQ8czKGRMywiaL6nX8SUCk2qe96Ht_sD6Wo6ZvgrlYnbFdrZhE=w1000-h1000-c-n": {
+      "type": "food",
+      "confidence": 0.75,
+      "ocr_hint": "title:Food & drink",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHQdq_ZSrBM1RR3-40oQQZeFOjNxtI1Mofp7JI8WLTmwmsr5DNBi28r1EYBrM3lKbCeLSURK4AT1_rGjZ8S6pvgkZFIW8XBTwsRYjOsROsm5enzmh7OHwkxffYkVmbMQ3Y_kS9IRw=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.75,
+      "ocr_hint": "title:Vibe",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAE1CcV7KdjI8JCBCU4PtVYXOLuTN572xIT2hsupiIWMic2VnDjG0KvAS9UOz6t5SDJrnMyn_Xhb1ECQMYyistZNWaFuRCKzC1HgDE8o5l0gW78q6bhJF11kcpMhSy0cD-GHXxjK=w1000-h1000-c-n": {
+      "type": "food",
+      "confidence": 0.75,
+      "ocr_hint": "title:Nachos",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHuLYGXLMjv9hx09tjcFWgxqo2f2Yq4dzsRiCdjBwXESU0zSxI3BIOeFsRCuV6m01pHndZPs_lYv70W8kJVkV9__ZKbPYY8Fh1qGtkvge_HIl6D8kWaBu62WE9J0a_IhxVSyAtrr27GRYCN=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGKuwUl-PvCibgUJhNYX7YWPP2LGdOXwrvnbJZrFS0V9NBhtAHXdXOO1eHnxysth097Ve_cTCLz00JKzKNXOt7F8BqB7BemupmUku5tGz7BUHgNb3Mx8zteflUp4eth_7S0cZ2sQZIcEhoL=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFdqwYP1_TafjYU-qFqb_x49d9pHLGyZC7nYMlPhQa49I21OmGoD1YLacQolY6FwqbRKVpposy3e8orJzrUbz7_s7biEmXBSB2pY3CSmFcTLJr3KNnX7cyqr_febcxgZwWuecpI3g=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEmNjKOyp4tjWk_dCSMymOsUbOPpB3eZtndwi_MpaYrbP0TNjc6ol_lUkhf6TLu30CECWY7U5pO3Sclv9fMX-2ElXX4Bw5nxb8S4mQH0T-g6E4au69sh5euR4ysP78VBgNastFq=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFUrbmNTLZRLiQoUlO8Oc5eWt_3f9HyJKfx6EURNbHCF4N8QFpiH4wlVc2g3xlRXiwnyJI0PR0mKfDJBkczm2WWtWNMPFm6kt6U7peBHWk1Jx5dWumjb0qS7TZJfKOx5OMOvDibGVXxEN7B=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHuw_liz5jnPrjZUQuqfKDndEL3dy8CcCGF1x33L1rh5TuF9PflaU3laiyRjJUpWapP9d1KXV74o3ee3PQykZ7Et_Mr1X5ByQVGahyl4ovADPZcZxFnrNjR6WfNuiDED8eUDXT4=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://streetviewpixels-pa.googleapis.com/v1/thumbnail?panoid=tx4NSqiYyPAjPSg4GSdxKg&cb_client=maps_sv.tactile.gps&w=224&h=298&yaw=330.26556&pitch=0&thumbfov=100": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHc6sbfgToA7lFDLMZs2WJRMBD-OFkm9_ylAHxLurXud5osuvT4BkzV4UaI9WT2AtkMd6ZsZs2Z38xHQ5JbnFE2G0pp5B5OKErQPAADeTcT8N-TsEd2s8lDKrU_n_jyOCSpVDFVmQ=w4032-h3024-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAE69bT245_IPq4-F6I1RjaZmIgbOCbFn0pDBSS3pmYoUBWkco-Rrj5kBFRbxCYzJVcE_gTwB4RHM4Yu_HoC5j1vn2mlQ90LezsJ5lFlyWQ8g8idGU3MA1YaQC4XT1ZUvU630eNgXA=w3024-h4032-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEup8irouPPa1yIWQ0yjCV17DyBVLX_hlzmWbPpI5zC-Tgwf26KIdfOlHyFnQCknGF3VhpQxvXeCHYViok3NUGiVYc4KCt-UZXOsu5m75K2CfautHIF6MpWzdMJ_vNAbB_lXDnGrQ=w5712-h4284-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGJ2ugxYJ4F95oB5VHHsgrZAuZf385f5PR4LEaYleVCknz6vEYqhBmnLJNts6MjSmIbawwYlYfCr9Pzb34FPFHkmG3SrjzduvkSCKQSp1JKAD9FplmPEy6RToYskTJ-38lPq74zGw=w2268-h4032-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFYwAR0y83vjJfUZ6ZimdW7cix1JKggUpLVSivmFhiwmV9YOA8ljlXvHf12tDiIIerLA2a0tBW1n4270_jaJpKCJba_fTZ9_I70ZbrLMn3538VFniwMrA01W969QAtF6hRl8A0=w3024-h4032-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGD3mpjG6rKwpnw-F98DzUeDcBIgeTcefNmEhtTeNbwEohj9vPIltaz3CmSWVZiije8DuthAUrX2d0BIgGtRyJebSPSHTeo1rjVTomwDotOYIq36KCrh_OYHJwvak5_w-MjggqT4w=w3024-h4032-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGVDObCSMotTPFyY1JoelowAGknecDZzoMkanpi2jdeI2dQA71Mkg-rFFXsUGfOspukxpc3Kpi9IZwcismUQLyHPVIqt1PgeAoGCNoJYQbppdvHsH2ttaaX6aHXsO-zWYHYJAU=w3024-h4032-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAF8TEQw__YzwBqNcXLPb3FaQz1yj-HbK2FFaqAyJ4Ve_mJOnPu7EffbLG53bQvrKayP3OxC0V80UOv6iqxhCeb2wDHfgHjRopW4RgC-2n0gqs3GiZENg_1VXv90u4TTBW8A1Th6=w4032-h3024-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFSK6s1kuA4LPkZDkfWtJytTLQ7VbpB-aPAcyKy9neQx6GaIHhoGad6X4hLzngxRvm9QrUQDh-0xNkOVrnFTSFFy-pSh22RLkEaMh1SJxcrahqWByeUt5ve-CkzThKSb7wis_CA3w=w3024-h4032-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEd3-HDFVf9evvxbdFfsfdVqaROHmag2l187Wo8AYpoKFpCl5rZ5nNX-WTUY4PD72pNlyyNDOwz8O9fZ71RwODirxM-zc44W1WIzQiFxaeK0Dpt96nDijNTlGNOOEd_xi5hS2g=w3456-h3538-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHIR5N4ptsigWAn9RepepPgVGMemsdGHF2gBSG5qgypGOVcHjlOPWTo4eFU4lch4zuO7DPLLHfYWZaZCYmh_rIXQSQPFSbjt1ugeYuXoBAXmWmPz8evSlHEN3F4j-uYWHmbDftN=w3000-h4000-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFNr1fDH3WBhyHBobvnYZnLi_D8tnnE2x9omKEh_9TIy_eu39UUflTtd_0oOAMoWqg7_riI-ovboBd_9undYVeTB_4njXKZOMgP21HCNvn8twDV5PlWRKRFgU59_-wskPyHFuI=w3000-h4000-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAH2aYPwCer-DHuPPdLU8ZBZt0PLxnKV7NZ7hKPuq5Ar522sLGtbYgAm-dYMTZ1GD8TwYbJDylXGTlHHgLve6k5IHOSkqAkmiCptHTbDFifjMxXs6vRd8t9za1amm1CswX5RVUzuRA=w5312-h2988-n-k-no": {
+      "type": "food",
+      "confidence": 0.75,
+      "ocr_hint": "title:Seafood Mornay Crepes",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAE_WlHnAAWoii-WU6GiPDqu8nLT7HhSGEDyv1SW6qdiDyOseS_ZgbTMxmlyBD4ft7TTusmq9ncz80Ka-CDjNBpF8rQJfTxQjIkg9-iwa5qN1FTefNO6Jqy5yZ31SOfNItyXdFvz=w3024-h4032-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEl66upmxhWTa3vHUYp7N7gmAwgMV2_Az7dw2OivroUAKH_UL0VgqxOVNvzJgRP1wFBnPV0xBYIb6P1ziN0Cryrm2gx_9eGh5ElU_e93b2TBMVQmus86F09T_ecumq8AmdkCss=w4032-h1908-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHpTheZ3r3vT1evUYMk-S0aKvb5QQMMbtW1p_8r30LxfeFJfCkymUNNnHd9RFcPFQxzrvQnEvjrVGi5NFIL9UhWYXvuYeN_-G5l2YK52-FNG30xr7P-iuX1WWotjl2zkM-A0_KE=w4080-h3072-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFdqwYP1_TafjYU-qFqb_x49d9pHLGyZC7nYMlPhQa49I21OmGoD1YLacQolY6FwqbRKVpposy3e8orJzrUbz7_s7biEmXBSB2pY3CSmFcTLJr3KNnX7cyqr_febcxgZwWuecpI3g=w3000-h4000-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAE1CcV7KdjI8JCBCU4PtVYXOLuTN572xIT2hsupiIWMic2VnDjG0KvAS9UOz6t5SDJrnMyn_Xhb1ECQMYyistZNWaFuRCKzC1HgDE8o5l0gW78q6bhJF11kcpMhSy0cD-GHXxjK=w2268-h4032-n-k-no": {
+      "type": "food",
+      "confidence": 0.75,
+      "ocr_hint": "title:Avocado Nachos",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHYM23EnI2BR0hVPmVurad5jpX8fHMuZUpPdlZB5LTHL-puomEENrzp3-IJuWYaLbSb-adJ_Mo33J13Rx1yNY60RaZoFH7Ubcb-b5wfOIhPxG8huuPLaBSivno1IOz2i0kERbIL=w3072-h4080-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFExvCE3nG5NHnj0sH5c-nXJ0vOGCWmo7nqx47Mcm0IEqiVR3aG8ag9mLz_YWafEvit23zvAhnpgAENYomYR53osRJbk7iwAyXGYnKqqaWb-lA3vYLWut73R3-GmzLx1ycfeq3LlQ=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHraRTX_RQCfK2sDvTgXG1EiBzJuQUXrhnB2ooTMZpe4jmazaY905QhMrxp_rEa8wN1X6vJjSxP14iInUYflYsopdB_mwchw0k1HRUk7knRE0fksTA40IEVdNr9_QKXTeDZq8YccVFCYNgA=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.75,
+      "ocr_hint": "title:Latest",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFksemklSo9VLLW-89g62EXTMReDM-CAoXLt2CVKJc_wOhZUySr5o0H0MHdvXSp1eC3zKN5_q7Pv1vDY57bNvp7jjd9-fG5vxPanj3vbXAerXNFKuX4nKzOQ0ydBErn6nn0GuQhaQ=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.75,
+      "ocr_hint": "title:Videos",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFeQBbuB84WfZUvoONZxeow3ajOZHd23Y_JG9kjYTYFj6R1-cytOn4BxRbLZ3N_APjbXaEFWvuX7mej6BwjXcFiyFN-akYynrKPBBZIm14DdWYzxuAnI2hn0FkgQn3SoJu_EVNh07O0DhWx=w1000-h1000-c-n": {
+      "type": "menu_list",
+      "confidence": 0.75,
+      "ocr_hint": "title:Menu",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFKQ2xcmRyhfIpMN_OyOz50IV2-YU_nSDtiHtnw7tUTBXZ_t5k-jz82kE_VWG5dCEimrublql8ug4U9a659d_rfdkZfnjzxXl6WIy-nQy__Gyu1Ip46_nLvTuoBg9n8CafWQ5s=w1000-h1000-c-n": {
+      "type": "food",
+      "confidence": 0.75,
+      "ocr_hint": "title:Food & drink",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGYBgEUWzzOpYDohM8XROwNsE1l48HrAj94s8RRnhCKzyfciVKNvoebcGIYPlLuROMojs07vXTvTqfqQia9t_sv3geui79hGmTgj-PASACXi0eahHGMxb-t5ejNgMfujfOKEzpP5wxFBScR=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.75,
+      "ocr_hint": "title:Vibe",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFKHgcC6utV9AwcQtXMVVBjMddO4cN3_WfSfFfzRZfNwsyKUGpkf512PQVVDV79vwhEprg_9Qhz6ZiTq9G9iEXchguHRIOFWdX98BFFBUEkRJVqQD6EYbefvQAZLpJ6ytHXUTlJ=w1000-h1000-c-n": {
+      "type": "food",
+      "confidence": 0.75,
+      "ocr_hint": "title:Oyster",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFGuPyvcFg1pi_E-Tq63QryHoDllN_NBrTeqeQPQEIZLvNGarHEewSRt78yRLlSMCiy_xVP6EX0kbNcmq_rXSM3N2JgR5s-CdUd00mjJKKwzbk5u7sJGC_hDZIlzFCJ9HDQIdaK=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGVfEsrVyXQ-c00amtT193cYD26PZUZo3Yo-rlLnup6gkY7gUnvVZi9G5yaA0oKO5-iLZwEr2wMRI-OA7ndJfabExC3P3hXebMY5uRxQJYNv_acRYSdwQubvLPzOY4Ra8RUO0WN=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGdL_h45wHeBMUOlClVRiIkDagV7y3fDEGn2vPMtuDXPl5x98I0MJ7LUuRkJR3Ge0DiIXdksuO6BgIiN5h8K0nNIEVEpl0tOAQ50sXP6-8IRkdnQh7DSl-e7US3_u9p8rO4PfxC=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFI-nmFo6ABj_RHcr6SRe7a-XGG1K8oopJnuZMO40G0CywebJYeeRF0VLtG0HDA6OBmTOU1oRCEc-iGuIlFs9TBDfnttrfF7Yv8xQXISIA2g1hB-X5cJty97kFdaDIosId79pLXrDe8UZj9=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAH1gwdzSvMsD-KtNgW8fzj6VgIJAqxmPXQCaGe9KeWTFgka0cPaZyrLiZ3DCxKATX7t_82jzOeCLt01mLYxPu2emL15GwJq25oDKGKPAf0cqW_EPFWbOL6fXAwxArZRJhE2sfh0Cw=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEiEepnCO_fP67VsPsx_f87uDsSJVI_Jot9D0IdJAFfgL5oq8JpzejM_No9ySZvswOfXxvBXQ7AvIhfZelJK-sz4WD9Yc81-Mddyd4cBKnF0-dGTYoluLUHK1M_qsKxv7aMLls=w1000-h1000-c-n": {
+      "type": "food",
+      "confidence": 0.75,
+      "ocr_hint": "title:Cocktail",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFN3f_sngevhIckhY8Qtkl34CR_QtNW-B4ieyMdLltUbXuv6J3f_01GRGELoqM-ckaYanvZvt11xGSmw-e9994c5UKbR8F5WvdY99X-3V7KSUC6QpxT-gQWoRfB9suvCWoov98O7B1vavY=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGcDgB6h1mKA87rB-hvpq8sptJ2zC3R_h94xP2ezizzNIbT_SDYKX7NTPdHF6_3NLEFIb2RgYI0GiEtq-2P32r33QHGWrz59K4J3zUaPy9JmXme7cRmOwF9sLdwlPXEa5cdPnRxdxl0b1as=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHJ-aVLhbEn670lpchrTb0HbU9YctoXK2G1Ue_YWSTJVc6fp11yeuNX0MMzX4ZRLE4Sf0qDaVkm8xNpODitMDjC31Ld9xYywd8YVSWPPlmcY5pcVMAxNrk_UmQtdMbgBwJa69fq=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHnz8HN0AHcuumIe_N2Gqg0Pr3dFTuvRxdlvM-Z9p5x5kKxK8i-9WzgvHA7i0vYIXXoWUPOUwbn_1uhNiymVNcqTspxyRTio_WzkVnt8Zhtj9lms8Uo1VGGNzMB_BkfoDjZj6Ae=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFeQBbuB84WfZUvoONZxeow3ajOZHd23Y_JG9kjYTYFj6R1-cytOn4BxRbLZ3N_APjbXaEFWvuX7mej6BwjXcFiyFN-akYynrKPBBZIm14DdWYzxuAnI2hn0FkgQn3SoJu_EVNh07O0DhWx=w3313-h4212-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFblgruEEtdp8ERclwIExBfEj5KBwl1FGuQyIKyB875u02YpdjAVnJ_nNRxlpZqP_WxfZK6DBRFxcTnACA7JSAt8dgJXZ3yDiLupSySZtEyGVk1em9Rl1I4rhiNurPLD5T530OzwIpMq2Gm=w3423-h4385-k-no": {
+      "type": "ambience",
+      "confidence": 0.75,
+      "ocr_hint": "title:Scallops",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGs03ve6vs-enI4gLhU3UVeaEu80tJR7I-ugdcrsaglSRdAnSu0ARvQJ41gUt4uY5XStootibrlIFXLJreWlsFjqeVC2Gn1TCBJtQNeCAt-nw0KckfT5sENUi1-9okmW6eF-thyGaD18jDu=w3154-h4206-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGFM5nw60-sXb-ouUjZCaFYSAHXHv0it15UEQhec6urESLbhSM9iPz4luVFGeoZ27r63SF_HPzBQlaJ1v_Nkm3qufTYpNhbLpZalHphJkxG1rTuddtGpQ0RIK_jBV6ZUu5ZFQJlpgSqkAOb=w3000-h4000-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEsJeuKJZ78ri4gM-J-rcRh85QzIAzMfwsF_4VKNjDdnL8VVug7WF0DoWIkehNS15ebq0RAnXV1DxKEKvrdb-nuQkUS8QWU-4xscLFGqQvBPJqDk9yf9nIwviNwqgUDG4E6seiX=w3024-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHdmstAKnyI7eWfbEzEKjZ3NIWWKBkM62oEa6OMuWU0DofF0Yz1OLLG4y_77fR8b6a-cqrrVXKdFt-_Oec92x8RxdWoDPgfTwafiMqMufzXUKxfA-QGikCyzW4w6AwBjaLnyDGNig=w3000-h4000-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFV_41RbR3mXJAIim8cgEx-ramR5qcj6DuU4R_CgzXASOHMf61XuoxyivjbqPlnupdjqrgcfw7v-2XbxRXTVc8QjUTG8QHKj8Pg_TbatQrMHdU5FdeRSgsdhXCPKvODJWmt-Zq0=w2252-h4000-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHY-Gl-7NURn3C5cgpYwCrEK8t78zfpFFmS-2JRZKkePxyZ5lbBIDGmrPZCuvCGKcF1IALH-lVStlGcuTrI9ZpXPWCvKOvUFOgBEKTEyyX1_azSwdqvPijSmOyATAZqZ3D5eUwH=w3024-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFGmrn5zKz4dGZr-X_2sgeXVtzZ0MSmW63P5YWUhXEXfbear_rY21eWFTUndC4h_c08Tmh9d2l7JXsOJR9TnCPJMRCCZ8bsc3YHv128ihCa09X2P_RUoA6GFTvmagHSoMTqM12H=w3024-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFYsqXm2h2TEFR3g2y88Np8aUOA0LmwwuR_5hAcaLWaPqo4edai8WpK8u0OPaqfES8tI6CouapS_CuW61y_dF7C7SdRtDC1SG4AX2g2O17WujgYR1ypm0TABxddN5eqKYLFga-H=w3997-h2712-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAH9pNzpvbBnctH-YtiOUntGPv0lcJ933qC-YK2FaE97L505SZjp6prgJ0i_WhfK2tbB6gbvlYhCJz0eaD4ZpJMiH6CufYeLHlmGgKb9DV0Lneg2XGqsR7iPnsGPZ79f-fFqiWVTKA=w3024-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHbAq9OVpQqdKns7ijUwoWgAw1kxv-8SiJZH8p1rf-fd-QBh_fH8vtZkcLx5VQRhhwm3U0EzTHZXP1wyJ8Wm9lfBppqswr0HuO2CdQWOpnW3u4GCtB23dUZUPtIykyzV5sMPXGb=w4032-h2268-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGysUfPtNayYA3vdiSZ3t-EUsfbB9T_TfRb7Bil8wNouvo2N6pAvrnDvOjhINvEJtUx6Ip8oOFo9iUxCc2d4GBhV4GhPTjT3PaGJtne2Xy0ZrlVBl2Wi_LIvWdAocDGrpKLc46RmA=w3024-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGCWKuPCyiT9JAwSRU-i2nBrnJcL_0qWREMB5k1f17n3p-X_2ofm6NmoNG4lWXcFtQgZmtjUlWTVJGgu9gbktmqPpPe27fALVtf-U3SguiLItDYlfI1-HzH-ji_rQQzFbVaQQ=w3024-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAE6ukzycgiPu2ikdqu5VKWEmwZ7KPo1G38mM7Z4tIsBNB0Mb-d5WyqJO7tRWKukj8AXdVXKiOZZ-aKye0SvuH2P5yWPFnLYjwtm58iVnhJLykSv1IhRiKEFZ_SNaL0Nf_Ht9f81pQ=w3024-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHEpHPvpieToPddHkj5QI_QOUbjEIyLypALKAMk45KqBqjMDJD-FKKB9qnqp7PJ74_CEjiWcju5WgpBzsqr2Ag0FOPqD-81gWvKNyQUQBZG0zlGg34dLVi-TnU7vhMb7AWvXbZC=w2592-h4608-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEvYZ-QiHx21NkmY3jFGRqSMy8UmMhr7WcAniPY4qfyQyMBtn0pWnaahJ4iAAWFl4BjhzjpHEGRUkYl798UPyvuY1Ei3er5g_KbpNZpS26R_QhNvXVDVIIHZx_Trnx7jgWgjhzGHA=w3000-h4000-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEIOXWvAsZGsT1UHUtoZjfC4GZ22iC6Gu_Dj4rKKNy8_f7K5644uLHcq6K9trUtFRHq8VtyEkupxJ2yg_Aapn7Ztieg3urzsbmUAih3TnW4egZZnIuZh37yEhdMFUMES0N4Ws7N=w3000-h4000-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFeWDX48qCS1ymr9nib0jJNTjEjI9qmwPgCL7MME73JTP1eMg_rR9iOaC-Tc0CcjK-Flf6MblZHcj7BZNqL9-z6zDi0HWkQY8tD57I9_GniDBHnJ2HBW8uIQdafYi1xtAi8zeXCyg=w2592-h4608-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHA67j6M2ZPVkDEnbbx1SN6IFj_yHxMUFxGHfob4EyR1kx6xc01cd-4-ouZOyljdCCuWcIxosmPppPItRKeEgXJDrp2rwRkeSpUAR1dNWirKW5vKdVo3lhfmncEneJIYQeJG8GSpg=w750-h954-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHGBu7o6lvSVoFxI1WgdAdB0KnlaSqWWmiH1u8Wx51St1YPgopZxiJQefZa5tOG4T66fMSJWVIdWgGCDqqFFv1T_XZSpqi8jdpQKABnXDsNT6-vx9OXR4uMwg4sk1T9ggWC86LsZw=w862-h960-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFSdwbx6sWp71aFcwdlj7xiv_e9C1gU56MzXypWkVcBKHG602JduZ2HwPfxo4BzFt0eslqYmokoW3-IHKIUVGWVLUOCSeTZ7A_G9XM5tsDWuShJbfQTgpHuf9sXvAH7dT0krpKK=w4032-h3024-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGqTXwOytrclyY_QJ6YKAf8v-uhIKQGHy88sb51jWJlupT3ezBeR70fpYv-mOpaOO3r9-5WyPw_J3rA5_GhfoWbzwj9WHYPkdRUB8FiuBNtRhuJPZrdHilVOV69OPB-ZCFiqly5=w3072-h4080-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGsibF_5WVrl1mnb9ciT99Uvt-9no7P_L1ub1bIZfswBJHBK9p0VDd4juV7S8zOUwb0CJ0CUKDwD-R8eR1kKf-NJ1OGJgeMPiMHbPACH_Z1nti6hmU6uOkBcfBMI4PW9NcC9rk-=w3024-h4032-n-k-no": {
+      "type": "food",
+      "confidence": 0.75,
+      "ocr_hint": "title:Cocktail",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFf7U2cGSYHZ6C1eqqeCodBux63W5WW1CT1XIZ5gOVIwt_2XYsGCYnl0ww7fhwArvEGBVO_ybMSWJE78UcQlMMZpVCvVjr-S9jfW1Owa5k268OdaBSNle8RC7dnwThqTk7a4cU=w2252-h4000-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGkP7vzX5FmOa0XBCXkOMt9Atu3Rhbs7ae6TQ419ja4kBz2YhPWxeLDjMhL-tp7kpceDnhGpMnv1KDB3ndXtXe6qiBDhdcYSPhgRmUJSwg8g4TNTc9PcWdKpOLgtY8IsPZdrhc8=w4032-h3024-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGdL_h45wHeBMUOlClVRiIkDagV7y3fDEGn2vPMtuDXPl5x98I0MJ7LUuRkJR3Ge0DiIXdksuO6BgIiN5h8K0nNIEVEpl0tOAQ50sXP6-8IRkdnQh7DSl-e7US3_u9p8rO4PfxC=w4032-h2268-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFPi9DA1sRcEgJuoTtVUQ7o1F43wS4WKF_gOAuvAeTxctgOljBrEgiBBVio1OOIaEG1RrA6_nMS3c8i0_VNOLomQlc9V_S7cdAAK0PBCF8Ve2eTRIeBUaUdvTJGT2993-dURzYZ=w2268-h4032-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGd5F_OO81txiMSFY7Nr7b-8OnLM-1_bJcly0Zovq-ixt3dEuUxUPt-LORFhVsONYO53lWJg3NSQr2_BeNMoXpnWXcqb7npylgwk6j-_6Y_J2_cw_Tf9J_F3EkNUO0Kc4W1loSaRQ=w4032-h2268-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGw7wJBwUlmNbsLt99CnMzDtLun2d2tWB_2lOBgVFTuWTFN4cRtOPKHVYotaskrfE4QSfytr6upgB8M41P6V4-_iMsPPdJ7ptI7ZIiZ7mUyCV8nY8sfEyruVWueX_rhgJuwpqU=w1080-h1080-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEglBZFun2MoCspnq5YdCjOntUHtbaEyu-8-Fjiq2k5FZnPzScLoAdogWVppLSBugxo41FPuV5Bu7wK9LvxD4gGhPjHiWmHKcF59v2WyR7C8xYlks8GfA5K2rNrLUoCr7imcMVG=w2000-h2000-n-k-no": {
+      "type": "food",
+      "confidence": 0.75,
+      "ocr_hint": "title:With a Glass of Sparkling Wine on Arrival",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGVfEsrVyXQ-c00amtT193cYD26PZUZo3Yo-rlLnup6gkY7gUnvVZi9G5yaA0oKO5-iLZwEr2wMRI-OA7ndJfabExC3P3hXebMY5uRxQJYNv_acRYSdwQubvLPzOY4Ra8RUO0WN=w2143-h3000-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEsdriPh065wCuyK_LdwTq9yT_jBmPiaPPbmGEYvIzMxzsf6CmQmffD4b5m7fv70UzYFRVF-fA6L4Qe1tQFywGmzHqE4Fd7xASr3iGvvgP5WwzFfV0mvWM9FYaoLBxEvKU9GwE1=w3024-h4032-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEO2B7_8E7xKpzwwtqzgYOppVS3oD2G9aWxL0cD6IajPlSKUSGWN0bL7PgZw906-FrG_DTU8puDZ8kLKBkLE-5fl7piA6426z7aVWXUKyCpB-g6UJSB_VzOtCRbRkU7tiXNQEXt=w2268-h4032-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEoQKwPdi_eo58woAOsJaWhxeb00mhpKoCb8emqYFboCYKYZoRKfKPFh2G1PnrXfcXmBO0AgJewFdfU9T8CPs_T-vO-FWbDAw9MN7KajgfwA0Ldyhryh1ALXzANyuNkYux-ttq3-A=w2268-h4032-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEnw6K5haZHrZZCl0QVPdlNmRRi2Jj4OdNqHXVGh-zdYHwyCrGWOdpa53e7VcTTm27k14LhVcmnFvwavCmYxJFp1kV4NlW5BPwzzNwX83Ycb2nVkA4HzmwjcrR6llhZCp-9e_I3=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFpxDtprwTqiFXrtTQwEcOVIGMhRySM0Kf8Ijx2xUgI4FZoWz0iCsGIV--H1maN8TCixtDia1_SSWh9oBMoQMZrFcqprERawUS2Bon4vutSRHsrNbLKfyR9hnWj0GU4njMOI0vl=w1000-h1000-c-n": {
+      "type": "menu_list",
+      "confidence": 0.75,
+      "ocr_hint": "title:Menu",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFUUVS6dV_1zneclsNZqygTdwNgbadogoZJNg1MEL6WJJ3olwmJPDqlckETEP0yfS-jMfWgwDOkF0FAR0CEH57rkJGyMY4G_HfjwaolDcPhofyg8jSLL8RdQgUjn7s5W9YJ_P3k-Q=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.75,
+      "ocr_hint": "title:Videos",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHklaS9QcgGBRwC2vN8fvtHtOOMC_AExLPTmuOmsPjnLQvsK6xlKTZSRxWFqm1tX7_j6jao3cNgluvoo-L3zrksnkKj4Rd73ddwu3t_NZDbYc_ceHtnsTuGnu_TcFtKvUvbXtzYsg=w1000-h1000-c-n": {
+      "type": "food",
+      "confidence": 0.75,
+      "ocr_hint": "title:Food & drink",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFzEoO440_oNb1ESuTqfBqGtel4bL8WDxiYYiH11djSm-m3QVzDmSp2-WL-E0mJa3LcqPLFsEZIXhWKZifjHWJfcxgDiErU0QSY-FViLbVcl4ltxQWSPjUfzq5qreZtPM1c7wNL=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.75,
+      "ocr_hint": "title:Vibe",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGdD62g73OpSkDQACpfxZn3Bh0rAsHx76uZUbXbXH9vEczwHi3gKdI_fzXIppWmoWd0mSuLwT-Var5XHFoRPbw9OB8ahbSSmV_jXGBzzmxyMPJ1dMCHTKqJ9TNc8Y5f59T0jQqZzg=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEAUr5pGkCAMOZBA5gl7a5Mve7A6E7gtni5SrSsa5NW5cOyZ5dYEscqVY6zUSC_SOErFBKdY8HhxUIFwiw5efYOhmHgKUsM7bPjfNAz1p2BIGD8TQzS3yl7S5DuKbRslxUgQzWX=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHZMbgmb2tEPLQU_zWX_mVjtCVnpRbatAxnsTY4luoFPDDkBSLsEGiiPRi5EvQyN4_WtkzrQYMrwYctEt5FqAi38GWSHlZT3kWbzWaqj-gOJcdneOmQ0ri3GcM6YeTR-3kO8Yzn8g=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFG-EtnMafHxivw5F-p0ohfQEFC9bNmQPysyJmPVdSGJEL0pwzFUI5SxSTdSaGp0M0ap-VqZHFR-EbnDU5lWrtZg3aNNQK5wufZfk3ttH-ZF9-x8kZiNFAJu_jXKtqdsoz6m5M=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAF66PA6yAY7xOuttrEPeUcKET0DiciOb77fFRXb5t6vpBAlKw9bFieXFAKvpEux-0e6xJb5ynyHtbfd2c5XYQW2KuFB1WWHQYtkAWPQAOWYqw4aeGAqppUxCqd5lbmSBe_KQJY=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://streetviewpixels-pa.googleapis.com/v1/thumbnail?panoid=00FLyAr2lXWxUYYtt4HuLw&cb_client=maps_sv.tactile.gps&w=224&h=298&yaw=319.7127&pitch=0&thumbfov=100": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFpxDtprwTqiFXrtTQwEcOVIGMhRySM0Kf8Ijx2xUgI4FZoWz0iCsGIV--H1maN8TCixtDia1_SSWh9oBMoQMZrFcqprERawUS2Bon4vutSRHsrNbLKfyR9hnWj0GU4njMOI0vl=w1122-h793-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFFnMICluIj8yCYYffqp0D7iPOpOsMVZi2bufnwnOfrOM7RvIH4aMN2QzWefTCduTjA90C1VZmCEuQmIFRns6i6GaJfPbBK0we9he6YJDsCHT10YposOdsrnEOOfXJcDFChf29DWQ=w1122-h793-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHE3mhI3BqJtRFKjuDMsGmcKMzowylQ2K9YCVb44G5wH9LNyCugvsfn6NIL_ali2oHQDJjBIxzoT9CMRdLcnDsl9iFkPyNgJoj1hCLywKEY_kKgg0MNQ_11ZSqJVXmhzciBTJ5Ahg=w2736-h3648-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFRfaIbmczw0H9aH4BJjqanrFKi9C4BJmrEJtJ6VjIMtCiywayQrtqokpRGjPaLs_M7oO1IA8WuJ-TZPZ90CgEaKKj89_B6vk-YlZLikhNYiBU3xRYM9WK33gX0ox6VXiQluckD=w3072-h4080-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEl59lvCEqBUXQG6s9XScTAGTjognD-OvovfFGND4_ysxHYitSHLJNtmnLl_KREKc5KkC1FbLjvJx2r673iyTXEUOpL8ZggQ5vEN5Hzgy4i6dzHYBKMVFw-yY3d3PnTzT0rkZA=w3072-h4080-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAG2FGkk4_xRtX1yte87KfrM-OobPIVoov3YvR-0hoJwSB4UFfT-gQB3SMQ28yTC_2vsKeiJ1q2BvNRHe9NwmIDxKYLDBhcz4SDbPn3g5h5hqHdGbUOzT7AXsgI5AnZCn2Fs0Pqq=w3492-h4656-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGfeiMElzI_BjJM6EIzph4RPujm1NlrnUbh7YtFI9zO_SDM2ydZSN_NiuwNuVF8XQVrDbi3BqqEwJ-FEyWTuEAb4pW726JLP5KcTVO230IJFW6CRqnP9kW343Ltb3B0lu1ud8Ck=w3024-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGz5V4bOwKfZk2Cu0hP3V6fju-9tNnfAcEa94zEBS_Tma0JTqpwBlL0gjtNsHoDPnZj1uHeOy6vRCAIN0rWyjmX_sjSH1EpzYSeLJROhyv_-WKTcLmqv31irjqnzMxpryvKngE_=w4624-h3472-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAENj143pA0mc55g-BJEGZUjhadVavkm5FzNTBmGy-FP2WF8UtcEN8EypXvf-pR-45LfLzZFQpAwCVKUVwApnCZbOGHQFwj7GDWhT_2yTs6EKmsJAC8MiOWXTHmV6ko-QeU1-ifj=w3024-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHhSqCbBPULSijja48aoHaUaR9-ruDvnWCDzvxkea4uvqKD1eSHojzkkJ2gfPjtuD_GYDRe9TpIoj9nm9pBJDAKuAk7Grwj0uu15cx2_qnM_xx_mgSjYq9ub5fKCP9ohSn1JVg=w3000-h4000-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHXp7KPKujjoFCJKD2KMXn4UWEma2S8c1Lrsk_zv6_IkYYN9LgtInWcT5RHqvYazXOaDc1cdT_mQwikqfnslq1knGoyXtbKNSrkJlAIyiUXBu_vg1YThK8NZ4i6VKN6i4LIF1Xz=w3024-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFcwRgjGkQ6jSdCQWtc6WL57I8UhqAcbW14oS_Kf4eSLnzo5mkCsK095QIvXCVSyEawLRIlNCGQ27FFEKVum_LqgS50935tjc3cbMzKlQN_B5HEhoh1rQW3vG71-fXmfwXfe0633w=w3024-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAG162QwZWQsWA4LWQFmvG4P25XZGKbUoGdJl4tSjzmkPG-E8yNV5alEqIrnF8DtXkyukP-AI2nZiRre-88uXtM8E2JGgD8nBrIo6FYFafluW9YBd0VA9Fjl4IQKcyVxtKB38r8X=w3024-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFcfnwk-Sx5w1bZPfxh5eP2PTcxN0RyCL7Fd0nVy15ZPHhk9UcmWUDAWapimH4bP4KTZabEDy4E2rGmM-hdM_VjJWJ_jmriQRc3r_JWUKhCI4dZIUrsP9REw8dNEZj1mBd89Ik=w3000-h4000-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFLXTSomCzrcp-09PZO52Q9uI4tn-Dk-S5eXhv4QPvY791T_56qdAVcv25Sh8xWWnLhcQW5cDchXQSdJiC3_Zt_sCr6k2FEQK9-k83orviOcFYmHWzFb6HibI4zXmLY0lrjUd4=w2155-h3200-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAG85NkKJda32V1R1yaztl3lkHGyPzLTLrLbusbme9jqU4VE2ESR_S8SsQ_70Bz4KwcVd--4rkT162hvq33UEffGZz3dwuYsfiZahl2J0_w0Emym_XYX42lTFsuvbJ8T094dNsM=w1882-h2509-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEPyuL7dXDx3iKEEC38mUp7kx6pXKG6UjB2ysf_5y0UXYKRf9a-gz4MzIMHaFkFI5jOA0rWIUcfHymyRZ54SqaTDAa4YDICs3ohxQwq_JHfBiO3LnfitpPMriPLCk-0_0_HshfU=w2231-h2750-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEU-erxlCWVrktOcC2L3Uj3_ACmrA6nkcSQZnKdMVOX_ndjfmN4kXMQO1KhD8K9j0qRhVESJVMuzucJH2AtM0N12aVfTcg_ZbNXL-1J82ccxtcubTdDOiAXtCnn2OoZ3KHs9-zZ=w3000-h4000-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAH2Bgxiq8e88E9a_mlZLRXWHdSC99zpITj7eeIgIMi30eJLE2FpriWZ-FirJ_S9jMMD1kxQHOJgTfPd9nVAeUiPgL-7khhlw9VfF5LMqocOi-woI6tTVvsi8MWYWSnj2kz-DFK0cA=w3264-h2448-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGgIXAan8VQKFXy_Sawcjx4mYCzV0ncS5SCAKQwdSQX3v2n8k35z0LaPLukH8As2upuByVtW8Y63TdY4t28_vFzUM3G1md_PeN8ZyuQsjTKEv-uYs4H4BL0atELmvIS7pPChXF-=w1600-h778-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHvdDP0KmwWyXl-jap7H0XDogiV21VEkeK5xL9fkr0638b2xq0HlciCQymUT-T5g-P6zZwqi2Ha1AS6JypWMGOsFnadTtMExxTS6qwhqwJXAsjPxwFDWecUrBPVJ-NyZFZJzbB69Q=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAELik_w5KJrOQ-le7CjF5bocedLZ6svMYJUbWQQzyu5qbPgn05uYx81AXpePM66X_Mpn7-tViIcGHa1v8kQwN9i3fSmpdplsLiOhK1rc93G0cXMbxV73_9IG-bHyVvRje7-Ls6UoQ=w1000-h1000-c-n": {
+      "type": "menu_list",
+      "confidence": 0.75,
+      "ocr_hint": "title:Menu",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAG82R5A9HWELJLgQklfb0a-UDZ_JNYkw2jwo9Am2MX00d-KFSWzkQjVntZWaKUUrphz45obZsKoXldfiAuEstQjOh6FLpE5V2zi1sFqdTGRMh3LDKQNUNXc_u8lkDjZXeoeY9JZ5A=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.75,
+      "ocr_hint": "title:Videos",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHSMbGLEaviH7IB6y062YjeU97Ygpo4rmYPFTUp2hzYK3xNYSLV8wwbFUtsKAw29Al_0v3c190SZaY5CgrOY9oR-2JJuw_ivvC_LOG2GeFuq-HpZt533OE7e4mGd_9uEQhyr1N_ww=w1000-h1000-c-n": {
+      "type": "food",
+      "confidence": 0.75,
+      "ocr_hint": "title:Food & drink",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGY5QOqRALIEzqmC_btoLtz3pXusz0mw_Uz3MHQ-VZLqLn8sTFMkzxvaaxScLN91GXvAioSjH9JSsodCeAO-ft2l9Q30gOWyPC9WSPWeqrlLXhO9oWDfDIW8HW8vJtprivBuBo=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.75,
+      "ocr_hint": "title:Vibe",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGSBkTVVAhKB3Chumz-2ISflH_kod0Wx-PxZaxlqWXCoptSn2cEG9Vk7ai_sIRca04SX2gZQt41GnUdmczixZNzwuDAKSJn2ijzvigGrbnWdgsvN7dlfEZFqXiCjDyjP2e61VY=w1000-h1000-c-n": {
+      "type": "food",
+      "confidence": 0.75,
+      "ocr_hint": "title:Oyster",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEWtIPCqekJdpMN_6P-ymO7ebhEbY0alBd1vLq6lVcMET7aZQ-jmvPQvI4esOGWXAknNN2BamDcz3T-TaXD4olv6q62X2EWo6asVwc5hWNA_Omo9e88kKVKn3KdRxaR4ry8kJ0=w1000-h1000-c-n": {
+      "type": "food",
+      "confidence": 0.75,
+      "ocr_hint": "title:Wine",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAF35OM5NjNSwHvm1BBMyE3hdTEfGBMUAnI0qhj_BdgTnBuDujAIhviLryP4RrEvXxf0Fz6NEKkLussk14pmFtec8PKMdfmddE5yaC86PKKj_oYgabjcA84K1d1KNslCYbZQAN1BTg=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFaoGg7Th5x9YoTrv0cLgHsSECujc_sOAbSuq6AyBavFBure8q3H7ax31yaLK1gjF5ldwuxAWATYUotdRqkKy88zC8s3WBGGH7Y_TrME1pk-xCnEoRBJWy872olxZ9fY8MfIJXr=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFQzpeqbshVV7-UJ5h_C1UZs8DyBeGvKx1_s_x4kX9Q6nFsiSGcd5iYI8KC30NtwTo5euKfdXBk4t56UwVvZPSJBna9RjAtBBhlTUHMh7V-hSWscQzWmGiytXJydSu3ZCX8wsY=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFzFFMRJYlL8a8NSbc_UHYUW7o-WzZi3Xw2z3Kr7I4zQKH5bL5UNXAbFmehPVZu1wlSt5k6S4ECx8zBFlEP1i7lr_79C9vV1mBmxl6S7T0yy4KEPxYEO7wyfFvcncz90dAmG94h=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGGrqAeBvUNoZ-AiBuO77frQJjpEgwl8CGcRnu270iDHchDQFySZt5jm6nhIvpXzRIjyCyHOyeBaCT7WUOX52kEGH9YIYhqmZ7x7GPu9xaUEc6bZewgCM5PkAZZVsBl6fuR362jcw=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEMUS98IDa457XYPmBHIKKZ5rfvUSjLwxzZmBW6nHsfzuDiQUkpCOc6uGTER8LDscDRQKLeA4bk39BClBIpRIfla0QH2dEekBqh4P1PT9JBCIbT1E24zL9gwWTvDnIv0E4PgwZAyw=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHEAe2lx45cYvwm3pDnKoilbQ9Cj4mAg54jxwNP-54c89rNnzaJAZRfQWAoEFoneAZuUf9limurOsEQb8_w54pmxO0iy370Zjw4lvbzRw9mx6DHGI5-dQ1D-0UOfrDoB3rTgxxV=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAELik_w5KJrOQ-le7CjF5bocedLZ6svMYJUbWQQzyu5qbPgn05uYx81AXpePM66X_Mpn7-tViIcGHa1v8kQwN9i3fSmpdplsLiOhK1rc93G0cXMbxV73_9IG-bHyVvRje7-Ls6UoQ=w2268-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGZdFtTP4DerYeOYcadvKhXZV9PqRuFS-Sb1xQB0RzXG733_FiXz_yJCjncNWE4EiElp7CC1vobDzBC0QDCXStR30zvqThKYlxOwBt8DcqAjiNGMSOBC9AJ3SwaZD0XodJ-lKPU=w3024-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEWENcQ1TcTBQMp6cBBNQ3k_l4j5j46-2HsaSwDW0a9pH8dUoDaQMi1IlBdDUrFA4OhbrbCrgyl6TLlpdTKQOdacklkTWmj_Ad4AV1Fcrql_TIM_OSAL41I0A7g5TsothQOtRj4BQ=w3024-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGNs1nPgRTAVBbU_DQe5a5RK7RM90IDyIC-ZFlhmptD9JOIuzPEK6RhDCaaG4glC_QonOFHSUeuFG3-ptNwYdI3fRqZ-ESeQw6OYG3waXGtLeUnpy4ue29teWdWXu6FtoyVxSWz=w3024-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHODXeDX6Ub50P7ECPNgFhB8rQyojwkjCYtNQmFqZv3Qlkrq0413vuN84L6NxpAEQPzoTk3WVtH3pLO5vZvrIJvBrvXS3qvL0-ASTmCEkQoZ60hAsyywiJFbgSsm-yhWBghLXT__g=w3072-h4096-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFcbtAOKoP9f5mszDUEDI1r248vWxYOSYQShfFVKjRouFnCm2-8G4lS6MEsAFUMeuMbUPXbh_A6JUXXs_HuX-4P0hj3GwIq4LogvXwJLO0hj0ImpD6iPbgJ1W2_W6umilw_lko=w1200-h1600-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGd8s6s-T_DAYD0sZMjmE_Tv8Px-iyfh-TLLCR2ryAwDvhIa-B9PwTih88avvVY4FOoeY0CWU5RDyIKNHvtq1L_jphGYNL7SC9pMcvzevuHmj2AeS3iozE1Je5SuuOja5OpGsPi=w2268-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.75,
+      "ocr_hint": "title:Manta oysters, Cabernet Sauvignon mignonette",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFyRrJJlaaPR6GWErk7vCl-hHF6zwPB7nq2_71Mgp1KoTuHFqhiRXiEyoHVs2RLwP4jixiwTHXyNNyWaNSbwJsZhUymJz2sYZUBn5QFNYQIU8dbt90_GhRwMQRDfixGtS5sRUk=w1868-h4000-k-no": {
+      "type": "food",
+      "confidence": 0.75,
+      "ocr_hint": "title:Baked oysters, beurre blanc, pickled cucumber, lumpfish caviar",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEYNbFTn_iriPLJiHVmfQ1YbNC0bivsZOht6I0pPL1DZ-W0DM1mpUsq1j84Q7tPAs_CHCEXeFHL0GfVxorMmmweJ6S_9Fyoz5LoJFUG9lEN1izRcHsG8IJq6QdKykXDSHqz_MRd=w3000-h4000-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHi_nMaeTxvFUbqEnLuAXNBvHrl8JauXhUP9H2rh2TI1DMxNaVvo_UHxysKby-PoDnlw2jy8Hu8htD9lzN1Tgq4D2TyYKCRpwuEHSyX-PQkOSxZOy46pR05LMdjYuQSzPDEgMXpbw=w3024-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHpzTrsVxUQQ0zr4qqdPIZ0V_Beuk6M5gruywzUW8BEr35rREzGeIjZKe9XCynmnzgEfQKcqn8_fTYZZxqUX49bn_hHfdcxib-eEDguZrdBwj3L8Z45c3mDm5b7t5x4gRf0eYBVMA=w3024-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFEr2eXfajLCLd_8smqLlT3ALeGP9vSw3Ilemm3STt6--bLGCUA4P1sjzVzRTk-vmvPHUdOdi7qggAHJ_qOJol34QstrqTqq7LBl9SP_cPwCJPFj5s7PsUbOB0IcvsCttj47cn2=w3024-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHvkAXIAU0kOgX-Jacbpww6G9iNDGX_dXEzw1FCu8_kyax-VH99SDjtcvmSee3rHaGYZybJZAoGRcc_wPObvdPPegtUMfgHvm0tmaQEHHpoixmc7Uxlp2pbgVQ4ZfMTPvxazBU=w3024-h4032-k-no": {
+      "type": "ambience",
+      "confidence": 0.75,
+      "ocr_hint": "title:Yellow fin tuna crudo (Port Stephens) , sugar plum tomato, Sicilian green ollives, pickled eschallot",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGCeC2DycPCrACDPGIDUZCsRVFrRRXssBYjpltMtUD0GkQKUNfB52KL5hCuyFlxKvOT5wJuFoMlf6ZLPypnTaRCxOEKZ2dklkw-HcgKLRNBoTKZknqcuYlqW2FV4pkO1VP4Sbk0Ug=w3024-h4032-k-no": {
+      "type": "ambience",
+      "confidence": 0.75,
+      "ocr_hint": "title:Scallop ceviche (Abrolhos Island) , avocado, pomegranate, puffed rice",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFYxIfVqBP7j3GXK2IfmOs_rn6P-M7iwRhu5wdKf5tX4tg3RKU9Vb83Oasgn8BSN3-qM-5f9FMcCqXSDEdc0GgE82Nn_jaxSrmCGHncv_H5uuryTsxI6_XhVpst8gdLiwtpkPwZKw=w3000-h4000-k-no": {
+      "type": "ambience",
+      "confidence": 0.75,
+      "ocr_hint": "title:Kingfish crudo (Port Stephens), sesame, ponzu, chilli, shallots",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFYMmHgfgtu8KpiiwC4PHo0mLHgynaW3yWjHBHfl08_Ur20tuOYSaGc9xR_OpvE6KbZNVC0kyM5zuu40-h2jok7-JHqnly9sPPiOID0BvI6PInqTF9zZJwl7Mg6YxiDx-Aj9CjL=w3024-h4032-k-no": {
+      "type": "ambience",
+      "confidence": 0.75,
+      "ocr_hint": "title:Raw tasting plate, selection of tuna, scallop, & Kingfish",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGnQ5vE2eVoxIOsR-Qbu2uu2hPhZ9R37_7I8tB5gDwUvAzIr4gUmv7BoRH4sfwvnjsc6QfPhNveGavmRriJoDF37PJVrBD1__AXdBf_y7fYXjsXBPT-r7Gw9rBkN8qyEJICJYnc=w3024-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEqt-O5lgp0K3tufoygRcPge42ttRPoNoiILfcB7-I-k9Wh-1x-_JIdpEFWCu0-m9DEBKxCvRPvyjG2d35bOq7JCsYdyUcjaPyJDsPbwszY2XThK12WdC-cfND2OJU1BQvoIYLE=w2252-h4000-k-no": {
+      "type": "ambience",
+      "confidence": 0.75,
+      "ocr_hint": "title:Seared deep sea scallops, butternut pumpkin, nduja butter, karkalla",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEwE9GqAz6LmWILLo44QU1WVqhBnXLGscAAZG10O7fntzBL8_Tcduf8SA0nvoipM2zOznOgLtP3n6LYOUhGerPSFAZ1k0tWek-Zqy3H_m1A73lya1FeQb7jit-oAzOdXzIGK0d-eA=w2268-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFnU9fz7Xp2L4247iw6GApIiuukL-9fQ_V9mJeR4yojMJqSOi38GgNsSJFQSzDlAU7EIXGD8jDv184pEaox_p9lYeICvULdNTq1Zb4rRBmsGSK9vCETOnUV-4yHc288RFNNlkbY=w3072-h4096-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEygTO3T6H-LiGEwGE5kltayrL_l_iJbp3F950AvOHzafn1YPzVNFaxaTnv-btcr5s0QikY4g9ff3XjvSgUgFDGmiDNPCifc-bp8V3sVslDGPXx2FXErBNqRNryV3Vu6udQta2ZxQ=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGrig4vbzXk3SSa6Ey22I_yk_6b6vufQj1UhTuEhDrWZ72LHo168Apc7-IBcEjCciSvSMDAWpVVu2MCRSZO1LXpp7_oEaP86Xeb9imrL7514v1JTDvg1rHWT_CozbxKFH-QfUW2luDD4MI=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.75,
+      "ocr_hint": "title:Latest",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGGHxuqN9KeCzgYbYBReBrjItSpXFw18w2GIihxlaz1uh1zvG99u71IsxI_FUvfM_LclX0QbQULi7bzuV-kkyD4zQF7WgTTjPGSn4Jd_MndqpQ3K2J-31bqZj6T_9Ie-WhUahqQVA=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.75,
+      "ocr_hint": "title:Videos",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGHFGCJ7FFW7lyGv3ZQidtKUbZQt2OZv_iSGWIIras1ARjwZf6_o2t7WMGzFTjU6tLZoGSHqD-LAWcDHGbQj9IhAgt7YCY6ntAMtgk1VNznwklWNPZ5feVKWyjjsHBd3_uRvJ5gBAPdMm-E=w1000-h1000-c-n": {
+      "type": "menu_list",
+      "confidence": 0.75,
+      "ocr_hint": "title:Menu",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAG5-dJoyxGeZbrSGuxeVxlMddWrSqzXeb96dSS2y5YiElyLJCukxtSswgVUG_Qf8oPx5ALccvmMMQagnI5d59Co5baVJvyev2SPexgHYRq2W73Cz9NaMwif9xfvz38yNGW4MPZL0Wmp1zmw=w1000-h1000-c-n": {
+      "type": "food",
+      "confidence": 0.75,
+      "ocr_hint": "title:Food & drink",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAF8BgPy8m0REOjS8Z6EMg3TEQpBLLIlPCnYuDV561h2Q7DeLko_y43H66N3wf9j1skj5YutwKif11a9Hca_27tDzFPZeudwB2UfRt_cNujsIqeudv-SQlrf55XeJeWTrpy5SjJvLg=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.75,
+      "ocr_hint": "title:Vibe",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHQymHVoRZVoB-RCrhE6UXzPc9pTpGvQ2Z9o7077CQiAStM07pi66EH4xzglamwXAuQeGESfc0ddg7iaLJateKx4iEmVleIq3u5pVNl31P9NArL2oRwzwJWoAF73_xxvt7HvZy8fsbTOE6u=w1000-h1000-c-n": {
+      "type": "food",
+      "confidence": 0.75,
+      "ocr_hint": "title:Oyster",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHqzHzfcctEYoUEF0yKDMxxw6lLEe8XImNcm5AI3tAnc6tTQu4zhhHKfCqSpLAOxfUghCmSD_aOSKPa0xgwFS0x5Fat7vIUMqs9ketkY6Pci5YA4mAALDNbswMo_Mlzl3GHeMHl=w1000-h1000-c-n": {
+      "type": "food",
+      "confidence": 0.75,
+      "ocr_hint": "title:Octopus as food",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGp7u_MjIK3qB-JOBQdt8z3SAAIoK1NSBfd6aQ1Pt7Jl-RyW2FZya5ZwaBJ_x8j8HziLkn80-2ntu0JLtZOCKsLwnI8Kt4uNp7aKvY8w4C01xf_aIe1pBRZ0hsjoeh2ixaP2Wvo0VH0sR4B=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEygx6StzSw_KYb7vSNPmd8LLncYU6OoOLrN5EkZcUAF_WVhHrVLuEOGWtgs0FH9fB28PxH_wgI81UlC9Nec-GxDTrIEjHQQM209Wk4cbgwbE0TTYV0fCMrHjNm3O8vh8DpJU5YknN_2g7i=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFKVntmB-Fu5msKXsojH9hj9PvfIbcIY5KDONyDI-YY3W_BCc2iMcQEJdrJNNZhtsNLXlwt5odlUgqaJDWBmyi3q1HRmILhRyqLu48NrpVd1SGjhNJKgsuUkDPXRIf0zsTcaHPF1g=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHwEJF9rUfYVy5tbmcZUKSfY3A86V6sNFj-bGiingdNn3MEJDoKVtVlrrSXHwIq-mKMS0olSkFZrilnv43qRnamhWY8744xY2OiTtXxmE69s43ICup3HPcJtNd1-kygfvjl_-DqmZlRFZ8=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEEPvlSYo9s0B0ssBiR86MXa3GPzZBUOT7zNiOka2pmIfo3uo1zR0e2shuF5d9DTJbk1mkYicYKLshPkvGonseIU3RVDj0ICZMkR-QsBbdQNkqQWzo9WKBCUH1JjT9FdIlUWao_HNpAzk_W=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFb4b0p-I_16L8ubAEsr5ACB_VsAcoHWENlfUnV6-5KRZDDOCrFNLl7rPZCWGFZxQFDgOux04ZPUvKl6aeowxJ9hfkV23n2pRwmnR7IimRUNRNt4yK4Qsq5VCYxyor0A7pumEAglw=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFlnkHPz8Ik_IZeQQwnrcE1YyDBcTDk5AjxHF9rzLG8ZYk7I4lnDqEqGpgQ3Y94YAUw8VmL0uYUnJJ2-kJT6racxNBC1cS0FH-K3TS_P9jV5vDWTN-CZECa7ALmRNGcKhLsgQaf=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://streetviewpixels-pa.googleapis.com/v1/thumbnail?panoid=3rytzXzi8mjMyta85cFBtg&cb_client=maps_sv.tactile.gps&w=224&h=298&yaw=250.1475&pitch=0&thumbfov=100": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGHFGCJ7FFW7lyGv3ZQidtKUbZQt2OZv_iSGWIIras1ARjwZf6_o2t7WMGzFTjU6tLZoGSHqD-LAWcDHGbQj9IhAgt7YCY6ntAMtgk1VNznwklWNPZ5feVKWyjjsHBd3_uRvJ5gBAPdMm-E=w1440-h1920-k-no": {
+      "type": "food",
+      "confidence": 0.75,
+      "ocr_hint": "title:Sydney rock oyster, black lime dressing",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGZMNOdlDHl1dxAtz3cvQjINUMyJTS49x6V-wtUP4dh3SngfMQWopNSKMLx9uxgjzsJ7GSAcU_uDNika2OwMswdUn7_ZZu5KWZHyxh1yTOtUPq2Zj9Tqo_3wCzWjhhkIk7UCLpT=w2244-h1522-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGsql6g6j1VOmihFQBmDimLpdVfcxQto8FvWmFndVSOQj0hKWsxGXZLkbUHnlKScUK0RfuazHfgT9at4DAymkzZb4Xly8j3RNEtmkbnAQbjc-mZyY3DZMhxh7ibfouMIjbwFHDK=w2252-h1524-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHltHvKLuyPmB2nUAs2IpCnXGXO93lw4NipR7UR5ONAFWf-pC0Zcl-fxdWeittxzPbI_jNZKXQCbsIRsLu7ixSqfr_g1S8JydJ2BgGcqzqeVwIzpi_9iXNrDfw3BYEIbZgH7XK1jw=w2252-h4000-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGKwN87abF1o-bvjMsoaWEOWUCK6_9zvuagrVlehbrU1DbJN4E8n821ZwQOunLJ1bIkNpmLi19pup4LpCC0qMGKRVeInoKJLDT1HUxk6PVHAjcxAIfxB2tFDy743T1aZBik91Uo-zw25Nyz=w3072-h4080-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAECEHO6bzmfmPQzl5_EKF257S2w4GPbPfdkySecMC4VIq9zS4CJidmd5oRoPYIxRMVB7dk_2t83gE33_csWuTGSIk_uCYhnAnR1PrwwVsMra1vvdDP-9fJj8auoeaexzuyohdXfjSBpGmKX=w4032-h2268-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGVVk-qInSEHrg8nouaGEdqGHH3GZCV-AgJ77Z-_Lw8BTIcSXCQe_V6XMS5LnF9iDgCpgYHoQ5gJKH6wqaO4g6BgRBBH2-fWf9MkPP7hpwXQHTIjB9flP9mMalOZx7vDJAvva80=w3024-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAF3a9f0kYdxX2_ZVXbrSR_iLhz-t2Xu6X5kdiRVMFYVtO6C8hKqGxZPYLaw8zgjPL2cWDBC4uz7uhRE8ZyB3G6kNptShxIkQOKxNehr789t77B8Yu8SYtH5hwqpE-IM8Yr1vs-5=w2996-h3762-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFvnYhaamT47b42YnNuXKowAe3NleaWuXY-vLrvTlTFqI2ljyeymcm6y8IzhS7qSOk765sG2e14lAiTfwm9negm_ByE0Q-bNJi-7iq7fSzewJ9WJgJptc_AWGRtlyw-IGj4RVW81lOB4RhY=w3000-h4000-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFS49IYCtuolsJA_iJ5xMSeMyQ6zArzmhEq0g2Q6QMq47WGWWsj5iW0yW6T3orPX174l0wZbkdrB_kaQ4x7VIkafSNb9OXbpDIA3494JNcGTQccMT6gz4eP0UbyT9D7oqBgWA-A=w5712-h4284-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEAfusIp8PF9dP-6hb2a-qqNnUtEPvYcQOETYX_EDRJeHohbaRdgT645him41E6hkqadL9C6i4WXV6Hf101hSTMwzcUCZ9g9F5mhFrzq6U2NlEc8rxrj30ZePaT46BX-ibR7EB0gvc2wY4=w4284-h5712-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEnDFWvkRXp0kXipPMHbVfXDIqHPJe_gyDgtEwMkQUo5O-4fLTXJDECBSwKdGIkRpbiSQYtIpk3pP8BlStswiAumWg-8rOkFouhob8wlIUesPtJ8Okv2ZX2W52VDHWU5v_Xq7iTiBvAzr_I=w3024-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEqT_z2anCgC1jJAgykslT2n1gyOHCeuQvegUt57hPnLHOBrcon8GZ6fbbxiN7litachsFggwQJo7oM_q5yJdULjRDhTv2GWpBmrUygcvvgVXHSl-anvBeBYz0TETz-wW8i-MrBDkSlJNYW=w3000-h4000-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAE0IWntoRguCmA7BBB9jFDUs3q8FMmYA27zDrZkwkIkFPJU9Id217sObnshIfnKcf5VlElz7_OPSVGvQZeHHGzUgTTznmymBCv1jK_FJGXEAyp_j_OQ_kgfO2AkdcqB1nvNAfWq=w2268-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEGmzs1uo4WHmSJNhrBmZnbghjsFRtu3qmJC5akA3fVlCVmWZHsHCfYrCH60BMc7BB-RIjfPXHdvMUZYC1IuhQbFyj3QFNubvpSe3gMOv-vPOnrIN6FUVHXuHdPy8wO6_l4mx440g=w1646-h1911-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAE4wn3JkgkT8ec8N9Yk1O31oDsIaaNDj3MlDkoUTyY5Fkwv0tFQa7X8Mx0EJNPdOszM7qBiS3Q5ndInfoWL7YtEoSXwfZw29y0TsqvdDdE__6DCazmTEYqPVprLRcGYch_DGdFLZg=w3024-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHajIakbEs-EgmY5t4wn_m8cFR90BSl-TP5tyPQFw23OqMe1vUN90njwGzqOXPzcJa86KYWj9ThzgyaPg-0JwAI4lH64mwqzxLpxbZHqWcU0iEqxVfwWG8NFouEtUX_tiCNDspC=w4031-h2595-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHb_IZ70stCmyB-PEajyWdqHrVe_1N4U4UkU7nVUPATkN5tTgwPHyJK9scd321c3BHZwhS_9U4NnJizIxvETJSHg0bP2r9G6_b2K7IE0Wr8stqacWvMjP24-FUBgSQK3Tpv04-3gw=w4080-h3072-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEsUeYevi_VdDmQGZm6qUKX9sQxPdEZIRLaf2Ta17b9yG8X7V3QsXcJfAfL8vMZstj5EQwBGJdtH9fBD1PX7P1aZYK-G-Qb6Ze2pjP6BW18VQFugLbkIGBoo5LPhzrUmWddn5s=w714-h1514-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAG3sfw_w9Qp6JlA5iT4kpe7UuSe5g-ZUe_qUg9Mhym1nSHgqQpy_SG13CPTnCqcypgr96uIt3SBnzG_Ta7tgz4S8P6YQ1vD2JSRlHBY-NGyJm43DO8kLjvGI-FhztC2dazQRur_=w710-h1512-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEj0bsGMamUwnC_Tsj3CLzjghqOvtiSWuu4OUTbBcYWey2zF8wZ2te2PQr44R_PWKsppG8jWKyo8tGBybk9XLtfuWZrIhwhWItL5M13TEhg01ETUxudesTnkK_nJlYY6y6VctBi=w3024-h4032-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHQymHVoRZVoB-RCrhE6UXzPc9pTpGvQ2Z9o7077CQiAStM07pi66EH4xzglamwXAuQeGESfc0ddg7iaLJateKx4iEmVleIq3u5pVNl31P9NArL2oRwzwJWoAF73_xxvt7HvZy8fsbTOE6u=w1200-h1500-n-k-no": {
+      "type": "food",
+      "confidence": 0.75,
+      "ocr_hint": "title:Sydney Rock Oyster Black Lime Dressing",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHAIiVsMzBGutAM38lCCqQ7fWHFA4ulSAMj58SPibTb0TxKl2Rxf83-obIOeFLGZgAHQqE51me0htlgyQLgRz1Dni3Nyk3RjFy55oDTkfLK_2IWklLv1SvchcXA63zzTVZl9lqjHg=w6240-h4160-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFc-v8-BIk8GE3XZ3beF7dSXuzl2e3XlJnXo6Kp9ufXvbjlytzFy6siPnX4v-djxQOyoTs-LL36QSXsKMmUDXg7-YujzNmwsl78RrXSnlnEwM1U_7YzmvoxuZMCecHRjno-XR-hag=w4000-h2252-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAG-jB64KoAMl2VL9wsVziGhd2pQnv9IRPBmhhJWIKhpMdHG4_Trt0Vsd2iKA3lvdIc6be5sMzexaGvv039kacaFXb9LqajlWUyzmqVk23p8ArH2mzJNK72TDJmdILgyL_JfX1Kt=w1800-h4000-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAH0ukUH-sDpV3bc65_Bqy10ZzoF0nhR1SQosgv3YoUTkdZQtrHYzyUUf1wSwV7K3eSY32_Ub99oQGpFB5zwkwWTG1i1cS_ddeJ5Xm7txpc8Ytqh53Pr4q2Xr-_3jnctkrTojI5k=w4096-h3072-n-k-no": {
+      "type": "ambience",
+      "confidence": 0.75,
+      "ocr_hint": "title:Hand Stretched Halloumi",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGdM44wq2WU7Hhcl157AKX0FjOImGLqejwuXXR4FIS_4Xkp7Ds-OBggKgAw96vbUw_hwpqfOwhPmmJuoE8syufUCOCcIIRf-1_2snVPCKLz-IVHnvTrGOdELRnddA_2BRGUPR1l=w3024-h4032-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAG8h61lAOkiCvD8wFCRhs-_kKAverx4mqtf8tS1IRAavviwfywuGcYM20CHsElDiSvGaKu-bRerIljxUQ-OsjlwYQirmkFaSpsWKP1fxhvAbasrFWa8zp259w-uZe-cLk-HT3j8=w1290-h2796-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAE0VLJTOKCcdtm_uu0TwszdGyj1ZrVSV9sM4cI5S1ycvS8deHAjPb97kswAX5B75cdDCJikgRhQdKJ8BD0zVVEZ7F-oTGSLgVfKGiZs1azy5wyv5eW4r8bG-uThiCkgvp0YjTCN=w3024-h4032-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFIuD2D40-K5tzmQoM54DWbHf8Hcvw00NjdV7R9KNJPIOP9Fm8N7oEeQoJ4JIWF5fQbTQ7_jqr3p6cBNJz4A1nY71qJV4ZmDGYEUc1rvzZlMgYMNjJlAEmt8tOlGUmxxAXd8bba=w3024-h4032-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFrVwq1308z4KY9HIPSXicLlbJ-Q5JEVJ3SxZ5F5Vc_RGV8U2vTj3LA7kg7s5XnjGnHqqct-Of2mxWHQBw-9lv_VYK989Ja6VNnBc_fBD3mPuI3t3gnnBHE_LRpcwK4bAo5eHQP=w3000-h4000-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHRKQenOf4ALdlZIXtyAGO89Gn1UbcbPfgfAEdXmbmtY298HZ7yiM_aTFhLEIDocnwisVdGvypNexElF_81htgZ2FkVLUxMtWyZfUjPEq-Y2K38vOerIps_p4YkXEFPNQgV9klPz43QBvup=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFVa_rjlxQOGLsOlHxq1anUTvg-9FHqCcodGPFWteyByr6cRBTfpLgMZnCej7xSCOj5jKNX42Hr_4SGy9dV-9AAVhghLtStIRmBtRcm3I-1pvxIl16gneepqfwa3P7xB__qIrVtuTuUUNcg=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.75,
+      "ocr_hint": "title:Latest",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHmNOTubk2KU6xHvnbU0AqzDrHldJQIaD2uOvjyoWyo1m8G7kc8totTeqhyMWjvu5j1iO6kieDinB9Msv38CV7kGBuNeQZxr-neAnNHVl0MQ5K8kkvjx37JuysaxdEFG2i1PTJMzQjhenKD=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.75,
+      "ocr_hint": "title:Videos",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHOLNnmwHcbm9_9-6DjCy8IZCPxHUGNekzavuGZeow0zTZ9_i91dTzioTZ0VkHvMW2TF-H4VD6QkXn0zWamu9ba_wRfIRtUVNaceoTfSPDURI1iGBPC-MFf2v8N8PqLeE2AOsCsWkit5us=w1000-h1000-c-n": {
+      "type": "menu_list",
+      "confidence": 0.75,
+      "ocr_hint": "title:Menu",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAH00bvFk6TcjBUwYWMcVvWryZZay0ra1cHMmZfa3brCV6qyWMJxCm6U2XLO4hv0vMqoK6sYiBYqwWJwwZik725yuOIF0Ex7LPpC4OfIne50BrWmwuepypZYDNjsvAhptfiiS7Yf0EKFOQA=w1000-h1000-c-n": {
+      "type": "food",
+      "confidence": 0.75,
+      "ocr_hint": "title:Food & drink",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHaluhFoX7vZXu3L1fU0RKGPhqQ9lHR4IJ7rmeODBH7nCCpk7uNsypSKmoRriANI1hxzQd9nkEOgrMJkZo3E7ctsJtgq0PweP9hh5mRUzgtlNuuqX5wkNDL4D4SPM4kAs8xwJDjfgii0NgH=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.75,
+      "ocr_hint": "title:Vibe",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFcrvaV54RROWarnmJCY8BzQ4WnjQZLxfge01d2qHUi-sZHvrhlXnOHH3btsitZnYtu1IYU6Mx4-ODPzFNQ1kMERbnHAVyDoUkK-vlwav6DdCrC0QrRXnzZGTE4N2BQndWKytxwcPVKQ2d4=w1000-h1000-c-n": {
+      "type": "food",
+      "confidence": 0.75,
+      "ocr_hint": "title:Oyster",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAED_Lhf2hUeA0Th9xJ-9EHlf0QS2TdkLUX_537sy59tDbJh4RGKK1QSFhC2BNxw_WevxagpVAj0ZMPELD7QNjvB5sFazXiYgWPVvMqody1OyiwOjIkWn5yRzCEr5RJN2HD23itYXtbBcdQ=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFvCTUq32mer6kilMnM4TQswU4BCbNTtGpNlTsFQOxwZUuuMej0Z-CxjRkvnugB6Q3nyiXElE_afE-95-OnaKqSRmYoyTx4GMc21V3WGfFYGwo8rFBxGwyxRpD5s0WDzpor_Wu-=w1000-h1000-c-n": {
+      "type": "food",
+      "confidence": 0.75,
+      "ocr_hint": "title:Wine",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAELv2MQiqpuxi40R_N_D8KWKMIgHYJ6H7Kg_iypDhLP_vjdCwevHldnrR51IkaxFEVuyWJae5h1UQKdSQZ2S90CKmQBqrbhSEAMjCEIg9YMykoaGW0ZT10deR-9xTz6xMPIUeL7aofvUnjZ=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGOP3b_WT3aVydHjNe7hxYCmSRbc6iytV-rQFi4Ce1Uz2qYy6JEaeW7cD8YSotfFCkf7ofB1jo1VqvMbsl1CHDDLgk0_P3j6hzp5oBzzy6wyf3hto1zdqxjSWgxJgI9YLWU8s9M=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEX73ebu1Svob8YR8ljHkAArcOiONlwaUdrAfVXTPUIJ5Gmkv8uu4L_5zb7qR-8X6Q7XZjocq5fxlxEuVp-lQFSix8pZhWc57Y6sHZI-fMkxoVgr3bYPwp9P4-vzpre3orJsUH4Ukneymc=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHZgCVzVWwLyjF0XbZqjq0Tm6Qp6XHuJgl_6dQatbVxHnjVYl1O2co43Bchv5p0T1XfC8gkswzRx4qUB01O0HTnDGUBr4n_9SEFyktWu5FP6zA_DiopqNwa5yVeY2fXFzso8dABUQ=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHolwn7C-bq1HrvkOA-xvlO5FaOHXLHDc8HyB4DsnzdtQe4C3yc7tABK_8aWLolLIDqvEQS6ZkKMGZ9b-jttcgTkKdjkl3V3S48C6OqBCwHhqYCSJwwHd-kvQDlVlCbPn4q6Ofifr67RyxU=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEiBPr0vWaDWiGmMq35MnI7dt9fYzzXrbE_A1XlCHWUbDEntP3zwcoeypKmuo_oNruoP_pl4dakHQsHvTYzhyFOTBSEt8V-btyC4KBu2luy4aJ8CuoNPpjJBnGp77X_y5-Q4gXq=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHWo9mDbRRYtfhkIxjxTl5jobVznViW91rCYtjRQcfBFCO3GubjxxWMcGvbOWQ8sAc_jxkJlQa3FZxzvpvvOXOQf-ae91ksbyMe7NDrJlMDs5qGdbPEfD_u5sEF_LacAmOVGCr_nA=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHOLNnmwHcbm9_9-6DjCy8IZCPxHUGNekzavuGZeow0zTZ9_i91dTzioTZ0VkHvMW2TF-H4VD6QkXn0zWamu9ba_wRfIRtUVNaceoTfSPDURI1iGBPC-MFf2v8N8PqLeE2AOsCsWkit5us=w8160-h6120-k-no": {
+      "type": "food",
+      "confidence": 0.75,
+      "ocr_hint": "title:Merimbula Rock Oysters",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAH1Jv3W73AOWX_cI4sPrwJGZS0DIiwRTvd_PzlK6YkZMDATkisSC9M14s88CAOmR79zNjjPGvJLFvjYB19UxKgYf4_XepaejwsuoAngQA9f6XVWyZR2hjJVJsP5fOFoRlA1B9JumF8p84k=w3024-h3024-k-no": {
+      "type": "food",
+      "confidence": 0.75,
+      "ocr_hint": "title:Albany Rock Oysters",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAENJXlZpTTAjJb-DrOj3kduqtT-pRyXNn0xPAzzl3nfPU2lHLNL2cgA10fJA_GodQJyRJvqzBS70NgMy00AKUTmS8C5HfByONg5nCOEUUz-VYS5YIsN8GYqnwjz_B3I-P3W-3U=w2497-h3330-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEWgrc5JfDpeRntMAjZGam76RN_OjKFP2h7H4pfLiv0PADnDh70hkd1y2AVb8GnZuEFdEgjTnwFwQ87Fx2elPN5qEPPjutfwJ8ozb4__Dw_ljEarb9gLvJwIxm2rINfnoSejTaZVA=w2268-h3227-k-no": {
+      "type": "ambience",
+      "confidence": 0.75,
+      "ocr_hint": "title:Abrolhos Scallop on the Shell",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAG8x0QYhkfvNgzewVzuUknmulON7atvSYpr0_HRIL0-_xkiiCYXF5nTJlosc9GpewthSukaTyYKkZ4-kvt0sEyjo5x39XR-IO6orato9EqovNvDSwg50MKEMGFHg1G_st3TS1UN0w=w2814-h3752-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEShVgqgBJvxVEQ428BFJnGozCA5xPlhzK0Qtyeq47oZcjANbtCSrY9eaUJTCCxmkumbzTDftA61wTXwQunaYxNiCFrT72wR_vr2Yp0c3aph7CCqL9IlPdxnghdoa3VNWNU6MX5=w1990-h3529-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHRSbkom6QDmfHzIuGkxzTbjjTIvs7MIA2qQXs7Xq2n13l54-2ZoWFYV2FWQYZpQNg2obLG1RLEYPAikijmlzi-Lpkal0rh-WQ3YS66G14gTuadJ3s7EI32nwXtwpPnj_22JFY=w3454-h2782-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEKQZ2JibEtdsiSVJx6kVZ1rNCF-9p4GR57Z0lGTupULEoLdo_ulbnNdpmoEgOiPIq5QYPdP_k5fXLBtuYxiVtTkHSJZDan3LNRlo19jn_LehPTsNKvcGezn4PF-FXQzn84PFS8S7HN6qKy=w3000-h4000-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGWvCg2YWGAH0o6w7HnaxZWknDFFZvJn0_QSolhABZddHNb-16Gs86faE0MbD2VIMO5Zru8NJ2z4YHi3KXvML_F9hzW4anqlanqL5E74L9wwwx3RgOcRKsrfJyvBrsrocXfzWA=w2497-h3330-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAF9yQJZywSVceuJEjyxmX8Me4jB3IIidE7pk3gwVw9ZtnGUJG2Fu8a23iZDmPneSYDn2SBgeVCTyIp437ianUZPowDZBbCAGRpmDY9uedaoVWsiazCkIvNcvw1nbZ1PJT5VngyO=w3024-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEdDV7jccdGzUS6yWYvDnTpqxNyeO7rFHz8J7soX29ic6NSU7_dvcxy4iPLpwo5tBdnDPTsjagvT-g-6asrAb08TW2t93Oj0doY08t8TKTpdtIC5FBu-ZpV5gQxm_RPsHOEM1sN3w=w2814-h3752-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHkDknkbpl87iBd4HB9b37RQcN-HUzRy4aFBJ2w5poZXTsL54CKfmRYh0jFM9F8fCBVLNG-p9P0Uaxay4-AlOAvsh_BIzQq1am77I6-xs9BNgS1G3DGm-IzJf5hnXm_e-rBV3c=w3024-h4032-k-no": {
+      "type": "ambience",
+      "confidence": 0.75,
+      "ocr_hint": "title:Pan Roasted Scallops",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEe5xsGYTGyaca-qDM7JTutB0PLWzIcB6gtd40omBSPD-ECYceF-UmOoTlNAQ7GXO8JsH0Q6E-fVjxQz9zx9t71DMO00okENC73E98mhfn3pCSorZZ-Nojokgl6bECmW92cpYE=w3024-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAE3-rezhc0rS1noR_70nt8O_aMYljzdbuTfH52-CkQM8yZSlmIhOcw40P6nJskzQI8dAOKgk5yFB5HobXSNUTj5MIUGFQSSQMSNpUTYHNdSif2n82M0z5XkvRBcM0whni8UoSzc=w3024-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEy0MAMMpcfynVwBiMYijmuhxKDipkQSIxO7ma7VKAxURdH83SjdwWB76DIjbUiuNMFEK-0Yf7KAvkVIYYgCHfBEAYTA9GL-uS--_irwDbSQFe4xbkdQW_I7ICrE5J4BrzEtgB7=w3072-h4080-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAG46POteAnkwqt9gEIDTGrfrth-A_JRHhlvfOyzJrJ3PjfVUEOk--lhZ6UM5_VVDJlK0kBwtbeIjMJYP2o77N1RsJu6y4LphgoEqMC_qvgKiZ17jyJIT-_KiAusUXIOqMC_hsgj6w=w3024-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAF7RGrnYfUlc2ryhkxf0eL1vgPO-H51PbzEdqWwQdRbNyOOex95SFxqhGpZg7JVBDcsGdl2A_3wX2MeAuxidfXiAf7DlEzgxm1TSq3aaUpkKt3LLUO_2gHNnJteE0oeX_e7XeONzw=w3024-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHdrpA_SVSSCOw3V9Qw-_tWVBHlFuIrtHcZfXrQD_l8JQsAO4cYZ50MA49DnwSswesvTSj600ra2b4pWGhEU-7lt09TxUrL9ZKjqC9ps1gpvEhNVk3oCisDUlP46F33J3ZG0qL5=w9000-h12000-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHkBVpPahaUI7yTHPucP5_T7ykkqCy2oxcoyLC8RLfpP3JB3R6tlfZizf4GGNCTDuoG0TaSMHVZU9HEBEqimsYBC2ByFl0crZ5tnBaG7tR2G_JSe5rNpn2DNtK8xeYRzwA19z3T=w3792-h5056-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAG4hUDm10aT0Bj_sktnBzpGDa0LJBei6qqqPtprMgSvfMTt9LCF5uZFxeUWHgFrwnx54ZcZcZjqsxG1qV3cnSC3DJLtOFcoijbA4wuFoQMJVpcxUHR30d1-roufJisjkHqU7SyFKg=w2128-h4608-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGR6MH8ZOp7XAiErG8Q6ULkyOSp4oeAqWmzKd1ABd5t9LTpS5_swj1ToUScV0ct1fuocLrnac67gK1UUyk1Fxqb_oGg3DHeYw_-hcX1qUs3mDnv5udZNBfo4cfbWdKLVHeMNYCIhw=w2500-h1667-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAELv2MQiqpuxi40R_N_D8KWKMIgHYJ6H7Kg_iypDhLP_vjdCwevHldnrR51IkaxFEVuyWJae5h1UQKdSQZ2S90CKmQBqrbhSEAMjCEIg9YMykoaGW0ZT10deR-9xTz6xMPIUeL7aofvUnjZ=w4080-h3060-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGq3MoYw97QT_kYLvq_YyN-pzuRBCGEZrVxSXhVjflG93PD6_5StcKTEjGA0aQXxjWYuU2VMpsiDrhnJZVcovyii5EMTkZ3ioYBuWMJyBBcE9IyLeT8x1z1RWjraJI7IpWWv_Gi=w3024-h4032-n-k-no": {
+      "type": "ambience",
+      "confidence": 0.75,
+      "ocr_hint": "title:Pan Seared Scallops Caramelised Potato & Gruyere Puree Preserved Lemon Peas Prosciutto",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFaX8lsFK535vBKyygVBIjNnNsDUa141jQn2QA7XEcgtIsIazslO5c0Ruo7OjTdBDTk3ujsDxHlI2MY4lj57xpxSbd7O9K95OtforA96CkZLOD4SV-5X62WjlUf5W6JHBsQ0pIT=w1616-h1080-n-k-no": {
+      "type": "food",
+      "confidence": 0.75,
+      "ocr_hint": "title:Merimbula Oysters",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGUxtex0y0xJtEWA635xOpwTR16C9uyv1lyl7AQhLKE8TMUpsuoD05Xj4wVSQgIkKIG8SB_rwxdCWns8kzUFOQoWmgqF9TrxS7fNpDhftX4OPJAUuDCXfyYTvf6DYsurjTomuzg=w1816-h2770-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEX73ebu1Svob8YR8ljHkAArcOiONlwaUdrAfVXTPUIJ5Gmkv8uu4L_5zb7qR-8X6Q7XZjocq5fxlxEuVp-lQFSix8pZhWc57Y6sHZI-fMkxoVgr3bYPwp9P4-vzpre3orJsUH4Ukneymc=w1284-h1154-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAF0VgQi6EIKc4YngXaD_9vkEEBnPpH2gCvQHiWUa-uWB8f2M-Pq1BxfZqECQ1S3tgp3TzBHOKsyEaNrKQbHsZEsVg5IvvdggllmVCCoFw2nhQTGeApUMGgUWvTjs3Gp3sJw9GQw1A=w2048-h957-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHq9kBojblnrrgxkjI6Kcth_9qB97u5ReDVsEjDNYCzbIvUq2mPdiT_zn6MFEIaWmUbxZXq49VOQix8EVu-14Ah2GJr8OQlQFgKcafv22fulw8Wm_tTFCAwV1gfCc4ATG6kOhTKRDJNSD1b=w4080-h3060-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGVA04qr5OMn7BVB5DE--oU1TVXEQl2cV4AH36dGfl6Y8YDu-iO-7IoltvcnEnQo0pancH1hqY-mOde6U4W-_ftUcpYc4yzUaaj0CPtyAfw4J2xonDyPH39WUNIwaG94s0qLWY=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHirmcW5AIO5JmWgDeVA8i2kFsOz2qF4Bvu4P-1e7KVe9c38nILm5WubPVKaR6k95cAeYta-5VgSOVbO1fvS99FYB-rBPWtEFjoxPaxc9uYuNpIRo0ui-5YLxzuWAeMIYgXdd6AXu-62nlM=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.75,
+      "ocr_hint": "title:Latest",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFbgOOKU4HoRUTsuHMVL785oIBRGuSSoXJbGDFUzM8PJhOUzpWG2I6cgA4TNgy3cRYpTM83V_KXOy6KQkMvHw1aoEqD7dvPGnc2Ar7-xtFECLGenELoT61-Hyp4znIpo9ALuuY=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.75,
+      "ocr_hint": "title:Videos",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGPvTY7KbppI2wE44_b55qzTxFOU8mdOx3s_vI4SYiHdkEyOwt6d2L4awEG-mE3CuLvRIJgu3Mt10XjeTXm1TDAaMoSoa8qOgW8S2eSOWLlFluKd06KpTh1RQ_CmDGoKgaiDhIwujUjKDLA=w1000-h1000-c-n": {
+      "type": "menu_list",
+      "confidence": 0.75,
+      "ocr_hint": "title:Menu",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAE7fQQyZjuLmrcgx9HydtHfPCMeLNIhGJLa_5xV0ejcK8V2t3ecKEjteunf1WCpzLNEjNzvPAGfR7HmynfI7daIcT5vGW2rpeGRwJYg6fpcLts3XqzUyY6VcZnMumm0niOtNyVY8Q=w1000-h1000-c-n": {
+      "type": "food",
+      "confidence": 0.75,
+      "ocr_hint": "title:Food & drink",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFVaGblmBPCr9I-nwRKqOgPC996bCE5ubxuuSXtU181cnvdWRt8Vygmt43TAHTNCwkJBH2Oc76avYEZStSxgUTK95FBX7UlUd6j9JTPfDaWCN2dr7Kaf-zSJoC4b53dp1iGWIE=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.75,
+      "ocr_hint": "title:Vibe",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHPlPfwPBWLPANscGSM7nj2zMmNRykRYgEEktDWFqVy3200LOZkRIghO9iA7H2N2GfMsG7mj3UpmItMUG-fyNAPFIATr0-UAwrsi8oD8iM4MIktQEGIgRCziLBpyfrCuAW2PL4=w1000-h1000-c-n": {
+      "type": "food",
+      "confidence": 0.75,
+      "ocr_hint": "title:Oyster",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHpZpIEX6xQreOHdoSvqYG_ixmNPeJr76AaUQLcHmo0xgy-umiE2l1gW_RXq63dCtL97WTAYCz056-13IWXOHRlD794nl_3Mp_i9vGeVTyMXmrW4qxbOoyyoIL2NZW09AvOYYTbM81CEmI=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEgeCqLOa59B7mrUPFmqQE4eAn9IpT8XheB6uUQC00twJO4LuieQrvUTLSpXD5mBJ5-iNSKPxYA9OyfEkhuun-qZNJo1bDqPfT3QLs90P3Q_Yns8iuoQaRuHqr4mtGgPVbsGDY9wxIgS76a=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEzZWoptJ_sTzowrvBJRDxw3HsHvwdfzKStRt7IGa7T3hQdIJq4Kqw3dsaG4GpCJDT8b4irqUEvmLjmFIVvDBvusQKU8wlMKU0wRbREO2g4i5o7MKAgIQ-Bb0CV8yaHezJ0V7mdx5ROk8VJ=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEILhwSOslS-2xT2jo9QtiKnU472Xtv93GClbfcoIzFap5Y4Wls05kUF1kbng8RXVB02rnR0S5H-vDlS1pgEdbwaMnUMupParllQa1enRXmjDIX0A6dwJ0_WEBgMAm70NKP6mPZCQmBlcXv=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEAcHHrd-p4p5lvQwUCeIWDJyPHI4gXoUVtlo0LDrTge-wFQUIbO7TzWZdeLs46RjsjPLXD_9ypl_wYj7BhaAWZY3WIDtTnUhUKTBTc95q5xu1P0uNopTDTDKOdEKC6yzI6WO_VIdlB9ZhI=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFnPjuKohTttHT9LUj8A2OzAByx7vSYiW4HgqYRrXo2PqLacF6bq09yFBmVtLv4lU4cjCort9eLZyVPEdJY3iqI-X_NsokPplILXEPwa9DmaVfHJho719ea-zj9OhEoXG4xM9CADw=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFdBF0_3I96eGqwobXUIsskxSqRMyGsyjqAC2E4nsdwbhyniP3NT9-f21XiXZA9Zx_ANpLJGViJZFtpwqZKb4eCTXdr34R13Fmh-jw3nVwz5bU1K07wHsoTABH_BgPaulpIpgc=w1000-h1000-c-n": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://streetviewpixels-pa.googleapis.com/v1/thumbnail?panoid=0CDNV3P_wFhN-VMGZ4iO1g&cb_client=maps_sv.tactile.gps&w=224&h=298&yaw=29.2313&pitch=0&thumbfov=100": {
+      "type": "ambience",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGPvTY7KbppI2wE44_b55qzTxFOU8mdOx3s_vI4SYiHdkEyOwt6d2L4awEG-mE3CuLvRIJgu3Mt10XjeTXm1TDAaMoSoa8qOgW8S2eSOWLlFluKd06KpTh1RQ_CmDGoKgaiDhIwujUjKDLA=w849-h1177-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHxM3hcaQHOp7T95REnTxlKi5VjTeicx7mtiA4nhyMdrGeWeJbuoJ_pEdVKBkrrdeaoeJRPPRkTw8352v94_UO3Idyz_8d0g9ossRFpTLeUjHX_VQsRsljdthh5FDO_ppT0gpjoZcTIJSoP=w1123-h794-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEklb5J8rCrJd25E_LdM-huTDK4fvJul3vBYSX3j_0-tJrnGxF3ypDhrQv7QX-i_rATuX-OmVPx7z9OjNUmJtzFOA5I5bydDnorAvob2DoGGYhf6GvW-i9Q_PQagRhEYZYf71X15PYphIkF=w1123-h794-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAF07lOChL0D8FhOicQ0BISMQGjoNyfhkLBkCLMV1WT5uMRQdN230Uk6L9fw9AVdD7ieFLU7TJfmUStTRM0B9nlsjT-bx8LXbzXK6p3ZZYoO10aBYZ0smc8c7GrnvttYh6gjbILOhAInx84q=w1123-h794-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAETW82_oowp1TsI8nvyG3GaO9GaMNdxm4-PDaJUtXSKuqvf4yRupzKz7K8SS2q73p6Pu_oCtLKHiTP-JOJPuTndiX1Hnuzt2wXyBx2hrMoc9M85VDKlmX9eQhBn1wZK5KWltDn9EuKM95u-=w1123-h794-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFEuBcPPcWOJxNq0Lad10MLIinCOgBPJ_585mkLV9rVTqlV0bbavYL68pFfwQEGq635bQtIlU2AuwdFsYk6nE4sW3iY1qGc_LiHb1J0hmWsycuugFeKRUjiXBAD-jNGRnwRpj82jVpwggQ=w1123-h794-k-no": {
+      "type": "ambience",
+      "confidence": 0.75,
+      "ocr_hint": "title:Steamed Barramundi fillet with ginger and shallots*",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFFsRQGvjxty2pwbtVdYgu4t7WbyeXsnspctHS5AyoCNGzThcvfi7m1GgpV9QYwyvyZkYMnaclBHGg26kEpDrCs6p4_vAqamyxNbDBCFIZfdL8MZb0S38LsSkE3zsMpo1UOVZq9iZOZwz4=w1587-h1122-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHIfm33E3GxKKoP_fu1cT_IbBkiDm4DwUVCs30V9CRO0KGQ_RenUaxI_H8eRU1xEVV0yprR4jBiKYG_1oF886W7d3X5A1p-G5SZKNdcF4zMK_UzZA7LkK_xMsZi_QSqHoIqmJGhAfP-Wy1t=w1587-h1122-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGPmEstR99YHQinhtdqxfvR0SYibTlIgMpvQTlqFP0Iu0gJrXq2LKS-9GCfQBukWQuk7mEDj0loWphcVF-kERKFKMMrcg-FZse992Qnz4ZpSJxFwfn4Pz03q5MSvwME7QWrviSZblgO50u8=w1123-h794-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHKSLunKxVJkJcuypjoMPxRR59XWZQN90ce8ZgJSB8Lkv3ZmorcSySpMMeYwjUJovfafgeD1FGWZkP13gGCp5xEyGt1yb8ccC09leKcJsn496D4CSc3_wa3lheM2oj60IUbN3tlO9tSbeg=w1123-h794-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAH7tXmEdvBgKfGDPuSb4j399o0wGxRvl5df_29c8z_zDMCAvAeW7gAIHpy0_3JrSwwViIWX3MlNdqPLRXWSFk8nVYIRqP_O3x6sbXm6N-YmqsqPSO10zQkSzj9efvjJY-DjBDLdLRfVehsA=w1123-h794-k-no": {
+      "type": "food",
+      "confidence": 0.75,
+      "ocr_hint": "title:Add dessert w/ coffee or tea for $14 per person",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEPZTznXQ8lGFZvyo6XU9Jq1x16dicmEOQzAllMzUm7IQBTR0R0lxTlFn2pPBprrfg-rkydeWWBRRjqfTDP9JGjsggXUaAzvAUBWdbeSezptxXGYtCd5SYbmYg1L2-l4tOOjLtknl1PBYAg=w1123-h794-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEbmDd7CL0lJ9VX4TaMwA75T_tKyg9KzVtNhqh8FrQnjqGmZvZyBIBy8edTQJFuchOmluRDaggIOtmilLiCGQFuLx0mN5rNJG3rjMnj_pl4uxySrVoyeOJ1YipLgYOuRdeFnwWRZ5lF7Ilo=w1123-h794-k-no": {
+      "type": "ambience",
+      "confidence": 0.75,
+      "ocr_hint": "title:Lobster, scallop, prawns and squid ink dumplings",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFeuKQ8uA7JbhRKP9r3YlCpaz48fFQMs_2AXVktYyqkNoKo79RFve-Wgw6y3IBnd6x_OTdd_0-ohwc2CCPbWvpiXMrqHJPZSgU4jD5iPsGq6xUyABr1J6qmqRWxTDq9RWkEFcFewp1pEuwQ=w1123-h794-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFpyk0bYRUfAGbkmu-seSX77GngQ11MRZUDwDxONXpv_HMlFZPMltskRPo4mWHpjF8ORkgvoTIj-_PjcujtAhE6uvJxZ45doixBP0Xn8b6u6-AQq4e8o5Ri5_x8_Osp4IZILPZ6nKbf_uA=w1123-h794-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAF9FiI6CxcKlKHcPueaeBeuTU3JXq-KA8rfEUptWfyPqor4TRJTVlhfT08hnZbJhYjBfFFyuu0xHROah0n6K0Nn_L9mpDTNrXXP9HVtKo--dnz433CDrOb3_aTr1acfQkEKNI5K9zFnjYl4=w1123-h794-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHUlQ3WNyUCUkM3E0wOTB6Oh3Fen1YvLWBr5R9BedzcStqW8fO0BhTiq2gxxWKgL-T6Zg3ixrod5-4bcgx8BKIBctqi6gfYxYRZmKv_tkDYpFz2WCka0m6Qcqwfwke_BZsnnhbf_MJ_twEC=w3000-h4000-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHudAi7oetKO4u9zh9JLCXvvpzyF6gawx2QP0Yb5eRDwcot9KKpitXtmCO2y-Siai4RGpSxLbwkVJHdduhtgwcv3OB7ha9Y82Q223U-2hxto0jGrB8VnhxMKej_sKZnTY_i3Bh4AgQp9l0=w3072-h4080-k-no": {
+      "type": "ambience",
+      "confidence": 0.75,
+      "ocr_hint": "title:Steamed Barramundi fillet with ginger and shallots*",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHoa3DFr-RDcIt4xQ5zcyZl2hsXq4x_roteblwEN0pFFNVD70Ha6AhzruY8fBhSde0vR6pI65OR-SYpeF_MqNLQOAbQfMGvjr35AFlsp8ZoZD4pOjRAR3YgCjmq5cd1fzcMyhnNdaBe13M=w3024-h4032-k-no": {
+      "type": "ambience",
+      "confidence": 0.75,
+      "ocr_hint": "title:Grilled Wagyu sirloin steak (250g, MBS4+) with Taiwanese spice soy and shallots",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAH180nwK4PKt3srzPTEixUe2k5s0D3CKUms3-RznZZqJwCfhphosybiRDb_HmW0LMxyITIbbP8b01ZLomVI_k5u0vi9G5O8hkyXTZ3gPNdxOWw6AHveWpwN0KSEEcWYBrkhvk3tFWmYnMQ5=w3024-h4032-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAE9rbzzhbkm9xyipAUWNbWY9bU3NGhvXFJbIugWpmgIlYAcgSfxB0w2lK_-Cc60zzA9X6AM1ov-M7bKaxIlGo_c9lOhU0SGxB0S3IzDhKg-Vk-KmEPFNrtV60yL_wVkfgcyPagU=w4284-h5712-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGP_EeovlJMs9wzOi9GzuQlBNG9sHRjc0ryYCBqzdAUoDhgm-R5xgcLp7tE_3x7UNilYDBcws0_KCe7Q1k4eKMdN83pBi_-Bpibj_PBiIsLSQwZ-JZRvgx77CaFYladBD-ZHPBy=w3024-h4032-n-k-no": {
+      "type": "food",
+      "confidence": 0.75,
+      "ocr_hint": "title:Appellation Sydney rock oysters with lemon sorbet and finger lime",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGt5QGJJHsODuLW8g48LJa6YigEWSEmJph5yIkl_DAfz1G9maXALJNgJRe-3dpboBxLOoscRQJIoAvp7wWsslFhCHNQDYyf1XIpsXP1ehbMK_CZC6LNAGHEiYzujKQ2WnFdgaVz=w2000-h1335-n-k-no": {
+      "type": "food",
+      "confidence": 0.75,
+      "ocr_hint": "title:Cocktail",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFePfNBfdKLWyW3MpcPuW6EqGJhwCeaDbMOu5Teg1x4XDTPKeGVRZjWtfcoKOUBOVUJN5s-mxjqd7xQM8s5Ty-ljReGhWmJOsnNfAaSyqpzmtSX8hA-z5rj8pIMHF79PMwYTuc=w2267-h1537-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAF9q435ybzw_8LqX3FsGdzELNtsmQcxSRPIFP_j3IxUmlp7sGkvd5M3y-Pdrasq-5wwW0xUMAsZ6K1PyCymmHdNQ2KFoPOKo5p3wityMQoAGy7BoAEFWH45G307Cz5bZaNhiaEc9Q=w1536-h2049-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFZX-aGvvxgFRJr-4woZ96XClOGedwuehHRdnCdHnQs0RJLO1l8LrL7X5hcXXbtaCvGWIh9oXfBcbgyyEvMYweCqrYvN8O12K7zWNycxR3oLZYUtaW2K1rZtuigZ8YnWnjMwvC-=w4031-h2842-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAE5LdPGzVRAAA8OpBHwav-JtP51LK8DVu1ShYHnH1hNOG24hmTwR6hEotzIYDOzFRW62K7tiCQ-b__L0qF7PaGHU6eeYQpC2humhUN_2Y-jX3YCTaHkd2PEEwtx5H9HfWmKY7BbXQ=w3000-h4000-n-k-no": {
+      "type": "ambience",
+      "confidence": 0.75,
+      "ocr_hint": "title:Steamed Barramundi Fillet with Ginger and Shallots",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHPlPfwPBWLPANscGSM7nj2zMmNRykRYgEEktDWFqVy3200LOZkRIghO9iA7H2N2GfMsG7mj3UpmItMUG-fyNAPFIATr0-UAwrsi8oD8iM4MIktQEGIgRCziLBpyfrCuAW2PL4=w4284-h5712-n-k-no": {
+      "type": "ambience",
+      "confidence": 0.75,
+      "ocr_hint": "title:Grilled Half Shell Scallops with Laksa Butter and Crispy Curry Leaves",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAG9hPuru7eZcETRne5R8ioi85ayIvdCbvYqxhh8Pe13ooNzZM5-q3KUDMD2OK3hh-JIYZf9V5vyRaBRPMebCF8rx7uZSOlj4di7F87H8mABUgdvXpWpyBb1f4npOpMPha7IAzo0XrjdcIw=w3024-h4032-n-k-no": {
+      "type": "food",
+      "confidence": 0.75,
+      "ocr_hint": "title:Crab Prawn Furikake and Flying Fish Roe Seafood Fried Rice with Egg",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFOjIpm7cEBu0uk3SXUa6IGknJpWqj3N9CijrSVkBsTpqHFQXaVWscq_Hdy_uq2GOVknd7_S1hloDaPkenDeL1auJqFYrX1zOAhzqp0hlxU0DoSmcEDVvUENelUiTcUgYAViSDR=w3024-h4032-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHJc-iI96MWxizUsjA0N33JmMAjQirjNttuAFg5ITeTez8OlL2GY5D6MhM3_M88rGMX318lV_Sx1dBS2S6n2PPAE0VbZjpmZRUT9JBYcsycunRL-vI907c8ff_rSP1DdKiHCKCq2w=w3648-h2736-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAF3MnQUgBMudXlWFX1fwpKPu-E9ABUWTx2q-IXbCMZKFmeyXSUV_XSwMX4O4X282t2j1ZDfGSAZQ4KtlrONzfrw-SvjQ42FnNUvvsUXpVZ5TRgT9LnSej-17AIIgCCT0uDyFEvb=w1080-h720-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    },
+    "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHtX6ifN4rMb19O3nmiE-auL5WRvsnIen5Tj-wge175l7BBnEesNaWXqmsxtc_oQ8j5oX7zNRprzXSKGv06kd11kvBzHpUhzA2sxj-hWdkNcfCEXnWUkvUn92tZgpkhFwB0LV1J=w1620-h1215-n-k-no": {
+      "type": "food",
+      "confidence": 0.5,
+      "ocr_hint": "default by source",
+      "method": "heuristic"
+    }
+  }
+}

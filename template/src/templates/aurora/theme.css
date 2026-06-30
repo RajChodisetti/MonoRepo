@@ -1,0 +1,89 @@
+@theme {
+  --color-aurora-black: #09090b;
+  --color-aurora-navy: #0b1220;
+  --color-aurora-purple: #7c3aed;
+  --color-aurora-blue: #2563eb;
+  --color-aurora-cyan: #06b6d4;
+  --color-aurora-white: #f8fafc;
+}
+
+@layer components {
+  [data-template="2"] .aurora-heading {
+    font-family: var(--font-aurora-display), system-ui, sans-serif;
+  }
+
+  [data-template="2"] .glass-card {
+    @apply rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.4)];
+  }
+
+  [data-template="2"] .glass-card-hover {
+    @apply transition duration-500 hover:border-purple-500/30 hover:bg-white/[0.08] hover:shadow-[0_8px_40px_rgba(124,58,237,0.15)];
+  }
+
+  [data-template="2"] .aurora-gradient-text {
+    @apply bg-gradient-to-r from-purple-400 via-blue-400 to-cyan-400 bg-clip-text text-transparent;
+  }
+
+  [data-template="2"] .aurora-btn-primary {
+    @apply inline-flex items-center justify-center rounded-full bg-gradient-to-r from-purple-600 to-blue-600 px-8 py-3 text-sm font-semibold text-white shadow-[0_0_30px_rgba(124,58,237,0.35)] transition hover:shadow-[0_0_40px_rgba(124,58,237,0.5)] hover:-translate-y-0.5;
+  }
+
+  [data-template="2"] .aurora-btn-secondary {
+    @apply inline-flex items-center justify-center rounded-full border border-white/20 bg-white/5 px-8 py-3 text-sm font-semibold text-white backdrop-blur-md transition hover:border-cyan-400/40 hover:bg-white/10;
+  }
+
+  [data-template="2"] .aurora-section {
+    @apply relative py-24 md:py-32;
+  }
+
+  [data-template="2"] .aurora-container {
+    @apply mx-auto max-w-6xl px-6;
+  }
+}
+
+[data-template="2"] .aurora-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.4;
+  animation: auroraFloat 12s ease-in-out infinite;
+}
+
+[data-template="2"] .aurora-blob-1 {
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, #7c3aed 0%, transparent 70%);
+  top: -10%;
+  left: -10%;
+}
+
+[data-template="2"] .aurora-blob-2 {
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, #2563eb 0%, transparent 70%);
+  top: 20%;
+  right: -5%;
+  animation-delay: -4s;
+}
+
+[data-template="2"] .aurora-blob-3 {
+  width: 350px;
+  height: 350px;
+  background: radial-gradient(circle, #06b6d4 0%, transparent 70%);
+  bottom: 10%;
+  left: 30%;
+  animation-delay: -8s;
+}
+
+@keyframes auroraFloat {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(30px, -20px) scale(1.05); }
+  66% { transform: translate(-20px, 20px) scale(0.95); }
+}
+
+[data-template="2"] .aurora-grid-bg {
+  background-image:
+    linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+  background-size: 64px 64px;
+}
