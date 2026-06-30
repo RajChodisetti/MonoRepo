@@ -6,18 +6,18 @@ import {
   parseRestaurantIndex,
   getRestaurantCount,
 } from "@/lib/adapters/scrapedRestaurant";
-import { getActiveTemplate } from "@/lib/templateConfig";
+import { resolveTemplate } from "@/lib/templateConfig";
 import { buildMetadata as buildCinematicMetadata } from "@/templates/cinematic/seo";
 import { buildAuroraMetadata } from "@/templates/aurora/seo";
 
 interface PageProps {
-  searchParams: Promise<{ id?: string }>;
+  searchParams: Promise<{ id?: string; template?: string }>;
 }
 
 export async function generateMetadata({ searchParams }: PageProps): Promise<Metadata> {
   const params = await searchParams;
   const index = parseRestaurantIndex(params.id);
-  const template = getActiveTemplate();
+  const template = resolveTemplate(params.template);
 
   try {
     const restaurant = loadRestaurant(index);
@@ -32,7 +32,7 @@ export async function generateMetadata({ searchParams }: PageProps): Promise<Met
 export default async function HomePage({ searchParams }: PageProps) {
   const params = await searchParams;
   const index = parseRestaurantIndex(params.id);
-  const template = getActiveTemplate();
+  const template = resolveTemplate(params.template);
 
   try {
     const restaurant = loadRestaurant(index);

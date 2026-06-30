@@ -8,6 +8,7 @@ Imports all leads/*.json and data/*.json files.
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import sys
@@ -17,8 +18,10 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+MONOREPO_ROOT = SCRIPT_DIR.parent.parent
 LEADS_DIR = SCRIPT_DIR / "leads"
 DATA_DIR = SCRIPT_DIR / "data"
+DEFAULT_RESTAURANTS_FILE = MONOREPO_ROOT / "data" / "restaurants_data.json"
 IMPORTED_MENU_NAME = "Imported Menu"
 
 
@@ -326,12 +329,26 @@ def import_leads(cur) -> int:
     return count
 
 
-def import_restaurant_data(cur) -> tuple[int, int]:
+def import_restaurant_data(cur, extra_files: list[Path] | None = None) -> tuple[int, int]:
     imported = 0
     skipped = 0
     seen_place_ids: set[str] = set()
 
-    for path in sorted(DATA_DIR.glob("*.json")):
+    paths: list[Path] = []
+    if extra_files:
+        paths.extend(extra_files)
+    paths.extend(sorted(DATA_DIR.glob("*.json")))
+
+    seen_paths: set[Path] = set()
+    unique_paths = []
+    for path in paths:
+        resolved = path.resolve()
+        if resolved in seen_paths or not path.is_file():
+            continue
+        seen_paths.add(resolved)
+        unique_paths.append(path)
+
+    for path in unique_paths:
         payload = json.loads(path.read_text(encoding="utf-8"))
         file_imported = 0
         for record in payload.get("restaurants") or []:
@@ -358,23 +375,56 @@ def import_restaurant_data(cur) -> tuple[int, int]:
     return imported, skipped
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Import outreach leads and scraped restaurant JSON into PostgreSQL.",
+    )
+    parser.add_argument(
+        "--restaurants-only",
+        action="store_true",
+        help="Skip leads import; only import restaurant JSON data.",
+    )
+    parser.add_argument(
+        "--data-file",
+        action="append",
+        default=[],
+        type=Path,
+        help="Extra restaurant JSON file to import (default includes MonoRepo/data/restaurants_data.json).",
+    )
+    return parser.parse_args()
+
+
 def main() -> int:
+    args = parse_args()
     database_url = load_env()
     print("Connecting to database…")
     conn = get_conn(database_url)
     conn.autocommit = False
 
+    data_files = list(args.data_file)
+    if DEFAULT_RESTAURANTS_FILE.is_file():
+        data_files.insert(0, DEFAULT_RESTAURANTS_FILE)
+
     try:
         with conn.cursor() as cur:
-            print("\n[1/2] Importing leads…")
-            lead_count = import_leads(cur)
+            lead_count = 0
+            if not args.restaurants_only:
+                print("\n[1/2] Importing leads…")
+                lead_count = import_leads(cur)
+            else:
+                print("\nSkipping leads import (--restaurants-only)")
 
-            print("\n[2/2] Importing restaurant scrape data…")
-            imported, skipped = import_restaurant_data(cur)
+            step = "[2/2]" if not args.restaurants_only else "[1/1]"
+            print(f"\n{step} Importing restaurant scrape data…")
+            if data_files:
+                for path in data_files:
+                    print(f"  including: {path}")
+            imported, skipped = import_restaurant_data(cur, data_files or None)
 
         conn.commit()
-        print(f"\nDone.")
-        print(f"  Leads upserted: {lead_count}")
+        print("\nDone.")
+        if not args.restaurants_only:
+            print(f"  Leads upserted: {lead_count}")
         print(f"  Restaurants imported/updated: {imported}")
         print(f"  Duplicates skipped: {skipped}")
         return 0

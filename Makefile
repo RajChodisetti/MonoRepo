@@ -1,7 +1,7 @@
 GO ?= go
 COMPOSE_FILE ?= infra/docker/docker-compose.yml
 
-.PHONY: api worker test fmt db-up db-down db-reset migrate-up migrate-down setup dev seed-admin seed-demo-fixture seed-restaurants-data openapi swagger
+.PHONY: api worker test fmt db-up db-down db-reset migrate-up migrate-down setup dev seed-admin seed-demo-fixture seed-restaurants-data import-restaurants-outreach openapi swagger
 
 OPENAPI_SPEC ?= docs/openapi/openapi.yaml
 OPENAPI_DIR ?= docs/openapi
@@ -20,6 +20,12 @@ seed-demo-fixture:
 	$(GO) run ./backend/cmd/seed-demo-fixture
 
 seed-restaurants-data:
+	$(GO) run ./backend/cmd/seed-restaurants-data
+
+# Run migrations + import restaurants_data.json using DATABASE_URL from outreach/.env
+import-restaurants-outreach:
+	@set -a && . ./automation/outreach/.env && set +a && \
+	$(GO) run ./backend/cmd/migrate up && \
 	$(GO) run ./backend/cmd/seed-restaurants-data
 
 test:
