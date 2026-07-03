@@ -30,6 +30,12 @@ type Queue interface {
 	Jobs() <-chan Job
 }
 
+type FinishingQueue interface {
+	Queue
+	Complete(ctx context.Context, job Job) error
+	Fail(ctx context.Context, job Job, jobErr error, retryDelay time.Duration) error
+}
+
 type InMemoryQueue struct {
 	jobs chan Job
 }
@@ -119,6 +125,30 @@ func (w *Worker) process(ctx context.Context, job Job) {
 	}
 
 	if err := handler(ctx, job); err != nil {
+		if finisher, ok := w.queue.(FinishingQueue); ok {
+			if failErr := finisher.Fail(ctx, job, err, w.retryDelay); failErr != nil {
+				w.log.ErrorContext(ctx, "job_fail_update_failed", "job_id", job.ID, "error", failErr)
+			}
+			if job.Attempts < job.MaxAttempts {
+				w.log.WarnContext(ctx, "job_retry_scheduled",
+					"job_id", job.ID,
+					"job_type", job.Type,
+					"attempts", job.Attempts,
+					"max_attempts", job.MaxAttempts,
+					"error", err,
+				)
+			} else {
+				w.log.ErrorContext(ctx, "job_failed",
+					"job_id", job.ID,
+					"job_type", job.Type,
+					"attempts", job.Attempts,
+					"max_attempts", job.MaxAttempts,
+					"error", err,
+				)
+			}
+			return
+		}
+
 		job.Attempts++
 		if job.Attempts < job.MaxAttempts {
 			w.log.WarnContext(ctx, "job_retry_scheduled",
@@ -148,6 +178,11 @@ func (w *Worker) process(ctx context.Context, job Job) {
 	}
 
 	w.log.InfoContext(ctx, "job_completed", "job_id", job.ID, "job_type", job.Type)
+	if finisher, ok := w.queue.(FinishingQueue); ok {
+		if err := finisher.Complete(ctx, job); err != nil {
+			w.log.ErrorContext(ctx, "job_complete_update_failed", "job_id", job.ID, "error", err)
+		}
+	}
 }
 
 const SampleJobType = "sample.log"

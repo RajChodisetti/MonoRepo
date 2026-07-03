@@ -27,6 +27,8 @@ type Config struct {
 	Database DatabaseConfig
 	Redis    RedisConfig
 	Email    EmailConfig
+	SMTP     SMTPConfig
+	AppURLs  AppURLsConfig
 	LLM      LLMConfig
 	Voice    VoiceConfig
 	Storage  StorageConfig
@@ -39,6 +41,11 @@ type AppConfig struct {
 	Name    string
 	Env     string
 	Version string
+}
+
+type AppURLsConfig struct {
+	PublicBaseURL string
+	PublicWebURL  string
 }
 
 type HTTPConfig struct {
@@ -67,11 +74,21 @@ type RedisConfig struct {
 }
 
 type EmailConfig struct {
-	Provider       string
-	APIKey         string
-	FromAddress    string
-	DisableSending bool
-	RedirectTo     string
+	Provider          string
+	APIKey            string
+	FromAddress       string
+	FromName          string
+	DisableSending    bool
+	RedirectTo        string
+	OpenTrackingEnabled bool
+}
+
+type SMTPConfig struct {
+	Host     string
+	Port     int
+	Username string
+	Password string
+	UseTLS   bool
 }
 
 type LLMConfig struct {
@@ -119,6 +136,10 @@ func Load() (Config, error) {
 			Env:     parser.string("APP_ENV", EnvLocal),
 			Version: parser.string("APP_VERSION", "dev"),
 		},
+		AppURLs: AppURLsConfig{
+			PublicBaseURL: parser.string("PUBLIC_BASE_URL", "http://localhost:8080"),
+			PublicWebURL:  parser.string("PUBLIC_WEB_URL", "http://localhost:3000"),
+		},
 		HTTP: HTTPConfig{
 			Addr:               parser.listenAddr(),
 			CORSAllowedOrigins: parser.csv("CORS_ALLOWED_ORIGINS", []string{"http://localhost:3000", "http://127.0.0.1:3000"}),
@@ -141,11 +162,20 @@ func Load() (Config, error) {
 			RequireInProduction: true,
 		},
 		Email: EmailConfig{
-			Provider:       parser.string("EMAIL_PROVIDER", providerDisabled),
-			APIKey:         parser.string("EMAIL_API_KEY", ""),
-			FromAddress:    parser.string("EMAIL_FROM_ADDRESS", ""),
-			DisableSending: parser.bool("EMAIL_DISABLE_SENDING", true),
-			RedirectTo:     parser.string("EMAIL_REDIRECT_TO", ""),
+			Provider:            parser.string("EMAIL_PROVIDER", providerDisabled),
+			APIKey:              parser.string("EMAIL_API_KEY", ""),
+			FromAddress:         parser.string("EMAIL_FROM_ADDRESS", ""),
+			FromName:            parser.string("EMAIL_FROM_NAME", "Tuvi Solutions"),
+			DisableSending:      parser.bool("EMAIL_DISABLE_SENDING", true),
+			RedirectTo:          parser.string("EMAIL_REDIRECT_TO", ""),
+			OpenTrackingEnabled: parser.bool("EMAIL_OPEN_TRACKING_ENABLED", true),
+		},
+		SMTP: SMTPConfig{
+			Host:     parser.string("SMTP_HOST", "smtp.gmail.com"),
+			Port:     parser.int("SMTP_PORT", 587),
+			Username: parser.string("SMTP_USERNAME", ""),
+			Password: parser.string("SMTP_PASSWORD", ""),
+			UseTLS:   parser.bool("SMTP_USE_TLS", true),
 		},
 		LLM: LLMConfig{
 			Provider: parser.string("LLM_PROVIDER", providerDisabled),
@@ -252,11 +282,27 @@ func (c Config) validateProviders() []error {
 	var errs []error
 
 	if providerEnabled(c.Email.Provider) {
-		if strings.TrimSpace(c.Email.APIKey) == "" {
-			errs = append(errs, fmt.Errorf("EMAIL_API_KEY is required when EMAIL_PROVIDER is enabled"))
-		}
 		if strings.TrimSpace(c.Email.FromAddress) == "" {
 			errs = append(errs, fmt.Errorf("EMAIL_FROM_ADDRESS is required when EMAIL_PROVIDER is enabled"))
+		}
+		switch strings.ToLower(strings.TrimSpace(c.Email.Provider)) {
+		case "smtp":
+			if strings.TrimSpace(c.SMTP.Host) == "" {
+				errs = append(errs, fmt.Errorf("SMTP_HOST is required when EMAIL_PROVIDER is smtp"))
+			}
+			if c.SMTP.Port < 1 || c.SMTP.Port > 65535 {
+				errs = append(errs, fmt.Errorf("SMTP_PORT must be between 1 and 65535"))
+			}
+			if strings.TrimSpace(c.SMTP.Username) == "" {
+				errs = append(errs, fmt.Errorf("SMTP_USERNAME is required when EMAIL_PROVIDER is smtp"))
+			}
+			if strings.TrimSpace(c.SMTP.Password) == "" {
+				errs = append(errs, fmt.Errorf("SMTP_PASSWORD is required when EMAIL_PROVIDER is smtp"))
+			}
+		default:
+			if strings.TrimSpace(c.Email.APIKey) == "" {
+				errs = append(errs, fmt.Errorf("EMAIL_API_KEY is required when EMAIL_PROVIDER is enabled"))
+			}
 		}
 	}
 

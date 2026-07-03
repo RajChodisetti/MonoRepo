@@ -5,7 +5,6 @@ import { useSearchParams } from "next/navigation";
 import type { TemplateId } from "@/lib/templateConfig";
 import { parseTemplateId } from "@/lib/templateConfig";
 import VoiceAssistantWidget from "@/components/VoiceAssistantWidget";
-import TemplateSwitchPopup from "@/components/TemplateSwitchPopup";
 
 function TemplateShellInner({
   defaultTemplateId,
@@ -16,6 +15,7 @@ function TemplateShellInner({
 }) {
   const searchParams = useSearchParams();
   const templateId = parseTemplateId(searchParams.get("template")) ?? defaultTemplateId;
+  const restaurantIndex = parseInt(searchParams.get("id") ?? "0", 10) || 0;
 
   useEffect(() => {
     document.documentElement.dataset.template = templateId;
@@ -24,8 +24,7 @@ function TemplateShellInner({
   return (
     <>
       {children}
-      <TemplateSwitchPopup currentTemplateId={templateId} />
-      <VoiceAssistantWidget templateId={templateId} />
+      <VoiceAssistantWidget templateId={templateId} restaurantIndex={restaurantIndex} />
     </>
   );
 }

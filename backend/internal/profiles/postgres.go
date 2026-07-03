@@ -1,0 +1,183 @@
+package profiles
+
+import (
+	"context"
+	"errors"
+	"fmt"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	repository "github.com/rajchodisetti/restaurant-platform/backend/internal/platform/errors"
+)
+
+type Postgres struct {
+	pool *pgxpool.Pool
+}
+
+func NewPostgres(pool *pgxpool.Pool) *Postgres {
+	return &Postgres{pool: pool}
+}
+
+func (repo *Postgres) GetRestaurantIDByPlaceID(ctx context.Context, placeID string) (uuid.UUID, error) {
+	if repo.pool == nil {
+		return uuid.Nil, fmt.Errorf("database pool is not configured")
+	}
+
+	const query = `
+		SELECT restaurant_id
+		FROM restaurant_profiles
+		WHERE google_place_id = $1
+		LIMIT 1`
+
+	var restaurantID uuid.UUID
+	err := repo.pool.QueryRow(ctx, query, placeID).Scan(&restaurantID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, repository.ErrNotFound
+	}
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("lookup restaurant by place_id: %w", err)
+	}
+
+	return restaurantID, nil
+}
+
+func (repo *Postgres) ListMenuImages(ctx context.Context, restaurantID uuid.UUID) ([]MenuImage, error) {
+	if repo.pool == nil {
+		return nil, fmt.Errorf("database pool is not configured")
+	}
+
+	const query = `
+		SELECT id, restaurant_id, url, thumbnail_url, image_type, confidence,
+		       title, source, sort_order, metadata, created_at, updated_at
+		FROM menu_images
+		WHERE restaurant_id = $1
+		ORDER BY sort_order ASC, created_at ASC`
+
+	rows, err := repo.pool.Query(ctx, query, restaurantID)
+	if err != nil {
+		return nil, fmt.Errorf("list menu images: %w", err)
+	}
+	defer rows.Close()
+
+	images := make([]MenuImage, 0)
+	for rows.Next() {
+		record, scanErr := scanMenuImage(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		images = append(images, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list menu images rows: %w", err)
+	}
+
+	return images, nil
+}
+
+func (repo *Postgres) ListGalleryImages(ctx context.Context, restaurantID uuid.UUID) ([]GalleryImage, error) {
+	if repo.pool == nil {
+		return nil, fmt.Errorf("database pool is not configured")
+	}
+
+	const query = `
+		SELECT id, restaurant_id, url, thumbnail_url, image_type, confidence,
+		       title, source, sort_order, metadata, created_at, updated_at
+		FROM gallery_images
+		WHERE restaurant_id = $1
+		ORDER BY sort_order ASC, created_at ASC`
+
+	rows, err := repo.pool.Query(ctx, query, restaurantID)
+	if err != nil {
+		return nil, fmt.Errorf("list gallery images: %w", err)
+	}
+	defer rows.Close()
+
+	images := make([]GalleryImage, 0)
+	for rows.Next() {
+		record, scanErr := scanGalleryImage(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		images = append(images, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list gallery images rows: %w", err)
+	}
+
+	return images, nil
+}
+
+func (repo *Postgres) GetSiteImages(ctx context.Context, restaurantID uuid.UUID) (SiteImages, error) {
+	menuImages, err := repo.ListMenuImages(ctx, restaurantID)
+	if err != nil {
+		return SiteImages{}, err
+	}
+	galleryImages, err := repo.ListGalleryImages(ctx, restaurantID)
+	if err != nil {
+		return SiteImages{}, err
+	}
+
+	return SiteImages{
+		RestaurantID:  restaurantID,
+		MenuImages:    menuImages,
+		GalleryImages: galleryImages,
+	}, nil
+}
+
+func (repo *Postgres) GetSiteImagesByPlaceID(ctx context.Context, placeID string) (SiteImages, error) {
+	restaurantID, err := repo.GetRestaurantIDByPlaceID(ctx, placeID)
+	if err != nil {
+		return SiteImages{}, err
+	}
+	return repo.GetSiteImages(ctx, restaurantID)
+}
+
+func scanMenuImage(scanner interface {
+	Scan(dest ...any) error
+}) (MenuImage, error) {
+	var record MenuImage
+	err := scanner.Scan(
+		&record.ID,
+		&record.RestaurantID,
+		&record.URL,
+		&record.ThumbnailURL,
+		&record.ImageType,
+		&record.Confidence,
+		&record.Title,
+		&record.Source,
+		&record.SortOrder,
+		&record.Metadata,
+		&record.CreatedAt,
+		&record.UpdatedAt,
+	)
+	if err != nil {
+		return MenuImage{}, fmt.Errorf("scan menu image: %w", err)
+	}
+	return record, nil
+}
+
+func scanGalleryImage(scanner interface {
+	Scan(dest ...any) error
+}) (GalleryImage, error) {
+	var record GalleryImage
+	err := scanner.Scan(
+		&record.ID,
+		&record.RestaurantID,
+		&record.URL,
+		&record.ThumbnailURL,
+		&record.ImageType,
+		&record.Confidence,
+		&record.Title,
+		&record.Source,
+		&record.SortOrder,
+		&record.Metadata,
+		&record.CreatedAt,
+		&record.UpdatedAt,
+	)
+	if err != nil {
+		return GalleryImage{}, fmt.Errorf("scan gallery image: %w", err)
+	}
+	return record, nil
+}

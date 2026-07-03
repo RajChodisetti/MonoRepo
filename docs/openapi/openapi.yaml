@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: Restaurant Platform API
   description: |
-    Phase 1 backend API — auth, restaurant leads, memberships, and public demo sites.
+    Phase 1 backend API — auth, restaurant leads, memberships, demo sites, and **email outreach campaigns**.
 
     ## Authentication
     Protected routes use `Authorization: Bearer <access_token>` from signup or login.
@@ -11,6 +11,18 @@ info:
     - `internal_admin` — full restaurant admin (seed via `make seed-admin`)
     - `restaurant_owner` — scoped to assigned restaurants only
     - `developer` — health endpoints (local/test signup only)
+
+    ## Email outreach flow (admin)
+    1. `POST /api/v1/restaurants/{id}/demo-sites` — create published demo; save one-time `token`
+    2. Ensure restaurant has email and `restaurant_profiles.review_status = approved`
+    3. `POST /api/v1/restaurants/{id}/campaigns` — create draft (requires `demo_site_id` + `demo_token`)
+    4. `POST /api/v1/campaigns/{id}/approve` — approve draft
+    5. `POST /api/v1/campaigns/{id}/send-step` — enqueue `email.send` job (worker must be running)
+    6. Track opens/clicks via public `/t/*` routes embedded in sent email
+
+    ## Local email testing
+    Set `EMAIL_REDIRECT_TO` in `backend/.env` so all sends go to your inbox during dev.
+    Restart **worker** after changing `.env` (worker reads env at startup only).
 
     ## Postman
     Import `postman/Restaurant-Platform.postman_collection.json` for the full PM demo flow.
@@ -38,6 +50,13 @@ tags:
     description: Restaurant membership (tenant scoping)
   - name: Demo Sites
     description: Admin demo site creation
+  - name: Email Campaigns
+    description: |
+      Outreach campaign drafts, approval, and send orchestration.
+      Requires `internal_admin`. Sends are processed asynchronously by the worker (`make worker`).
+  - name: Email Tracking
+    description: |
+      Public click/open/unsubscribe endpoints (no JWT). Tokens are injected into sent emails.
   - name: Public Demo
     description: Public demo payload (slug + token, no JWT)
   - name: Health
@@ -444,6 +463,278 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/restaurants/{id}/campaigns:
+    parameters:
+      - $ref: '#/components/parameters/restaurantId'
+    get:
+      tags: [Email Campaigns]
+      summary: List campaigns for a restaurant
+      operationId: listCampaigns
+      security:
+        - bearerAuth: []
+      description: Requires role `internal_admin` with access to the restaurant.
+      responses:
+        '200':
+          description: Campaign list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Email Campaigns]
+      summary: Create outreach campaign draft
+      operationId: createCampaign
+      security:
+        - bearerAuth: []
+      description: |
+        Requires role `internal_admin`.
+
+        Builds a personalized HTML/text draft from the restaurant profile and demo site.
+        The demo site's one-time `token` from create demo site must be supplied here
+        (stored on the campaign for tracked demo links).
+
+        **Prerequisites:** published demo site for this restaurant.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCampaignRequest'
+            example:
+              demo_site_id: bb24aff1-faad-4d3d-8b23-004ee6a1962b
+              demo_token: h7PGY0LTjW9PpHCzOU-gd6QqQ8sx-FzAWnSaBYzK_7Q
+              campaign_type: outreach
+      responses:
+        '201':
+          description: Campaign draft created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Campaign'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/campaigns/{id}:
+    parameters:
+      - $ref: '#/components/parameters/campaignId'
+    get:
+      tags: [Email Campaigns]
+      summary: Get campaign detail and events
+      operationId: getCampaign
+      security:
+        - bearerAuth: []
+      description: Requires role `internal_admin`. Returns campaign fields plus `email_events` history.
+      responses:
+        '200':
+          description: Campaign with events
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/campaigns/{id}/approve:
+    parameters:
+      - $ref: '#/components/parameters/campaignId'
+    post:
+      tags: [Email Campaigns]
+      summary: Approve campaign for sending
+      operationId: approveCampaign
+      security:
+        - bearerAuth: []
+      description: |
+        Requires role `internal_admin`.
+        Sets `status` to `approved`, records `approved_at` and `approved_by`.
+        Required before `send-step`.
+      responses:
+        '200':
+          description: Approved campaign
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Campaign'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/CampaignConflict'
+
+  /api/v1/campaigns/{id}/send-step:
+    parameters:
+      - $ref: '#/components/parameters/campaignId'
+    post:
+      tags: [Email Campaigns]
+      summary: Enqueue email send job
+      operationId: sendCampaignStep
+      security:
+        - bearerAuth: []
+      description: |
+        Requires role `internal_admin`. Enqueues an `email.send` job in PostgreSQL (`job_runs`).
+
+        **Worker required:** run `make worker` in a separate terminal.
+
+        **Eligibility checks (409 if fail):**
+        - Restaurant has contact email
+        - Not on suppression list
+        - Demo site `status=published`
+        - Campaign `status=approved` (or already `sending`)
+        - `restaurant_profiles.review_status=approved`
+
+        On success, worker sends via Google Workspace SMTP (`EMAIL_PROVIDER=smtp`).
+        Local dev: set `EMAIL_REDIRECT_TO` to receive all mail at your test inbox.
+
+        Idempotency key: `email.send:{campaign_id}:step:{step}` — same step is not duplicated.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendCampaignStepRequest'
+            example:
+              step: 0
+      responses:
+        '200':
+          description: Job enqueued; campaign status becomes `sending`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Campaign'
+        '400':
+          description: Missing restaurant email
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/CampaignNotEligible'
+
+  /api/v1/campaigns/{id}/stop:
+    parameters:
+      - $ref: '#/components/parameters/campaignId'
+    post:
+      tags: [Email Campaigns]
+      summary: Stop campaign follow-ups
+      operationId: stopCampaign
+      security:
+        - bearerAuth: []
+      description: |
+        Requires role `internal_admin`.
+        Sets `status` to `stopped` and records `stopped_reason`.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StopCampaignRequest'
+            example:
+              reason: stopped by admin
+      responses:
+        '200':
+          description: Stopped campaign
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Campaign'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/CampaignConflict'
+
+  /t/click/{token}:
+    parameters:
+      - $ref: '#/components/parameters/trackingToken'
+    get:
+      tags: [Email Tracking]
+      summary: Track demo link click
+      operationId: trackEmailClick
+      security: []
+      description: |
+        Public endpoint (no auth). Records `clicked` in `email_events`, then **302 redirects**
+        to the demo URL stored on the tracking token.
+      responses:
+        '302':
+          description: Redirect to demo site
+          headers:
+            Location:
+              schema:
+                type: string
+                example: http://localhost:3000/demo/test-cafe-demo?token=...
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /t/open/{token}:
+    parameters:
+      - $ref: '#/components/parameters/trackingToken'
+    get:
+      tags: [Email Tracking]
+      summary: Track email open (tracking pixel)
+      operationId: trackEmailOpen
+      security: []
+      description: |
+        Public endpoint (no auth). Returns a 1×1 GIF and records `opened` in `email_events`.
+        Embedded in HTML email when `EMAIL_OPEN_TRACKING_ENABLED=true`.
+        Open tracking is approximate (many clients block pixels).
+      responses:
+        '200':
+          description: Transparent GIF pixel
+          content:
+            image/gif:
+              schema:
+                type: string
+                format: binary
+
+  /t/unsubscribe/{token}:
+    parameters:
+      - $ref: '#/components/parameters/trackingToken'
+    get:
+      tags: [Email Tracking]
+      summary: Unsubscribe from outreach
+      operationId: trackEmailUnsubscribe
+      security: []
+      description: |
+        Public endpoint (no auth). Adds restaurant email to `email_suppressions`,
+        records `unsubscribed` event, and returns a simple HTML confirmation page.
+      responses:
+        '200':
+          description: HTML confirmation page
+          content:
+            text/html:
+              schema:
+                type: string
+                example: '<!DOCTYPE html><html><body><h1>Unsubscribed</h1>...</body></html>'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /api/public/v1/demo/{slug}:
     parameters:
       - name: slug
@@ -573,6 +864,21 @@ components:
       schema:
         type: boolean
         default: false
+    campaignId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Email campaign UUID
+    trackingToken:
+      name: token
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Opaque tracking token from `email_tracking_tokens`
 
   responses:
     BadRequest:
@@ -621,6 +927,26 @@ components:
             error:
               code: conflict
               message: Email is already registered.
+    CampaignConflict:
+      description: Campaign state conflict (e.g. already stopped)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: campaign_stopped
+              message: campaign is stopped
+    CampaignNotEligible:
+      description: Campaign or restaurant not eligible to send
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: not_eligible
+              message: 'campaign is not eligible to send: restaurant profile is not approved for outreach'
 
   schemas:
     ErrorResponse:
@@ -913,6 +1239,134 @@ components:
         status:
           type: string
           enum: [draft, published]
+
+    CampaignStatus:
+      type: string
+      enum: [draft, approved, sending, sent, stopped]
+
+    CampaignType:
+      type: string
+      enum: [outreach]
+      default: outreach
+
+    EmailEventType:
+      type: string
+      enum: [sent, opened, clicked, failed, unsubscribed]
+
+    CreateCampaignRequest:
+      type: object
+      required: [demo_site_id, demo_token]
+      properties:
+        demo_site_id:
+          type: string
+          format: uuid
+          description: Published demo site for this restaurant
+        demo_token:
+          type: string
+          description: One-time token from `POST .../demo-sites` response
+        campaign_type:
+          $ref: '#/components/schemas/CampaignType'
+
+    SendCampaignStepRequest:
+      type: object
+      properties:
+        step:
+          type: integer
+          minimum: 0
+          default: 0
+          description: Outreach step index (0 = first email)
+
+    StopCampaignRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          default: stopped by admin
+
+    Campaign:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        restaurant_id:
+          type: string
+          format: uuid
+        demo_site_id:
+          type: string
+          format: uuid
+        campaign_type:
+          $ref: '#/components/schemas/CampaignType'
+        status:
+          $ref: '#/components/schemas/CampaignStatus'
+        current_step:
+          type: integer
+        subject:
+          type: string
+        body_html:
+          type: string
+          description: Draft HTML with `{{CLICK_URL}}` and `{{UNSUBSCRIBE_URL}}` placeholders (replaced at send time)
+        body_text:
+          type: string
+        approved_at:
+          type: string
+          format: date-time
+          nullable: true
+        approved_by:
+          type: string
+          format: uuid
+          nullable: true
+        last_sent_at:
+          type: string
+          format: date-time
+          nullable: true
+        stopped_reason:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CampaignList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Campaign'
+
+    EmailEvent:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        event_type:
+          $ref: '#/components/schemas/EmailEventType'
+        metadata:
+          type: object
+          additionalProperties: true
+          description: |
+            For `sent`: step, redirected_to, original_recipient, provider_message.
+            For `clicked`/`opened`/`unsubscribed`: token and optional target_url.
+        event_time:
+          type: string
+          format: date-time
+        restaurant_id:
+          type: string
+          format: uuid
+
+    CampaignDetail:
+      type: object
+      properties:
+        campaign:
+          $ref: '#/components/schemas/Campaign'
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmailEvent'
 
     PublicDemoPayload:
       type: object

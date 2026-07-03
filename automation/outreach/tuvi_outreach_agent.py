@@ -45,15 +45,26 @@ from typing import Optional
 # ─────────────────────────────────────────────────────────────
 import requests
 from bs4 import BeautifulSoup
-from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv()
+from env_loader import load_project_env
+
+load_project_env()
 
 try:
     from openai import OpenAI
 except ImportError:
     OpenAI = None
+
+try:
+    from hf_llm import chat_completion as hf_chat_completion, hf_enabled, hf_text_model
+except ImportError:
+    hf_chat_completion = None
+
+    def hf_enabled() -> bool:
+        return False
+
+    def hf_text_model() -> str:
+        return ""
 
 try:
     from notion_client import Client as NotionClient
@@ -82,9 +93,15 @@ log = logging.getLogger("tuvi_outreach")
 # 3. CONFIGURATION
 # ═════════════════════════════════════════════════════════════
 class Config:
-    # ── OpenAI ─────────────────────────────────────────
+    # ── LLM (Hugging Face preferred, OpenAI fallback) ─────
+    HUGGING_FACE_API_KEY: str     = (
+        os.getenv("HUGGING_FACE_API_KEY", "")
+        or os.getenv("HF_TOKEN", "")
+        or os.getenv("HUGGINGFACE_API_KEY", "")
+    )
+    HF_TEXT_MODEL: str            = os.getenv("HF_TEXT_MODEL", "Qwen/Qwen2.5-7B-Instruct")
     OPENAI_API_KEY: str           = os.getenv("OPENAI_API_KEY", "")
-    OPENAI_MODEL: str             = "gpt-4o"
+    OPENAI_MODEL: str             = os.getenv("OPENAI_MODEL", "gpt-4o")
     OPENAI_MAX_TOKENS: int        = 3000
 
     # ── Zoho Mail ─────────────────────────────────────────
@@ -126,6 +143,10 @@ class Config:
     SERPAPI_KEY: str              = os.getenv("SERPAPI_KEY", "")
     PLACES_API_KEY: str           = os.getenv("PLACES_API", "") or os.getenv("GOOGLE_PLACES_API_KEY", "")
 
+    # ── Menu image OCR (Hugging Face vision primary) ─────
+    MENU_OCR_ENABLED: bool        = os.getenv("MENU_OCR_ENABLED", "true").lower() in ("1", "true", "yes")
+    MENU_OCR_MODEL: str           = os.getenv("HF_VISION_MODEL", os.getenv("MENU_OCR_MODEL", "Qwen/Qwen2-VL-7B-Instruct"))
+    MENU_OCR_MAX_IMAGES: int      = int(os.getenv("MENU_OCR_MAX_IMAGES", "15"))
 
 # Major Australian cities for restaurant lead sourcing
 AUSTRALIAN_RESTAURANT_CITIES: list[str] = [
@@ -985,13 +1006,16 @@ def scrape_company_google_data(company_name: str, domain: str, cfg: Config) -> s
 # ═════════════════════════════════════════════════════════════
 
 def generate_email_draft(lead: Lead, scraped_text: str, cfg: Config) -> dict:
-    """Call OpenAI → parsed JSON dict."""
-    if not OpenAI:
-        raise ImportError("openai SDK not installed. Run: pip install openai")
-    if not cfg.OPENAI_API_KEY:
-        raise ValueError("OPENAI_API_KEY not set in environment variables.")
+    """Call Hugging Face or OpenAI → parsed JSON dict."""
+    use_hf = bool(cfg.HUGGING_FACE_API_KEY) and hf_chat_completion is not None
 
-    client = OpenAI(api_key=cfg.OPENAI_API_KEY)
+    if not use_hf:
+        if not OpenAI:
+            raise ImportError("openai SDK not installed. Run: pip install openai")
+        if not cfg.OPENAI_API_KEY:
+            raise ValueError(
+                "HUGGING_FACE_API_KEY or OPENAI_API_KEY must be set (check backend/.env)."
+            )
 
     user_content = textwrap.dedent(f"""
         PROSPECT DETAILS:
@@ -1010,18 +1034,31 @@ def generate_email_draft(lead: Lead, scraped_text: str, cfg: Config) -> dict:
         Generate the personalised email draft JSON now.
     """).strip()
 
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": user_content},
+    ]
+
     def _call():
+        if use_hf:
+            return hf_chat_completion(
+                messages=messages,
+                model=cfg.HF_TEXT_MODEL or hf_text_model(),
+                max_tokens=cfg.OPENAI_MAX_TOKENS,
+                temperature=0.7,
+                json_mode=True,
+            )
+        client = OpenAI(api_key=cfg.OPENAI_API_KEY)
         return client.chat.completions.create(
-            model      = cfg.OPENAI_MODEL,
-            max_tokens = cfg.OPENAI_MAX_TOKENS,
-            temperature= 0.7,
-            messages   = [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_content}
-            ],
+            model=cfg.OPENAI_MODEL,
+            max_tokens=cfg.OPENAI_MAX_TOKENS,
+            temperature=0.7,
+            response_format={"type": "json_object"},
+            messages=messages,
         )
 
-    response = with_retry(_call, cfg.RETRY_ATTEMPTS, cfg.RETRY_BACKOFF, "OpenAI")
+    provider_label = "HuggingFace" if use_hf else "OpenAI"
+    response = with_retry(_call, cfg.RETRY_ATTEMPTS, cfg.RETRY_BACKOFF, provider_label)
     raw      = response.choices[0].message.content.strip()
 
     # Strip accidental markdown fences
@@ -1274,7 +1311,7 @@ def process_lead(
             log.warning(f"{thread_name}  No content scraped — using generic template.")
 
         # ── 2. Generate email ──────────────────────────────
-        log.info(f"{thread_name} [2/5] Calling OpenAI…")
+        log.info(f"{thread_name} [2/5] Calling LLM (Hugging Face / OpenAI)…")
         try:
             llm = generate_email_draft(lead, result.scraped_text, cfg)
         except Exception as e:

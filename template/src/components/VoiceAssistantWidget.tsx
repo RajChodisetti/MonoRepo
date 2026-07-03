@@ -43,7 +43,55 @@ function CloseIcon() {
   );
 }
 
-export default function VoiceAssistantWidget({ templateId }: { templateId: TemplateId }) {
+function formatBookingDay(slot: string, bookingDate?: string): string {
+  if (slot) {
+    try {
+      return new Intl.DateTimeFormat("en-AU", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      }).format(new Date(slot));
+    } catch {
+      // fall through
+    }
+  }
+  if (bookingDate) {
+    try {
+      return new Intl.DateTimeFormat("en-AU", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      }).format(new Date(`${bookingDate}T12:00:00`));
+    } catch {
+      return bookingDate;
+    }
+  }
+  return "—";
+}
+
+function formatBookingTime(slot: string, bookingTime?: string): string {
+  if (slot) {
+    try {
+      return new Intl.DateTimeFormat("en-AU", {
+        hour: "numeric",
+        minute: "2-digit",
+      }).format(new Date(slot));
+    } catch {
+      // fall through
+    }
+  }
+  return bookingTime || "—";
+}
+
+export default function VoiceAssistantWidget({
+  templateId,
+  restaurantIndex = 0,
+}: {
+  templateId: TemplateId;
+  restaurantIndex?: number;
+}) {
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const {
@@ -51,12 +99,14 @@ export default function VoiceAssistantWidget({ templateId }: { templateId: Templ
     error,
     transcript,
     active,
+    booking,
     connect,
     disconnect,
     reset,
+    dismissBooking,
     prefetchStatus,
     preloadWorklet,
-  } = useVoiceAgentSession();
+  } = useVoiceAgentSession(restaurantIndex);
 
   const isAurora = templateId === "2";
 
@@ -125,7 +175,84 @@ export default function VoiceAssistantWidget({ templateId }: { templateId: Templ
               : "bg-[#8a7340]";
 
   return (
-    <div className="pointer-events-none fixed bottom-20 right-4 z-[70] md:bottom-6 md:right-6">
+    <>
+      {booking && (
+        <div
+          className="pointer-events-auto fixed inset-0 z-[90] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Table booking confirmation"
+        >
+          <div
+            className={`w-full max-w-sm rounded-2xl p-6 text-center shadow-2xl ${panelClass}`}
+          >
+            <p className={`text-xs font-semibold uppercase tracking-[0.16em] ${accentClass}`}>
+              Table booked
+            </p>
+            <h2 className="mt-2 text-xl font-semibold">Your reservation is confirmed</h2>
+            <p className={`mt-2 text-sm ${dimClass}`}>
+              {booking.guestName ? `Thanks, ${booking.guestName}. ` : ""}
+              Save this confirmation number.
+            </p>
+
+            <div
+              className={`mt-5 space-y-3 rounded-xl border px-4 py-4 text-left ${
+                isAurora ? "border-white/10 bg-white/5" : "border-[#e8e0d4]/15 bg-black/20"
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <span className={`text-[11px] font-semibold uppercase tracking-[0.12em] ${dimClass}`}>
+                  Day
+                </span>
+                <span className="text-right text-sm font-medium">
+                  {formatBookingDay(booking.slot, booking.bookingDate)}
+                </span>
+              </div>
+              <div className="flex items-start justify-between gap-3">
+                <span className={`text-[11px] font-semibold uppercase tracking-[0.12em] ${dimClass}`}>
+                  Time
+                </span>
+                <span className="text-right text-sm font-medium">
+                  {formatBookingTime(booking.slot, booking.bookingTime)}
+                </span>
+              </div>
+              <div className="flex items-start justify-between gap-3">
+                <span className={`text-[11px] font-semibold uppercase tracking-[0.12em] ${dimClass}`}>
+                  Guests
+                </span>
+                <span className="text-right text-sm font-medium">
+                  {booking.partySize} {booking.partySize === 1 ? "person" : "people"}
+                </span>
+              </div>
+            </div>
+
+            <div
+              className={`mt-4 rounded-xl border px-4 py-4 ${
+                isAurora ? "border-cyan-400/30 bg-white/5" : "border-[#b88a44]/35 bg-black/20"
+              }`}
+            >
+              <p className={`text-[11px] font-semibold uppercase tracking-[0.14em] ${dimClass}`}>
+                Confirmation ID
+              </p>
+              <p
+                className={`mt-2 font-mono text-3xl font-bold tracking-[0.2em] ${accentClass}`}
+              >
+                {booking.confirmationCode}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={dismissBooking}
+              className={`mt-6 w-full rounded-xl px-4 py-3 text-sm font-semibold transition ${buttonClass}`}
+            >
+              Got it
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="pointer-events-none fixed bottom-20 right-4 z-[70] md:bottom-6 md:right-6">
       {open && (
         <div
           ref={panelRef}
@@ -231,5 +358,6 @@ export default function VoiceAssistantWidget({ templateId }: { templateId: Templ
         <span>Try our AI assistant</span>
       </button>
     </div>
+    </>
   );
 }

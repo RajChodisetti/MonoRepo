@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { RestaurantContent } from "@/data/types/restaurant";
+import TemplateSwitchButton from "@/components/TemplateSwitchButton";
 
 const LINKS = [
   { href: "#menu", label: "Menu" },
@@ -51,6 +52,9 @@ export default function Navigation({ restaurant }: { restaurant: RestaurantConte
             </li>
           ))}
           <li>
+            <TemplateSwitchButton variant="cinematic" />
+          </li>
+          <li>
             <a
               href={restaurant.primaryCTA.href}
               className="rounded border border-[#b88a44] bg-[#b88a44]/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#b88a44] transition hover:bg-[#b88a44]/20"
@@ -90,6 +94,9 @@ export default function Navigation({ restaurant }: { restaurant: RestaurantConte
                 {link.label}
               </a>
             ))}
+            <div className="mt-4">
+              <TemplateSwitchButton variant="cinematic" />
+            </div>
             <a
               href={restaurant.primaryCTA.href}
               className="mt-4 block rounded bg-brass py-3 text-center text-sm font-semibold uppercase tracking-widest text-charcoal"

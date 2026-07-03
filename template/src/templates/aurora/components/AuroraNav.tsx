@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { RestaurantContent } from "@/data/types/restaurant";
+import TemplateSwitchButton from "@/components/TemplateSwitchButton";
 
 const LINKS = [
-  { href: "#features", label: "Features" },
   { href: "#showcase", label: "Showcase" },
   { href: "#menu", label: "Menu" },
   { href: "#reviews", label: "Reviews" },
@@ -48,6 +48,9 @@ export default function AuroraNav({ restaurant }: { restaurant: RestaurantConten
             </li>
           ))}
           <li>
+            <TemplateSwitchButton variant="aurora" />
+          </li>
+          <li>
             <a href={restaurant.primaryCTA.href} className="aurora-btn-primary !px-5 !py-2 !text-xs">
               {restaurant.primaryCTA.label}
             </a>
@@ -83,6 +86,9 @@ export default function AuroraNav({ restaurant }: { restaurant: RestaurantConten
                 {link.label}
               </a>
             ))}
+            <div className="mt-3 border-t border-white/10 pt-3">
+              <TemplateSwitchButton variant="aurora" />
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

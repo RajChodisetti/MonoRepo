@@ -11,9 +11,12 @@ import (
 
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/auth"
 	httpapi "github.com/rajchodisetti/restaurant-platform/backend/internal/http"
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/campaigns"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/config"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/logger"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/demos"
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/profiles"
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/reservations"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/restaurants"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/store"
 )
@@ -33,12 +36,12 @@ func (readiness fakeReadiness) Ping(context.Context) error {
 
 func testRouter(t *testing.T, readiness fakeReadiness) http.Handler {
 	t.Helper()
-	return testRouterWithStores(t, readiness, &auth.Mock{}, &restaurants.Mock{}, &restaurants.MembershipMock{}, &demos.Mock{})
+	return testRouterWithStores(t, readiness, &auth.Mock{}, &restaurants.Mock{}, &restaurants.MembershipMock{}, &demos.Mock{}, &campaigns.Mock{})
 }
 
 func testRouterWithUserRepo(t *testing.T, readiness fakeReadiness, users auth.Repository) http.Handler {
 	t.Helper()
-	return testRouterWithStores(t, readiness, users, &restaurants.Mock{}, &restaurants.MembershipMock{}, &demos.Mock{})
+	return testRouterWithStores(t, readiness, users, &restaurants.Mock{}, &restaurants.MembershipMock{}, &demos.Mock{}, &campaigns.Mock{})
 }
 
 func testRouterWithStores(
@@ -48,11 +51,17 @@ func testRouterWithStores(
 	restaurantsRepo restaurants.Repository,
 	memberships restaurants.MembershipRepository,
 	demosRepo demos.Repository,
+	campaignsRepo ...campaigns.Repository,
 ) http.Handler {
 	t.Helper()
 
+	campaignsRepoImpl := campaigns.Repository(&campaigns.Mock{})
+	if len(campaignsRepo) > 0 && campaignsRepo[0] != nil {
+		campaignsRepoImpl = campaignsRepo[0]
+	}
+
 	cfg := testConfig(t)
-	dataStore := store.NewWithRepositories(nil, nil, users, restaurantsRepo, memberships, demosRepo)
+	dataStore := store.NewWithRepositories(nil, nil, users, restaurantsRepo, memberships, demosRepo, campaignsRepoImpl, &profiles.Mock{}, &reservations.Mock{})
 	return httpapi.NewRouter(logger.NewWithWriter(cfg.Logging, io.Discard), readiness, dataStore, cfg)
 }
 

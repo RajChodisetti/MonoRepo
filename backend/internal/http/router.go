@@ -8,10 +8,13 @@ import (
 	"time"
 
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/auth"
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/campaigns"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/demos"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/http/handlers"
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/jobs"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/config"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/db"
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/reservations"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/restaurants"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/store"
 )
@@ -28,12 +31,24 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	accessService := restaurants.NewService(dataStore.Restaurants, dataStore.Memberships)
 	demoService := demos.NewService(dataStore.Demos, accessService, cfg.Demo.TokenTTL)
 
+	jobQueue := jobs.NewPostgresQueue(dataStore.Pool(), cfg.Jobs.BufferSize, cfg.Jobs.RetryDelay)
+	var jobEnqueuer campaigns.SendJobEnqueuer = &jobs.CampaignEnqueuer{Queue: jobQueue}
+	if dataStore.Pool() == nil {
+		jobEnqueuer = &jobs.CampaignEnqueuer{Queue: jobs.NewInMemoryQueue(cfg.Jobs.BufferSize)}
+	}
+	campaignService := campaigns.NewService(dataStore.Campaigns, dataStore.Demos, accessService, jobEnqueuer, cfg.AppURLs)
+
 	authHandler := handlers.NewAuthHandler(authService, cfg.App.Env, writeJSON, writeError)
 	adminHandler := handlers.NewAdminHandler(dataStore.Users, writeJSON, writeError)
 	userHandler := handlers.NewUserHandler(dataStore.Users, dataStore.Restaurants, dataStore.Memberships, writeJSON, writeError)
 	restaurantHandler := handlers.NewRestaurantHandler(accessService, writeJSON, writeError)
 	demoPublicHandler := handlers.NewDemoPublicHandler(demoService, writeJSON, writeError)
 	demoAdminHandler := handlers.NewDemoAdminHandler(demoService, writeJSON, writeError)
+	campaignHandler := handlers.NewCampaignHandler(campaignService, writeJSON, writeError)
+	trackingHandler := handlers.NewTrackingHandler(dataStore.Campaigns, writeError)
+	restaurantPublicHandler := handlers.NewRestaurantPublicHandler(dataStore.Profiles, writeJSON, writeError)
+	reservationService := reservations.NewService(dataStore.Reservations)
+	reservationPublicHandler := handlers.NewReservationPublicHandler(reservationService, writeJSON, writeError)
 
 	mux.HandleFunc("POST /api/v1/auth/signup", authHandler.Signup)
 	mux.HandleFunc("POST /api/v1/auth/login", authHandler.Login)
@@ -76,8 +91,25 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	mux.Handle("GET /api/v1/restaurants/{id}/members", protectRestaurantAdmin(http.HandlerFunc(restaurantHandler.ListMembers)))
 	mux.Handle("POST /api/v1/restaurants/{id}/members", protectRestaurantAdmin(http.HandlerFunc(restaurantHandler.AddMember)))
 	mux.Handle("POST /api/v1/restaurants/{id}/demo-sites", protectRestaurantAdmin(http.HandlerFunc(demoAdminHandler.Create)))
+	mux.Handle("POST /api/v1/restaurants/{id}/campaigns", protectRestaurantAdmin(http.HandlerFunc(campaignHandler.Create)))
+	mux.Handle("GET /api/v1/restaurants/{id}/campaigns", protectRestaurantAdmin(http.HandlerFunc(campaignHandler.List)))
+	mux.Handle("GET /api/v1/campaigns/{id}", protectInternalAdmin(http.HandlerFunc(campaignHandler.Get)))
+	mux.Handle("POST /api/v1/campaigns/{id}/approve", protectInternalAdmin(http.HandlerFunc(campaignHandler.Approve)))
+	mux.Handle("POST /api/v1/campaigns/{id}/send-step", protectInternalAdmin(http.HandlerFunc(campaignHandler.SendStep)))
+	mux.Handle("POST /api/v1/campaigns/{id}/stop", protectInternalAdmin(http.HandlerFunc(campaignHandler.Stop)))
+
+	mux.HandleFunc("GET /t/click/{token}", trackingHandler.Click)
+	mux.HandleFunc("GET /t/open/{token}", trackingHandler.Open)
+	mux.HandleFunc("GET /t/unsubscribe/{token}", trackingHandler.Unsubscribe)
 
 	mux.HandleFunc("GET /api/public/v1/demo/{slug}", demoPublicHandler.Get)
+	mux.HandleFunc("GET /api/public/v1/restaurants/{id}/site-images", restaurantPublicHandler.GetSiteImagesByID)
+	mux.HandleFunc("GET /api/public/v1/restaurants/by-place/{place_id}/site-images", restaurantPublicHandler.GetSiteImagesByPlaceID)
+	mux.HandleFunc("GET /api/public/v1/site/restaurants", restaurantPublicHandler.ListSiteRestaurants)
+	mux.HandleFunc("GET /api/public/v1/site/restaurants/{index}", restaurantPublicHandler.GetSiteContentByIndex)
+	mux.HandleFunc("GET /api/public/v1/site/by-place/{place_id}", restaurantPublicHandler.GetSiteContentByPlaceID)
+	mux.HandleFunc("GET /api/public/v1/restaurants/{id}/table-availability", reservationPublicHandler.GetTableAvailability)
+	mux.HandleFunc("PUT /api/public/v1/restaurants/{id}/reservations", reservationPublicHandler.PutReservation)
 
 	var handler http.Handler = mux
 	handler = Recovery(log)(handler)

@@ -31,7 +31,25 @@ DATABASE_URL=postgres://postgres:postgres@localhost:5432/restaurant_platform?ssl
 
 ### 2. Quick start (recommended)
 
-Start database, run migrations, and launch the API in one go:
+**One command — everything (Postgres + migrations + API + worker):**
+
+```bash
+make start
+```
+
+Press `Ctrl+C` to stop API and worker. Postgres keeps running until `make stop-all`.
+
+**VM / Docker deployment (all services in containers):**
+
+```bash
+make up      # build + start postgres, migrate, api, worker
+make logs    # follow logs
+make down    # stop stack
+```
+
+Copy `backend/.env` (SMTP secrets) before `make up` on a VM. Set `PUBLIC_BASE_URL` to your server URL.
+
+**Legacy — API only (no email worker):**
 
 ```bash
 make dev
@@ -42,12 +60,7 @@ Or step by step:
 ```bash
 make setup   # db-up + migrate-up
 make api     # start API (requires database + migrations)
-```
-
-### 3. Worker (optional, second terminal)
-
-```bash
-make worker
+make worker  # second terminal — required for email sends
 ```
 
 ## Commands

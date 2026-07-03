@@ -12,3 +12,5 @@ apps/web/node_modules/
 
 # Local artifacts
 tmp/
+.run/
+infra/docker/stack.env

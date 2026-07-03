@@ -1,7 +1,8 @@
 GO ?= go
 COMPOSE_FILE ?= infra/docker/docker-compose.yml
+COMPOSE_DIR ?= infra/docker
 
-.PHONY: api worker test fmt db-up db-down db-reset migrate-up migrate-down setup dev seed-admin seed-demo-fixture seed-restaurants-data import-restaurants-outreach openapi swagger
+.PHONY: api worker test fmt db-up db-down db-reset migrate-up migrate-down setup dev seed-admin seed-demo-fixture seed-restaurants-data import-outreach ocr-all sanitize-import import-restaurants-outreach openapi swagger up down logs start stop-all
 
 OPENAPI_SPEC ?= docs/openapi/openapi.yaml
 OPENAPI_DIR ?= docs/openapi
@@ -22,10 +23,28 @@ seed-demo-fixture:
 seed-restaurants-data:
 	$(GO) run ./backend/cmd/seed-restaurants-data
 
-# Run migrations + import restaurants_data.json using DATABASE_URL from outreach/.env
-import-restaurants-outreach:
-	@set -a && . ./automation/outreach/.env && set +a && \
-	$(GO) run ./backend/cmd/migrate up && \
+# Run OCR on all restaurant JSON + import to local Docker DB
+ocr-all: db-up migrate-up
+	cd automation/outreach && \
+	(test -d .venv && . .venv/bin/activate; \
+	python menu_image_ocr.py --sanitize-data ../../data/restaurants_data.json && \
+	python menu_image_ocr.py --batch-data ../../data/restaurants_data.json && \
+	python import_to_db.py --restaurants-only)
+
+# Quick fix: strip menu boards from dish cards + re-import (no API calls)
+sanitize-import: db-up migrate-up
+	cd automation/outreach && \
+	(test -d .venv && . .venv/bin/activate; \
+	python menu_image_ocr.py --sanitize-data ../../data/restaurants_data.json && \
+	python import_to_db.py --restaurants-only)
+
+# Import restaurant JSON to local Docker DB
+import-outreach: db-up migrate-up
+	cd automation/outreach && \
+	(test -d .venv && . .venv/bin/activate; python import_to_db.py --restaurants-only)
+
+# Legacy: Go seed (uses backend/.env DATABASE_URL)
+import-restaurants-outreach: db-up migrate-up
 	$(GO) run ./backend/cmd/seed-restaurants-data
 
 test:
@@ -35,7 +54,7 @@ fmt:
 	gofmt -w $$(find backend -name '*.go')
 
 db-up:
-	docker compose -f $(COMPOSE_FILE) up -d --wait
+	docker compose -f $(COMPOSE_FILE) up -d postgres --wait
 
 db-down:
 	docker compose -f $(COMPOSE_FILE) down
@@ -51,7 +70,28 @@ migrate-down:
 
 setup: db-up migrate-up
 
+# API only (legacy quick start — no worker)
 dev: setup api
+
+# Local: postgres + migrate + api + worker (one terminal, Ctrl+C to stop app processes)
+start:
+	@chmod +x scripts/start-all.sh scripts/stop-all.sh scripts/up-stack.sh
+	@./scripts/start-all.sh
+
+stop-all:
+	@chmod +x scripts/stop-all.sh
+	@./scripts/stop-all.sh
+
+# VM / Docker: postgres + migrate + api + worker containers
+up:
+	@chmod +x scripts/up-stack.sh
+	@./scripts/up-stack.sh
+
+down:
+	docker compose -f $(COMPOSE_FILE) --profile stack down
+
+logs:
+	docker compose -f $(COMPOSE_FILE) --profile stack logs -f
 
 openapi:
 	@command -v npx >/dev/null 2>&1 || { echo "npx required: install Node.js or validate manually at editor.swagger.io"; exit 1; }

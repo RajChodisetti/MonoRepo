@@ -47,7 +47,27 @@ export default function MenuPreview({
           />
         )}
 
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        {restaurant.menuListImages.length > 0 && (
+          <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {restaurant.menuListImages.map((img) => (
+              <div
+                key={img.url}
+                className="relative aspect-[3/4] overflow-hidden rounded-xl border border-cream/10 bg-[#1a1614]"
+              >
+                <Image
+                  src={img.url}
+                  alt={img.alt}
+                  fill
+                  loading="lazy"
+                  className="object-contain p-2"
+                  sizes="(max-width: 768px) 100vw, 33vw"
+                />
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className={`grid gap-6 sm:grid-cols-2 lg:grid-cols-3 ${restaurant.menuListImages.length ? "mt-12" : "mt-10"}`}>
           {items.map((item) => (
             <article
               key={item.name + item.category}

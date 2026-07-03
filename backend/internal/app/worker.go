@@ -7,10 +7,13 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/campaigns"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/jobs"
+	emailprovider "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/email"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/config"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/db"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/logger"
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/restaurants"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/store"
 )
 
@@ -19,7 +22,7 @@ type WorkerApp struct {
 	log    *slog.Logger
 	db     *db.DB
 	store  *store.Store
-	queue  *jobs.InMemoryQueue
+	queue  *jobs.PostgresQueue
 	worker *jobs.Worker
 }
 
@@ -41,9 +44,26 @@ func NewWorker(ctx context.Context) (*WorkerApp, error) {
 		return nil, err
 	}
 
-	queue := jobs.NewInMemoryQueue(cfg.Jobs.BufferSize)
+	queue := jobs.NewPostgresQueue(dataStore.Pool(), cfg.Jobs.BufferSize, cfg.Jobs.RetryDelay)
 	worker := jobs.NewWorker(queue, log, cfg.Jobs.RetryDelay)
+
 	if err := worker.Register(jobs.SampleJobType, jobs.SampleHandler(log)); err != nil {
+		return nil, err
+	}
+
+	accessService := restaurants.NewService(dataStore.Restaurants, dataStore.Memberships)
+	campaignService := campaigns.NewService(dataStore.Campaigns, dataStore.Demos, accessService, &jobs.CampaignEnqueuer{Queue: queue}, cfg.AppURLs)
+	emailProvider, err := emailprovider.NewFromConfig(cfg.Email, cfg.SMTP)
+	if err != nil {
+		return nil, err
+	}
+	if err := worker.Register(jobs.EmailSendJobType, jobs.EmailSendHandler(jobs.EmailSendDeps{
+		Campaigns:        dataStore.Campaigns,
+		CampaignsService: campaignService,
+		Email:            emailProvider,
+		EmailCfg:         cfg.Email,
+		AppURLs:          cfg.AppURLs,
+	}, log)); err != nil {
 		return nil, err
 	}
 
@@ -60,6 +80,8 @@ func NewWorker(ctx context.Context) (*WorkerApp, error) {
 func (w *WorkerApp) Run(ctx context.Context) error {
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	w.queue.StartPoller(ctx)
 
 	sample, err := jobs.NewSampleJob("worker booted")
 	if err != nil {
