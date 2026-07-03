@@ -1,0 +1,117 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #08080c;
+  --color-bg-elevated: #101018;
+  --color-surface: #14141f;
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-gold: #d4a853;
+  --color-gold-dim: #b88a44;
+  --color-cyan: #38bdf8;
+  --color-muted: #8b8b9e;
+  --color-text: #f4f4f8;
+  --font-display: var(--font-syne), system-ui, sans-serif;
+  --font-body: var(--font-dm-sans), system-ui, sans-serif;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-body);
+    overflow-x: clip;
+  }
+
+  ::selection {
+    background: rgba(212, 168, 83, 0.35);
+    color: #fff;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    background: linear-gradient(135deg, #f4f4f8 0%, #d4a853 55%, #38bdf8 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .grid-bg {
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    background-size: 64px 64px;
+  }
+
+  .glass {
+    background: rgba(16, 16, 24, 0.72);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--color-border);
+  }
+
+  .nav-glass {
+    background: rgba(8, 8, 12, 0.45);
+    backdrop-filter: blur(18px) saturate(160%);
+    -webkit-backdrop-filter: blur(18px) saturate(160%);
+    border: none;
+    box-shadow: none;
+  }
+
+  .nav-glass-scrolled {
+    background: rgba(8, 8, 12, 0.72);
+    backdrop-filter: blur(22px) saturate(180%);
+    -webkit-backdrop-filter: blur(22px) saturate(180%);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+  }
+}
+
+@keyframes marquee {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee {
+  animation: marquee 40s linear infinite;
+}
+
+.animate-marquee:hover {
+  animation-play-state: paused;
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-12px) scale(1.02);
+  }
+}
+
+.animate-float {
+  animation: float 8s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 6s ease-in-out infinite;
+}

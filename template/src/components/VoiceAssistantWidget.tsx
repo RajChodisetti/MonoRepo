@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { TemplateId } from "@/lib/templateConfig";
+import { TOUR_VOICE_ASSISTANT } from "@/lib/tourTargets";
 import { useVoiceAgentSession } from "@/hooks/useVoiceAgentSession";
 
 const STATUS_LABELS: Record<string, string> = {
@@ -353,6 +354,7 @@ export default function VoiceAssistantWidget({
         className={`pointer-events-auto flex items-center gap-2.5 rounded-full px-4 py-3 text-sm font-semibold shadow-lg transition hover:scale-[1.02] active:scale-[0.98] ${buttonClass}`}
         aria-expanded={open}
         aria-haspopup="dialog"
+        data-tour={TOUR_VOICE_ASSISTANT}
       >
         <MicIcon />
         <span>Try our AI assistant</span>

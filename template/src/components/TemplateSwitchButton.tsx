@@ -6,6 +6,7 @@ import {
   getTemplateSwitchCopy,
   type TemplateId,
 } from "@/lib/templateConfig";
+import { TOUR_TEMPLATE_SWITCH } from "@/lib/tourTargets";
 
 type TemplateVariant = "aurora" | "cinematic";
 
@@ -32,7 +33,12 @@ export default function TemplateSwitchButton({ variant }: { variant: TemplateVar
       : "rounded border border-[#e8e0d4]/25 px-4 py-2 text-[11px] font-medium uppercase tracking-[0.1em] text-[#d4c4b0] transition hover:border-[#b88a44]/50 hover:bg-[#b88a44]/10 hover:text-[#b88a44]";
 
   return (
-    <button type="button" onClick={switchTemplate} className={className}>
+    <button
+      type="button"
+      onClick={switchTemplate}
+      className={className}
+      data-tour={TOUR_TEMPLATE_SWITCH}
+    >
       {copy.cta}
     </button>
   );

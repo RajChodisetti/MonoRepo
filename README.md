@@ -293,6 +293,16 @@ Key environment variables:
 
 See `.env.example` for the full list.
 
+## Tuvi corporate website
+
+Standalone marketing site (not the restaurant demo template):
+
+```bash
+cd tuvi-website/app && npm install && npm run dev
+```
+
+Runs at **http://localhost:3000**. See [tuvi-website/README.md](tuvi-website/README.md).
+
 ## Documentation
 
 - [Today's work log (2026-06-22)](docs/work-log/2026-06-22-backend-foundation-session.md) — detailed session notes

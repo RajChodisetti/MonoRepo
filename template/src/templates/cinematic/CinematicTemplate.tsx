@@ -7,7 +7,6 @@ import RestaurantStorySection from "./components/RestaurantStorySection";
 import ScrollDishSlideshow from "./components/ScrollDishSlideshow";
 import MenuPreview from "./components/MenuPreview";
 import AtmosphereGallery from "./components/AtmosphereGallery";
-import ExperienceCards from "./components/ExperienceCards";
 import ReservationCTA from "./components/ReservationCTA";
 import ReviewsSection from "./components/ReviewsSection";
 import LocationHours from "./components/LocationHours";
@@ -47,7 +46,6 @@ export default function CinematicTemplate({
         <ScrollDishSlideshow dishes={restaurant.signatureDishes} />
         <MenuPreview restaurant={restaurant} />
         <AtmosphereGallery images={restaurant.galleryImages} />
-        <ExperienceCards cards={restaurant.experienceCards} />
         <ReservationCTA restaurant={restaurant} />
         <ReviewsSection
           reviews={restaurant.reviews}

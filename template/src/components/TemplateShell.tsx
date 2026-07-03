@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import type { TemplateId } from "@/lib/templateConfig";
 import { parseTemplateId } from "@/lib/templateConfig";
 import VoiceAssistantWidget from "@/components/VoiceAssistantWidget";
+import SiteWalkthrough from "@/components/SiteWalkthrough";
 
 function TemplateShellInner({
   defaultTemplateId,
@@ -25,6 +26,7 @@ function TemplateShellInner({
     <>
       {children}
       <VoiceAssistantWidget templateId={templateId} restaurantIndex={restaurantIndex} />
+      <SiteWalkthrough templateId={templateId} />
     </>
   );
 }
