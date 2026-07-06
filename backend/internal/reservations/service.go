@@ -58,6 +58,7 @@ type PutReservationRequest struct {
 	GuestEmail      string `json:"guest_email,omitempty"`
 	PartySize       int    `json:"party_size"`
 	Slot            string `json:"slot"`
+	Source          string `json:"source,omitempty"`
 	Notes           string `json:"notes,omitempty"`
 	ClientRequestID string `json:"client_request_id,omitempty"`
 }
@@ -73,6 +74,7 @@ func (service *Service) PutReservation(ctx context.Context, restaurantID uuid.UU
 	req.GuestPhone = strings.TrimSpace(req.GuestPhone)
 	req.GuestEmail = strings.TrimSpace(req.GuestEmail)
 	req.Slot = strings.TrimSpace(req.Slot)
+	req.Source = strings.TrimSpace(req.Source)
 	req.ClientRequestID = strings.TrimSpace(req.ClientRequestID)
 
 	if req.GuestName == "" {
@@ -86,6 +88,15 @@ func (service *Service) PutReservation(ctx context.Context, restaurantID uuid.UU
 	}
 	if req.Slot == "" {
 		return PutReservationResponse{}, fmt.Errorf("slot is required")
+	}
+	source := SourceVoiceAgent
+	if req.Source != "" {
+		switch req.Source {
+		case SourceVoiceAgent, SourceWebForm:
+			source = req.Source
+		default:
+			return PutReservationResponse{}, fmt.Errorf("source must be voice_agent or web_form")
+		}
 	}
 
 	exists, err := service.repo.RestaurantExists(ctx, restaurantID)
@@ -130,7 +141,7 @@ func (service *Service) PutReservation(ctx context.Context, restaurantID uuid.UU
 		PartySize:       req.PartySize,
 		ReservationDate: resDate,
 		ReservationTime: resTime,
-		Source:          SourceVoiceAgent,
+		Source:          source,
 		Notes:           req.Notes,
 		ClientRequestID: req.ClientRequestID,
 	})

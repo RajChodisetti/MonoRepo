@@ -1,6 +1,8 @@
 export function getConsultationApiUrl(): string {
   return (
-    process.env.CONSULTATION_API_URL?.replace(/\/$/, "") || "http://localhost:8080"
+    process.env.CONSULTATION_API_URL?.replace(/\/$/, "") ||
+    process.env.MONOREPO_API_URL?.replace(/\/$/, "") ||
+    "http://localhost:8080"
   );
 }
 

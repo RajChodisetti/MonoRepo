@@ -76,8 +76,12 @@ CORPORATE_TOOLS = [
                         "type": "string",
                         "description": "Visitor's email for confirmation (required).",
                     },
+                    "prospect_phone": {
+                        "type": "string",
+                        "description": "Visitor's phone number for the consultation request.",
+                    },
                 },
-                "required": ["date", "time", "prospect_name", "prospect_email"],
+                "required": ["date", "time", "prospect_name", "prospect_email", "prospect_phone"],
             },
         },
     },

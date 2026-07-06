@@ -11,7 +11,11 @@ POST /api/v1/company/consultations
 
 This standalone backend is kept only as legacy reference while callers migrate.
 
-Go backend for Tuvi website consultation booking: slot availability, Google Calendar events, and SMTP notifications.
+Legacy standalone Go backend for Tuvi website consultation booking: slot availability, Google Calendar events, and SMTP notifications.
+
+The active Tuvi website and corporate voice agent now call the main MonoRepo API company consultation endpoints listed above.
+
+Keep this service only for reference or rollback testing.
 
 ## Prerequisites
 
@@ -114,7 +118,7 @@ curl -s -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/
   http://localhost:8090/api/v1/consultations
 ```
 
-## Voice agent integration
+## Legacy voice agent integration
 
 For active development, the voice agent should use the main MonoRepo API, not
 this legacy service. Set in `voice-sales-agent/.env`:

@@ -41,6 +41,12 @@ def _error(message: str, **extra: Any) -> dict[str, Any]:
     return {"status": "error", "message": message, **extra}
 
 
+def _message(payload: Any, fallback: str) -> str:
+    if isinstance(payload, dict) and payload.get("message"):
+        return str(payload["message"])
+    return fallback
+
+
 async def get_consultation_availability(
     date: str | None = None,
     days: int | None = None,
@@ -55,9 +61,9 @@ async def get_consultation_availability(
     try:
         async with httpx.AsyncClient(timeout=_timeout()) as client:
             resp = await client.get(url, params=params, headers=_headers())
-            if resp.status_code == 400:
+            if resp.status_code in (400, 401):
                 body = resp.json()
-                return _error(body.get("message") or "Invalid availability request.")
+                return _error(_message(body, "Invalid availability request."))
             resp.raise_for_status()
             data = resp.json()
             slots = data.get("slots") or []
@@ -69,7 +75,7 @@ async def get_consultation_availability(
             }
     except httpx.TimeoutException:
         log.warning("get_consultation_availability timeout")
-        return _error("Could not check consultation availability — request timed out.")
+        return _error("Could not check consultation availability - request timed out.")
     except Exception as exc:
         log.warning("get_consultation_availability failed: %s", exc)
         return _error("Could not reach the consultation booking system right now.")
@@ -81,14 +87,14 @@ async def check_consultation_slot(date: str, time: str) -> dict[str, Any]:
     try:
         async with httpx.AsyncClient(timeout=_timeout()) as client:
             resp = await client.get(url, params=params, headers=_headers())
-            if resp.status_code == 400:
+            if resp.status_code in (400, 401):
                 body = resp.json()
-                return _error(body.get("message") or "Invalid slot check.")
+                return _error(_message(body, "Invalid slot check."))
             resp.raise_for_status()
             return {"status": "success", **resp.json()}
     except httpx.TimeoutException:
         log.warning("check_consultation_slot timeout")
-        return _error("Could not verify that slot — request timed out.")
+        return _error("Could not verify that slot - request timed out.")
     except Exception as exc:
         log.warning("check_consultation_slot failed: %s", exc)
         return _error("Could not verify slot availability right now.")
@@ -100,6 +106,7 @@ async def book_consultation(
     time: str,
     prospect_name: str,
     prospect_email: str = "",
+    prospect_phone: str = "",
     source: str = "voice",
 ) -> dict[str, Any]:
     url = f"{_base_url()}/api/v1/company/consultations"
@@ -108,6 +115,7 @@ async def book_consultation(
         "time": time.strip(),
         "prospect_name": prospect_name.strip(),
         "prospect_email": prospect_email.strip(),
+        "prospect_phone": prospect_phone.strip(),
         "source": source,
     }
     try:
@@ -117,12 +125,12 @@ async def book_consultation(
                 payload = resp.json()
                 return {
                     "status": "conflict",
-                    "message": payload.get("message") or "That slot is already booked.",
+                    "message": _message(payload, "That slot is already booked."),
                     "alternatives": payload.get("alternatives") or [],
                 }
-            if resp.status_code == 400:
+            if resp.status_code in (400, 401):
                 payload = resp.json()
-                return _error(payload.get("message") or "Could not book that consultation.")
+                return _error(_message(payload, "Could not book that consultation."))
             resp.raise_for_status()
             data = resp.json()
             return {
@@ -130,6 +138,7 @@ async def book_consultation(
                 "confirmation_code": data.get("confirmation_code", ""),
                 "prospect_name": data.get("prospect_name", prospect_name),
                 "prospect_email": data.get("prospect_email", prospect_email),
+                "prospect_phone": data.get("prospect_phone", prospect_phone),
                 "slot": data.get("slot", ""),
                 "booking_date": data.get("booking_date", date),
                 "booking_time": data.get("booking_time", time),
@@ -139,7 +148,7 @@ async def book_consultation(
             }
     except httpx.TimeoutException:
         log.warning("book_consultation timeout")
-        return _error("Could not complete the booking — request timed out.")
+        return _error("Could not complete the booking - request timed out.")
     except Exception as exc:
         log.warning("book_consultation failed: %s", exc)
         return _error("Could not complete the consultation booking right now.")

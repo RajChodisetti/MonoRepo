@@ -77,6 +77,7 @@ type BookSuccess struct {
 	ConfirmationCode string `json:"confirmation_code"`
 	ProspectName     string `json:"prospect_name"`
 	ProspectEmail    string `json:"prospect_email"`
+	ProspectPhone    string `json:"prospect_phone"`
 	Slot             string `json:"slot"`
 	BookingDate      string `json:"booking_date"`
 	BookingTime      string `json:"booking_time"`
@@ -248,6 +249,7 @@ func (s *Service) Book(ctx context.Context, req BookRequest) (BookSuccess, *Book
 		ConfirmationCode: code,
 		ProspectName:     req.ProspectName,
 		ProspectEmail:    req.ProspectEmail,
+		ProspectPhone:    req.ProspectPhone,
 		Slot:             slotStart.Format(time.RFC3339),
 		BookingDate:      slotStart.Format("2006-01-02"),
 		BookingTime:      FormatSlotTime(slotStart),

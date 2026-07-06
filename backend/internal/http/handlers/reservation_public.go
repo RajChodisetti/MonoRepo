@@ -91,7 +91,7 @@ func (handler *ReservationPublicHandler) writeAvailabilityError(w http.ResponseW
 		return
 	}
 	msg := err.Error()
-	if strings.Contains(msg, "party_size") || strings.Contains(msg, "date") || strings.Contains(msg, "guest_") || strings.Contains(msg, "slot") {
+	if strings.Contains(msg, "party_size") || strings.Contains(msg, "date") || strings.Contains(msg, "guest_") || strings.Contains(msg, "slot") || strings.Contains(msg, "source") {
 		handler.writeError(w, http.StatusBadRequest, "validation_error", msg)
 		return
 	}

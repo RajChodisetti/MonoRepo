@@ -12,6 +12,101 @@ Each entry should explain:
 - how the work fits with the rest of the Phase 1 or Phase 2 plan;
 - risks, gaps, or follow-ups.
 
+## 2026-07-06 — Tuvi Scheduler and Voice Agent Unified API Alignment
+
+**Role:** Backend / Frontend / AI Workflow Agent
+
+**Delivered:** Merged the remote unified Tuvi company consultation backend and
+rewired the Tuvi corporate meeting scheduler and corporate voice assistant to use
+the same main MonoRepo API:
+`GET /api/v1/company/consultations/availability`,
+`GET /api/v1/company/consultations/availability/check`, and
+`POST /api/v1/company/consultations`. The scheduler now collects phone and sends
+`web` source through a server-side Next proxy that keeps `TUVI_API_TOKEN` out of
+the browser. The corporate voice assistant now asks for phone before booking and
+sends `voice` source directly to the same unified API. The company consultation
+success response now includes `prospect_phone`.
+
+**Why:** Raj merged the Tuvi app into the main app and asked that all relevant
+apps, including meeting scheduler and voice agent, call the new main endpoint.
+
+**Business Value:** Website and voice-assisted consultation bookings now land in
+one Phase 1 company consultation pipeline, reducing split-brain booking state and
+making future dashboards, analytics, and follow-up workflows simpler.
+
+**Plan Fit:** Advances P1-E05 reservation capture and P1-E08 voice assistant
+integration by routing Tuvi web and voice consultation requests through one main
+backend contract.
+
+**Tests / Checks Run:**
+- `rtk make test` — backend tests passed
+- `rtk python3 -m py_compile voice-sales-agent/tuvi_api_client.py voice-sales-agent/bot.py` — passed
+- `rtk npx tsc --noEmit` from `tuvi-website/app` — passed
+- `rtk npx -p node@22 node ./node_modules/next/dist/bin/next build` from
+  `tuvi-website/app` — passed after clearing stale `.next` output
+- `rtk npm run build` from `tuvi-website/app` — passed
+
+**Risks / Follow-ups:** Set the same `TUVI_API_TOKEN` in the main API, Tuvi
+website server env, and corporate voice-agent env before trying bookings. The
+unified API supports Google Calendar and SMTP through main backend configuration;
+local defaults keep those providers disabled.
+
+## 2026-06-30 — RTK Codex Initialization
+
+**Role:** DevOps / Documentation Agent
+
+**Delivered:** Installed and initialized RTK for Codex globally and locally.
+Global Codex config now includes `/Users/rajchodisetti/.codex/RTK.md`, and this
+repo now includes `RTK.md` with an `@RTK.md` reference from `AGENTS.md`.
+
+**Why:** Raj requested RTK initialization, especially for Codex integrations, so
+future Codex sessions get the token-optimized command instruction automatically.
+
+**Business Value:** Reduces command-output context usage during future coding
+sessions while preserving normal command behavior.
+
+**Plan Fit:** Supports the local development tooling rules in `AGENTS.md` and
+keeps agent command usage consistent across repo-local and global Codex contexts.
+
+**Tests / Checks Run:**
+- `rtk init -g --codex` — configured global Codex RTK files
+- `rtk init --codex` — configured repo-local Codex RTK files
+- `rtk init --codex --show` — verified global and local Codex RTK config
+- `rtk read RTK.md` — verified repo-local RTK instructions
+
+**Risks / Follow-ups:** Generic `rtk init --show` reports non-Codex hook status;
+use `rtk init --codex --show` to verify Codex integration specifically.
+
+## 2026-06-30 — Service and Workflow Inventory
+
+**Role:** Planner / Documentation Agent
+
+**Delivered:** Inspected the repo command surface, Phase 1/Phase 2 guides, Makefile,
+Docker Compose, current backend packages, template frontend, and automation
+README files to produce a business-prioritized service inventory and trigger
+workflow map.
+
+**Why:** Raj requested a clear view of which services exist or are planned, how
+to start them locally, and which business workflows trigger downstream services.
+
+**Business Value:** Clarifies the shortest path to running the sales MVP locally:
+database, migrations, API, worker, seed data, demo template, and optional
+automation. It also separates currently implemented services from planned Phase
+1/Phase 2 services so execution can stay focused.
+
+**Plan Fit:** Supports Phase 1 lead-to-demo-to-reservation sequencing and
+identifies the Phase 2 orchestration services as future work after the Phase 1
+sales loop is working.
+
+**Tests / Checks Run:** Inspection only. Ran targeted reads of `AGENTS.md`,
+`Makefile`, `README.md`, Phase 1/Phase 2 docs, Docker Compose, backend router,
+app startup, worker startup, config, template README/package, and automation
+README files. No code tests were run because no product code changed.
+
+**Risks / Follow-ups:** `apps/web` is still a placeholder; the runnable demo
+frontend currently lives under `template/`. Phase 2 docs are under `phase2/`
+rather than `docs/phase2/`.
+
 ## 2026-06-24 — User Profile API (`GET /api/v1/user/me`)
 
 **Role:** Backend Agent
@@ -292,4 +387,3 @@ endpoints (auth, admin, restaurants, members, demo sites, public demo, health).
 Added `docs/openapi/README.md`, `make openapi` validation target, and README/Postman links.
 
 **Checks Run:** `make openapi` — pass
-
