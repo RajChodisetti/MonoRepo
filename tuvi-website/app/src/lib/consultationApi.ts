@@ -15,6 +15,7 @@ export type BookSuccessResponse = {
   confirmation_code: string;
   prospect_name: string;
   prospect_email: string;
+  prospect_phone?: string;
   slot: string;
   booking_date: string;
   booking_time: string;
@@ -42,8 +43,10 @@ export async function fetchAvailability(days = 7): Promise<AvailabilityResponse>
 export async function bookConsultation(payload: {
   date: string;
   time: string;
+  slot?: string;
   prospect_name: string;
   prospect_email: string;
+  prospect_phone: string;
   source?: string;
 }): Promise<BookSuccessResponse> {
   const res = await fetch("/api/consultations", {

@@ -956,15 +956,19 @@ async def _dispatch_tool(
         time_str = (arguments.get("time") or "").strip()
         prospect_name = (arguments.get("prospect_name") or "Guest").strip() or "Guest"
         prospect_email = (arguments.get("prospect_email") or "").strip()
+        prospect_phone = (arguments.get("prospect_phone") or "").strip()
         if not date_str or not time_str:
             return {"status": "error", "message": "Need date (YYYY-MM-DD) and time before booking."}
         if not prospect_email:
             return {"status": "error", "message": "Need prospect_email before booking — ask for their email."}
+        if not prospect_phone:
+            return {"status": "error", "message": "Need prospect_phone before booking - ask for their phone number."}
         result = await tuvi_api_client.book_consultation(
             date=date_str,
             time=time_str,
             prospect_name=prospect_name,
             prospect_email=prospect_email,
+            prospect_phone=prospect_phone,
             source="voice",
         )
         if result.get("status") == "success":
@@ -976,6 +980,7 @@ async def _dispatch_tool(
                 "booking_time": result.get("booking_time", time_str),
                 "prospect_name": prospect_name,
                 "prospect_email": prospect_email,
+                "prospect_phone": prospect_phone,
                 "calendly_link": result.get("calendar_link") or result.get("calendly_link", ""),
             })
             outcome_state[0] = "booked"

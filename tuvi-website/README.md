@@ -22,7 +22,7 @@ Stop background services:
 
 ```bash
 cd tuvi-website/app
-cp .env.example .env.local   # CONSULTATION_API_URL + TUVI_API_TOKEN
+cp .env.example .env.local   # main API URL + consultation API token
 npm install
 npm run dev
 ```

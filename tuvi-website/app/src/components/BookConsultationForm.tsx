@@ -50,6 +50,7 @@ export default function BookConsultationForm() {
   const [selected, setSelected] = useState<ConsultationSlot | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [success, setSuccess] = useState<BookSuccessResponse | null>(null);
@@ -82,8 +83,10 @@ export default function BookConsultationForm() {
       const result = await bookConsultation({
         date: selected.date,
         time: selected.time,
+        slot: selected.iso,
         prospect_name: name.trim(),
         prospect_email: email.trim(),
+        prospect_phone: phone.trim(),
       });
       setSuccess(result);
     } catch (err) {
@@ -260,6 +263,19 @@ export default function BookConsultationForm() {
                 placeholder="you@company.com"
               />
             </label>
+            <label className="block sm:col-span-2">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">
+                Phone
+              </span>
+              <input
+                required
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="mt-1.5 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-text outline-none transition focus:border-cyan/50"
+                placeholder="+61 400 000 000"
+              />
+            </label>
           </div>
 
           {submitError && (
@@ -270,7 +286,7 @@ export default function BookConsultationForm() {
 
           <button
             type="submit"
-            disabled={submitting || !name.trim() || !email.trim()}
+            disabled={submitting || !name.trim() || !email.trim() || !phone.trim()}
             className="mt-5 w-full rounded-full bg-gradient-to-r from-gold-dim to-gold px-6 py-3.5 text-sm font-semibold text-bg transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Confirm booking

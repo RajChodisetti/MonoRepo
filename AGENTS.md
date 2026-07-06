@@ -898,3 +898,5 @@ _Last updated: 2026-06-22_
 2026-06-17 — Backend Agent — Implemented P1-E01 foundation scaffold with Go API/worker/migrate commands, config, logging, pgxpool DB wiring, health/readiness middleware, migrations, in-memory jobs, tests, README, Makefile, .env.example, and foundation ADR.
 2026-06-17 — Documentation Agent — Improved AGENTS.md with local development rules, Context7/Headroom usage, context-budget rules, git safety rules, and clearer living-memory update rules.
 ```
+
+@RTK.md

@@ -130,11 +130,11 @@ services:
       PUBLIC_BASE_URL: http://localhost:${VOICE_AGENT_PORT:-8000}
       REDIS_URL: redis://voice-sales-redis:6379
       CALL_LOG_DB: /app/data/calls.db
-      # Host-reach APIs (unified MonoRepo API :8080)
+      # Host-reach unified MonoRepo API (:8080)
       MONOREPO_API_URL: http://host.docker.internal:8080
-      TUVI_WEBSITE_API_URL: http://host.docker.internal:8080
-      API_TIMEOUT_MS: "20000"
+      TUVI_API_TOKEN: ${TUVI_API_TOKEN:-local-dev-tuvi-api-token-change-me}
       TUVI_API_TIMEOUT_MS: "20000"
+      API_TIMEOUT_MS: "20000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:

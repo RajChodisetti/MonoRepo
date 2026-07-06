@@ -60,7 +60,8 @@ make voice-down   # stop agent + Redis
 
 UI: http://localhost:8000/?agent=corporate
 
-Agent reaches host APIs via `host.docker.internal` (`MONOREPO_API_URL` :8080; `TUVI_WEBSITE_API_URL` is a backward-compatible alias for the same unified API).
+Agent reaches host APIs via `host.docker.internal` (`MONOREPO_API_URL` :8080).
+Set `TUVI_API_TOKEN` to the same token used by the main API consultation endpoints.
 
 **Legacy — API only (no email worker):**
 
@@ -303,6 +304,7 @@ Key environment variables:
 | `JWT_ACCESS_TOKEN_TTL` | Access token lifetime (default `24h`)        |
 | `DEMO_TOKEN_SECRET`    | Demo link token secret (min 32 chars)        |
 | `DEMO_TOKEN_TTL`       | Demo link expiry (default `720h`)            |
+| `TUVI_API_TOKEN`        | Bearer token for Tuvi company consultation endpoints |
 
 See `.env.example` for the full list.
 

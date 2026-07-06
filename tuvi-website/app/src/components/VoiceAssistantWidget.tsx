@@ -210,12 +210,15 @@ export default function VoiceAssistantWidget() {
   };
 
   const calendarUrl = consultation?.calendarLink || consultation?.calendlyLink;
-  const showBookingOverlay =
-    bookingProgress &&
-    bookingProgress.phase !== "idle" &&
-    (bookingProgress.phase === "checking_slots" ||
-      bookingProgress.phase === "booking_slot" ||
-      bookingProgress.phase === "success");
+  const activeBookingProgress: {
+    phase: "checking_slots" | "booking_slot" | "success";
+    message: string;
+  } | null =
+    bookingProgress?.phase === "checking_slots" ||
+    bookingProgress?.phase === "booking_slot" ||
+    bookingProgress?.phase === "success"
+      ? { phase: bookingProgress.phase, message: bookingProgress.message }
+      : null;
 
   return (
     <>
@@ -291,10 +294,10 @@ export default function VoiceAssistantWidget() {
             role="dialog"
             aria-label="Tuvi AI assistant"
           >
-            {showBookingOverlay && (
+            {activeBookingProgress && (
               <BookingProgressOverlay
-                phase={bookingProgress.phase}
-                message={bookingProgress.message}
+                phase={activeBookingProgress.phase}
+                message={activeBookingProgress.message}
               />
             )}
             {error && (
