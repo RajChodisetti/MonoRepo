@@ -50,11 +50,11 @@ Manual split terminals:
 ```bash
 docker compose -f MonoRepo/infra/docker/docker-compose.yml up -d postgres
 cd MonoRepo && make migrate-up && make api
-cd voice-sales-agent && docker compose up -d --build
+make -C MonoRepo voice-up   # voice agent Docker service on :8000
 cd tuvi-website/app && npm run dev
 ```
 
-Set `TUVI_WEBSITE_API_URL=http://localhost:8080` and `TUVI_API_TOKEN` in `voice-sales-agent/.env`.
+Set `MONOREPO_API_URL=http://localhost:8080` and `TUVI_API_TOKEN` in `voice-sales-agent/.env`.
 
 **Book a Call** (`/book`) uses the main API's company consultation endpoints. Voice AI bookings use the same endpoints.
 
@@ -76,4 +76,4 @@ npm run start    # serve build :3001
 ## Notes
 
 - Leadership section shows **names only** (initials monogram) — no founder photos.
-- Standalone frontend; no MonoRepo backend dependency.
+- The scheduler depends on the main MonoRepo API for company consultation bookings.

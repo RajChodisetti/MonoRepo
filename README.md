@@ -49,6 +49,19 @@ make down    # stop stack
 
 Copy `backend/.env` (SMTP secrets) before `make up` on a VM. Set `PUBLIC_BASE_URL` to your server URL.
 
+**Voice sales agent (Docker profile `voice`):**
+
+```bash
+# Requires voice-sales-agent/.env (API keys — copy from .env.example)
+make voice-up     # build + start agent + Redis on :8000
+make voice-logs   # follow agent logs
+make voice-down   # stop agent + Redis
+```
+
+UI: http://localhost:8000/?agent=corporate
+
+Agent reaches host APIs via `host.docker.internal` (`MONOREPO_API_URL` :8080; `TUVI_WEBSITE_API_URL` is a backward-compatible alias for the same unified API).
+
 **Legacy — API only (no email worker):**
 
 ```bash

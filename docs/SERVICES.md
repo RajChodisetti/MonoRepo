@@ -86,11 +86,11 @@ main API company consultations
   -> PostgreSQL restaurant_platform.company_consultations
   -> optional Google Calendar
   -> existing email provider / SMTP
-  <- voice-sales-agent corporate flow via TUVI_WEBSITE_API_URL=http://localhost:8080
+  <- voice-sales-agent corporate flow via MONOREPO_API_URL=http://localhost:8080
 ```
 
 ## Notes
 
 - `apps/web` is currently only a placeholder for the future Phase 1 dashboard.
-- The voice agent source is expected at `voice-sales-agent/`, but that directory is not present in this checkout yet.
+- The voice agent source lives at `voice-sales-agent/`; use `make voice-up` from the MonoRepo root for the Docker profile.
 - `tuvi-website/backend` is legacy reference code. Normal runtime uses the main API for consultation scheduling.
