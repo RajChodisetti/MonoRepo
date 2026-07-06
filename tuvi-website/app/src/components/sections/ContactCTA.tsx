@@ -1,13 +1,14 @@
-"use client";
-
 import { siteContent } from "@/content/site";
-import { getBookCallUrl, getContactEmail } from "@/lib/env";
+import { getBookCallUrl, getCallInDisplay, getCallInTelHref, getContactEmail } from "@/lib/env";
 import Button from "@/components/ui/Button";
 import SectionShell from "@/components/ui/SectionShell";
 import Reveal from "@/components/ui/Reveal";
+import RequestCallbackForm from "@/components/RequestCallbackForm";
 
 export default function ContactCTA() {
   const { contact } = siteContent;
+  const callInDisplay = getCallInDisplay();
+  const callInHref = getCallInTelHref();
 
   return (
     <SectionShell id={contact.id}>
@@ -27,9 +28,15 @@ export default function ContactCTA() {
           </p>
 
           <div className="relative mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
-            <Button href={getBookCallUrl()}>
-              {contact.primaryCta}
-            </Button>
+            <Button href={getBookCallUrl()}>{contact.primaryCta}</Button>
+            {callInHref && callInDisplay ? (
+              <a
+                href={callInHref}
+                className="rounded-xl border border-white/15 px-5 py-3 text-sm font-semibold text-text transition hover:border-cyan/40 hover:text-cyan"
+              >
+                Call our AI · {callInDisplay}
+              </a>
+            ) : null}
             <a
               href={`mailto:${getContactEmail()}`}
               className="text-sm text-muted transition hover:text-cyan"
@@ -37,6 +44,8 @@ export default function ContactCTA() {
               {getContactEmail()}
             </a>
           </div>
+
+          <RequestCallbackForm />
         </div>
       </Reveal>
     </SectionShell>

@@ -88,9 +88,64 @@ CORPORATE_TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "request_typed_email",
+            "description": (
+                "Open an on-screen email input in the browser so the visitor can TYPE their email "
+                "(never ask them to speak the email). Browser sessions only. "
+                "Call this after name/phone (if collected) when you need an email to book. "
+                "Wait for the tool result — it returns the typed email."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "prompt": {
+                        "type": "string",
+                        "description": "Short message shown above the email field.",
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "place_callback_call",
+            "description": (
+                "Dial the visitor's phone so the Tuvi AI phone assistant calls them. "
+                "Use ONLY after they ask to be called back (or say 'call me') and you have "
+                "confirmed their phone number aloud. Browser sessions only."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "phone_number": {
+                        "type": "string",
+                        "description": "Visitor phone in E.164 if possible (e.g. +61412345678).",
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "Optional visitor name.",
+                    },
+                },
+                "required": ["phone_number"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "end_call",
             "description": "End the voice session after a polite goodbye.",
             "parameters": {"type": "object", "properties": {}},
         },
     },
+]
+
+# Phone sessions: no browser UI tools / no further outbound dials.
+_PHONE_EXCLUDED = {"place_callback_call", "request_typed_email"}
+CORPORATE_PHONE_TOOLS = [
+    t
+    for t in CORPORATE_TOOLS
+    if t.get("function", {}).get("name") not in _PHONE_EXCLUDED
 ]

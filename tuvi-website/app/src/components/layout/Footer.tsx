@@ -1,8 +1,10 @@
 import { siteContent } from "@/content/site";
-import { getContactEmail, getLinkedInUrl } from "@/lib/env";
+import { getCallInDisplay, getCallInTelHref, getContactEmail, getLinkedInUrl } from "@/lib/env";
 
 export default function Footer() {
   const year = new Date().getFullYear();
+  const callInDisplay = getCallInDisplay();
+  const callInHref = getCallInTelHref();
 
   return (
     <footer className="border-t border-border bg-bg-elevated px-5 py-12 md:px-8">
@@ -18,6 +20,14 @@ export default function Footer() {
           >
             {getContactEmail()}
           </a>
+          {callInHref && callInDisplay ? (
+            <a
+              href={callInHref}
+              className="mt-2 block text-sm text-muted transition hover:text-cyan"
+            >
+              Call our AI assistant · {callInDisplay}
+            </a>
+          ) : null}
         </div>
 
         <div className="flex flex-wrap items-center gap-4 text-sm text-muted">

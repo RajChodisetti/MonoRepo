@@ -80,6 +80,7 @@ from pipecat.frames.frames import (
     EndFrame,
     TranscriptionFrame,
     TextFrame,
+    TTSSpeakFrame,
     InputAudioRawFrame,
     OutputAudioRawFrame,
     UserStartedSpeakingFrame,
@@ -116,8 +117,8 @@ from pipecat.transcriptions.language import Language
 # ── Call Logger (local SQLite) ────────────────────────────────────────────────
 from logger_db import (
     init_db, start_call, log_turn, end_call,
-    get_call_summary, list_calls,
-    is_opted_out, record_opt_out, get_call_number,
+    get_call_summary, list_calls, list_conversation_transcripts,
+    is_opted_out, record_opt_out, get_call_number, update_call_contact,
 )
 
 import api_client
@@ -125,7 +126,7 @@ import tuvi_api_client
 from prompts.restaurant import build_restaurant_greeting, build_restaurant_prompt
 from prompts.tools_restaurant import RESTAURANT_TOOLS
 from prompts.corporate import build_corporate_greeting, build_corporate_prompt
-from prompts.tools_corporate import CORPORATE_TOOLS
+from prompts.tools_corporate import CORPORATE_TOOLS, CORPORATE_PHONE_TOOLS
 
 load_dotenv()
 
@@ -656,6 +657,118 @@ async def _require_twilio_signature(request: Request):
         raise HTTPException(status_code=403, detail="Invalid Twilio signature")
 
 
+async def _require_call_api_key(request: Request):
+    """Require X-Call-Api-Key (or Bearer) matching CALL_API_SECRET when configured."""
+    secret = (os.environ.get("CALL_API_SECRET") or "").strip()
+    if not secret:
+        env = os.environ.get("ENVIRONMENT", "development").lower()
+        if env == "development":
+            logger.warning("CALL_API_SECRET unset — allowing /call in development")
+            return
+        raise HTTPException(status_code=503, detail="CALL_API_SECRET is not configured")
+
+    header_key = (request.headers.get("X-Call-Api-Key") or "").strip()
+    auth = (request.headers.get("Authorization") or "").strip()
+    bearer = ""
+    if auth.lower().startswith("bearer "):
+        bearer = auth[7:].strip()
+    provided = header_key or bearer
+    if not provided or provided != secret:
+        raise HTTPException(status_code=401, detail="Invalid or missing call API key")
+
+
+def _stream_custom_params(start_payload: dict) -> dict[str, str]:
+    """Parse Twilio Media Stream start.customParameters (dict or name/value list)."""
+    custom = start_payload.get("customParameters") or {}
+    if isinstance(custom, dict):
+        return {str(k): str(v) for k, v in custom.items()}
+    if isinstance(custom, list):
+        out: dict[str, str] = {}
+        for item in custom:
+            if isinstance(item, dict) and item.get("name") is not None:
+                out[str(item["name"])] = str(item.get("value", ""))
+        return out
+    return {}
+
+
+def _normalize_agent_mode(raw: str | None, default: str = "corporate") -> str:
+    mode = (raw or default).strip().lower()
+    if mode in ("corporate", "tuvi"):
+        return "corporate"
+    if mode in ("restaurant", "sales"):
+        return "sales"
+    return default
+
+
+# Populated before FastAPI routes; used by start_outbound_call and stream handlers.
+_active_tasks: dict[str, PipelineTask] = {}
+_call_db_ids: dict[str, int] = {}
+_call_agent_modes: dict[str, str] = {}  # call_sid → corporate | sales
+_paused_campaigns: set[str] = set()
+
+
+def start_outbound_call(
+    to_number: str,
+    *,
+    campaign_id: str = "default",
+    agent_mode: str = "corporate",
+) -> dict:
+    """
+    Place a Twilio outbound call with Media Stream → /stream.
+    Caller must already have run compliance / E.164 normalisation.
+    """
+    agent_mode = _normalize_agent_mode(agent_mode)
+    public_url = os.environ["PUBLIC_BASE_URL"].rstrip("/")
+    ws_host = public_url.replace("https://", "").replace("http://", "")
+
+    safe_campaign = "".join(c for c in campaign_id if c.isalnum() or c in "-_")[:64] or "default"
+    safe_agent = agent_mode if agent_mode in ("corporate", "sales") else "corporate"
+
+    twilio_client = TwilioClient(
+        os.environ["TWILIO_ACCOUNT_SID"],
+        os.environ["TWILIO_AUTH_TOKEN"],
+    )
+
+    twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Connect>
+    <Stream url="wss://{ws_host}/stream">
+      <Parameter name="campaign_id" value="{safe_campaign}"/>
+      <Parameter name="agent" value="{safe_agent}"/>
+    </Stream>
+  </Connect>
+</Response>"""
+
+    call = twilio_client.calls.create(
+        to=to_number,
+        from_=os.environ["TWILIO_PHONE_NUMBER"],
+        twiml=twiml,
+        status_callback=f"{public_url}/twilio/status",
+        status_callback_event=["initiated", "ringing", "answered", "completed"],
+        status_callback_method="POST",
+    )
+
+    call_db_id = start_call(
+        call.sid,
+        to_number,
+        channel="phone",
+        agent_mode=safe_agent,
+    )
+    _call_db_ids[call.sid] = call_db_id
+    _call_agent_modes[call.sid] = safe_agent
+
+    logger.info(
+        f"Outbound call → {to_number}  SID={call.sid}  agent={safe_agent}  DB id={call_db_id}"
+    )
+    return {
+        "status": "calling",
+        "to": to_number,
+        "call_sid": call.sid,
+        "log_id": call_db_id,
+        "agent": safe_agent,
+    }
+
+
 # ==============================================================================
 #  STARTUP PRE-WARMING
 #  Eliminates the two biggest sources of connect latency:
@@ -805,6 +918,76 @@ async def _emit_booking_progress(websocket, phase: str, message: str = "") -> No
         )
     except Exception as exc:
         logger.warning(f"Failed to emit booking progress: {exc}")
+
+
+async def _wait_for_typed_email(
+    websocket,
+    mailbox: dict,
+    *,
+    call_db_id: int,
+    prompt: str = "",
+    timeout_s: float = 120.0,
+) -> dict:
+    """
+    Open an on-screen email field in the browser widget and wait for the visitor
+    to type + submit it (event: user_email).
+    """
+    loop = asyncio.get_running_loop()
+    # Cancel any previous waiter
+    old = mailbox.get("email_future")
+    if old is not None and not old.done():
+        old.cancel()
+
+    fut: asyncio.Future = loop.create_future()
+    mailbox["email_future"] = fut
+    message = (prompt or "").strip() or "Enter your email to book the consultation."
+
+    try:
+        await websocket.send_text(
+            json.dumps({
+                "event": "request_email",
+                "message": message,
+            })
+        )
+    except Exception as exc:
+        mailbox.pop("email_future", None)
+        logger.warning("Failed to emit request_email: %s", exc)
+        return {"status": "error", "message": "Could not open the email form."}
+
+    log_turn(call_db_id, "assistant", message)
+    logger.info("Waiting for typed email (timeout=%ss)", timeout_s)
+
+    try:
+        email = await asyncio.wait_for(fut, timeout=timeout_s)
+    except asyncio.TimeoutError:
+        return {
+            "status": "error",
+            "message": "Timed out waiting for email. Open the form again with request_typed_email.",
+        }
+    except asyncio.CancelledError:
+        return {"status": "error", "message": "Email collection was cancelled."}
+    finally:
+        if mailbox.get("email_future") is fut:
+            mailbox.pop("email_future", None)
+        try:
+            await websocket.send_text(json.dumps({"event": "email_prompt_closed"}))
+        except Exception:
+            pass
+
+    email = (email or "").strip().lower()
+    if not email or "@" not in email or "." not in email.split("@")[-1]:
+        return {
+            "status": "error",
+            "message": "That email looks invalid. Call request_typed_email again.",
+        }
+
+    log_turn(call_db_id, "user", email)
+    update_call_contact(call_db_id, email=email)
+    return {
+        "status": "success",
+        "email": email,
+        "message": f"Visitor typed email: {email}. Use this in book_consultation.",
+    }
 
 
 # ==============================================================================
@@ -984,6 +1167,12 @@ async def _dispatch_tool(
                 "calendly_link": result.get("calendar_link") or result.get("calendly_link", ""),
             })
             outcome_state[0] = "booked"
+            update_call_contact(
+                call_db_id,
+                phone=prospect_phone,
+                email=prospect_email,
+                contact_name=prospect_name,
+            )
         return result
 
     if function_name == "book_appointment":
@@ -1008,6 +1197,57 @@ async def _dispatch_tool(
         outcome_state[0] = "opted_out"
         logger.warning(f"mark_do_not_call tool called for {phone}")
         return {"status": "recorded", "message": "Number added to internal do-not-call list."}
+
+    if function_name == "place_callback_call":
+        if not is_browser:
+            return {
+                "status": "error",
+                "message": "Callback dialing is only available from the browser assistant.",
+            }
+        raw_phone = (arguments.get("phone_number") or "").strip()
+        to_number = normalize_e164(raw_phone)
+        if not to_number:
+            return {
+                "status": "error",
+                "message": "Invalid phone number. Ask for a number with country code, e.g. +61…",
+            }
+        if is_opted_out(to_number):
+            return {
+                "status": "blocked",
+                "reason": "internal_opt_out",
+                "message": "That number is on the do-not-call list.",
+            }
+        skip_compliance = os.environ.get("ENVIRONMENT", "development").lower() == "development"
+        allowed, reason = _is_calling_allowed()
+        if not allowed and not skip_compliance:
+            return {
+                "status": "queued",
+                "reason": reason,
+                "message": (
+                    f"Outside the allowed calling window ({reason}). "
+                    "Offer to book a consultation instead."
+                ),
+            }
+        try:
+            result = start_outbound_call(
+                to_number,
+                campaign_id="website_callback",
+                agent_mode="corporate",
+            )
+            # Link this browser session transcripts to the dialled number
+            update_call_contact(call_db_id, phone=to_number, contact_name=(arguments.get("name") or "").strip())
+            return {
+                "status": result.get("status", "calling"),
+                "call_sid": result.get("call_sid"),
+                "to": to_number,
+                "name": (arguments.get("name") or "").strip() or None,
+            }
+        except Exception as e:
+            logger.error(f"place_callback_call failed: {e}")
+            return {
+                "status": "error",
+                "message": "Could not place the call. Offer a consultation instead.",
+            }
 
     if function_name == "send_followup_sms":
         if is_browser:
@@ -1075,10 +1315,6 @@ app = FastAPI(title="Voice Sales Agent", lifespan=lifespan)
 _STATIC_DIR = Path(__file__).parent / "static"
 if _STATIC_DIR.is_dir():
     app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
-
-_active_tasks: dict[str, PipelineTask] = {}
-_call_db_ids: dict[str, int] = {}
-_paused_campaigns: set[str] = set()   # in-memory; use Redis for multi-worker
 
 
 # ── Health / readiness ─────────────────────────────────────────────────────────
@@ -1167,6 +1403,30 @@ async def get_call(call_id: int):
     return JSONResponse(summary)
 
 
+@app.get("/transcripts")
+async def get_transcripts(
+    phone: str | None = None,
+    email: str | None = None,
+    call_id: int | None = None,
+    limit: int = 500,
+):
+    """
+    List conversation transcripts (user + assistant), filterable by phone or email.
+
+    Examples:
+      GET /transcripts?phone=%2B61412345678
+      GET /transcripts?email=jane%40example.com
+      GET /transcripts?call_id=42
+    """
+    rows = list_conversation_transcripts(
+        phone=phone,
+        email=email,
+        call_id=call_id,
+        limit=limit,
+    )
+    return JSONResponse({"count": len(rows), "transcripts": rows})
+
+
 # ── Admin endpoints ────────────────────────────────────────────────────────────
 
 @app.post("/admin/call/{call_sid}/hangup")
@@ -1196,11 +1456,15 @@ async def admin_resume_campaign(campaign_id: str):
 # ── Outbound call trigger ──────────────────────────────────────────────────────
 
 @app.post("/call")
-async def initiate_call(request: Request):
+async def initiate_call(
+    request: Request,
+    _: None = Depends(_require_call_api_key),
+):
     """
     Trigger an outbound call with compliance pre-checks.
 
-    Body: {"to": "+61412345678", "campaign_id": "camp_01"}
+    Body: {"to": "+61412345678", "campaign_id": "camp_01", "agent": "corporate"}
+    Header: X-Call-Api-Key: <CALL_API_SECRET>
 
     Pre-checks (in order):
       1. Campaign pause guard
@@ -1211,6 +1475,7 @@ async def initiate_call(request: Request):
     body = await request.json()
     to_raw = body.get("to", "")
     campaign_id = body.get("campaign_id", "default")
+    agent_mode = _normalize_agent_mode(body.get("agent"), default="corporate")
 
     # 1. Campaign pause guard
     if campaign_id in _paused_campaigns:
@@ -1243,42 +1508,18 @@ async def initiate_call(request: Request):
             "message": f"Outside ACMA calling window ({reason}). Schedule for next valid window.",
         })
 
-    public_url = os.environ["PUBLIC_BASE_URL"].rstrip("/")
-    ws_host = public_url.replace("https://", "").replace("http://", "")
-
-    twilio_client = TwilioClient(
-        os.environ["TWILIO_ACCOUNT_SID"],
-        os.environ["TWILIO_AUTH_TOKEN"],
-    )
-
-    twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Connect>
-    <Stream url="wss://{ws_host}/stream">
-      <Parameter name="campaign_id" value="{campaign_id}"/>
-    </Stream>
-  </Connect>
-</Response>"""
-
-    call = twilio_client.calls.create(
-        to=to_number,
-        from_=os.environ["TWILIO_PHONE_NUMBER"],
-        twiml=twiml,
-        status_callback=f"{public_url}/twilio/status",
-        status_callback_event=["initiated", "ringing", "answered", "completed"],
-        status_callback_method="POST",
-    )
-
-    call_db_id = start_call(call.sid, to_number)
-    _call_db_ids[call.sid] = call_db_id
-
-    logger.info(f"Outbound call → {to_number}  SID={call.sid}  DB id={call_db_id}")
-    return {
-        "status": "calling",
-        "to": to_number,
-        "call_sid": call.sid,
-        "log_id": call_db_id,
-    }
+    try:
+        return start_outbound_call(
+            to_number,
+            campaign_id=campaign_id,
+            agent_mode=agent_mode,
+        )
+    except Exception as e:
+        logger.error(f"Outbound call failed: {e}")
+        return JSONResponse(
+            {"status": "error", "message": str(e)},
+            status_code=502,
+        )
 
 
 # ── TwiML webhook (inbound / fallback) ────────────────────────────────────────
@@ -1290,10 +1531,18 @@ async def twiml_webhook(
 ):
     public_url = os.environ["PUBLIC_BASE_URL"].rstrip("/")
     ws_host = public_url.replace("https://", "").replace("http://", "")
+    form = await request.form()
+    # Inbound caller identity for transcript storage
+    caller_raw = (form.get("From") or "").strip()
+    caller_phone = "".join(c for c in caller_raw if c.isdigit() or c == "+")
+    # Inbound website number → corporate AI assistant
     twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Connect>
-    <Stream url="wss://{ws_host}/stream"/>
+    <Stream url="wss://{ws_host}/stream">
+      <Parameter name="agent" value="corporate"/>
+      <Parameter name="caller_phone" value="{caller_phone}"/>
+    </Stream>
   </Connect>
 </Response>"""
     return PlainTextResponse(content=twiml, media_type="application/xml")
@@ -1368,6 +1617,8 @@ async def stream_websocket(websocket: WebSocket):
     call_sid = "unknown"
     stream_sid = "unknown"
     call_db_id = -1
+    agent_mode = "corporate"
+    custom_params: dict[str, str] = {}
 
     logger.info("Twilio WebSocket connected — reading call SID...")
 
@@ -1382,19 +1633,40 @@ async def stream_websocket(websocket: WebSocket):
         raw2 = await asyncio.wait_for(websocket.receive_text(), timeout=5.0)
         envelope2 = json.loads(raw2)
         if envelope2.get("event") == "start":
-            call_sid = envelope2.get("start", {}).get("callSid", "unknown")
-            stream_sid = envelope2.get("start", {}).get("streamSid", "unknown")
-            logger.info(f"Linked to call SID: {call_sid}")
+            start_payload = envelope2.get("start", {}) or {}
+            call_sid = start_payload.get("callSid", "unknown")
+            stream_sid = start_payload.get("streamSid", "unknown")
+            custom_params = _stream_custom_params(start_payload)
+            agent_mode = _normalize_agent_mode(
+                custom_params.get("agent") or _call_agent_modes.get(call_sid),
+                default="corporate",
+            )
+            logger.info(f"Linked to call SID: {call_sid}  agent={agent_mode}")
+            caller_phone = (
+                custom_params.get("caller_phone")
+                or custom_params.get("from")
+                or start_payload.get("from")
+                or start_payload.get("to")
+                or ""
+            ).strip()
             if call_sid in _call_db_ids:
                 call_db_id = _call_db_ids[call_sid]
+                # Outbound already stored dialled number; fill if missing
+                if caller_phone and not get_call_number(call_db_id):
+                    update_call_contact(call_db_id, phone=caller_phone)
             else:
-                # Inbound / unregistered call
-                to_num = envelope2.get("start", {}).get("to", "unknown")
-                call_db_id = start_call(call_sid, to_num)
+                # Inbound / unregistered call — store caller phone for transcripts
+                call_db_id = start_call(
+                    call_sid,
+                    caller_phone or "unknown",
+                    channel="phone",
+                    agent_mode=agent_mode,
+                )
                 _call_db_ids[call_sid] = call_db_id
+            _call_agent_modes[call_sid] = agent_mode
     except Exception as e:
         logger.warning(f"Could not read call SID from Twilio envelope: {e}")
-        call_db_id = start_call("unknown", "unknown")
+        call_db_id = start_call("unknown", "unknown", channel="phone", agent_mode=agent_mode)
 
     # Resolve prospect's phone number (needed for SMS and opt-out tools)
     to_number_ref: list[str] = [get_call_number(call_db_id) or "unknown"]
@@ -1419,11 +1691,20 @@ async def stream_websocket(websocket: WebSocket):
     # ── STT ───────────────────────────────────────────────────────────────────
     stt = DeepgramSTTService(api_key=os.environ["DEEPGRAM_API_KEY"])
 
+    if agent_mode == "corporate":
+        phone_tools = CORPORATE_PHONE_TOOLS
+        system_prompt = build_corporate_prompt(channel="phone")
+        greeting_text = build_corporate_greeting()
+    else:
+        phone_tools = TOOLS
+        system_prompt = SYSTEM_PROMPT
+        greeting_text = GREETING_TEXT
+
     # ── LLM ───────────────────────────────────────────────────────────────────
     llm = OpenAILLMService(
         api_key=os.environ["OPENAI_API_KEY"],
         model=os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
-        tools=TOOLS,
+        tools=phone_tools,
     )
 
     # Mutable closure state
@@ -1448,7 +1729,7 @@ async def stream_websocket(websocket: WebSocket):
     llm.register_function(None, handle_tool_call)
 
     # ── LLM Context ───────────────────────────────────────────────────────────
-    context = LLMContext(messages=[{"role": "system", "content": SYSTEM_PROMPT}])
+    context = LLMContext(messages=[{"role": "system", "content": system_prompt}])
     user_aggregator, assistant_aggregator = LLMContextAggregatorPair(context)
 
     # ── TTS ───────────────────────────────────────────────────────────────────
@@ -1507,6 +1788,7 @@ async def stream_websocket(websocket: WebSocket):
     # Track answer time for duration_s calculation
     call_start_time: list[float] = [0.0]
     _flushed: list[bool] = [False]
+    max_duration_task: asyncio.Task | None = None
 
     def _do_flush():
         if _flushed[0]:
@@ -1515,17 +1797,50 @@ async def stream_websocket(websocket: WebSocket):
         duration = round(time.time() - call_start_time[0], 1) if call_start_time[0] else None
         _flush_call_log(call_sid, call_db_id, outcome_state[0], booking_state or None, duration)
 
+    def _cancel_max_duration():
+        nonlocal max_duration_task
+        if max_duration_task and not max_duration_task.done():
+            max_duration_task.cancel()
+        max_duration_task = None
+
     # ── Events ────────────────────────────────────────────────────────────────
 
     @transport.event_handler("on_client_connected")
     async def on_connected(transport, client):
+        nonlocal max_duration_task
         call_start_time[0] = time.time()
-        logger.info("Prospect answered — AI greeting started")
-        await task.queue_frames([LLMMessagesFrame(context.messages)])
+        logger.info(
+            "Prospect answered — speaking greeting (agent=%s): %s",
+            agent_mode,
+            greeting_text[:80],
+        )
+        # Speak immediately via TTS (do not wait for LLM). Pipeline then listens.
+        log_turn(call_db_id, "assistant", greeting_text)
+        await task.queue_frames([
+            TTSSpeakFrame(text=greeting_text, append_to_context=True),
+        ])
+
+        max_minutes = _phone_call_max_minutes()
+        if max_minutes is not None:
+            logger.info(
+                "Phone call max duration: %.1f minute(s) (PHONE_CALL_MAX_MINUTES)",
+                max_minutes,
+            )
+            max_duration_task = asyncio.create_task(
+                _max_duration_watchdog(
+                    minutes=max_minutes,
+                    call_sid=call_sid,
+                    call_db_id=call_db_id,
+                    outcome_state=outcome_state,
+                    task_ref=task_ref,
+                    flushed=_flushed,
+                )
+            )
 
     @transport.event_handler("on_client_disconnected")
     async def on_disconnected(transport, client):
         logger.info("Call ended")
+        _cancel_max_duration()
         if outcome_state[0] == "unknown":
             outcome_state[0] = "completed"
         _do_flush()
@@ -1533,12 +1848,16 @@ async def stream_websocket(websocket: WebSocket):
 
     # ── Run ───────────────────────────────────────────────────────────────────
     runner = PipelineRunner()
-    await runner.run(task)
+    try:
+        await runner.run(task)
+    finally:
+        _cancel_max_duration()
 
     _do_flush()  # no-op if already flushed in on_disconnected
 
     _active_tasks.pop(call_sid, None)
     _call_db_ids.pop(call_sid, None)
+    _call_agent_modes.pop(call_sid, None)
     logger.info(f"Pipeline done. DB id={call_db_id}  outcome={outcome_state[0]}")
 
 
@@ -1577,7 +1896,7 @@ async def browser_stream(websocket: WebSocket):
     if agent_mode == "corporate":
         site = {"name": "Tuvi Solutions"}
         restaurant_id = ""
-        system_prompt = build_corporate_prompt()
+        system_prompt = build_corporate_prompt(channel="browser")
         greeting_text = build_corporate_greeting()
         agent_tools = CORPORATE_TOOLS
     else:
@@ -1598,7 +1917,12 @@ async def browser_stream(websocket: WebSocket):
         agent_tools = RESTAURANT_TOOLS
 
     session_id = f"browser-{uuid.uuid4().hex[:8]}"
-    call_db_id = start_call(session_id, "browser")
+    call_db_id = start_call(
+        session_id,
+        "",
+        channel="browser",
+        agent_mode=agent_mode,
+    )
 
     logger.info(f"Browser session started: {session_id}  DB id={call_db_id}")
 
@@ -1614,6 +1938,8 @@ async def browser_stream(websocket: WebSocket):
     booking_state: dict = {}
     outcome_state: list[str] = ["unknown"]
     task_ref: list = [None]
+    # Shared mailbox: browser_serializer puts typed email futures here
+    client_mailbox: dict = {}
 
     # ── Transport ─────────────────────────────────────────────────────────────
     _lang = _cartesia_pipecat_language()
@@ -1627,7 +1953,7 @@ async def browser_stream(websocket: WebSocket):
             audio_out_sample_rate=16000,
             vad_enabled=True,
             vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=0.4)),
-            serializer=BrowserFrameSerializer(),
+            serializer=BrowserFrameSerializer(mailbox=client_mailbox),
         ),
     )
 
@@ -1654,6 +1980,32 @@ async def browser_stream(websocket: WebSocket):
     # ── Tool handler ──────────────────────────────────────────────────────────
     async def handle_browser_tool(function_name, tool_call_id, arguments, llm, context, result_callback):
         check_tools = ("check_consultation_slot", "check_consultation_slots")
+
+        if function_name == "request_typed_email":
+            result = await _wait_for_typed_email(
+                websocket,
+                client_mailbox,
+                call_db_id=call_db_id,
+                prompt=(arguments.get("prompt") or "").strip(),
+            )
+            await result_callback(json.dumps(result))
+            return
+
+        # Browser booking must use a typed email — open the form if missing/invalid
+        if function_name == "book_consultation":
+            email = (arguments.get("prospect_email") or "").strip()
+            if not email or "@" not in email:
+                typed = await _wait_for_typed_email(
+                    websocket,
+                    client_mailbox,
+                    call_db_id=call_db_id,
+                    prompt="Enter your email to confirm the consultation.",
+                )
+                if typed.get("status") != "success":
+                    await result_callback(json.dumps(typed))
+                    return
+                arguments = {**arguments, "prospect_email": typed["email"]}
+
         if function_name in check_tools:
             await _emit_booking_progress(websocket, "checking_slots", "Checking slots…")
         elif function_name == "book_consultation":
@@ -1825,6 +2177,95 @@ async def _delayed_end(task: PipelineTask, delay: float = 3.0):
     """Let TTS finish saying goodbye, then end the pipeline."""
     await asyncio.sleep(delay)
     await task.queue_frames([EndFrame()])
+
+
+def _phone_call_max_minutes() -> float | None:
+    """
+    Max talk time for phone calls, in minutes.
+    Env: PHONE_CALL_MAX_MINUTES (or TIME as alias). 2 = 2 minutes, 3 = 3 minutes.
+    0 / unset / invalid = no auto hangup.
+    """
+    raw = (
+        os.environ.get("PHONE_CALL_MAX_MINUTES")
+        or os.environ.get("TIME")
+        or ""
+    ).strip()
+    if not raw:
+        return None
+    try:
+        minutes = float(raw)
+    except ValueError:
+        logger.warning("Invalid PHONE_CALL_MAX_MINUTES=%r — ignoring", raw)
+        return None
+    if minutes <= 0:
+        return None
+    return minutes
+
+
+def _hangup_twilio_call(call_sid: str) -> None:
+    """Force-end the Twilio call leg so the user phone hangs up."""
+    if not call_sid or call_sid == "unknown":
+        return
+    sid = os.environ.get("TWILIO_ACCOUNT_SID", "")
+    token = os.environ.get("TWILIO_AUTH_TOKEN", "")
+    if not (sid and token):
+        return
+    try:
+        TwilioClient(sid, token).calls(call_sid).update(status="completed")
+        logger.info("Twilio hangup sent for %s", call_sid)
+    except Exception as exc:
+        logger.warning("Twilio hangup failed for %s: %s", call_sid, exc)
+
+
+async def _max_duration_watchdog(
+    *,
+    minutes: float,
+    call_sid: str,
+    call_db_id: int,
+    outcome_state: list[str],
+    task_ref: list,
+    flushed: list[bool],
+) -> None:
+    """After `minutes`, speak a short wrap-up and auto-cut the phone call."""
+    try:
+        await asyncio.sleep(minutes * 60.0)
+    except asyncio.CancelledError:
+        return
+
+    if flushed[0]:
+        return
+
+    logger.warning(
+        "Phone call max duration reached (%.1f min) — auto hangup SID=%s",
+        minutes,
+        call_sid,
+    )
+    outcome_state[0] = "max_duration"
+    wrap_up = (
+        "Thanks so much for contacting Tuvi Solutions. "
+        "It was a pleasure speaking with you. "
+        "If you'd like to continue, call us back anytime or book a free consultation on our website. "
+        "Take care, and goodbye."
+    )
+    try:
+        log_turn(call_db_id, "assistant", wrap_up)
+    except Exception:
+        pass
+
+    task = task_ref[0]
+    if task is not None:
+        try:
+            await task.queue_frames([TTSSpeakFrame(text=wrap_up, append_to_context=True)])
+        except Exception as exc:
+            logger.warning("Max-duration wrap-up TTS failed: %s", exc)
+        # Let closing message finish speaking before hangup
+        await asyncio.sleep(10.0)
+        try:
+            await task.queue_frames([EndFrame()])
+        except Exception:
+            pass
+
+    _hangup_twilio_call(call_sid)
 
 
 def _mock_available_slots() -> list[str]:

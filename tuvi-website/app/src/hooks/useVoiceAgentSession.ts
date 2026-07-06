@@ -20,12 +20,6 @@ export type BookingProgress = {
   message: string;
 };
 
-export type TranscriptTurn = {
-  id: string;
-  role: "user" | "assistant";
-  text: string;
-};
-
 export type ConsultationConfirmation = {
   confirmationCode: string;
   prospectName: string;
@@ -127,10 +121,10 @@ function waitForWsOpen(ws: WebSocket, timeoutMs: number): Promise<void> {
 export function useVoiceAgentSession() {
   const [status, setStatus] = useState<VoiceSessionStatus>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [transcript, setTranscript] = useState<TranscriptTurn[]>([]);
   const [active, setActive] = useState(false);
   const [consultation, setConsultation] = useState<ConsultationConfirmation | null>(null);
   const [bookingProgress, setBookingProgress] = useState<BookingProgress | null>(null);
+  const [emailPrompt, setEmailPrompt] = useState<string | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -183,13 +177,6 @@ export function useVoiceAgentSession() {
     }
   }, []);
 
-  const addTurn = useCallback((role: "user" | "assistant", text: string) => {
-    setTranscript((prev) => [
-      ...prev,
-      { id: `${Date.now()}-${prev.length}`, role, text },
-    ]);
-  }, []);
-
   const playPcm16 = useCallback((buffer: ArrayBuffer) => {
     const audioCtx = audioCtxRef.current;
     if (!audioCtx) return;
@@ -221,6 +208,7 @@ export function useVoiceAgentSession() {
     clearBookingProgressTimer();
     setBookingProgress(null);
     pendingConsultationRef.current = null;
+    setEmailPrompt(null);
     sessionActiveRef.current = false;
     readyReceivedRef.current = false;
     setActive(false);
@@ -332,9 +320,10 @@ export function useVoiceAgentSession() {
           else clearThinkingTimer();
         }
 
+        // Transcript text is audio-only in the UI; server still persists via log_turn.
+        // We only use assistant transcript events to surface the booking modal.
         if (msg.event === "transcript" && msg.role && msg.text) {
           clearThinkingTimer();
-          addTurn(msg.role as "user" | "assistant", String(msg.text));
           if (
             msg.role === "assistant" &&
             CONSULTATION_CONFIRMED_PATTERN.test(String(msg.text)) &&
@@ -353,6 +342,16 @@ export function useVoiceAgentSession() {
           const message = String(msg.message ?? "");
           setBookingPhase(phase, message);
         }
+
+        if (msg.event === "request_email") {
+          setEmailPrompt(
+            String(msg.message ?? "Enter your email to book the consultation."),
+          );
+        }
+
+        if (msg.event === "email_prompt_closed") {
+          setEmailPrompt(null);
+        }
         return;
       }
 
@@ -360,7 +359,6 @@ export function useVoiceAgentSession() {
       playPcm16(data);
     },
     [
-      addTurn,
       applyConsultation,
       armThinkingTimer,
       cleanup,
@@ -394,6 +392,7 @@ export function useVoiceAgentSession() {
     setError(null);
     setStatus("checking");
     pendingConsultationRef.current = null;
+    setEmailPrompt(null);
 
     const readiness = await checkVoiceAgentReadiness();
     if (gen !== connectGenRef.current) return;
@@ -501,12 +500,22 @@ export function useVoiceAgentSession() {
     setBookingProgress(null);
     setError(null);
     setStatus("idle");
-    setTranscript([]);
     setConsultation(null);
+    setEmailPrompt(null);
   }, [clearBookingProgressTimer]);
 
   const dismissConsultation = useCallback(() => {
     setConsultation(null);
+  }, []);
+
+  const submitEmail = useCallback((email: string) => {
+    const trimmed = email.trim();
+    if (!trimmed) return false;
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return false;
+    ws.send(JSON.stringify({ event: "user_email", email: trimmed }));
+    setEmailPrompt(null);
+    return true;
   }, []);
 
   useEffect(() => {
@@ -520,14 +529,15 @@ export function useVoiceAgentSession() {
   return {
     status,
     error,
-    transcript,
     active,
     consultation,
     bookingProgress,
+    emailPrompt,
     connect,
     disconnect,
     reset,
     dismissConsultation,
+    submitEmail,
     prefetchStatus,
     preloadWorklet,
   };

@@ -191,8 +191,12 @@ func (s *Service) Book(ctx context.Context, req BookRequest) (BookSuccess, *Book
 		"Consultation booking\nName: %s\nEmail: %s\nPhone: %s\nConfirmation: %s\nSource: %s",
 		req.ProspectName, req.ProspectEmail, req.ProspectPhone, code, req.Source,
 	)
+	eventTitle := "Tuvi Consultation"
+	if name := strings.TrimSpace(req.ProspectName); name != "" {
+		eventTitle = "Tuvi Consultation — " + name
+	}
 	event, err := s.calendar.CreateEvent(ctx, calendarprovider.CreateEventInput{
-		Title:       fmt.Sprintf("Tuvi Consultation - %s", req.ProspectName),
+		Title:       eventTitle,
 		Description: desc,
 		Start:       slotStart,
 		End:         slotEnd,
@@ -201,6 +205,19 @@ func (s *Service) Book(ctx context.Context, req BookRequest) (BookSuccess, *Book
 	if err != nil {
 		return BookSuccess{}, nil, fmt.Errorf("calendar booking failed: %w", err)
 	}
+
+	// Always build a Google Calendar "add event" link so the prospect can mark
+	// the booked date/time on their own calendar (works even if CRM calendar is noop).
+	calendarAddLink := GoogleCalendarAddURL(
+		slotStart,
+		slotEnd,
+		"Tuvi Consultation",
+		fmt.Sprintf(
+			"Tuvi Solutions free consultation\nConfirmation: %s\nName: %s\nPhone: %s\n\nhttps://tuvisolutions.com",
+			code, req.ProspectName, req.ProspectPhone,
+		),
+		"Tuvi Solutions (video call)",
+	)
 
 	tx, err := s.repo.BeginTx(ctx)
 	if err != nil {
@@ -242,7 +259,7 @@ func (s *Service) Book(ctx context.Context, req BookRequest) (BookSuccess, *Book
 		return BookSuccess{}, nil, err
 	}
 
-	go s.sendBookingEmail(context.Background(), req, code, slotStart, event.HTMLLink)
+	go s.sendBookingEmail(context.Background(), req, code, slotStart, calendarAddLink)
 
 	return BookSuccess{
 		Status:           "success",
@@ -253,7 +270,7 @@ func (s *Service) Book(ctx context.Context, req BookRequest) (BookSuccess, *Book
 		Slot:             slotStart.Format(time.RFC3339),
 		BookingDate:      slotStart.Format("2006-01-02"),
 		BookingTime:      FormatSlotTime(slotStart),
-		CalendarLink:     event.HTMLLink,
+		CalendarLink:     calendarAddLink,
 		Message:          fmt.Sprintf("Your consultation is booked. Confirmation number %s.", code),
 	}, nil, nil
 }
@@ -386,65 +403,74 @@ func overlapsBusy(start, end time.Time, busy []calendarprovider.BusyPeriod) bool
 
 func (s *Service) sendBookingEmail(ctx context.Context, req BookRequest, code string, slotStart time.Time, calendarLink string) {
 	if s.email == nil {
+		if s.log != nil {
+			s.log.ErrorContext(ctx, "consultation_email_provider_nil", "confirmation_code", code)
+		}
 		return
 	}
 
-	when := slotStart.In(s.cfg.Timezone).Format("Monday, 2 January 2006 at 3:04 PM MST")
-	calendarText := ""
-	if calendarLink != "" {
-		calendarText = fmt.Sprintf("\nOpen in Google Calendar: %s\n", calendarLink)
+	local := slotStart.In(s.cfg.Timezone)
+	when := local.Format("Monday, 2 January 2006 at 3:04 PM MST")
+	dayLabel := local.Format("Monday 2 January")
+	timeLabel := local.Format("3:04 pm")
+	meta := map[string]string{"confirmation_code": code, "source": req.Source}
+
+	// Prospect confirmation first — this is the user-facing booking email.
+	if email := strings.TrimSpace(req.ProspectEmail); email != "" {
+		prospect := buildProspectConfirmationEmail(
+			req.ProspectName,
+			email,
+			req.ProspectPhone,
+			code,
+			when,
+			dayLabel,
+			timeLabel,
+			calendarLink,
+		)
+		result, err := s.email.Send(ctx, emailprovider.SendRequest{
+			To:       email,
+			Subject:  prospect.Subject,
+			TextBody: prospect.TextBody,
+			HTMLBody: prospect.HTMLBody,
+			Metadata: meta,
+		})
+		if err != nil {
+			if s.log != nil {
+				s.log.ErrorContext(ctx, "consultation_confirmation_email_failed",
+					"error", err, "confirmation_code", code, "to", email)
+			}
+		} else if s.log != nil {
+			if result.Skipped {
+				s.log.WarnContext(ctx, "consultation_confirmation_email_skipped",
+					"confirmation_code", code, "to", email)
+			} else {
+				s.log.InfoContext(ctx, "consultation_confirmation_email_sent",
+					"confirmation_code", code, "to", email, "redirected_to", result.RedirectedTo)
+			}
+		}
+	} else if s.log != nil {
+		s.log.WarnContext(ctx, "consultation_confirmation_email_skipped_no_address",
+			"confirmation_code", code)
 	}
 
-	subject := fmt.Sprintf("New consultation booked - %s", code)
-	text := fmt.Sprintf(`A new consultation has been booked.
-
-Confirmation: %s
-Name: %s
-Email: %s
-Phone: %s
-When: %s
-Source: %s%s`, code, req.ProspectName, req.ProspectEmail, req.ProspectPhone, when, req.Source, calendarText)
-
-	html := fmt.Sprintf(`<p>A new consultation has been booked.</p>
-<ul>
-<li><strong>Confirmation:</strong> %s</li>
-<li><strong>Name:</strong> %s</li>
-<li><strong>Email:</strong> %s</li>
-<li><strong>Phone:</strong> %s</li>
-<li><strong>When:</strong> %s</li>
-<li><strong>Source:</strong> %s</li>
-</ul>`, code, req.ProspectName, req.ProspectEmail, req.ProspectPhone, when, req.Source)
-
+	notify := buildInternalBookingNotifyEmail(
+		req.ProspectName,
+		req.ProspectEmail,
+		req.ProspectPhone,
+		code,
+		when,
+		req.Source,
+		calendarLink,
+	)
 	if _, err := s.email.Send(ctx, emailprovider.SendRequest{
 		To:       s.cfg.NotifyEmail,
-		Subject:  subject,
-		TextBody: text,
-		HTMLBody: html,
-		ReplyTo:  req.ProspectEmail,
-		Metadata: map[string]string{"confirmation_code": code, "source": req.Source},
+		Subject:  notify.Subject,
+		TextBody: notify.TextBody,
+		HTMLBody: notify.HTMLBody,
+		ReplyTo:  strings.TrimSpace(req.ProspectEmail),
+		Metadata: meta,
 	}); err != nil && s.log != nil {
-		s.log.ErrorContext(ctx, "consultation_notification_email_failed", "error", err, "confirmation_code", code)
-	}
-
-	if req.ProspectEmail == "" {
-		return
-	}
-	prospectSubject := fmt.Sprintf("Your Tuvi consultation is confirmed - %s", code)
-	prospectText := fmt.Sprintf(
-		"Hi %s,\n\nYour consultation is confirmed for %s.\nConfirmation: %s%s\nWe look forward to speaking with you.\n\nTuvi Solutions\n",
-		req.ProspectName, when, code, calendarText,
-	)
-	prospectHTML := fmt.Sprintf(
-		`<p>Hi %s,</p><p>Your consultation is confirmed for <strong>%s</strong>.</p><p>Confirmation: <strong>%s</strong></p><p>We look forward to speaking with you.</p><p>Tuvi Solutions</p>`,
-		req.ProspectName, when, code,
-	)
-	if _, err := s.email.Send(ctx, emailprovider.SendRequest{
-		To:       req.ProspectEmail,
-		Subject:  prospectSubject,
-		TextBody: prospectText,
-		HTMLBody: prospectHTML,
-		Metadata: map[string]string{"confirmation_code": code, "source": req.Source},
-	}); err != nil && s.log != nil {
-		s.log.ErrorContext(ctx, "consultation_confirmation_email_failed", "error", err, "confirmation_code", code)
+		s.log.ErrorContext(ctx, "consultation_notification_email_failed",
+			"error", err, "confirmation_code", code)
 	}
 }

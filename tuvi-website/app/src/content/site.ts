@@ -119,7 +119,7 @@ export const siteContent = {
     eyebrow: "Let's build",
     title: "Ready to engineer your next phase of growth?",
     description:
-      "Let's discuss your challenges. No sales pitch, just a deep dive into data-driven solutions.",
+      "Talk in browser, call our AI assistant, or get an immediate callback. No sales pitch — just a deep dive into data-driven solutions.",
     primaryCta: "Schedule a Free Consultation",
   },
 

@@ -120,14 +120,16 @@ services:
     ports:
       - "${VOICE_AGENT_PORT:-8000}:8000"
     env_file:
-      - path: ../../voice-sales-agent/.env
-        required: false
+      # Defaults first; real .env last so real keys win.
       - path: ../../voice-sales-agent/.env.example
+        required: false
+      - path: ../../voice-sales-agent/.env
         required: false
     environment:
       ENVIRONMENT: development
       PORT: "8000"
-      PUBLIC_BASE_URL: http://localhost:${VOICE_AGENT_PORT:-8000}
+      # PUBLIC_BASE_URL comes from voice-sales-agent/.env via env_file above.
+      # Must be public HTTPS (ngrok) — Twilio cannot reach localhost Media Streams.
       REDIS_URL: redis://voice-sales-redis:6379
       CALL_LOG_DB: /app/data/calls.db
       # Host-reach unified MonoRepo API (:8080)
@@ -140,6 +142,8 @@ services:
     volumes:
       - ../../voice-sales-agent/data:/app/data
       - ../../voice-sales-agent/bot.py:/app/bot.py
+      - ../../voice-sales-agent/logger_db.py:/app/logger_db.py
+      - ../../voice-sales-agent/browser_serializer.py:/app/browser_serializer.py
       - ../../voice-sales-agent/api_client.py:/app/api_client.py
       - ../../voice-sales-agent/tuvi_api_client.py:/app/tuvi_api_client.py
       - ../../voice-sales-agent/prompts:/app/prompts

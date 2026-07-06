@@ -26,7 +26,14 @@ def dial(number: str, campaign_id: str = "default"):
     print(f"Dialling {number} via {url} (campaign: {campaign_id}) ...")
 
     headers = {"ngrok-skip-browser-warning": "true"}
-    resp = requests.post(url, json={"to": number, "campaign_id": campaign_id}, headers=headers)
+    secret = (os.environ.get("CALL_API_SECRET") or "").strip()
+    if secret:
+        headers["X-Call-Api-Key"] = secret
+    resp = requests.post(
+        url,
+        json={"to": number, "campaign_id": campaign_id, "agent": "corporate", "skip_compliance": True},
+        headers=headers,
+    )
 
     print(f"Status Code: {resp.status_code}")
     try:

@@ -12,6 +12,7 @@ import { createPortal } from "react-dom";
 import type { TemplateId } from "@/lib/templateConfig";
 import { getTemplateSwitchCopy } from "@/lib/templateConfig";
 import {
+  TOUR_RESTART_EVENT,
   TOUR_STORAGE_KEY,
   TOUR_TEMPLATE_SWITCH,
   TOUR_VOICE_ASSISTANT,
@@ -107,24 +108,19 @@ export default function SiteWalkthrough({ templateId }: { templateId: TemplateId
       {
         target: `[data-tour="${TOUR_TEMPLATE_SWITCH}"]`,
         placement: "bottom",
-        eyebrow: switchCopy.eyebrow,
+        eyebrow: "1 / 2 · Other template",
         title: switchCopy.title,
-        body: `Tap "${switchCopy.cta}" up here to preview the ${switchCopy.targetLabel} layout.`,
+        body: `Try out our other template. Tap "${switchCopy.cta}" to preview the ${switchCopy.targetLabel} layout instantly.`,
       },
       {
         target: `[data-tour="${TOUR_VOICE_ASSISTANT}"]`,
         placement: "top",
-        eyebrow: "Voice AI",
-        title: "Try our AI assistant",
-        body: "Book a table, ask about the menu, or get help — start a voice conversation anytime.",
+        eyebrow: "2 / 2 · Voice AI",
+        title: "This is our AI assistant",
+        body: "Try our agent anytime — book a table, ask about the menu, or get help over voice like a real host.",
       },
     ],
-    [
-      switchCopy.cta,
-      switchCopy.eyebrow,
-      switchCopy.targetLabel,
-      switchCopy.title,
-    ],
+    [switchCopy.cta, switchCopy.targetLabel, switchCopy.title],
   );
 
   const [mounted, setMounted] = useState(false);
@@ -140,6 +136,13 @@ export default function SiteWalkthrough({ templateId }: { templateId: TemplateId
     } catch {
       // ignore
     }
+    window.dispatchEvent(new CustomEvent("tuvi-tour-finished"));
+  }, []);
+
+  const startTour = useCallback((fromStep = 0) => {
+    setStepIndex(fromStep);
+    setActive(true);
+    window.dispatchEvent(new CustomEvent("tuvi-tour-started"));
   }, []);
 
   const goNext = useCallback(() => {
@@ -159,9 +162,15 @@ export default function SiteWalkthrough({ templateId }: { templateId: TemplateId
     } catch {
       // ignore
     }
-    const timer = window.setTimeout(() => setActive(true), 600);
+    const timer = window.setTimeout(() => startTour(0), 600);
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [startTour]);
+
+  useEffect(() => {
+    const onRestart = () => startTour(0);
+    window.addEventListener(TOUR_RESTART_EVENT, onRestart);
+    return () => window.removeEventListener(TOUR_RESTART_EVENT, onRestart);
+  }, [startTour]);
 
   useLayoutEffect(() => {
     if (!active) return;
@@ -191,7 +200,6 @@ export default function SiteWalkthrough({ templateId }: { templateId: TemplateId
   if (!mounted || !active) return null;
 
   const step = steps[stepIndex];
-  const isLast = stepIndex === steps.length - 1;
 
   const panelClass = isAurora
     ? "border border-white/20 bg-[#09090B]/98 text-white shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
@@ -258,9 +266,6 @@ export default function SiteWalkthrough({ templateId }: { templateId: TemplateId
           <div className="min-w-0 flex-1">
             <p className={`text-[10px] font-bold uppercase tracking-[0.16em] ${eyebrowClass}`}>
               {step.eyebrow}
-              <span className={`ml-2 font-medium ${bodyClass}`}>
-                {stepIndex + 1}/{steps.length}
-              </span>
             </p>
             <h3 className="mt-1 text-base font-semibold leading-snug">{step.title}</h3>
             <p className={`mt-2 text-sm leading-relaxed ${bodyClass}`}>{step.body}</p>
@@ -284,7 +289,7 @@ export default function SiteWalkthrough({ templateId }: { templateId: TemplateId
             onClick={goNext}
             className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${primaryBtn}`}
           >
-            {isLast ? "Got it" : "Next"}
+            OK
           </button>
         </div>
       </div>

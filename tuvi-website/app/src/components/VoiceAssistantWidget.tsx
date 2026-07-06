@@ -2,16 +2,18 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useVoiceAgentSession, type BookingProgressPhase } from "@/hooks/useVoiceAgentSession";
+import RequestCallbackForm from "@/components/RequestCallbackForm";
+import VoiceOrbCanvas, { statusGlow } from "@/components/VoiceOrbCanvas";
 
 const STATUS_LABELS: Record<string, string> = {
-  idle: "Ready to connect",
-  checking: "Checking configuration…",
+  idle: "Ready",
+  checking: "Checking…",
   error: "Unavailable",
   connecting: "Connecting…",
-  listening: "Listening…",
-  thinking: "AI is thinking…",
-  speaking: "AI is speaking…",
-  "user-speaking": "You are speaking…",
+  listening: "Listening",
+  thinking: "Thinking",
+  speaking: "Speaking",
+  "user-speaking": "Listening",
 };
 
 function MicIcon({ className }: { className?: string }) {
@@ -30,6 +32,25 @@ function MicIcon({ className }: { className?: string }) {
     >
       <rect x="9" y="2" width="6" height="11" rx="3" />
       <path d="M5 10a7 7 0 0 0 14 0M12 19v3M9 22h6" />
+    </svg>
+  );
+}
+
+function PhoneIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.81.36 1.6.68 2.34a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.74-1.74a2 2 0 0 1 2.11-.45c.74.32 1.53.55 2.34.68A2 2 0 0 1 22 16.92z" />
     </svg>
   );
 }
@@ -160,24 +181,35 @@ function BookingProgressOverlay({
 
 export default function VoiceAssistantWidget() {
   const [open, setOpen] = useState(false);
+  const [showCallback, setShowCallback] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const {
     status,
     error,
-    transcript,
     active,
     consultation,
     bookingProgress,
+    emailPrompt,
     connect,
     disconnect,
     reset,
     dismissConsultation,
+    submitEmail,
     prefetchStatus,
     preloadWorklet,
   } = useVoiceAgentSession();
 
+  const [emailInput, setEmailInput] = useState("");
+
   useEffect(() => {
-    if (!open) return;
+    if (emailPrompt) setEmailInput("");
+  }, [emailPrompt]);
+
+  useEffect(() => {
+    if (!open) {
+      setShowCallback(false);
+      return;
+    }
     void prefetchStatus();
   }, [open, prefetchStatus]);
 
@@ -185,19 +217,25 @@ export default function VoiceAssistantWidget() {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        if (emailPrompt) return;
+        if (showCallback) {
+          setShowCallback(false);
+          return;
+        }
         if (active) disconnect();
         setOpen(false);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, active, disconnect]);
+  }, [open, active, disconnect, emailPrompt, showCallback]);
 
   const handlePrimaryAction = async () => {
     if (!open) {
       setOpen(true);
       return;
     }
+    if (showCallback) setShowCallback(false);
     if (active) {
       disconnect();
       return;
@@ -207,6 +245,12 @@ export default function VoiceAssistantWidget() {
       return;
     }
     await connect();
+  };
+
+  const closePanel = () => {
+    if (active) disconnect();
+    setShowCallback(false);
+    setOpen(false);
   };
 
   const calendarUrl = consultation?.calendarLink || consultation?.calendlyLink;
@@ -219,6 +263,8 @@ export default function VoiceAssistantWidget() {
     bookingProgress?.phase === "success"
       ? { phase: bookingProgress.phase, message: bookingProgress.message }
       : null;
+
+  const glow = statusGlow(status);
 
   return (
     <>
@@ -290,7 +336,7 @@ export default function VoiceAssistantWidget() {
         {open && (
           <div
             ref={panelRef}
-            className="pointer-events-auto relative mb-3 w-[min(380px,calc(100vw-2.5rem))] rounded-2xl border border-white/15 bg-bg-elevated/95 p-4 text-text shadow-2xl backdrop-blur-xl"
+            className="pointer-events-auto relative mb-3 w-[min(440px,calc(100vw-2.5rem))] overflow-hidden rounded-2xl border border-white/15 bg-bg-elevated/95 p-5 text-text shadow-2xl backdrop-blur-xl"
             role="dialog"
             aria-label="Tuvi AI assistant"
           >
@@ -300,7 +346,60 @@ export default function VoiceAssistantWidget() {
                 message={activeBookingProgress.message}
               />
             )}
-            {error && (
+
+            {emailPrompt && (
+              <div
+                className="absolute inset-0 z-30 flex items-center justify-center rounded-2xl bg-bg/80 p-4 backdrop-blur-md"
+                role="dialog"
+                aria-label="Enter email"
+              >
+                <form
+                  className="w-full space-y-3 rounded-xl border border-cyan/30 bg-bg-elevated p-4 shadow-xl"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    submitEmail(emailInput);
+                  }}
+                >
+                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-cyan">
+                    Confirm email
+                  </p>
+                  <p className="text-sm text-text">{emailPrompt}</p>
+                  <input
+                    type="email"
+                    required
+                    autoFocus
+                    autoComplete="email"
+                    placeholder="you@company.com"
+                    value={emailInput}
+                    onChange={(e) => setEmailInput(e.target.value)}
+                    className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2.5 text-sm text-text outline-none placeholder:text-muted/70 focus:border-cyan/50"
+                  />
+                  <button
+                    type="submit"
+                    className="w-full rounded-xl bg-gradient-to-r from-gold-dim to-gold px-4 py-2.5 text-sm font-semibold text-bg transition hover:opacity-90"
+                  >
+                    Enter
+                  </button>
+                  <p className="text-center text-[11px] text-muted">
+                    Press Enter to confirm — meeting books to this address
+                  </p>
+                </form>
+              </div>
+            )}
+
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <p className="text-xs font-semibold uppercase tracking-wider text-cyan">Tuvi AI</p>
+              <button
+                type="button"
+                onClick={closePanel}
+                className="rounded-lg p-1.5 text-muted transition hover:bg-white/10 hover:text-text"
+                aria-label="Close assistant"
+              >
+                <CloseIcon />
+              </button>
+            </div>
+
+            {error && !showCallback && (
               <div
                 className="mb-3 rounded-xl border border-red-400/40 bg-red-500/15 px-3 py-2.5 text-red-100"
                 role="alert"
@@ -312,93 +411,91 @@ export default function VoiceAssistantWidget() {
               </div>
             )}
 
-            <div className="mb-3 flex items-start justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-cyan">
-                  Tuvi AI Assistant
-                </p>
-                <h2 className="mt-1 text-lg font-semibold">Ask about our services</h2>
-                <p className="mt-1 text-xs text-muted">
-                  Book a free consultation or learn what we build.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  if (active) disconnect();
-                  setOpen(false);
-                }}
-                className="rounded-lg p-1.5 text-muted transition hover:bg-white/10 hover:text-text"
-                aria-label="Close assistant"
-              >
-                <CloseIcon />
-              </button>
-            </div>
-
-            <div className="mb-3 flex items-center gap-2 text-sm text-muted">
-              <span
-                className={`h-2 w-2 shrink-0 rounded-full ${
-                  status === "listening" || status === "user-speaking"
-                    ? "bg-emerald-400"
-                    : status === "speaking"
-                      ? "bg-sky-400"
-                      : status === "thinking" || status === "connecting"
-                        ? "bg-amber-400"
-                        : status === "error"
-                          ? "bg-red-400"
-                          : "bg-white/35"
-                }`}
-              />
-              <span>{STATUS_LABELS[status] ?? status}</span>
-            </div>
-
-            <div className="mb-3 max-h-44 min-h-[100px] overflow-y-auto rounded-xl bg-white/5 p-3 text-sm leading-relaxed">
-              {transcript.length === 0 ? (
-                <p className="italic text-muted">
-                  {error
-                    ? "Fix the error above, then try again."
-                    : "Start talking — ask about custom software, AI, or book a call."}
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  {transcript.map((turn) => (
-                    <div key={turn.id}>
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-cyan">
-                        {turn.role === "user" ? "You" : "Tuvi AI"}
-                      </p>
-                      <p className="mt-0.5">{turn.text}</p>
-                    </div>
-                  ))}
+            {showCallback ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-semibold text-text">Call me</p>
+                    <p className="mt-0.5 text-xs text-muted">
+                      Drop your number — our AI will dial you now.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowCallback(false)}
+                    className="rounded-lg p-1.5 text-muted transition hover:bg-white/10 hover:text-text"
+                    aria-label="Close callback form"
+                  >
+                    <CloseIcon />
+                  </button>
                 </div>
-              )}
-            </div>
+                <RequestCallbackForm
+                  compact
+                  onSuccess={() => {
+                    window.setTimeout(() => setShowCallback(false), 1800);
+                  }}
+                />
+              </div>
+            ) : (
+              <div className="flex flex-col items-center py-1">
+                <VoiceOrbCanvas status={status} size={176} className="mx-auto bg-transparent" />
 
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onMouseDown={() => void preloadWorklet()}
-                onClick={() => void handlePrimaryAction()}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-gold-dim to-gold px-4 py-3 text-sm font-semibold text-bg transition hover:opacity-90"
-              >
-                <MicIcon />
-                {active ? "End conversation" : error ? "Check again" : "Start talking"}
-              </button>
-              {(error || transcript.length > 0) && !active && (
-                <button
-                  type="button"
-                  onClick={reset}
-                  className="rounded-xl border border-white/15 px-3 py-3 text-sm text-muted transition hover:bg-white/5"
+                <div
+                  className="mt-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5"
+                  style={{ borderColor: `${glow}40` }}
                 >
-                  Reset
-                </button>
-              )}
-            </div>
+                  <span
+                    className={`h-2 w-2 shrink-0 rounded-full ${
+                      status === "thinking" || status === "connecting"
+                        ? "animate-pulse"
+                        : ""
+                    }`}
+                    style={{ backgroundColor: glow, boxShadow: `0 0 8px ${glow}` }}
+                  />
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
+                    {STATUS_LABELS[status] ?? status}
+                  </span>
+                </div>
+
+                <div className="mt-4 flex w-full items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowCallback(true)}
+                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/5 text-text transition hover:border-cyan/40 hover:bg-white/10 hover:text-cyan"
+                    aria-label="Get a callback"
+                    title="Get a callback"
+                  >
+                    <PhoneIcon />
+                  </button>
+
+                  <button
+                    type="button"
+                    onMouseDown={() => void preloadWorklet()}
+                    onClick={() => void handlePrimaryAction()}
+                    className="flex h-12 flex-1 items-center justify-center gap-2 rounded-full bg-gradient-to-r from-gold-dim to-gold px-4 text-sm font-semibold text-bg transition hover:opacity-90"
+                  >
+                    <MicIcon />
+                    {active ? "End" : error ? "Check again" : "Start talking"}
+                  </button>
+
+                  {error && !active && (
+                    <button
+                      type="button"
+                      onClick={reset}
+                      className="h-12 shrink-0 rounded-full border border-white/15 px-3 text-sm text-muted transition hover:bg-white/5"
+                    >
+                      Reset
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
         <button
           type="button"
-          onClick={() => (open ? setOpen(false) : handlePrimaryAction())}
+          onClick={() => (open ? closePanel() : handlePrimaryAction())}
           onMouseDown={() => void preloadWorklet()}
           className="pointer-events-auto flex items-center gap-2.5 rounded-full bg-gradient-to-r from-gold-dim to-gold px-5 py-3.5 text-sm font-semibold text-bg shadow-[0_8px_32px_rgba(212,168,83,0.35)] transition hover:scale-[1.02] active:scale-[0.98]"
           aria-expanded={open}

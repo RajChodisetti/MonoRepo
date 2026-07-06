@@ -11,6 +11,8 @@ Run all commands from **`MonoRepo/automation/outreach/`**.
 | `fetch_restaurant_leads.py` | Fetch restaurant decision-maker leads from Apollo.io |
 | `scrape_restaurant_places.py` | Scrape restaurants via Google Places API |
 | `scrape_restaurant_data.py` | Scrape restaurants via SerpAPI (legacy) |
+| `scrape_tripadvisor.py` | TripAdvisor scrape (SerpAPI) — menu photos **TripAdvisor-only** |
+| `cron_tripadvisor.sh` | Daily cron wrapper for TripAdvisor + merge |
 | `city_pipeline.py` | Fetch leads + scrape in one command per city |
 | `fetch_restaurants_no_website.py` | Filter scraped JSON for restaurants without a website |
 | `tuvi_outreach_agent.py` | Full outreach: scrape sites, draft emails, Zoho/Slack |
@@ -88,3 +90,45 @@ Generated at runtime (gitignored):
 - `reports/` — run summaries
 
 Seed data for the backend lives separately at `MonoRepo/data/restaurants_data.json`.
+
+## TripAdvisor menu photos (cron)
+
+Menu photos used for outreach cards must come from **TripAdvisor only** (not Google / Yelp).
+
+Cities match the default Google / Places geo: **Sydney, Melbourne, Perth, Adelaide, Brisbane**.
+
+```bash
+# One city (write data/restaurants_data_<city>_tripadvisor.json)
+python scrape_tripadvisor.py --city Sydney --limit 100
+
+# All default cities
+python scrape_tripadvisor.py --all-cities --limit 100
+
+# Merge TripAdvisor menu_photos into Google scrape files
+# (sets images.menu_photos_source = "tripadvisor")
+python scrape_tripadvisor.py --all-cities --limit 100 --merge
+
+# Long-running process (no crontab)
+python scrape_tripadvisor.py --all-cities --merge --schedule daily
+```
+
+### Crontab
+
+```bash
+chmod +x cron_tripadvisor.sh
+crontab -e
+# Daily 02:15 — edit path to your checkout:
+# 15 2 * * * /ABS/PATH/MonoRepo/automation/outreach/cron_tripadvisor.sh
+```
+
+Logs: `logs/tripadvisor_cron_YYYYMMDD.log`
+
+Merged menu photos look like:
+
+```json
+"images": {
+  "menu_photos": [{ "url": "...", "source": "tripadvisor" }],
+  "menu_photos_source": "tripadvisor"
+}
+```
+
