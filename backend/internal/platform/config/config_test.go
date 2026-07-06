@@ -40,7 +40,7 @@ func TestLoadProductionRequiresDatabaseAndExplicitToken(t *testing.T) {
 	}
 
 	msg := err.Error()
-	for _, want := range []string{"DATABASE_URL", "TOKEN_SECRET", "REDIS_URL"} {
+	for _, want := range []string{"DATABASE_URL", "TOKEN_SECRET", "TUVI_API_TOKEN", "REDIS_URL"} {
 		if !strings.Contains(msg, want) {
 			t.Fatalf("Load() error = %q, want it to contain %q", msg, want)
 		}
@@ -60,7 +60,7 @@ func TestLoadStagingRequiresExplicitSecrets(t *testing.T) {
 	}
 
 	msg := err.Error()
-	for _, want := range []string{"DATABASE_URL", "TOKEN_SECRET", "REDIS_URL"} {
+	for _, want := range []string{"DATABASE_URL", "TOKEN_SECRET", "TUVI_API_TOKEN", "REDIS_URL"} {
 		if !strings.Contains(msg, want) {
 			t.Fatalf("Load() error = %q, want it to contain %q", msg, want)
 		}
@@ -273,6 +273,17 @@ func clearEnv(t *testing.T) {
 		"JWT_ACCESS_TOKEN_TTL",
 		"JOB_BUFFER_SIZE",
 		"JOB_RETRY_DELAY",
+		"TUVI_API_TOKEN",
+		"CONSULTATION_NOTIFY_EMAIL",
+		"CONSULTATION_TIMEZONE",
+		"CONSULTATION_BUSINESS_HOUR_START",
+		"CONSULTATION_BUSINESS_HOUR_END",
+		"CONSULTATION_SLOT_DURATION_MINUTES",
+		"CONSULTATION_DEFAULT_AVAILABILITY_DAYS",
+		"CONSULTATION_AVAILABILITY_HORIZON_DAYS",
+		"CONSULTATION_GOOGLE_CALENDAR_ID",
+		"CONSULTATION_GOOGLE_SERVICE_ACCOUNT_JSON",
+		"CONSULTATION_GOOGLE_CALENDAR_DISABLED",
 	} {
 		t.Setenv(key, "")
 	}

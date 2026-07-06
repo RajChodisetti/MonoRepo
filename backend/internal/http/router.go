@@ -9,11 +9,14 @@ import (
 
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/auth"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/campaigns"
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/consultations"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/demos"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/http/handlers"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/jobs"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/config"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/db"
+	calendarprovider "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/calendar"
+	emailprovider "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/email"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/reservations"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/restaurants"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/store"
@@ -37,6 +40,13 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 		jobEnqueuer = &jobs.CampaignEnqueuer{Queue: jobs.NewInMemoryQueue(cfg.Jobs.BufferSize)}
 	}
 	campaignService := campaigns.NewService(dataStore.Campaigns, dataStore.Demos, accessService, jobEnqueuer, cfg.AppURLs)
+	calendarProvider := calendarprovider.NewFromConfig(context.Background(), cfg.Consultations, log)
+	emailProvider, err := emailprovider.NewFromConfig(cfg.Email, cfg.SMTP)
+	if err != nil {
+		log.ErrorContext(context.Background(), "consultation_email_provider_unavailable", "error", err)
+		emailProvider = emailprovider.NewDisabled()
+	}
+	consultationService := consultations.NewService(cfg.Consultations, dataStore.Consultations, calendarProvider, emailProvider, log)
 
 	authHandler := handlers.NewAuthHandler(authService, cfg.App.Env, writeJSON, writeError)
 	adminHandler := handlers.NewAdminHandler(dataStore.Users, writeJSON, writeError)
@@ -49,6 +59,7 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	restaurantPublicHandler := handlers.NewRestaurantPublicHandler(dataStore.Profiles, writeJSON, writeError)
 	reservationService := reservations.NewService(dataStore.Reservations)
 	reservationPublicHandler := handlers.NewReservationPublicHandler(reservationService, writeJSON, writeError)
+	companyConsultationHandler := handlers.NewCompanyConsultationHandler(consultationService, writeJSON)
 
 	mux.HandleFunc("POST /api/v1/auth/signup", authHandler.Signup)
 	mux.HandleFunc("POST /api/v1/auth/login", authHandler.Login)
@@ -73,6 +84,7 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 			RequireRestaurantAccess(accessService)(next),
 		))
 	}
+	protectConsultationAPI := RequireStaticBearerToken(cfg.Consultations.APIToken)
 
 	mux.Handle("GET /api/v1/auth/me", protectAuthenticated(http.HandlerFunc(authHandler.Me)))
 	mux.Handle("GET /healthz", protectDeveloper(http.HandlerFunc(healthz(cfg))))
@@ -111,6 +123,9 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	mux.HandleFunc("GET /api/public/v1/restaurants/{id}/table-availability", reservationPublicHandler.GetTableAvailability)
 	mux.HandleFunc("PUT /api/public/v1/restaurants/{id}/reservations", reservationPublicHandler.PutReservation)
 
+	registerCompanyConsultationRoutes(mux, "/api/v1/company/consultations", protectConsultationAPI, companyConsultationHandler)
+	registerCompanyConsultationRoutes(mux, "/api/v1/consultations", protectConsultationAPI, companyConsultationHandler)
+
 	var handler http.Handler = mux
 	handler = Recovery(log)(handler)
 	handler = CORS(cfg.HTTP.CORSAllowedOrigins)(handler)
@@ -118,6 +133,33 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	handler = RequestID()(handler)
 
 	return handler
+}
+
+func registerCompanyConsultationRoutes(
+	mux *http.ServeMux,
+	prefix string,
+	protect func(http.Handler) http.Handler,
+	handler *handlers.CompanyConsultationHandler,
+) {
+	mux.Handle("GET "+prefix+"/availability", protect(http.HandlerFunc(handler.GetAvailability)))
+	mux.Handle("GET "+prefix+"/availability/check", protect(http.HandlerFunc(handler.CheckAvailability)))
+	mux.Handle("POST "+prefix, protect(http.HandlerFunc(handler.Book)))
+}
+
+func RequireStaticBearerToken(token string) func(http.Handler) http.Handler {
+	expected := "Bearer " + token
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("Authorization") != expected {
+				writeJSON(w, http.StatusUnauthorized, map[string]any{
+					"status":  "error",
+					"message": "unauthorized",
+				})
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 func healthz(cfg config.Config) http.HandlerFunc {

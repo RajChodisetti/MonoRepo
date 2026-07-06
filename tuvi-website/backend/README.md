@@ -1,4 +1,15 @@
-# Tuvi Consultation API
+# Tuvi Consultation API (Legacy)
+
+The active consultation scheduler now lives in the main MonoRepo API on
+`http://localhost:8080` under:
+
+```text
+GET  /api/v1/company/consultations/availability
+GET  /api/v1/company/consultations/availability/check
+POST /api/v1/company/consultations
+```
+
+This standalone backend is kept only as legacy reference while callers migrate.
 
 Go backend for Tuvi website consultation booking: slot availability, Google Calendar events, and SMTP notifications.
 
@@ -105,14 +116,16 @@ curl -s -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/
 
 ## Voice agent integration
 
-Set in `voice-sales-agent/.env`:
+For active development, the voice agent should use the main MonoRepo API, not
+this legacy service. Set in `voice-sales-agent/.env`:
 
 ```
-TUVI_WEBSITE_API_URL=http://localhost:8090
+TUVI_WEBSITE_API_URL=http://localhost:8080
 TUVI_API_TOKEN=<same as backend TUVI_API_TOKEN>
 ```
 
-The corporate voice agent (`?agent=corporate`) calls this API via `tuvi_api_client.py`.
+The corporate voice agent (`?agent=corporate`) calls the main API company
+consultation endpoints via `tuvi_api_client.py`.
 
 Start the voice agent with Docker (recommended):
 

@@ -16,25 +16,27 @@ const (
 	EnvStaging    = "staging"
 	EnvProduction = "production"
 
-	providerDisabled = "disabled"
-	localDevToken    = "local-dev-token-secret-change-me-32chars"
+	providerDisabled  = "disabled"
+	localDevToken     = "local-dev-token-secret-change-me-32chars"
+	localDevTuviToken = "local-dev-tuvi-api-token-change-me"
 )
 
 type Config struct {
-	App      AppConfig
-	HTTP     HTTPConfig
-	Logging  LoggingConfig
-	Database DatabaseConfig
-	Redis    RedisConfig
-	Email    EmailConfig
-	SMTP     SMTPConfig
-	AppURLs  AppURLsConfig
-	LLM      LLMConfig
-	Voice    VoiceConfig
-	Storage  StorageConfig
-	Token    TokenConfig
-	Demo     DemoConfig
-	Jobs     JobsConfig
+	App           AppConfig
+	HTTP          HTTPConfig
+	Logging       LoggingConfig
+	Database      DatabaseConfig
+	Redis         RedisConfig
+	Email         EmailConfig
+	SMTP          SMTPConfig
+	AppURLs       AppURLsConfig
+	LLM           LLMConfig
+	Voice         VoiceConfig
+	Storage       StorageConfig
+	Token         TokenConfig
+	Demo          DemoConfig
+	Jobs          JobsConfig
+	Consultations ConsultationConfig
 }
 
 type AppConfig struct {
@@ -74,12 +76,12 @@ type RedisConfig struct {
 }
 
 type EmailConfig struct {
-	Provider          string
-	APIKey            string
-	FromAddress       string
-	FromName          string
-	DisableSending    bool
-	RedirectTo        string
+	Provider            string
+	APIKey              string
+	FromAddress         string
+	FromName            string
+	DisableSending      bool
+	RedirectTo          string
 	OpenTrackingEnabled bool
 }
 
@@ -126,6 +128,23 @@ type JobsConfig struct {
 	RetryDelay time.Duration
 }
 
+type ConsultationConfig struct {
+	APIToken string
+
+	NotifyEmail string
+
+	Timezone            *time.Location
+	BusinessHourStart   int
+	BusinessHourEnd     int
+	SlotDurationMinutes int
+	DefaultAvailDays    int
+	AvailabilityHorizon int
+
+	GoogleCalendarID         string
+	GoogleServiceAccountJSON string
+	GoogleCalendarDisabled   bool
+}
+
 func Load() (Config, error) {
 	loadEnvFiles()
 
@@ -142,7 +161,7 @@ func Load() (Config, error) {
 		},
 		HTTP: HTTPConfig{
 			Addr:               parser.listenAddr(),
-			CORSAllowedOrigins: parser.csv("CORS_ALLOWED_ORIGINS", []string{"http://localhost:3000", "http://127.0.0.1:3000"}),
+			CORSAllowedOrigins: parser.csv("CORS_ALLOWED_ORIGINS", []string{"http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001", "http://127.0.0.1:3001"}),
 		},
 		Logging: LoggingConfig{
 			Level:  parser.string("LOG_LEVEL", "info"),
@@ -206,6 +225,19 @@ func Load() (Config, error) {
 			BufferSize: parser.int("JOB_BUFFER_SIZE", 32),
 			RetryDelay: parser.duration("JOB_RETRY_DELAY", 2*time.Second),
 		},
+		Consultations: ConsultationConfig{
+			APIToken:                 parser.string("TUVI_API_TOKEN", localDevTuviToken),
+			NotifyEmail:              parser.string("CONSULTATION_NOTIFY_EMAIL", "contact@tuvisolutions.com"),
+			Timezone:                 parser.location("CONSULTATION_TIMEZONE", "Australia/Sydney"),
+			BusinessHourStart:        parser.int("CONSULTATION_BUSINESS_HOUR_START", 9),
+			BusinessHourEnd:          parser.int("CONSULTATION_BUSINESS_HOUR_END", 17),
+			SlotDurationMinutes:      parser.int("CONSULTATION_SLOT_DURATION_MINUTES", 30),
+			DefaultAvailDays:         parser.int("CONSULTATION_DEFAULT_AVAILABILITY_DAYS", 5),
+			AvailabilityHorizon:      parser.int("CONSULTATION_AVAILABILITY_HORIZON_DAYS", 14),
+			GoogleCalendarID:         parser.string("CONSULTATION_GOOGLE_CALENDAR_ID", ""),
+			GoogleServiceAccountJSON: parser.string("CONSULTATION_GOOGLE_SERVICE_ACCOUNT_JSON", ""),
+			GoogleCalendarDisabled:   parser.bool("CONSULTATION_GOOGLE_CALENDAR_DISABLED", true),
+		},
 	}
 
 	if err := parser.join(); err != nil {
@@ -264,6 +296,41 @@ func (c Config) Validate() error {
 	}
 	if c.Jobs.RetryDelay <= 0 {
 		errs = append(errs, fmt.Errorf("JOB_RETRY_DELAY must be positive"))
+	}
+	if strings.TrimSpace(c.Consultations.APIToken) == "" {
+		errs = append(errs, fmt.Errorf("TUVI_API_TOKEN is required"))
+	}
+	if strings.TrimSpace(c.Consultations.NotifyEmail) == "" {
+		errs = append(errs, fmt.Errorf("CONSULTATION_NOTIFY_EMAIL is required"))
+	}
+	if c.Consultations.Timezone == nil {
+		errs = append(errs, fmt.Errorf("CONSULTATION_TIMEZONE is required"))
+	}
+	if c.Consultations.BusinessHourStart < 0 || c.Consultations.BusinessHourStart > 23 {
+		errs = append(errs, fmt.Errorf("CONSULTATION_BUSINESS_HOUR_START must be between 0 and 23"))
+	}
+	if c.Consultations.BusinessHourEnd < 1 || c.Consultations.BusinessHourEnd > 24 {
+		errs = append(errs, fmt.Errorf("CONSULTATION_BUSINESS_HOUR_END must be between 1 and 24"))
+	}
+	if c.Consultations.BusinessHourStart >= c.Consultations.BusinessHourEnd {
+		errs = append(errs, fmt.Errorf("CONSULTATION_BUSINESS_HOUR_START must be before CONSULTATION_BUSINESS_HOUR_END"))
+	}
+	if c.Consultations.SlotDurationMinutes < 1 || c.Consultations.SlotDurationMinutes > 240 {
+		errs = append(errs, fmt.Errorf("CONSULTATION_SLOT_DURATION_MINUTES must be between 1 and 240"))
+	}
+	if c.Consultations.DefaultAvailDays < 1 {
+		errs = append(errs, fmt.Errorf("CONSULTATION_DEFAULT_AVAILABILITY_DAYS must be at least 1"))
+	}
+	if c.Consultations.AvailabilityHorizon < c.Consultations.DefaultAvailDays {
+		errs = append(errs, fmt.Errorf("CONSULTATION_AVAILABILITY_HORIZON_DAYS must be greater than or equal to CONSULTATION_DEFAULT_AVAILABILITY_DAYS"))
+	}
+	if !c.Consultations.GoogleCalendarDisabled {
+		if strings.TrimSpace(c.Consultations.GoogleCalendarID) == "" {
+			errs = append(errs, fmt.Errorf("CONSULTATION_GOOGLE_CALENDAR_ID is required when consultation Google Calendar is enabled"))
+		}
+		if strings.TrimSpace(c.Consultations.GoogleServiceAccountJSON) == "" {
+			errs = append(errs, fmt.Errorf("CONSULTATION_GOOGLE_SERVICE_ACCOUNT_JSON is required when consultation Google Calendar is enabled"))
+		}
 	}
 	if !oneOf(c.Logging.Level, "debug", "info", "warn", "error") {
 		errs = append(errs, fmt.Errorf("LOG_LEVEL must be one of debug, info, warn, error"))
@@ -351,6 +418,9 @@ func (c Config) validateDeployedSecrets() []error {
 	}
 	if c.Token.Secret == localDevToken {
 		errs = append(errs, fmt.Errorf("TOKEN_SECRET must be explicit in %s", c.App.Env))
+	}
+	if c.Consultations.APIToken == localDevTuviToken {
+		errs = append(errs, fmt.Errorf("TUVI_API_TOKEN must be explicit in %s", c.App.Env))
 	}
 	if strings.TrimSpace(c.Redis.URL) == "" && c.Redis.RequireInProduction {
 		errs = append(errs, fmt.Errorf("REDIS_URL is required in %s", c.App.Env))

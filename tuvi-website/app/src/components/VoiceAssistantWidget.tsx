@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useVoiceAgentSession } from "@/hooks/useVoiceAgentSession";
+import { useVoiceAgentSession, type BookingProgressPhase } from "@/hooks/useVoiceAgentSession";
 
 const STATUS_LABELS: Record<string, string> = {
   idle: "Ready to connect",
@@ -127,7 +127,7 @@ function BookingProgressOverlay({
   phase,
   message,
 }: {
-  phase: "checking_slots" | "booking_slot" | "success";
+  phase: BookingProgressPhase;
   message: string;
 }) {
   const isSuccess = phase === "success";
