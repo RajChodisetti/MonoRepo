@@ -50,7 +50,7 @@ Manual split terminals:
 ```bash
 docker compose -f MonoRepo/infra/docker/docker-compose.yml up -d postgres
 cd tuvi-website/backend && make migrate-up && make run
-cd voice-sales-agent && docker compose up -d --build
+make -C MonoRepo voice-up   # voice agent Docker service on :8000
 cd tuvi-website/app && npm run dev
 ```
 

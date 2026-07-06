@@ -2,7 +2,7 @@ GO ?= go
 COMPOSE_FILE ?= infra/docker/docker-compose.yml
 COMPOSE_DIR ?= infra/docker
 
-.PHONY: api worker test fmt db-up db-down db-reset migrate-up migrate-down setup dev seed-admin seed-demo-fixture seed-restaurants-data import-outreach ocr-all sanitize-import import-restaurants-outreach openapi swagger up down logs start stop-all
+.PHONY: api worker test fmt db-up db-down db-reset migrate-up migrate-down setup dev seed-admin seed-demo-fixture seed-restaurants-data import-outreach ocr-all sanitize-import import-restaurants-outreach openapi swagger up down logs start stop-all voice-up voice-down voice-logs
 
 OPENAPI_SPEC ?= docs/openapi/openapi.yaml
 OPENAPI_DIR ?= docs/openapi
@@ -92,6 +92,19 @@ down:
 
 logs:
 	docker compose -f $(COMPOSE_FILE) --profile stack logs -f
+
+# Voice sales agent (Docker profile "voice")
+# Requires voice-sales-agent/.env (copy from .env.example)
+voice-up:
+	mkdir -p voice-sales-agent/data
+	docker compose -f $(COMPOSE_FILE) --profile voice up -d --build voice-sales-agent voice-sales-redis
+
+voice-down:
+	docker compose -f $(COMPOSE_FILE) --profile voice stop voice-sales-agent voice-sales-redis
+	docker compose -f $(COMPOSE_FILE) --profile voice rm -f voice-sales-agent voice-sales-redis
+
+voice-logs:
+	docker compose -f $(COMPOSE_FILE) --profile voice logs -f voice-sales-agent
 
 openapi:
 	@command -v npx >/dev/null 2>&1 || { echo "npx required: install Node.js or validate manually at editor.swagger.io"; exit 1; }
