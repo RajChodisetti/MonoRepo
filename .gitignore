@@ -9,6 +9,10 @@ coverage.out
 # Frontend placeholder / future Next.js
 apps/web/.next/
 apps/web/node_modules/
+tuvi-website/app/node_modules/
+tuvi-website/app/.next/
 
 # Local artifacts
 tmp/
+.run/
+infra/docker/stack.env

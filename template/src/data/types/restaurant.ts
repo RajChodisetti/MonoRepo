@@ -53,6 +53,7 @@ export interface RestaurantContent {
   storySteps: StoryStep[];
   signatureDishes: import("./menu").MenuItem[];
   menuCategories: import("./menu").MenuCategory[];
+  menuListImages: import("./menuImages").MenuListImage[];
   galleryImages: import("./gallery").GalleryImage[];
   reviews: import("./reviews").Review[];
   experienceCards: ExperienceCard[];

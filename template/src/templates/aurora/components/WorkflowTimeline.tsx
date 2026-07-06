@@ -50,9 +50,11 @@ export default function WorkflowTimeline({ steps }: { steps: StoryStep[] }) {
         <BlurReveal>
           <p className="text-xs uppercase tracking-[0.2em] text-blue-400">Our Journey</p>
           <h2 className="aurora-heading mt-3 text-4xl font-bold text-white md:text-5xl">
-            AI Workflow Timeline
+            Every plate tells a story
           </h2>
-          <p className="mt-4 text-white/50">From tradition to table — our story in five acts.</p>
+          <p className="mt-4 text-white/50">
+            From the first ingredient to the final garnish — craft, tradition, and care in every step.
+          </p>
 
           <div className="mt-10 space-y-4">
             {steps.map((s, i) => (

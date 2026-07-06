@@ -1,3 +1,7 @@
+# Postgres only:        docker compose up -d postgres --wait
+# Full VM stack:        make up            (profile "stack")
+# Voice sales agent:    make voice-up      (profile "voice")
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -18,5 +22,133 @@ services:
       retries: 5
       start_period: 10s
 
+  migrate:
+    profiles: [stack]
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.backend
+    container_name: restaurant_platform_migrate
+    command: ["/app/migrate", "up"]
+    env_file:
+      - stack.env.example
+      - path: stack.env
+        required: false
+      - path: ../../backend/.env
+        required: false
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/restaurant_platform?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    profiles: [stack]
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.backend
+    container_name: restaurant_platform_api
+    command: ["/app/api"]
+    ports:
+      - "8080:8080"
+    env_file:
+      - stack.env.example
+      - path: stack.env
+        required: false
+      - path: ../../backend/.env
+        required: false
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/restaurant_platform?sslmode=disable
+      HTTP_ADDR: ":8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  worker:
+    profiles: [stack]
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.backend
+    container_name: restaurant_platform_worker
+    command: ["/app/worker"]
+    env_file:
+      - stack.env.example
+      - path: stack.env
+        required: false
+      - path: ../../backend/.env
+        required: false
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/restaurant_platform?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      api:
+        condition: service_started
+    restart: unless-stopped
+
+  # Voice sales agent + Redis.
+  # Usage from MonoRepo root:
+  #   make voice-up
+  #   make voice-logs
+  #   make voice-down
+  # UI: http://localhost:8000/?agent=corporate
+  voice-sales-redis:
+    profiles: [voice]
+    image: redis:7-alpine
+    container_name: voice_sales_redis
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - voice_sales_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  voice-sales-agent:
+    profiles: [voice]
+    build:
+      context: ../../voice-sales-agent
+      dockerfile: Dockerfile
+    container_name: voice_sales_agent
+    ports:
+      - "${VOICE_AGENT_PORT:-8000}:8000"
+    env_file:
+      - path: ../../voice-sales-agent/.env
+        required: false
+      - path: ../../voice-sales-agent/.env.example
+        required: false
+    environment:
+      ENVIRONMENT: development
+      PORT: "8000"
+      PUBLIC_BASE_URL: http://localhost:${VOICE_AGENT_PORT:-8000}
+      REDIS_URL: redis://voice-sales-redis:6379
+      CALL_LOG_DB: /app/data/calls.db
+      # Host-reach APIs (MonoRepo API :8080, Tuvi consultation API :8090)
+      MONOREPO_API_URL: http://host.docker.internal:8080
+      TUVI_WEBSITE_API_URL: http://host.docker.internal:8090
+      API_TIMEOUT_MS: "20000"
+      TUVI_API_TIMEOUT_MS: "20000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ../../voice-sales-agent/data:/app/data
+      - ../../voice-sales-agent/bot.py:/app/bot.py
+      - ../../voice-sales-agent/api_client.py:/app/api_client.py
+      - ../../voice-sales-agent/tuvi_api_client.py:/app/tuvi_api_client.py
+      - ../../voice-sales-agent/prompts:/app/prompts
+      - ../../voice-sales-agent/static:/app/static
+    depends_on:
+      voice-sales-redis:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   postgres_data:
+  voice_sales_redis_data:

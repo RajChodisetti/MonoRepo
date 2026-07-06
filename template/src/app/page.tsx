@@ -5,7 +5,7 @@ import {
   loadRestaurant,
   parseRestaurantIndex,
   getRestaurantCount,
-} from "@/lib/adapters/scrapedRestaurant";
+} from "@/lib/adapters/restaurantLoader";
 import { resolveTemplate } from "@/lib/templateConfig";
 import { buildMetadata as buildCinematicMetadata } from "@/templates/cinematic/seo";
 import { buildAuroraMetadata } from "@/templates/aurora/seo";
@@ -20,7 +20,7 @@ export async function generateMetadata({ searchParams }: PageProps): Promise<Met
   const template = resolveTemplate(params.template);
 
   try {
-    const restaurant = loadRestaurant(index);
+    const restaurant = await loadRestaurant(index);
     return template === "2"
       ? buildAuroraMetadata(restaurant)
       : buildCinematicMetadata(restaurant);
@@ -35,7 +35,7 @@ export default async function HomePage({ searchParams }: PageProps) {
   const template = resolveTemplate(params.template);
 
   try {
-    const restaurant = loadRestaurant(index);
+    const restaurant = await loadRestaurant(index);
 
     if (template === "2") {
       return <AuroraTemplate restaurant={restaurant} />;
@@ -43,7 +43,7 @@ export default async function HomePage({ searchParams }: PageProps) {
     return <CinematicTemplate restaurant={restaurant} />;
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    const total = getRestaurantCount();
+    const total = await getRestaurantCount();
     return (
       <main className="flex min-h-screen items-center justify-center px-6 text-center">
         <div>

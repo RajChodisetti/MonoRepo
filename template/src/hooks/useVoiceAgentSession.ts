@@ -19,6 +19,19 @@ export type TranscriptTurn = {
   text: string;
 };
 
+export type BookingConfirmation = {
+  confirmationCode: string;
+  guestName: string;
+  guestPhone: string;
+  partySize: number;
+  slot: string;
+  bookingDate: string;
+  bookingTime: string;
+  message: string;
+};
+
+const BOOKING_CONFIRMED_PATTERN = /table.{0,40}booked|booked.{0,20}confirmation|confirmation\s+number/i;
+
 type ReadinessResult =
   | { ok: true }
   | { ok: false; message: string; missing?: string[] };
@@ -105,11 +118,12 @@ function waitForWsOpen(ws: WebSocket, timeoutMs: number): Promise<void> {
   });
 }
 
-export function useVoiceAgentSession() {
+export function useVoiceAgentSession(restaurantIndex = 0) {
   const [status, setStatus] = useState<VoiceSessionStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<TranscriptTurn[]>([]);
   const [active, setActive] = useState(false);
+  const [booking, setBooking] = useState<BookingConfirmation | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -121,6 +135,7 @@ export function useVoiceAgentSession() {
   const sessionActiveRef = useRef(false);
   const readyReceivedRef = useRef(false);
   const thinkingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingBookingRef = useRef<BookingConfirmation | null>(null);
 
   const fail = useCallback((message: string) => {
     setError(message);
@@ -167,6 +182,7 @@ export function useVoiceAgentSession() {
 
   const cleanup = useCallback((sendStop = true) => {
     clearThinkingTimer();
+    pendingBookingRef.current = null;
     sessionActiveRef.current = false;
     readyReceivedRef.current = false;
     setActive(false);
@@ -240,6 +256,13 @@ export function useVoiceAgentSession() {
           role?: "user" | "assistant";
           text?: string;
           message?: string;
+          confirmation_code?: string;
+          guest_name?: string;
+          guest_phone?: string;
+          party_size?: number;
+          slot?: string;
+          booking_date?: string;
+          booking_time?: string;
         };
         try {
           msg = JSON.parse(data);
@@ -282,6 +305,28 @@ export function useVoiceAgentSession() {
         if (msg.event === "transcript" && msg.role && msg.text) {
           clearThinkingTimer();
           addTurn(msg.role, msg.text);
+          if (
+            msg.role === "assistant" &&
+            BOOKING_CONFIRMED_PATTERN.test(msg.text) &&
+            pendingBookingRef.current
+          ) {
+            setBooking(pendingBookingRef.current);
+          }
+        }
+
+        if (msg.event === "booking" && msg.confirmation_code) {
+          const confirmation: BookingConfirmation = {
+            confirmationCode: msg.confirmation_code,
+            guestName: msg.guest_name ?? "",
+            guestPhone: msg.guest_phone ?? "",
+            partySize: msg.party_size ?? 2,
+            slot: msg.slot ?? "",
+            bookingDate: msg.booking_date ?? "",
+            bookingTime: msg.booking_time ?? "",
+            message: msg.message ?? "",
+          };
+          pendingBookingRef.current = confirmation;
+          setBooking(confirmation);
         }
         return;
       }
@@ -316,6 +361,7 @@ export function useVoiceAgentSession() {
   const connect = useCallback(async () => {
     setError(null);
     setStatus("checking");
+    pendingBookingRef.current = null;
 
     const readiness = await checkVoiceAgentReadiness();
     if (!readiness.ok) {
@@ -327,7 +373,7 @@ export function useVoiceAgentSession() {
       setStatus("connecting");
       await preloadWorklet();
 
-      const ws = new WebSocket(getVoiceAgentWsUrl());
+      const ws = new WebSocket(getVoiceAgentWsUrl(restaurantIndex));
       ws.binaryType = "arraybuffer";
       wsRef.current = ws;
 
@@ -401,7 +447,7 @@ export function useVoiceAgentSession() {
       fail(message);
       cleanup(false);
     }
-  }, [cleanup, fail, handleMessage, preloadWorklet]);
+  }, [cleanup, fail, handleMessage, preloadWorklet, restaurantIndex]);
 
   const disconnect = useCallback(() => {
     cleanup(true);
@@ -409,9 +455,15 @@ export function useVoiceAgentSession() {
   }, [cleanup]);
 
   const reset = useCallback(() => {
+    pendingBookingRef.current = null;
     setError(null);
     setStatus("idle");
     setTranscript([]);
+    setBooking(null);
+  }, []);
+
+  const dismissBooking = useCallback(() => {
+    setBooking(null);
   }, []);
 
   useEffect(() => () => cleanup(false), [cleanup]);
@@ -421,9 +473,11 @@ export function useVoiceAgentSession() {
     error,
     transcript,
     active,
+    booking,
     connect,
     disconnect,
     reset,
+    dismissBooking,
     prefetchStatus,
     preloadWorklet,
   };

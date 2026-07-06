@@ -31,7 +31,38 @@ DATABASE_URL=postgres://postgres:postgres@localhost:5432/restaurant_platform?ssl
 
 ### 2. Quick start (recommended)
 
-Start database, run migrations, and launch the API in one go:
+**One command — everything (Postgres + migrations + API + worker):**
+
+```bash
+make start
+```
+
+Press `Ctrl+C` to stop API and worker. Postgres keeps running until `make stop-all`.
+
+**VM / Docker deployment (all services in containers):**
+
+```bash
+make up      # build + start postgres, migrate, api, worker
+make logs    # follow logs
+make down    # stop stack
+```
+
+Copy `backend/.env` (SMTP secrets) before `make up` on a VM. Set `PUBLIC_BASE_URL` to your server URL.
+
+**Voice sales agent (Docker profile `voice`):**
+
+```bash
+# Requires voice-sales-agent/.env (API keys — copy from .env.example)
+make voice-up     # build + start agent + Redis on :8000
+make voice-logs   # follow agent logs
+make voice-down   # stop agent + Redis
+```
+
+UI: http://localhost:8000/?agent=corporate
+
+Agent reaches host APIs via `host.docker.internal` (`MONOREPO_API_URL` :8080, `TUVI_WEBSITE_API_URL` :8090).
+
+**Legacy — API only (no email worker):**
 
 ```bash
 make dev
@@ -42,12 +73,7 @@ Or step by step:
 ```bash
 make setup   # db-up + migrate-up
 make api     # start API (requires database + migrations)
-```
-
-### 3. Worker (optional, second terminal)
-
-```bash
-make worker
+make worker  # second terminal — required for email sends
 ```
 
 ## Commands
@@ -279,6 +305,16 @@ Key environment variables:
 | `DEMO_TOKEN_TTL`       | Demo link expiry (default `720h`)            |
 
 See `.env.example` for the full list.
+
+## Tuvi corporate website
+
+Standalone marketing site (not the restaurant demo template):
+
+```bash
+cd tuvi-website/app && npm install && npm run dev
+```
+
+Runs at **http://localhost:3000**. See [tuvi-website/README.md](tuvi-website/README.md).
 
 ## Documentation
 

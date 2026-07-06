@@ -1,0 +1,534 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { getVoiceAgentWsUrl } from "@/lib/voiceAgentConfig";
+
+export type VoiceSessionStatus =
+  | "idle"
+  | "checking"
+  | "error"
+  | "connecting"
+  | "listening"
+  | "thinking"
+  | "speaking"
+  | "user-speaking";
+
+export type BookingProgressPhase = "idle" | "checking_slots" | "booking_slot" | "success";
+
+export type BookingProgress = {
+  phase: BookingProgressPhase;
+  message: string;
+};
+
+export type TranscriptTurn = {
+  id: string;
+  role: "user" | "assistant";
+  text: string;
+};
+
+export type ConsultationConfirmation = {
+  confirmationCode: string;
+  prospectName: string;
+  prospectEmail: string;
+  slot: string;
+  bookingDate: string;
+  bookingTime: string;
+  calendlyLink: string;
+  calendarLink: string;
+  message: string;
+};
+
+const CONSULTATION_CONFIRMED_PATTERN =
+  /consultation.{0,40}booked|booked.{0,20}confirmation|confirmation\s+number/i;
+
+type ReadinessResult =
+  | { ok: true }
+  | { ok: false; message: string; missing?: string[] };
+
+const READY_TIMEOUT_MS = 12_000;
+
+export async function checkVoiceAgentReadiness(): Promise<ReadinessResult> {
+  try {
+    const res = await fetch("/api/voice-agent/status", {
+      cache: "no-store",
+      signal: AbortSignal.timeout(5000),
+    });
+    const data = (await res.json()) as {
+      status?: string;
+      missing?: string[];
+      message?: string;
+    };
+
+    if (res.ok && data.status === "ready") {
+      return { ok: true };
+    }
+
+    if (data.missing?.length) {
+      return {
+        ok: false,
+        missing: data.missing,
+        message:
+          data.message ||
+          `Missing API keys: ${data.missing.join(", ")}. Update voice-sales-agent/.env`,
+      };
+    }
+
+    if (data.status === "unavailable") {
+      return {
+        ok: false,
+        message: data.message || "Voice agent server is not running on port 8000.",
+      };
+    }
+
+    return {
+      ok: false,
+      message: data.message || "Voice assistant is not ready.",
+    };
+  } catch {
+    return {
+      ok: false,
+      message: "Could not reach voice assistant. Is the server running on port 8000?",
+    };
+  }
+}
+
+function waitForWsOpen(ws: WebSocket, timeoutMs: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (ws.readyState === WebSocket.OPEN) {
+      resolve();
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error("Connection timed out."));
+    }, timeoutMs);
+
+    const onOpen = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = () => {
+      cleanup();
+      reject(new Error("WebSocket connection failed."));
+    };
+
+    const cleanup = () => {
+      clearTimeout(timer);
+      ws.removeEventListener("open", onOpen);
+      ws.removeEventListener("error", onError);
+    };
+
+    ws.addEventListener("open", onOpen);
+    ws.addEventListener("error", onError);
+  });
+}
+
+export function useVoiceAgentSession() {
+  const [status, setStatus] = useState<VoiceSessionStatus>("idle");
+  const [error, setError] = useState<string | null>(null);
+  const [transcript, setTranscript] = useState<TranscriptTurn[]>([]);
+  const [active, setActive] = useState(false);
+  const [consultation, setConsultation] = useState<ConsultationConfirmation | null>(null);
+  const [bookingProgress, setBookingProgress] = useState<BookingProgress | null>(null);
+
+  const wsRef = useRef<WebSocket | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const workletRef = useRef<AudioWorkletNode | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const nextPlayTimeRef = useRef(0);
+  const workletReadyRef = useRef(false);
+  const preloadCtxRef = useRef<AudioContext | null>(null);
+  const sessionActiveRef = useRef(false);
+  const readyReceivedRef = useRef(false);
+  const connectInFlightRef = useRef(false);
+  const connectGenRef = useRef(0);
+  const thinkingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingConsultationRef = useRef<ConsultationConfirmation | null>(null);
+  const bookingProgressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearBookingProgressTimer = useCallback(() => {
+    if (bookingProgressTimerRef.current) {
+      clearTimeout(bookingProgressTimerRef.current);
+      bookingProgressTimerRef.current = null;
+    }
+  }, []);
+
+  const setBookingPhase = useCallback(
+    (phase: BookingProgressPhase, message: string) => {
+      clearBookingProgressTimer();
+      if (phase === "idle") {
+        setBookingProgress(null);
+        return;
+      }
+      setBookingProgress({ phase, message });
+      if (phase === "success") {
+        bookingProgressTimerRef.current = setTimeout(() => {
+          setBookingProgress(null);
+        }, 2500);
+      }
+    },
+    [clearBookingProgressTimer],
+  );
+
+  const fail = useCallback((message: string) => {
+    setError(message);
+    setStatus("error");
+  }, []);
+
+  const clearThinkingTimer = useCallback(() => {
+    if (thinkingTimerRef.current) {
+      clearTimeout(thinkingTimerRef.current);
+      thinkingTimerRef.current = null;
+    }
+  }, []);
+
+  const addTurn = useCallback((role: "user" | "assistant", text: string) => {
+    setTranscript((prev) => [
+      ...prev,
+      { id: `${Date.now()}-${prev.length}`, role, text },
+    ]);
+  }, []);
+
+  const playPcm16 = useCallback((buffer: ArrayBuffer) => {
+    const audioCtx = audioCtxRef.current;
+    if (!audioCtx) return;
+
+    const int16 = new Int16Array(buffer);
+    const float32 = new Float32Array(int16.length);
+    for (let i = 0; i < int16.length; i++) {
+      float32[i] = int16[i] / 32768;
+    }
+
+    const audioBuffer = audioCtx.createBuffer(1, float32.length, 16000);
+    audioBuffer.copyToChannel(float32, 0);
+    const source = audioCtx.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(audioCtx.destination);
+    const start = Math.max(audioCtx.currentTime, nextPlayTimeRef.current);
+    source.start(start);
+    nextPlayTimeRef.current = start + audioBuffer.duration;
+  }, []);
+
+  const resetPlayback = useCallback(() => {
+    nextPlayTimeRef.current = audioCtxRef.current?.currentTime ?? 0;
+  }, []);
+
+  const cleanup = useCallback((sendStop = true) => {
+    connectGenRef.current += 1;
+    connectInFlightRef.current = false;
+    clearThinkingTimer();
+    clearBookingProgressTimer();
+    setBookingProgress(null);
+    pendingConsultationRef.current = null;
+    sessionActiveRef.current = false;
+    readyReceivedRef.current = false;
+    setActive(false);
+
+    const ws = wsRef.current;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      if (sendStop) ws.send(JSON.stringify({ event: "stop" }));
+      ws.close();
+    }
+    wsRef.current = null;
+
+    workletRef.current?.disconnect();
+    workletRef.current = null;
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+
+    if (audioCtxRef.current) {
+      void audioCtxRef.current.close();
+      audioCtxRef.current = null;
+    }
+    workletReadyRef.current = false;
+    nextPlayTimeRef.current = 0;
+  }, [clearThinkingTimer, clearBookingProgressTimer]);
+
+  const armThinkingTimer = useCallback(() => {
+    // No hard timeout — tool calls (booking API) and long replies can take 30s+.
+    clearThinkingTimer();
+  }, [clearThinkingTimer]);
+
+  const preloadWorklet = useCallback(async () => {
+    if (workletReadyRef.current) return;
+    try {
+      preloadCtxRef.current = new AudioContext({ sampleRate: 16000 });
+      await preloadCtxRef.current.audioWorklet.addModule("/voice-agent/audio-processor.js");
+      workletReadyRef.current = true;
+    } catch {
+      // non-fatal
+    }
+  }, []);
+
+  const startMic = useCallback(async () => {
+    const audioCtx = audioCtxRef.current;
+    const stream = streamRef.current;
+    const ws = wsRef.current;
+    if (!audioCtx || !stream || !ws) return;
+
+    const source = audioCtx.createMediaStreamSource(stream);
+    const worklet = new AudioWorkletNode(audioCtx, "mic-processor");
+    worklet.port.onmessage = (e: MessageEvent<ArrayBuffer>) => {
+      if (ws.readyState === WebSocket.OPEN) ws.send(e.data);
+    };
+    source.connect(worklet);
+    worklet.connect(audioCtx.destination);
+    workletRef.current = worklet;
+  }, []);
+
+  const applyConsultation = useCallback((msg: Record<string, unknown>) => {
+    const confirmation: ConsultationConfirmation = {
+      confirmationCode: String(msg.confirmation_code ?? ""),
+      prospectName: String(msg.prospect_name ?? ""),
+      prospectEmail: String(msg.prospect_email ?? ""),
+      slot: String(msg.slot ?? ""),
+      bookingDate: String(msg.booking_date ?? ""),
+      bookingTime: String(msg.booking_time ?? ""),
+      calendlyLink: String(msg.calendly_link ?? msg.calendar_link ?? ""),
+      calendarLink: String(msg.calendar_link ?? msg.calendly_link ?? ""),
+      message: String(msg.message ?? ""),
+    };
+    pendingConsultationRef.current = confirmation;
+    setConsultation(confirmation);
+  }, []);
+
+  const handleMessage = useCallback(
+    async (data: string | ArrayBuffer) => {
+      if (typeof data === "string") {
+        let msg: Record<string, unknown>;
+        try {
+          msg = JSON.parse(data);
+        } catch {
+          return;
+        }
+
+        if (msg.event === "error" && msg.message) {
+          fail(String(msg.message));
+          cleanup(false);
+          return;
+        }
+
+        if (msg.event === "ready") {
+          readyReceivedRef.current = true;
+          clearThinkingTimer();
+          await startMic();
+          sessionActiveRef.current = true;
+          setActive(true);
+          setStatus("speaking");
+        }
+
+        if (msg.event === "status" && msg.state) {
+          const map: Record<string, VoiceSessionStatus> = {
+            user_speaking: "user-speaking",
+            thinking: "thinking",
+            bot_speaking: "speaking",
+            listening: "listening",
+          };
+          if (msg.state === "user_speaking") resetPlayback();
+          const next = map[String(msg.state)] ?? "listening";
+          setStatus(next);
+          if (next === "thinking") armThinkingTimer();
+          else clearThinkingTimer();
+        }
+
+        if (msg.event === "transcript" && msg.role && msg.text) {
+          clearThinkingTimer();
+          addTurn(msg.role as "user" | "assistant", String(msg.text));
+          if (
+            msg.role === "assistant" &&
+            CONSULTATION_CONFIRMED_PATTERN.test(String(msg.text)) &&
+            pendingConsultationRef.current
+          ) {
+            setConsultation(pendingConsultationRef.current);
+          }
+        }
+
+        if (msg.event === "consultation" && msg.confirmation_code) {
+          applyConsultation(msg);
+        }
+
+        if (msg.event === "booking_progress") {
+          const phase = String(msg.phase ?? "idle") as BookingProgressPhase;
+          const message = String(msg.message ?? "");
+          setBookingPhase(phase, message);
+        }
+        return;
+      }
+
+      clearThinkingTimer();
+      playPcm16(data);
+    },
+    [
+      addTurn,
+      applyConsultation,
+      armThinkingTimer,
+      cleanup,
+      clearThinkingTimer,
+      fail,
+      playPcm16,
+      resetPlayback,
+      setBookingPhase,
+      startMic,
+    ],
+  );
+
+  const prefetchStatus = useCallback(async () => {
+    setStatus("checking");
+    const readiness = await checkVoiceAgentReadiness();
+    if (!readiness.ok) {
+      fail(readiness.message);
+      return readiness;
+    }
+    setError(null);
+    setStatus("idle");
+    return readiness;
+  }, [fail]);
+
+  const connect = useCallback(async () => {
+    if (connectInFlightRef.current || sessionActiveRef.current) return;
+
+    connectInFlightRef.current = true;
+    const gen = ++connectGenRef.current;
+
+    setError(null);
+    setStatus("checking");
+    pendingConsultationRef.current = null;
+
+    const readiness = await checkVoiceAgentReadiness();
+    if (gen !== connectGenRef.current) return;
+    if (!readiness.ok) {
+      connectInFlightRef.current = false;
+      fail(readiness.message);
+      return;
+    }
+
+    try {
+      setStatus("connecting");
+      await preloadWorklet();
+      if (gen !== connectGenRef.current) return;
+
+      // Mic permission before WebSocket — server pipeline expects audio soon after connect.
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          sampleRate: 16000,
+          echoCancellation: true,
+          noiseSuppression: true,
+        },
+      });
+      if (gen !== connectGenRef.current) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+      streamRef.current = stream;
+
+      let audioCtx: AudioContext;
+      const preloaded = preloadCtxRef.current;
+      if (workletReadyRef.current && preloaded && preloaded.state !== "closed") {
+        audioCtx = preloaded;
+        preloadCtxRef.current = null;
+      } else {
+        audioCtx = new AudioContext({ sampleRate: 16000 });
+        if (!workletReadyRef.current) {
+          await audioCtx.audioWorklet.addModule("/voice-agent/audio-processor.js");
+          workletReadyRef.current = true;
+        }
+      }
+      if (gen !== connectGenRef.current) {
+        void audioCtx.close();
+        return;
+      }
+
+      if (audioCtx.state !== "running") await audioCtx.resume();
+      audioCtxRef.current = audioCtx;
+
+      const ws = new WebSocket(getVoiceAgentWsUrl());
+      ws.binaryType = "arraybuffer";
+      wsRef.current = ws;
+
+      let readyTimer: ReturnType<typeof setTimeout> | null = null;
+
+      ws.onclose = () => {
+        if (gen !== connectGenRef.current) return;
+        if (readyTimer) clearTimeout(readyTimer);
+        if (sessionActiveRef.current) {
+          cleanup(false);
+        } else if (!readyReceivedRef.current) {
+          fail("Connection closed before session started.");
+          cleanup(false);
+        }
+      };
+
+      ws.onmessage = async (evt) => {
+        if (gen !== connectGenRef.current) return;
+        await handleMessage(evt.data);
+      };
+
+      await waitForWsOpen(ws, 8000);
+      if (gen !== connectGenRef.current) return;
+
+      readyTimer = setTimeout(() => {
+        if (gen !== connectGenRef.current) return;
+        if (!readyReceivedRef.current) {
+          fail("Session start timed out.");
+          cleanup(false);
+        }
+      }, READY_TIMEOUT_MS);
+    } catch (e) {
+      if (gen !== connectGenRef.current) return;
+      if (e instanceof DOMException && e.name === "NotAllowedError") {
+        fail("Microphone access is required. Allow mic permission and try again.");
+      } else {
+        fail(e instanceof Error ? e.message : "Could not start voice session");
+      }
+      cleanup(false);
+    } finally {
+      if (gen === connectGenRef.current) {
+        connectInFlightRef.current = false;
+      }
+    }
+  }, [cleanup, fail, handleMessage, preloadWorklet]);
+
+  const disconnect = useCallback(() => {
+    cleanup(true);
+    setStatus("idle");
+  }, [cleanup]);
+
+  const reset = useCallback(() => {
+    pendingConsultationRef.current = null;
+    clearBookingProgressTimer();
+    setBookingProgress(null);
+    setError(null);
+    setStatus("idle");
+    setTranscript([]);
+    setConsultation(null);
+  }, [clearBookingProgressTimer]);
+
+  const dismissConsultation = useCallback(() => {
+    setConsultation(null);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      connectGenRef.current += 1;
+      clearBookingProgressTimer();
+      if (sessionActiveRef.current) cleanup(false);
+    };
+  }, [cleanup, clearBookingProgressTimer]);
+
+  return {
+    status,
+    error,
+    transcript,
+    active,
+    consultation,
+    bookingProgress,
+    connect,
+    disconnect,
+    reset,
+    dismissConsultation,
+    prefetchStatus,
+    preloadWorklet,
+  };
+}

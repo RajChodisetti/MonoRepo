@@ -33,6 +33,25 @@ def load_env() -> str:
     return url
 
 
+def verify_schema(cur) -> None:
+    cur.execute(
+        """
+        SELECT EXISTS (
+            SELECT 1 FROM information_schema.tables
+            WHERE table_schema = 'public' AND table_name = 'restaurant_profiles'
+        )
+        """
+    )
+    if not cur.fetchone()[0]:
+        raise SystemExit(
+            "Database schema not ready — restaurant_profiles table missing.\n"
+            "Run from MonoRepo root:\n"
+            "  make db-up        # start Docker Postgres\n"
+            "  make migrate-up   # apply migrations\n"
+            "Then retry: python import_to_db.py --restaurants-only"
+        )
+
+
 def get_conn(database_url: str):
     try:
         import psycopg2
@@ -47,16 +66,144 @@ def jdump(obj) -> str:
     return json.dumps(obj if obj is not None else None)
 
 
-def first_menu_image_url(images) -> str:
+def first_menu_image_url(images, menu_board_urls: set[str] | None = None) -> str:
+    """Pick first food photo URL — never a menu board image."""
+    menu_board_urls = menu_board_urls or set()
     if not images:
         return ""
-    if isinstance(images, list) and images:
-        first = images[0]
-        if isinstance(first, dict):
-            return str(first.get("url") or first.get("thumbnail") or "")
-        if isinstance(first, str):
-            return first
+    if isinstance(images, list):
+        for img in images:
+            if isinstance(img, dict):
+                url = str(img.get("url") or img.get("thumbnail") or "").strip()
+                img_type = str(img.get("image_type") or img.get("source") or "").lower()
+                if not url or url in menu_board_urls:
+                    continue
+                if img_type in ("menu_document", "menu_ocr", "menu_list"):
+                    continue
+                return url
+            if isinstance(img, str) and img.strip() and img.strip() not in menu_board_urls:
+                return img.strip()
     return ""
+
+
+def image_record_url(img) -> str:
+    if isinstance(img, str):
+        return img.strip()
+    if isinstance(img, dict):
+        return str(img.get("url") or img.get("thumbnail") or "").strip()
+    return ""
+
+
+def sync_classified_images(cur, restaurant_id: uuid.UUID, record: dict) -> tuple[int, int]:
+    """Replace menu_images and gallery_images from OCR-classified scrape JSON."""
+    images = record.get("images") or {}
+    menu_photos = images.get("menu_photos") or []
+    gallery = images.get("gallery") or []
+
+    cur.execute("DELETE FROM menu_images WHERE restaurant_id = %s", (restaurant_id,))
+    cur.execute("DELETE FROM gallery_images WHERE restaurant_id = %s", (restaurant_id,))
+
+    menu_count = 0
+    for i, img in enumerate(menu_photos):
+        url = image_record_url(img)
+        if not url:
+            continue
+        thumb = url
+        image_type = "menu_document"
+        confidence = None
+        title = ""
+        metadata = {}
+        if isinstance(img, dict):
+            thumb = str(img.get("thumbnail") or url).strip()
+            image_type = str(img.get("image_type") or "menu_document").strip()
+            confidence = img.get("confidence")
+            title = str(img.get("title") or "").strip()
+            metadata = {
+                k: v for k, v in img.items()
+                if k not in ("url", "thumbnail", "image_type", "confidence", "title")
+            }
+        cur.execute(
+            """
+            INSERT INTO menu_images (
+                restaurant_id, url, thumbnail_url, image_type, confidence,
+                title, source, sort_order, metadata
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb)
+            ON CONFLICT (restaurant_id, url) DO UPDATE SET
+                thumbnail_url = EXCLUDED.thumbnail_url,
+                image_type = EXCLUDED.image_type,
+                confidence = EXCLUDED.confidence,
+                title = EXCLUDED.title,
+                source = EXCLUDED.source,
+                sort_order = EXCLUDED.sort_order,
+                metadata = EXCLUDED.metadata,
+                updated_at = now()
+            """,
+            (
+                restaurant_id,
+                url,
+                thumb,
+                image_type,
+                confidence,
+                title,
+                "menu_ocr",
+                i,
+                jdump(metadata),
+            ),
+        )
+        menu_count += 1
+
+    gallery_count = 0
+    for i, img in enumerate(gallery):
+        url = image_record_url(img)
+        if not url:
+            continue
+        thumb = url
+        image_type = "other"
+        confidence = None
+        title = ""
+        metadata = {}
+        if isinstance(img, dict):
+            thumb = str(img.get("thumbnail") or url).strip()
+            image_type = str(img.get("image_type") or img.get("title") or "other").strip()
+            if image_type == "":
+                image_type = "other"
+            confidence = img.get("confidence")
+            title = str(img.get("title") or "").strip()
+            metadata = {
+                k: v for k, v in img.items()
+                if k not in ("url", "thumbnail", "image_type", "confidence", "title")
+            }
+        cur.execute(
+            """
+            INSERT INTO gallery_images (
+                restaurant_id, url, thumbnail_url, image_type, confidence,
+                title, source, sort_order, metadata
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb)
+            ON CONFLICT (restaurant_id, url) DO UPDATE SET
+                thumbnail_url = EXCLUDED.thumbnail_url,
+                image_type = EXCLUDED.image_type,
+                confidence = EXCLUDED.confidence,
+                title = EXCLUDED.title,
+                source = EXCLUDED.source,
+                sort_order = EXCLUDED.sort_order,
+                metadata = EXCLUDED.metadata,
+                updated_at = now()
+            """,
+            (
+                restaurant_id,
+                url,
+                thumb,
+                image_type,
+                confidence,
+                title,
+                "menu_ocr",
+                i,
+                jdump(metadata),
+            ),
+        )
+        gallery_count += 1
+
+    return menu_count, gallery_count
 
 
 def upsert_lead(cur, lead: dict) -> uuid.UUID | None:
@@ -145,6 +292,14 @@ def upsert_lead(cur, lead: dict) -> uuid.UUID | None:
 
 def upsert_restaurant_record(cur, record: dict, source_file: str) -> tuple[uuid.UUID, bool]:
     """Returns (restaurant_id, skipped_duplicate)."""
+    try:
+        from menu_image_ocr import _sanitize_menu_item_images
+        _sanitize_menu_item_images(record)
+    except ImportError:
+        pass
+
+    board_urls = _menu_board_urls(record)
+
     google = record.get("google") or {}
     place_id = (google.get("place_id") or "").strip()
 
@@ -289,7 +444,7 @@ def upsert_restaurant_record(cur, record: dict, source_file: str) -> tuple[uuid.
                 item.get("price_numeric"),
                 (item.get("price") or "").strip(),
                 category,
-                first_menu_image_url(item.get("images")),
+                first_menu_image_url(item.get("images"), board_urls),
                 jdump(item.get("images") or []),
                 i,
             ),
@@ -315,7 +470,19 @@ def upsert_restaurant_record(cur, record: dict, source_file: str) -> tuple[uuid.
             ),
         )
 
+    menu_img_count, gallery_img_count = sync_classified_images(cur, restaurant_id, record)
+    _ = menu_img_count, gallery_img_count
+
     return restaurant_id, False
+
+
+def _menu_board_urls(record: dict) -> set[str]:
+    urls: set[str] = set()
+    for img in (record.get("images") or {}).get("menu_photos") or []:
+        u = image_record_url(img)
+        if u:
+            urls.add(u)
+    return urls
 
 
 def import_leads(cur) -> int:
@@ -407,6 +574,7 @@ def main() -> int:
 
     try:
         with conn.cursor() as cur:
+            verify_schema(cur)
             lead_count = 0
             if not args.restaurants_only:
                 print("\n[1/2] Importing leads…")

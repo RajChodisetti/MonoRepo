@@ -95,7 +95,7 @@ export default function AuroraHero({ content }: { content: AuroraContent["hero"]
 
       <Marquee items={content.marqueeItems} />
 
-      <a href="#features" aria-label="Scroll" className="absolute bottom-24 left-1/2 -translate-x-1/2">
+      <a href="#menu" aria-label="Scroll" className="absolute bottom-24 left-1/2 -translate-x-1/2">
         <motion.span
           animate={{ opacity: [0.3, 1, 0.3] }}
           transition={{ duration: 2, repeat: Infinity }}
