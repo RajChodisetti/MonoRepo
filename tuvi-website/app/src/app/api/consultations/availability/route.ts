@@ -9,7 +9,7 @@ export async function GET(request: Request) {
   if (days) qs.set("days", days);
 
   try {
-    const res = await consultationFetch(`/api/v1/consultations/availability?${qs}`, {
+    const res = await consultationFetch(`/api/v1/company/consultations/availability?${qs}`, {
       cache: "no-store",
       signal: AbortSignal.timeout(15_000),
     });
@@ -17,7 +17,7 @@ export async function GET(request: Request) {
     return Response.json(data, { status: res.status });
   } catch {
     return Response.json(
-      { status: "error", message: "Consultation service unavailable. Is the API running on port 8090?" },
+      { status: "error", message: "Consultation service unavailable. Is the main API running on port 8080?" },
       { status: 503 },
     );
   }

@@ -92,6 +92,20 @@ func (p *envParser) duration(key string, fallback time.Duration) time.Duration {
 	return value
 }
 
+func (p *envParser) location(key, fallback string) *time.Location {
+	name := p.string(key, fallback)
+	loc, err := time.LoadLocation(name)
+	if err != nil {
+		p.errs = append(p.errs, fmt.Errorf("%s must be a valid IANA timezone", key))
+		fallbackLoc, fallbackErr := time.LoadLocation(fallback)
+		if fallbackErr != nil {
+			return time.UTC
+		}
+		return fallbackLoc
+	}
+	return loc
+}
+
 func (p *envParser) listenAddr() string {
 	if addr := strings.TrimSpace(os.Getenv("HTTP_ADDR")); addr != "" {
 		return normalizeListenAddr(addr)

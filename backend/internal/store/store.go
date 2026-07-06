@@ -10,6 +10,7 @@ import (
 
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/auth"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/campaigns"
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/consultations"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/demos"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/db"
 	repository "github.com/rajchodisetti/restaurant-platform/backend/internal/platform/errors"
@@ -22,15 +23,16 @@ import (
 const schemaBaselineKey = "schema_baseline"
 
 type Store struct {
-	database    *db.DB
-	Metadata    metadata.Repository
-	Users       auth.Repository
-	Restaurants restaurants.Repository
-	Memberships restaurants.MembershipRepository
-	Demos       demos.Repository
-	Campaigns   campaigns.Repository
+	database      *db.DB
+	Metadata      metadata.Repository
+	Users         auth.Repository
+	Restaurants   restaurants.Repository
+	Memberships   restaurants.MembershipRepository
+	Demos         demos.Repository
+	Campaigns     campaigns.Repository
 	Profiles      profiles.Repository
 	Reservations  reservations.Repository
+	Consultations consultations.Repository
 }
 
 func New(database *db.DB) *Store {
@@ -45,6 +47,7 @@ func New(database *db.DB) *Store {
 		campaigns.NewPostgres(pool),
 		profiles.NewPostgres(pool),
 		reservations.NewPostgres(pool),
+		consultations.NewPostgres(pool),
 	)
 }
 
@@ -58,17 +61,24 @@ func NewWithRepositories(
 	campaignsRepo campaigns.Repository,
 	profilesRepo profiles.Repository,
 	reservationsRepo reservations.Repository,
+	consultationsRepo ...consultations.Repository,
 ) *Store {
+	consultationRepo := consultations.Repository(&consultations.Mock{})
+	if len(consultationsRepo) > 0 && consultationsRepo[0] != nil {
+		consultationRepo = consultationsRepo[0]
+	}
+
 	return &Store{
-		database:    database,
-		Metadata:    metadataRepo,
-		Users:       usersRepo,
-		Restaurants: restaurantsRepo,
-		Memberships: membershipsRepo,
-		Demos:       demosRepo,
-		Campaigns:   campaignsRepo,
-		Profiles:    profilesRepo,
-		Reservations: reservationsRepo,
+		database:      database,
+		Metadata:      metadataRepo,
+		Users:         usersRepo,
+		Restaurants:   restaurantsRepo,
+		Memberships:   membershipsRepo,
+		Demos:         demosRepo,
+		Campaigns:     campaignsRepo,
+		Profiles:      profilesRepo,
+		Reservations:  reservationsRepo,
+		Consultations: consultationRepo,
 	}
 }
 
@@ -92,7 +102,10 @@ func (store *Store) VerifyStartup(ctx context.Context) error {
 	if err := store.verifyTableExists(ctx, "demo_sites", "demo_sites migration not applied: run make migrate-up"); err != nil {
 		return err
 	}
-	return store.VerifyEmailCampaigns(ctx)
+	if err := store.VerifyEmailCampaigns(ctx); err != nil {
+		return err
+	}
+	return store.verifyTableExists(ctx, "company_consultations", "company_consultations migration not applied: run make migrate-up")
 }
 
 func (store *Store) VerifyEmailCampaigns(ctx context.Context) error {

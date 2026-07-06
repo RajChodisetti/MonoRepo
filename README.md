@@ -60,7 +60,7 @@ make voice-down   # stop agent + Redis
 
 UI: http://localhost:8000/?agent=corporate
 
-Agent reaches host APIs via `host.docker.internal` (`MONOREPO_API_URL` :8080, `TUVI_WEBSITE_API_URL` :8090).
+Agent reaches host APIs via `host.docker.internal` (`MONOREPO_API_URL` :8080; `TUVI_WEBSITE_API_URL` is a backward-compatible alias for the same unified API).
 
 **Legacy — API only (no email worker):**
 
@@ -314,10 +314,15 @@ Standalone marketing site (not the restaurant demo template):
 cd tuvi-website/app && npm install && npm run dev
 ```
 
-Runs at **http://localhost:3000**. See [tuvi-website/README.md](tuvi-website/README.md).
+Runs at **http://localhost:3001** so it can run alongside the restaurant template on **http://localhost:3000**. See [tuvi-website/README.md](tuvi-website/README.md).
+
+The corporate website's scheduler uses the main API on **http://localhost:8080**
+via `/api/v1/company/consultations/*`; the older `tuvi-website/backend` service is
+legacy reference code.
 
 ## Documentation
 
+- [Service inventory](docs/SERVICES.md) — ports, start commands, one-shot jobs, and service interlinks
 - [Today's work log (2026-06-22)](docs/work-log/2026-06-22-backend-foundation-session.md) — detailed session notes
 - [Phase 1 technical backlog](PHASE1_TECHNICAL_BACKLOG.md) — tickets and acceptance criteria
 - [AGENTS.md](AGENTS.md) — coding-agent operating contract

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
 import { siteContent } from "@/content/site";
 import { getBookCallUrl } from "@/lib/env";
 import Button from "@/components/ui/Button";
@@ -62,36 +61,29 @@ export default function Nav() {
         </div>
       </nav>
 
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="border-t border-white/5 bg-bg/80 backdrop-blur-xl xl:hidden"
-          >
-            <div className="flex flex-col gap-1 px-5 py-4">
-              {siteContent.nav.map((link) => (
-                <a
-                  key={link.href}
-                  href={link.href}
-                  onClick={() => setOpen(false)}
-                  className="py-2.5 text-sm text-muted transition hover:text-text"
-                >
-                  {link.label}
-                </a>
-              ))}
-              <Button
-                href={getBookCallUrl()}
-                variant="primary"
-                className="mt-3 w-full"
+      {open && (
+        <div className="border-t border-white/5 bg-bg/80 backdrop-blur-xl xl:hidden">
+          <div className="flex flex-col gap-1 px-5 py-4">
+            {siteContent.nav.map((link) => (
+              <a
+                key={link.href}
+                href={link.href}
+                onClick={() => setOpen(false)}
+                className="py-2.5 text-sm text-muted transition hover:text-text"
               >
-                Book a Call
-              </Button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+                {link.label}
+              </a>
+            ))}
+            <Button
+              href={getBookCallUrl()}
+              variant="primary"
+              className="mt-3 w-full"
+            >
+              Book a Call
+            </Button>
+          </div>
+        </div>
+      )}
     </header>
   );
 }

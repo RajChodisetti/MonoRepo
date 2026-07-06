@@ -1,4 +1,4 @@
-"""Async client for Tuvi website consultation booking API."""
+"""Async client for Tuvi company consultation endpoints on the unified API."""
 
 from __future__ import annotations
 
@@ -10,12 +10,15 @@ import httpx
 
 log = logging.getLogger("tuvi_api_client")
 
-DEFAULT_BASE = "http://localhost:8090"
+DEFAULT_BASE = "http://localhost:8080"
 DEFAULT_TIMEOUT_MS = 20000
 
 
 def _base_url() -> str:
-    return os.getenv("TUVI_WEBSITE_API_URL", DEFAULT_BASE).rstrip("/")
+    return os.getenv(
+        "MONOREPO_API_URL",
+        os.getenv("TUVI_WEBSITE_API_URL", DEFAULT_BASE),
+    ).rstrip("/")
 
 
 def _timeout() -> float:
@@ -48,7 +51,7 @@ async def get_consultation_availability(
     if days is not None and days > 0:
         params["days"] = str(days)
 
-    url = f"{_base_url()}/api/v1/consultations/availability"
+    url = f"{_base_url()}/api/v1/company/consultations/availability"
     try:
         async with httpx.AsyncClient(timeout=_timeout()) as client:
             resp = await client.get(url, params=params, headers=_headers())
@@ -73,7 +76,7 @@ async def get_consultation_availability(
 
 
 async def check_consultation_slot(date: str, time: str) -> dict[str, Any]:
-    url = f"{_base_url()}/api/v1/consultations/availability/check"
+    url = f"{_base_url()}/api/v1/company/consultations/availability/check"
     params = {"date": date.strip(), "time": time.strip()}
     try:
         async with httpx.AsyncClient(timeout=_timeout()) as client:
@@ -99,7 +102,7 @@ async def book_consultation(
     prospect_email: str = "",
     source: str = "voice",
 ) -> dict[str, Any]:
-    url = f"{_base_url()}/api/v1/consultations"
+    url = f"{_base_url()}/api/v1/company/consultations"
     body = {
         "date": date.strip(),
         "time": time.strip(),

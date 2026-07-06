@@ -18,7 +18,7 @@ services:
       - CALL_LOG_DB=/app/data/calls.db
       # Reach MonoRepo API on the host (localhost inside the container is not the Mac)
       - MONOREPO_API_URL=http://host.docker.internal:8080
-      - TUVI_WEBSITE_API_URL=http://host.docker.internal:8090
+      - TUVI_WEBSITE_API_URL=http://host.docker.internal:8080
       - API_TIMEOUT_MS=20000
       - TUVI_API_TIMEOUT_MS=20000
     extra_hosts:

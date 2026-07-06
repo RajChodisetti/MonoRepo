@@ -9,7 +9,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const res = await consultationFetch("/api/v1/consultations", {
+    const res = await consultationFetch("/api/v1/company/consultations", {
       method: "POST",
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(30_000),
