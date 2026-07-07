@@ -143,10 +143,11 @@ export default function RestaurantServicesPage() {
                     <video
                       className="aspect-video w-full bg-black object-cover"
                       poster={item.poster}
-                      controls
+                      autoPlay
+                      loop
                       muted
                       playsInline
-                      preload="metadata"
+                      preload="auto"
                     >
                       <source src={item.video} type="video/mp4" />
                     </video>
