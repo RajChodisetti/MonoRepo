@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { siteContent } from "@/content/site";
 import { getBookCallUrl } from "@/lib/env";
@@ -23,19 +24,42 @@ export default function Nav() {
       }`}
     >
       <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-5 md:h-[72px] md:px-8">
-        <a href="#" className="shrink-0 font-display text-lg font-bold tracking-tight text-text md:text-xl">
+        <Link href="/" className="shrink-0 font-display text-lg font-bold tracking-tight text-text md:text-xl">
           Tuvi<span className="text-gold">.</span>
-        </a>
+        </Link>
 
         <ul className="hidden min-w-0 items-center gap-4 xl:flex xl:gap-7">
+          <li className="group relative shrink-0">
+            <button
+              type="button"
+              className="whitespace-nowrap text-[10px] font-medium uppercase tracking-[0.12em] text-muted transition hover:text-cyan focus:text-cyan focus:outline-none xl:text-xs xl:tracking-[0.14em]"
+              aria-haspopup="true"
+            >
+              {siteContent.servicesNav.label}
+            </button>
+            <div className="invisible absolute left-1/2 top-full min-w-72 -translate-x-1/2 pt-5 opacity-0 transition duration-200 group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100">
+              <div className="rounded-2xl border border-white/10 bg-bg-elevated/95 p-2 shadow-2xl shadow-black/40 backdrop-blur-xl">
+                {siteContent.servicesNav.items.map((item) => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className="block rounded-xl px-4 py-3 transition hover:bg-white/5"
+                  >
+                    <span className="block text-sm font-semibold text-text">{item.label}</span>
+                    <span className="mt-1 block text-xs leading-5 text-muted">{item.description}</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          </li>
           {siteContent.nav.map((link) => (
             <li key={link.href} className="shrink-0">
-              <a
+              <Link
                 href={link.href}
                 className="whitespace-nowrap text-[10px] font-medium uppercase tracking-[0.12em] text-muted transition hover:text-cyan xl:text-xs xl:tracking-[0.14em]"
               >
                 {link.label}
-              </a>
+              </Link>
             </li>
           ))}
           <li className="shrink-0">
@@ -64,15 +88,33 @@ export default function Nav() {
       {open && (
         <div className="border-t border-white/5 bg-bg/80 backdrop-blur-xl xl:hidden">
           <div className="flex flex-col gap-1 px-5 py-4">
+            <div className="py-2">
+              <p className="px-1 text-xs font-semibold uppercase tracking-[0.16em] text-muted">
+                {siteContent.servicesNav.label}
+              </p>
+              <div className="mt-2 flex flex-col gap-1">
+                {siteContent.servicesNav.items.map((item) => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setOpen(false)}
+                    className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-3 text-sm text-text transition hover:border-cyan/40"
+                  >
+                    <span className="block font-semibold">{item.label}</span>
+                    <span className="mt-1 block text-xs leading-5 text-muted">{item.description}</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
             {siteContent.nav.map((link) => (
-              <a
+              <Link
                 key={link.href}
                 href={link.href}
                 onClick={() => setOpen(false)}
                 className="py-2.5 text-sm text-muted transition hover:text-text"
               >
                 {link.label}
-              </a>
+              </Link>
             ))}
             <Button
               href={getBookCallUrl()}
