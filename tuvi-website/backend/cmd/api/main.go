@@ -58,14 +58,19 @@ func main() {
 	}
 
 	mailer := email.NewSender(email.Config{
-		FromAddress: cfg.EmailFromAddress,
-		FromName:    cfg.EmailFromName,
-		Host:        cfg.SMTPHost,
-		Port:        cfg.SMTPPort,
-		Username:    cfg.SMTPUsername,
-		Password:    cfg.SMTPPassword,
-		UseTLS:      cfg.SMTPUseTLS,
-		Disabled:    cfg.EmailDisabled,
+		Provider:         cfg.EmailProvider,
+		FromAddress:      cfg.EmailFromAddress,
+		FromName:         cfg.EmailFromName,
+		Disabled:         cfg.EmailDisabled,
+		ZohoAccountID:    cfg.ZohoAccountID,
+		ZohoFromEmail:    cfg.ZohoFromEmail,
+		ZohoRegion:       cfg.ZohoRegion,
+		ZohoAPIBaseURL:   cfg.ZohoAPIBaseURL,
+		ZohoClientID:     cfg.ZohoClientID,
+		ZohoClientSecret: cfg.ZohoClientSecret,
+		ZohoRefreshToken: cfg.ZohoRefreshToken,
+		ResendAPIKey:     cfg.ResendAPIKey,
+		ResendAPIBaseURL: cfg.ResendAPIBaseURL,
 	})
 
 	svc := consultations.NewService(cfg, st, cal, mailer)

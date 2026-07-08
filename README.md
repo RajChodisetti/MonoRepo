@@ -47,7 +47,7 @@ make logs    # follow logs
 make down    # stop stack
 ```
 
-Copy `backend/.env` (SMTP secrets) before `make up` on a VM. Set `PUBLIC_BASE_URL` to your server URL.
+Copy `backend/.env` (Resend `EMAIL_API_KEY` and related settings) before `make up` on a VM. Set `PUBLIC_BASE_URL` to your server URL.
 
 **Voice sales agent (Docker profile `voice`):**
 
@@ -123,6 +123,7 @@ Current migrations:
 - `000005_demo_sites` — public demo sites with token-gated access
 - `000006_restaurant_lead_fields` — `email`, `is_contacted`, `shown_interest` on restaurants
 - `000007_restaurant_status` — lead lifecycle `status` column
+- `000014_restaurant_email_sent` — `email_sent` flag on restaurants for bulk outreach tracking
 
 **Rollback notes:**
 
@@ -241,6 +242,8 @@ curl http://localhost:8080/readyz \
 | `GET /api/v1/restaurants/{id}/members` | Bearer + `internal_admin` | List restaurant members |
 | `POST /api/v1/restaurants/{id}/members` | Bearer + `internal_admin` | Assign owner to restaurant |
 | `POST /api/v1/restaurants/{id}/demo-sites` | Bearer + `internal_admin` | Create demo site (returns one-time token) |
+| `POST /api/v1/outreach/bulk-send` | Bearer + `internal_admin` | One-click bulk sales outreach email (services + live demo, OCR-verified, `email_sent=false`, max 150/run) |
+| `GET /api/v1/outreach/bulk-send/status` | Bearer + `internal_admin` | Pending eligible count + active/last bulk job summary |
 | `GET /api/public/v1/demo/{slug}?token=...` | Public | Public demo payload only (no internal fields) |
 | `GET /healthz` | Bearer + `developer` role | Process is running |
 | `GET /readyz` | Bearer + `developer` role | PostgreSQL is connected and ready |

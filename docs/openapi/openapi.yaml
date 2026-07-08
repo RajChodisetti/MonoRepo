@@ -20,6 +20,10 @@ info:
     5. `POST /api/v1/campaigns/{id}/send-step` — enqueue `email.send` job (worker must be running)
     6. Track opens/clicks via public `/t/*` routes embedded in sent email
 
+    ## Bulk outreach (one-click)
+    For OCR-verified leads at scale: `POST /api/v1/outreach/bulk-send` enqueues `outreach.bulk_send`
+    (max 150/run, 50 sends per Zoho account). Retrigger manually; only `email_sent=false` leads are processed.
+
     ## Local email testing
     Set `EMAIL_REDIRECT_TO` in `backend/.env` so all sends go to your inbox during dev.
     Restart **worker** after changing `.env` (worker reads env at startup only).
@@ -600,7 +604,7 @@ paths:
         - Campaign `status=approved` (or already `sending`)
         - `restaurant_profiles.review_status=approved`
 
-        On success, worker sends via Google Workspace SMTP (`EMAIL_PROVIDER=smtp`).
+        On success, worker sends via Resend HTTP API (`EMAIL_PROVIDER=resend`, `EMAIL_API_KEY`).
         Local dev: set `EMAIL_REDIRECT_TO` to receive all mail at your test inbox.
 
         Idempotency key: `email.send:{campaign_id}:step:{step}` — same step is not duplicated.
@@ -633,6 +637,77 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/CampaignNotEligible'
+
+  /api/v1/outreach/bulk-send:
+    post:
+      tags: [Email Campaigns]
+      summary: Trigger bulk outreach email job
+      operationId: triggerBulkOutreachSend
+      security:
+        - bearerAuth: []
+      description: |
+        Requires role `internal_admin`. Enqueues an `outreach.bulk_send` job.
+
+        **Worker required:** run `make worker` in a separate terminal.
+
+        Selects up to `OUTREACH_BULK_MAX` (default 150) leads where:
+        - `restaurant_profiles.ocr_verified=true`
+        - `restaurants.email_sent=false`
+        - contact email present and not suppressed
+        - published demo site exists
+
+        Sends the sales outreach email (services + live demo preview with three website styles),
+        rotating Zoho accounts
+        (`OUTREACH_ZOHO_ACCOUNTS_JSON`) with `OUTREACH_EMAILS_PER_ACCOUNT` (default 50) sends each.
+
+        On successful send: `restaurants.email_sent=true`, `is_contacted=true`, `status=emailed`.
+
+        Returns `409` if another bulk job is already queued or running.
+      responses:
+        '202':
+          description: Bulk job queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkOutreachTriggerResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Bulk job already active
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Outreach Zoho accounts not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/outreach/bulk-send/status:
+    get:
+      tags: [Email Campaigns]
+      summary: Bulk outreach status
+      operationId: getBulkOutreachStatus
+      security:
+        - bearerAuth: []
+      description: |
+        Requires role `internal_admin`.
+        Returns pending eligible lead count and active/last bulk job summary.
+      responses:
+        '200':
+          description: Bulk outreach status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkOutreachStatusResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /api/v1/campaigns/{id}/stop:
     parameters:
@@ -1275,6 +1350,57 @@ components:
           minimum: 0
           default: 0
           description: Outreach step index (0 = first email)
+
+    BulkOutreachTriggerResponse:
+      type: object
+      properties:
+        job_id:
+          type: string
+        status:
+          type: string
+          example: queued
+        max_sends:
+          type: integer
+          example: 150
+        pending_eligible_count:
+          type: integer
+
+    BulkOutreachStatusResponse:
+      type: object
+      properties:
+        pending_eligible_count:
+          type: integer
+        max_sends:
+          type: integer
+        active_job:
+          type: object
+          nullable: true
+          properties:
+            job_id:
+              type: string
+            status:
+              type: string
+        last_completed_job:
+          type: object
+          nullable: true
+          properties:
+            job_id:
+              type: string
+            status:
+              type: string
+            summary:
+              type: object
+              properties:
+                attempted:
+                  type: integer
+                sent:
+                  type: integer
+                failed:
+                  type: integer
+                max_sends:
+                  type: integer
+                stopped_reason:
+                  type: string
 
     StopCampaignRequest:
       type: object

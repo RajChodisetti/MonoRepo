@@ -3,6 +3,7 @@ package campaigns
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"sync"
 	"time"
 
@@ -19,6 +20,7 @@ type Mock struct {
 	Suppressed map[string]struct{}
 	SendContexts map[uuid.UUID]SendContext
 	RestaurantContexts map[uuid.UUID]SendContext
+	SiteIndices map[uuid.UUID]int
 }
 
 func (mock *Mock) Create(ctx context.Context, input CreateInput, draft DraftContent) (Campaign, error) {
@@ -219,8 +221,41 @@ func (mock *Mock) GetRestaurantContext(ctx context.Context, restaurantID uuid.UU
 	return ctxData, nil
 }
 
+func (mock *Mock) GetSiteIndexByRestaurantID(ctx context.Context, restaurantID uuid.UUID) (int, error) {
+	mock.mu.Lock()
+	defer mock.mu.Unlock()
+	if mock.SiteIndices == nil {
+		return 0, ErrNoSiteIndex
+	}
+	index, ok := mock.SiteIndices[restaurantID]
+	if !ok {
+		return 0, ErrNoSiteIndex
+	}
+	return index, nil
+}
+
 func (mock *Mock) MarkRestaurantEmailed(ctx context.Context, restaurantID uuid.UUID) error {
 	return nil
+}
+
+func (mock *Mock) GetLatestDemoTokenByDemoSiteID(ctx context.Context, demoSiteID uuid.UUID) (string, error) {
+	mock.mu.Lock()
+	defer mock.mu.Unlock()
+	var latest Campaign
+	var found bool
+	for _, record := range mock.Campaigns {
+		if record.DemoSiteID != demoSiteID || strings.TrimSpace(record.DemoToken) == "" {
+			continue
+		}
+		if !found || record.CreatedAt.After(latest.CreatedAt) {
+			latest = record
+			found = true
+		}
+	}
+	if !found {
+		return "", nil
+	}
+	return latest.DemoToken, nil
 }
 
 var _ Repository = (*Mock)(nil)

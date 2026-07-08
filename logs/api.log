@@ -1,0 +1,80 @@
+go run ./backend/cmd/api
+go: downloading github.com/gofiber/fiber/v2 v2.52.13
+go: downloading github.com/joho/godotenv v1.5.1
+go: downloading github.com/google/uuid v1.6.0
+go: downloading github.com/jackc/pgx/v5 v5.7.6
+go: downloading github.com/golang-jwt/jwt/v5 v5.3.1
+go: downloading golang.org/x/crypto v0.37.0
+go: downloading golang.org/x/oauth2 v0.28.0
+go: downloading google.golang.org/api v0.228.0
+go: downloading cloud.google.com/go/compute/metadata v0.6.0
+go: downloading github.com/jackc/puddle/v2 v2.2.2
+go: downloading github.com/jackc/pgpassfile v1.0.0
+go: downloading github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761
+go: downloading golang.org/x/text v0.24.0
+go: downloading github.com/valyala/fasthttp v1.51.0
+go: downloading github.com/mattn/go-colorable v0.1.13
+go: downloading github.com/mattn/go-isatty v0.0.20
+go: downloading github.com/mattn/go-runewidth v0.0.16
+go: downloading github.com/valyala/bytebufferpool v1.0.0
+go: downloading golang.org/x/sync v0.13.0
+go: downloading golang.org/x/sys v0.32.0
+go: downloading github.com/rivo/uniseg v0.2.0
+go: downloading github.com/valyala/tcplisten v1.0.0
+go: downloading github.com/klauspost/compress v1.17.9
+go: downloading github.com/andybalholm/brotli v1.1.0
+go: downloading google.golang.org/api v0.228.0
+go: downloading github.com/klauspost/compress v1.17.9
+go: downloading golang.org/x/text v0.24.0
+go: downloading go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.59.0
+go: downloading cloud.google.com/go/auth v0.15.0
+go: downloading google.golang.org/grpc v1.71.0
+go: downloading github.com/googleapis/gax-go/v2 v2.14.1
+go: downloading golang.org/x/net v0.37.0
+go: downloading cloud.google.com/go/auth/oauth2adapt v0.2.8
+go: downloading github.com/googleapis/enterprise-certificate-proxy v0.3.6
+go: downloading go.opentelemetry.io/otel v1.34.0
+go: downloading go.opentelemetry.io/otel/metric v1.34.0
+go: downloading go.opentelemetry.io/otel/trace v1.34.0
+go: downloading google.golang.org/protobuf v1.36.6
+go: downloading google.golang.org/genproto/googleapis/rpc v0.0.0-20250313205543-e70fdf4c4cb4
+go: downloading github.com/go-logr/logr v1.4.2
+go: downloading github.com/go-logr/stdr v1.2.2
+go: downloading go.opentelemetry.io/auto/sdk v1.1.0
+time=2026-07-08T09:26:46.192+05:30 level=INFO msg=database_connecting
+time=2026-07-08T09:26:46.203+05:30 level=INFO msg=database_connected_successfully max_conns=5 min_conns=0
+time=2026-07-08T09:26:46.213+05:30 level=INFO msg=consultation_calendar_disabled
+time=2026-07-08T09:26:46.213+05:30 level=WARN msg=outreach_account_pool_unavailable error="OUTREACH_ZOHO_ACCOUNTS_JSON must contain at least one Zoho account for bulk outreach"
+time=2026-07-08T09:26:46.213+05:30 level=INFO msg=api_starting addr=:8080 env=local
+
+ ┌───────────────────────────────────────────────────┐ 
+ │                  Fiber v2.52.13                   │ 
+ │               http://127.0.0.1:8080               │ 
+ │       (bound on host 0.0.0.0 and port 8080)       │ 
+ │                                                   │ 
+ │ Handlers ............. 1  Processes ........... 1 │ 
+ │ Prefork ....... Disabled  PID ............. 46502 │ 
+ └───────────────────────────────────────────────────┘ 
+
+time=2026-07-08T09:26:46.220+05:30 level=INFO msg=http_request request_id=151a713c718140c341c1d78634dddd36 method=GET path=/api/public/v1/site/restaurants status=200 bytes=7201 duration_ms=4
+time=2026-07-08T09:26:47.144+05:30 level=INFO msg=http_request request_id=d2a4f7808d0b71c775344cacb753de0a method=GET path=/api/public/v1/site/restaurants status=200 bytes=7201 duration_ms=2
+time=2026-07-08T09:26:47.184+05:30 level=INFO msg=http_request request_id=eb217650dd5fa0629e02f036f8a4c3a1 method=GET path=/api/public/v1/site/restaurants/0 status=200 bytes=314 duration_ms=13
+time=2026-07-08T09:26:47.238+05:30 level=INFO msg=http_request request_id=e39e74c84a4c7b79124187b84d29e5c2 method=GET path=/api/public/v1/site/restaurants status=200 bytes=7201 duration_ms=1
+time=2026-07-08T09:26:47.334+05:30 level=INFO msg=http_request request_id=5cae57288375e5379df519f21c248285 method=GET path=/api/public/v1/site/restaurants status=200 bytes=7201 duration_ms=0
+time=2026-07-08T09:27:58.620+05:30 level=INFO msg=database_connecting
+time=2026-07-08T09:27:58.646+05:30 level=INFO msg=database_connected_successfully max_conns=5 min_conns=0
+time=2026-07-08T09:27:58.659+05:30 level=INFO msg=consultation_calendar_disabled
+time=2026-07-08T09:27:58.659+05:30 level=WARN msg=outreach_account_pool_unavailable error="OUTREACH_ZOHO_ACCOUNTS_JSON must contain at least one Zoho account for bulk outreach"
+time=2026-07-08T09:27:58.660+05:30 level=INFO msg=api_starting addr=:8080 env=local
+
+ ┌───────────────────────────────────────────────────┐ 
+ │                  Fiber v2.52.13                   │ 
+ │               http://127.0.0.1:8080               │ 
+ │       (bound on host 0.0.0.0 and port 8080)       │ 
+ │                                                   │ 
+ │ Handlers ............. 1  Processes ........... 1 │ 
+ │ Prefork ....... Disabled  PID ............. 46730 │ 
+ └───────────────────────────────────────────────────┘ 
+
+time=2026-07-08T09:27:58.842+05:30 level=INFO msg=http_request request_id=6bd8f5dbfc020a304853c42595a8eb82 method=GET path=/api/public/v1/site/restaurants status=200 bytes=7201 duration_ms=8
+time=2026-07-08T09:28:00.789+05:30 level=INFO msg=http_request request_id=7d6462382204639b7cf7782895ee34cf method=GET path=/api/public/v1/site/restaurants/0 status=200 bytes=314 duration_ms=37

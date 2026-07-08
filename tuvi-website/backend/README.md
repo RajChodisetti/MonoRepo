@@ -11,7 +11,7 @@ POST /api/v1/company/consultations
 
 This standalone backend is kept only as legacy reference while callers migrate.
 
-Legacy standalone Go backend for Tuvi website consultation booking: slot availability, Google Calendar events, and SMTP notifications.
+Legacy standalone Go backend for Tuvi website consultation booking: slot availability, Google Calendar events, and HTTP email notifications (Zoho Mail or Resend).
 
 The active Tuvi website and corporate voice agent now call the main MonoRepo API company consultation endpoints listed above.
 
@@ -22,7 +22,7 @@ Keep this service only for reference or rollback testing.
 - Go 1.22+
 - PostgreSQL (reuse MonoRepo docker Postgres or local install)
 - Google Workspace service account with Calendar API enabled (production)
-- SMTP credentials (production)
+- Zoho Mail or Resend HTTP API credentials (production email)
 
 ## Quick start (local)
 
@@ -57,7 +57,10 @@ make run   # listens on :8090
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | Path to service account JSON key |
 | `GOOGLE_CALENDAR_DISABLED` | `true` = DB-only mode (local dev) |
 | `NOTIFY_EMAIL` | Booking notification recipient (default `contact@tuvisolutions.com`) |
-| `SMTP_*` / `EMAIL_*` | SMTP settings |
+| `EMAIL_PROVIDER` | `zoho` (default) or `resend` |
+| `ZOHO_*` | Zoho Mail HTTP API (when `EMAIL_PROVIDER=zoho`) |
+| `RESEND_API_KEY` | Resend API key (when `EMAIL_PROVIDER=resend`) |
+| `EMAIL_*` | From address / name |
 | `EMAIL_DISABLED` | `true` = skip sending email |
 
 ## Google Calendar setup (service account)

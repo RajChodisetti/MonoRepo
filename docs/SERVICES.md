@@ -49,6 +49,7 @@ This repo contains long-running services, one-shot jobs, static sites, and autom
 | Import outreach data | `make import-outreach` | Import automation/outreach restaurant JSON into local DB. |
 | Sanitize import | `make sanitize-import` | Strip bad menu-board image matches and import. |
 | OCR all | `make ocr-all` | Run menu image OCR/classification and import. |
+| Verify leads OCR | `make verify-leads-ocr` | OCR-verify unverified `restaurant_profiles` rows in DB (batch/cron). |
 | Outreach city pipeline | `cd automation/outreach && python city_pipeline.py --city Sydney --total 100` | Fetch leads and scrape restaurant data. |
 | Fetch leads | `cd automation/outreach && python fetch_restaurant_leads.py --city Sydney` | Apollo restaurant decision-maker leads. |
 | Scrape places | `cd automation/outreach && python scrape_restaurant_places.py --city Sydney --total 100` | Google Places restaurant data. |

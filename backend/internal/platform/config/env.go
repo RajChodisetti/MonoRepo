@@ -17,6 +17,12 @@ func (p *envParser) join() error {
 	return joinErrors(p.errs)
 }
 
+func (p *envParser) addError(err error) {
+	if err != nil {
+		p.errs = append(p.errs, err)
+	}
+}
+
 func (p *envParser) string(key, fallback string) string {
 	raw, ok := os.LookupEnv(key)
 	if !ok {

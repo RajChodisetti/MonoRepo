@@ -314,6 +314,7 @@ export function adaptRestaurant(index: number): RestaurantContent {
 
   return {
     index,
+    restaurantId: r.google?.place_id || `json-${index}`,
     name: r.name,
     tagline: "Fire, flavor, and a table waiting for you.",
     subheadline: `A ${cuisine.toLowerCase()} experience built around seasonal ingredients and warm hospitality in ${city || "your city"}.`,

@@ -91,6 +91,7 @@ def init_db() -> None:
         ("channel", "TEXT"),
         ("agent_mode", "TEXT"),
         ("contact_name", "TEXT"),
+        ("restaurant_index", "INTEGER"),
     ):
         _ensure_column(cur, "calls", col, decl)
     for col, decl in (
@@ -110,6 +111,7 @@ def start_call(
     channel: str = "phone",
     agent_mode: str = "",
     contact_name: str = "",
+    restaurant_index: int | None = None,
 ) -> int:
     """Insert a new call/session row and return its DB id."""
     init_db()
@@ -122,8 +124,8 @@ def start_call(
     cur.execute(
         """
         INSERT INTO calls (
-            call_sid, to_number, started_at, outcome, email, channel, agent_mode, contact_name
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            call_sid, to_number, started_at, outcome, email, channel, agent_mode, contact_name, restaurant_index
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             call_sid,
@@ -134,6 +136,7 @@ def start_call(
             channel,
             (agent_mode or "").strip() or None,
             (contact_name or "").strip() or None,
+            restaurant_index,
         ),
     )
     call_id = int(cur.lastrowid)

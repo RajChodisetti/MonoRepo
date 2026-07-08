@@ -2,7 +2,7 @@ GO ?= go
 COMPOSE_FILE ?= infra/docker/docker-compose.yml
 COMPOSE_DIR ?= infra/docker
 
-.PHONY: api worker test fmt db-up db-down db-reset migrate-up migrate-down setup dev seed-admin seed-demo-fixture seed-restaurants-data import-outreach ocr-all sanitize-import import-restaurants-outreach openapi swagger up down logs start stop-all voice-up voice-down voice-logs
+.PHONY: api worker test fmt db-up db-down db-reset migrate-up migrate-down setup dev seed-admin seed-demo-fixture seed-restaurants-data import-outreach ocr-all sanitize-import verify-leads-ocr import-restaurants-outreach ingest-daily openapi swagger up down logs start stop-all voice-up voice-down voice-logs
 
 OPENAPI_SPEC ?= docs/openapi/openapi.yaml
 OPENAPI_DIR ?= docs/openapi
@@ -42,6 +42,18 @@ sanitize-import: db-up migrate-up
 import-outreach: db-up migrate-up
 	cd automation/outreach && \
 	(test -d .venv && . .venv/bin/activate; python import_to_db.py --restaurants-only)
+
+# Verify unverified DB leads via menu OCR (nightly cron or manual)
+verify-leads-ocr: db-up migrate-up
+	cd automation/outreach && \
+	(test -d .venv && . .venv/bin/activate; \
+	LEAD_OCR_VERIFICATION_ENABLED=true python verify_leads_from_db.py --force)
+
+# Daily lead ingestion — Apollo fetch + Places scrape + DB import (500 req budget)
+ingest-daily: db-up migrate-up
+	cd automation/outreach && \
+	(test -d .venv && . .venv/bin/activate; \
+	LEAD_INGESTION_ENABLED=true python daily_ingestion.py)
 
 # Legacy: Go seed (uses backend/.env DATABASE_URL)
 import-restaurants-outreach: db-up migrate-up

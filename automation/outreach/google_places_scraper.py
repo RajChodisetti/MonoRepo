@@ -14,6 +14,12 @@ import requests
 
 from tuvi_outreach_agent import Config, _lead_from_dict, with_retry
 
+try:
+    from request_budget import BudgetExhausted, RequestBudget
+except ImportError:
+    BudgetExhausted = Exception  # type: ignore
+    RequestBudget = None  # type: ignore
+
 log = logging.getLogger("google_places")
 
 LEGACY_BASE = "https://maps.googleapis.com/maps/api/place"
@@ -39,11 +45,13 @@ def get_places_api_key(cfg: Config | None = None) -> str:
     return key
 
 
-def _places_get(url: str, params: dict, cfg: Config, label: str) -> dict:
+def _places_get(url: str, params: dict, cfg: Config, label: str, budget: RequestBudget | None = None) -> dict:
     api_key = get_places_api_key(cfg)
     params = {**params, "key": api_key}
 
     def _call():
+        if budget is not None:
+            budget.consume(1)
         resp = requests.get(url, params=params, timeout=cfg.SCRAPE_TIMEOUT)
         if resp.status_code != 200:
             raise RuntimeError(f"HTTP {resp.status_code}: {resp.text[:300]}")
@@ -56,15 +64,26 @@ def _places_get(url: str, params: dict, cfg: Config, label: str) -> dict:
     return with_retry(_call, cfg.RETRY_ATTEMPTS, cfg.RETRY_BACKOFF, label=label)
 
 
-def search_place_id(company_name: str, city: str, cfg: Config) -> tuple[str | None, dict]:
+def search_place_id(
+    company_name: str,
+    city: str,
+    cfg: Config,
+    *,
+    query_suffix: str = "restaurant",
+    budget: RequestBudget | None = None,
+) -> tuple[str | None, dict]:
     """Text Search → place_id and basic result."""
-    query = f"{company_name} restaurant {city} Australia"
-    data = _places_get(
-        f"{LEGACY_BASE}/textsearch/json",
-        {"query": query, "language": "en"},
-        cfg,
-        label=f"places-search:{company_name}",
-    )
+    query = f"{company_name} {query_suffix} {city} Australia"
+    try:
+        data = _places_get(
+            f"{LEGACY_BASE}/textsearch/json",
+            {"query": query, "language": "en"},
+            cfg,
+            label=f"places-search:{company_name}",
+            budget=budget,
+        )
+    except BudgetExhausted:
+        return None, {}
     results = data.get("results") or []
     if not results:
         return None, {}
@@ -72,7 +91,7 @@ def search_place_id(company_name: str, city: str, cfg: Config) -> tuple[str | No
     return top.get("place_id"), top
 
 
-def get_place_details(place_id: str, cfg: Config) -> dict:
+def get_place_details(place_id: str, cfg: Config, budget: RequestBudget | None = None) -> dict:
     """Place Details with reviews, photos, hours, contact."""
     fields = ",".join([
         "name", "place_id", "formatted_address", "formatted_phone_number",
@@ -80,12 +99,16 @@ def get_place_details(place_id: str, cfg: Config) -> dict:
         "user_ratings_total", "opening_hours", "price_level", "types",
         "geometry", "reviews", "photos", "editorial_summary", "business_status",
     ])
-    data = _places_get(
-        f"{LEGACY_BASE}/details/json",
-        {"place_id": place_id, "fields": fields, "language": "en"},
-        cfg,
-        label=f"places-details:{place_id[:12]}",
-    )
+    try:
+        data = _places_get(
+            f"{LEGACY_BASE}/details/json",
+            {"place_id": place_id, "fields": fields, "language": "en"},
+            cfg,
+            label=f"places-details:{place_id[:12]}",
+            budget=budget,
+        )
+    except BudgetExhausted:
+        return {}
     return data.get("result") or {}
 
 
@@ -176,8 +199,11 @@ def scrape_single_restaurant_places(
     lead_dict: dict,
     cfg: Config,
     max_reviews: int = 5,
+    *,
+    query_suffix: str = "restaurant",
+    budget: RequestBudget | None = None,
 ) -> dict:
-    """Scrape one restaurant via Google Places API (Maps data)."""
+    """Scrape one business via Google Places API (Maps data)."""
     lead = _lead_from_dict(lead_dict)
     company = lead_dict.get("company") or {}
     contact = lead_dict.get("contact") or {}
@@ -222,14 +248,16 @@ def scrape_single_restaurant_places(
     }
 
     try:
-        place_id, _search_hit = search_place_id(company_name, city, cfg)
+        place_id, _search_hit = search_place_id(
+            company_name, city, cfg, query_suffix=query_suffix, budget=budget,
+        )
         if not place_id:
             result["scrape_status"] = "not_found"
             result["errors"].append("No Google Maps listing found (Places API)")
             return result
 
         time.sleep(cfg.SCRAPE_DELAY)
-        details = get_place_details(place_id, cfg)
+        details = get_place_details(place_id, cfg, budget=budget)
         if not details:
             result["scrape_status"] = "not_found"
             result["errors"].append("Place details empty")
@@ -288,6 +316,9 @@ def scrape_single_restaurant_places(
                 "Menu items not available via Places API (use Playwright for menu)"
             )
 
+    except BudgetExhausted:
+        result["scrape_status"] = "budget_exhausted"
+        result["errors"].append("Request budget exhausted during Places scrape")
     except Exception as exc:
         result["scrape_status"] = "error"
         result["errors"].append(str(exc))

@@ -28,7 +28,8 @@ type Config struct {
 	Database      DatabaseConfig
 	Redis         RedisConfig
 	Email         EmailConfig
-	SMTP          SMTPConfig
+	ZohoMail      ZohoMailConfig
+	Outreach      OutreachConfig
 	AppURLs       AppURLsConfig
 	LLM           LLMConfig
 	Voice         VoiceConfig
@@ -78,6 +79,7 @@ type RedisConfig struct {
 type EmailConfig struct {
 	Provider            string
 	APIKey              string
+	APIBaseURL          string
 	FromAddress         string
 	FromName            string
 	DisableSending      bool
@@ -85,12 +87,21 @@ type EmailConfig struct {
 	OpenTrackingEnabled bool
 }
 
-type SMTPConfig struct {
-	Host     string
-	Port     int
-	Username string
-	Password string
-	UseTLS   bool
+type ZohoMailConfig struct {
+	AccountID    string
+	FromEmail    string
+	Region       string
+	APIBaseURL   string
+	ClientID     string
+	ClientSecret string
+	RefreshToken string
+}
+
+type OutreachConfig struct {
+	BulkMax           int
+	EmailsPerAccount  int
+	ZohoAccounts      []ZohoMailConfig
+	ZohoAccountsJSON  string
 }
 
 type LLMConfig struct {
@@ -183,19 +194,23 @@ func Load() (Config, error) {
 		Email: EmailConfig{
 			Provider:            parser.string("EMAIL_PROVIDER", providerDisabled),
 			APIKey:              parser.string("EMAIL_API_KEY", ""),
+			APIBaseURL:          parser.string("EMAIL_API_BASE_URL", "https://api.resend.com"),
 			FromAddress:         parser.string("EMAIL_FROM_ADDRESS", ""),
 			FromName:            parser.string("EMAIL_FROM_NAME", "Tuvi Solutions"),
 			DisableSending:      parser.bool("EMAIL_DISABLE_SENDING", true),
 			RedirectTo:          parser.string("EMAIL_REDIRECT_TO", ""),
 			OpenTrackingEnabled: parser.bool("EMAIL_OPEN_TRACKING_ENABLED", true),
 		},
-		SMTP: SMTPConfig{
-			Host:     parser.string("SMTP_HOST", "smtp.gmail.com"),
-			Port:     parser.int("SMTP_PORT", 587),
-			Username: parser.string("SMTP_USERNAME", ""),
-			Password: parser.string("SMTP_PASSWORD", ""),
-			UseTLS:   parser.bool("SMTP_USE_TLS", true),
+		ZohoMail: ZohoMailConfig{
+			AccountID:    parser.string("ZOHO_ACCOUNT_ID", ""),
+			FromEmail:    parser.string("ZOHO_FROM_EMAIL", ""),
+			Region:       parser.string("ZOHO_REGION", "com"),
+			APIBaseURL:   parser.string("ZOHO_API_BASE_URL", "https://mail.zoho.com/api/accounts"),
+			ClientID:     parser.string("ZOHO_CLIENT_ID", ""),
+			ClientSecret: parser.string("ZOHO_CLIENT_SECRET", ""),
+			RefreshToken: parser.string("ZOHO_REFRESH_TOKEN", ""),
 		},
+		Outreach: loadOutreachConfig(parser),
 		LLM: LLMConfig{
 			Provider: parser.string("LLM_PROVIDER", providerDisabled),
 			APIKey:   parser.string("LLM_API_KEY", ""),
@@ -354,17 +369,23 @@ func (c Config) validateProviders() []error {
 		}
 		switch strings.ToLower(strings.TrimSpace(c.Email.Provider)) {
 		case "smtp":
-			if strings.TrimSpace(c.SMTP.Host) == "" {
-				errs = append(errs, fmt.Errorf("SMTP_HOST is required when EMAIL_PROVIDER is smtp"))
+			errs = append(errs, fmt.Errorf("EMAIL_PROVIDER=smtp is no longer supported; use EMAIL_PROVIDER=resend with EMAIL_API_KEY"))
+		case "resend", "http", "https":
+			if strings.TrimSpace(c.Email.APIKey) == "" {
+				errs = append(errs, fmt.Errorf("EMAIL_API_KEY is required when EMAIL_PROVIDER is %s", c.Email.Provider))
 			}
-			if c.SMTP.Port < 1 || c.SMTP.Port > 65535 {
-				errs = append(errs, fmt.Errorf("SMTP_PORT must be between 1 and 65535"))
+			if strings.TrimSpace(c.Email.APIBaseURL) == "" {
+				errs = append(errs, fmt.Errorf("EMAIL_API_BASE_URL is required when EMAIL_PROVIDER is enabled"))
 			}
-			if strings.TrimSpace(c.SMTP.Username) == "" {
-				errs = append(errs, fmt.Errorf("SMTP_USERNAME is required when EMAIL_PROVIDER is smtp"))
+		case "zoho":
+			if strings.TrimSpace(c.ZohoMail.AccountID) == "" {
+				errs = append(errs, fmt.Errorf("ZOHO_ACCOUNT_ID is required when EMAIL_PROVIDER is zoho"))
 			}
-			if strings.TrimSpace(c.SMTP.Password) == "" {
-				errs = append(errs, fmt.Errorf("SMTP_PASSWORD is required when EMAIL_PROVIDER is smtp"))
+			if strings.TrimSpace(c.ZohoMail.ClientID) == "" || strings.TrimSpace(c.ZohoMail.ClientSecret) == "" || strings.TrimSpace(c.ZohoMail.RefreshToken) == "" {
+				errs = append(errs, fmt.Errorf("ZOHO_CLIENT_ID, ZOHO_CLIENT_SECRET, and ZOHO_REFRESH_TOKEN are required when EMAIL_PROVIDER is zoho"))
+			}
+			if strings.TrimSpace(c.ZohoMail.FromEmail) == "" && strings.TrimSpace(c.Email.FromAddress) == "" {
+				errs = append(errs, fmt.Errorf("ZOHO_FROM_EMAIL or EMAIL_FROM_ADDRESS is required when EMAIL_PROVIDER is zoho"))
 			}
 		default:
 			if strings.TrimSpace(c.Email.APIKey) == "" {

@@ -12,6 +12,7 @@ drafts/*
 !drafts/.gitkeep
 reports/*
 !reports/.gitkeep
+state/ingestion_state.json
 
 # Python
 .venv/

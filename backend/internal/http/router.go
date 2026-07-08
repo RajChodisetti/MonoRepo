@@ -13,6 +13,7 @@ import (
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/demos"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/http/handlers"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/jobs"
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/outreach"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/config"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/db"
 	calendarprovider "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/calendar"
@@ -41,7 +42,7 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	}
 	campaignService := campaigns.NewService(dataStore.Campaigns, dataStore.Demos, accessService, jobEnqueuer, cfg.AppURLs)
 	calendarProvider := calendarprovider.NewFromConfig(context.Background(), cfg.Consultations, log)
-	emailProvider, err := emailprovider.NewFromConfig(cfg.Email, cfg.SMTP)
+	emailProvider, err := emailprovider.NewFromConfig(cfg.Email, cfg.ZohoMail)
 	if err != nil {
 		log.ErrorContext(context.Background(), "consultation_email_provider_unavailable", "error", err)
 		emailProvider = emailprovider.NewDisabled()
@@ -55,6 +56,24 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	demoPublicHandler := handlers.NewDemoPublicHandler(demoService, writeJSON, writeError)
 	demoAdminHandler := handlers.NewDemoAdminHandler(demoService, writeJSON, writeError)
 	campaignHandler := handlers.NewCampaignHandler(campaignService, writeJSON, writeError)
+	outreachRepo := outreach.NewPostgres(dataStore.Pool())
+	outreachAccountPool, outreachPoolErr := emailprovider.NewAccountPoolFromConfig(cfg.Email, cfg.Outreach)
+	if outreachPoolErr != nil {
+		log.WarnContext(context.Background(), "outreach_account_pool_unavailable", "error", outreachPoolErr)
+	}
+	outreachService := outreach.NewService(
+		outreachRepo,
+		dataStore.Pool(),
+		dataStore.Campaigns,
+		campaignService,
+		outreach.DemoTokenResolver{Campaigns: dataStore.Campaigns, Demos: dataStore.Demos},
+		outreachAccountPool,
+		cfg.Email,
+		cfg.Outreach,
+		&jobs.OutreachBulkEnqueuer{Queue: jobQueue},
+		log,
+	)
+	outreachBulkHandler := handlers.NewOutreachBulkHandler(outreachService, writeJSON, writeError)
 	trackingHandler := handlers.NewTrackingHandler(dataStore.Campaigns, writeError)
 	restaurantPublicHandler := handlers.NewRestaurantPublicHandler(dataStore.Profiles, writeJSON, writeError)
 	reservationService := reservations.NewService(dataStore.Reservations)
@@ -109,6 +128,8 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	mux.Handle("POST /api/v1/campaigns/{id}/approve", protectInternalAdmin(http.HandlerFunc(campaignHandler.Approve)))
 	mux.Handle("POST /api/v1/campaigns/{id}/send-step", protectInternalAdmin(http.HandlerFunc(campaignHandler.SendStep)))
 	mux.Handle("POST /api/v1/campaigns/{id}/stop", protectInternalAdmin(http.HandlerFunc(campaignHandler.Stop)))
+	mux.Handle("POST /api/v1/outreach/bulk-send", protectInternalAdmin(http.HandlerFunc(outreachBulkHandler.Trigger)))
+	mux.Handle("GET /api/v1/outreach/bulk-send/status", protectInternalAdmin(http.HandlerFunc(outreachBulkHandler.Status)))
 
 	mux.HandleFunc("GET /t/click/{token}", trackingHandler.Click)
 	mux.HandleFunc("GET /t/open/{token}", trackingHandler.Open)

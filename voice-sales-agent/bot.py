@@ -123,8 +123,9 @@ from logger_db import (
 
 import api_client
 import tuvi_api_client
+from caller_id import resolve_caller_id
 from prompts.restaurant import build_restaurant_greeting, build_restaurant_prompt
-from prompts.tools_restaurant import RESTAURANT_TOOLS
+from prompts.tools_restaurant import RESTAURANT_TOOLS, RESTAURANT_BROWSER_TOOLS
 from prompts.corporate import build_corporate_greeting, build_corporate_prompt
 from prompts.tools_corporate import CORPORATE_TOOLS, CORPORATE_PHONE_TOOLS
 
@@ -695,7 +696,9 @@ def _normalize_agent_mode(raw: str | None, default: str = "corporate") -> str:
     mode = (raw or default).strip().lower()
     if mode in ("corporate", "tuvi"):
         return "corporate"
-    if mode in ("restaurant", "sales"):
+    if mode == "restaurant":
+        return "restaurant"
+    if mode == "sales":
         return "sales"
     return default
 
@@ -703,7 +706,7 @@ def _normalize_agent_mode(raw: str | None, default: str = "corporate") -> str:
 # Populated before FastAPI routes; used by start_outbound_call and stream handlers.
 _active_tasks: dict[str, PipelineTask] = {}
 _call_db_ids: dict[str, int] = {}
-_call_agent_modes: dict[str, str] = {}  # call_sid → corporate | sales
+_call_agent_modes: dict[str, str] = {}  # call_sid → corporate | sales | restaurant
 _paused_campaigns: set[str] = set()
 
 
@@ -712,6 +715,11 @@ def start_outbound_call(
     *,
     campaign_id: str = "default",
     agent_mode: str = "corporate",
+    restaurant_index: int | None = None,
+    from_number: str | None = None,
+    caller_verified: bool = False,
+    restaurant_name: str | None = None,
+    restaurant_phone_display: str | None = None,
 ) -> dict:
     """
     Place a Twilio outbound call with Media Stream → /stream.
@@ -722,26 +730,36 @@ def start_outbound_call(
     ws_host = public_url.replace("https://", "").replace("http://", "")
 
     safe_campaign = "".join(c for c in campaign_id if c.isalnum() or c in "-_")[:64] or "default"
-    safe_agent = agent_mode if agent_mode in ("corporate", "sales") else "corporate"
+    safe_agent = agent_mode if agent_mode in ("corporate", "sales", "restaurant") else "corporate"
 
     twilio_client = TwilioClient(
         os.environ["TWILIO_ACCOUNT_SID"],
         os.environ["TWILIO_AUTH_TOKEN"],
     )
 
+    from_e164, verified = (
+        (from_number, caller_verified)
+        if from_number
+        else resolve_caller_id(restaurant_phone_display)
+    )
+
+    restaurant_param = ""
+    if safe_agent == "restaurant" and restaurant_index is not None:
+        restaurant_param = f'\n      <Parameter name="restaurant_index" value="{max(0, int(restaurant_index))}"/>'
+
     twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Connect>
     <Stream url="wss://{ws_host}/stream">
       <Parameter name="campaign_id" value="{safe_campaign}"/>
-      <Parameter name="agent" value="{safe_agent}"/>
+      <Parameter name="agent" value="{safe_agent}"/>{restaurant_param}
     </Stream>
   </Connect>
 </Response>"""
 
     call = twilio_client.calls.create(
         to=to_number,
-        from_=os.environ["TWILIO_PHONE_NUMBER"],
+        from_=from_e164,
         twiml=twiml,
         status_callback=f"{public_url}/twilio/status",
         status_callback_event=["initiated", "ringing", "answered", "completed"],
@@ -758,7 +776,8 @@ def start_outbound_call(
     _call_agent_modes[call.sid] = safe_agent
 
     logger.info(
-        f"Outbound call → {to_number}  SID={call.sid}  agent={safe_agent}  DB id={call_db_id}"
+        f"Outbound call → {to_number}  SID={call.sid}  agent={safe_agent}  "
+        f"from={from_e164} verified={verified}  DB id={call_db_id}"
     )
     return {
         "status": "calling",
@@ -766,6 +785,10 @@ def start_outbound_call(
         "call_sid": call.sid,
         "log_id": call_db_id,
         "agent": safe_agent,
+        "from": from_e164,
+        "from_verified": verified,
+        "caller_name": restaurant_name,
+        "caller_display": restaurant_phone_display,
     }
 
 
@@ -1006,6 +1029,7 @@ async def _dispatch_tool(
     call_sid: str = "unknown",
     is_browser: bool = False,
     restaurant_id: str | None = None,
+    restaurant_index: int | None = None,
 ) -> dict:
     logger.info(f"Tool: {function_name}  args={arguments}  browser={is_browser}  restaurant={restaurant_id}")
 
@@ -1249,6 +1273,71 @@ async def _dispatch_tool(
                 "message": "Could not place the call. Offer a consultation instead.",
             }
 
+    if function_name == "place_restaurant_callback":
+        if not is_browser:
+            return {
+                "status": "error",
+                "message": "Restaurant callback dialing is only available from the browser assistant.",
+            }
+        raw_phone = (arguments.get("phone_number") or "").strip()
+        to_number = normalize_e164(raw_phone)
+        if not to_number:
+            return {
+                "status": "error",
+                "message": "Invalid phone number. Ask for a number with country code, e.g. +61…",
+            }
+        if is_opted_out(to_number):
+            return {
+                "status": "blocked",
+                "reason": "internal_opt_out",
+                "message": "That number is on the do-not-call list.",
+            }
+        skip_compliance = os.environ.get("ENVIRONMENT", "development").lower() == "development"
+        allowed, reason = _is_calling_allowed()
+        if not allowed and not skip_compliance:
+            return {
+                "status": "queued",
+                "reason": reason,
+                "message": (
+                    f"Outside the allowed calling window ({reason}). "
+                    "Offer to help here in chat instead."
+                ),
+            }
+        idx = restaurant_index if restaurant_index is not None else 0
+        site = await api_client.get_site_restaurant(idx)
+        restaurant_name = str(site.get("name") or "")
+        restaurant_phone_display = str(site.get("phone") or "").strip() or None
+        from_number, from_verified = resolve_caller_id(restaurant_phone_display)
+        try:
+            result = start_outbound_call(
+                to_number,
+                campaign_id="template_callback",
+                agent_mode="restaurant",
+                restaurant_index=idx,
+                from_number=from_number,
+                caller_verified=from_verified,
+                restaurant_name=restaurant_name,
+                restaurant_phone_display=restaurant_phone_display,
+            )
+            update_call_contact(
+                call_db_id,
+                phone=to_number,
+                contact_name=(arguments.get("name") or "").strip(),
+            )
+            return {
+                "status": result.get("status", "calling"),
+                "call_sid": result.get("call_sid"),
+                "to": to_number,
+                "from_verified": result.get("from_verified"),
+                "caller_display": result.get("caller_display"),
+            }
+        except Exception as e:
+            logger.error(f"place_restaurant_callback failed: {e}")
+            return {
+                "status": "error",
+                "message": "Could not place the call right now.",
+            }
+
     if function_name == "send_followup_sms":
         if is_browser:
             return {"status": "unavailable", "message": "SMS is not available in browser sessions."}
@@ -1476,6 +1565,35 @@ async def initiate_call(
     to_raw = body.get("to", "")
     campaign_id = body.get("campaign_id", "default")
     agent_mode = _normalize_agent_mode(body.get("agent"), default="corporate")
+    restaurant_index: int | None = None
+    if body.get("restaurant_index") is not None:
+        try:
+            restaurant_index = max(0, int(body.get("restaurant_index")))
+        except (TypeError, ValueError):
+            return JSONResponse(
+                {"status": "blocked", "reason": "invalid_restaurant_index"},
+                status_code=400,
+            )
+
+    restaurant_name: str | None = None
+    restaurant_phone_display: str | None = None
+    from_number: str | None = None
+    from_verified = False
+    if agent_mode == "restaurant":
+        idx = restaurant_index if restaurant_index is not None else 0
+        site = await api_client.get_site_restaurant(idx)
+        if site.get("status") == "error":
+            return JSONResponse(
+                {
+                    "status": "error",
+                    "message": site.get("message", "Restaurant not found."),
+                },
+                status_code=404,
+            )
+        restaurant_name = str(site.get("name") or "")
+        restaurant_phone_display = str(site.get("phone") or "").strip() or None
+        from_number, from_verified = resolve_caller_id(restaurant_phone_display)
+        restaurant_index = idx
 
     # 1. Campaign pause guard
     if campaign_id in _paused_campaigns:
@@ -1513,6 +1631,11 @@ async def initiate_call(
             to_number,
             campaign_id=campaign_id,
             agent_mode=agent_mode,
+            restaurant_index=restaurant_index,
+            from_number=from_number,
+            caller_verified=from_verified,
+            restaurant_name=restaurant_name,
+            restaurant_phone_display=restaurant_phone_display,
         )
     except Exception as e:
         logger.error(f"Outbound call failed: {e}")
@@ -1691,10 +1814,23 @@ async def stream_websocket(websocket: WebSocket):
     # ── STT ───────────────────────────────────────────────────────────────────
     stt = DeepgramSTTService(api_key=os.environ["DEEPGRAM_API_KEY"])
 
+    restaurant_id: str | None = None
     if agent_mode == "corporate":
         phone_tools = CORPORATE_PHONE_TOOLS
         system_prompt = build_corporate_prompt(channel="phone")
         greeting_text = build_corporate_greeting()
+    elif agent_mode == "restaurant":
+        try:
+            restaurant_index = int(custom_params.get("restaurant_index", "0"))
+        except ValueError:
+            restaurant_index = 0
+        site = await api_client.get_site_restaurant(restaurant_index)
+        if site.get("status") == "error":
+            site = {"name": "the restaurant"}
+        restaurant_id = str(site.get("restaurant_id") or "")
+        phone_tools = RESTAURANT_TOOLS
+        system_prompt = build_restaurant_prompt(site, channel="phone")
+        greeting_text = build_restaurant_greeting(site)
     else:
         phone_tools = TOOLS
         system_prompt = SYSTEM_PROMPT
@@ -1723,6 +1859,7 @@ async def stream_websocket(websocket: WebSocket):
             booking_state=booking_state,
             call_sid=call_sid,
             is_browser=False,
+            restaurant_id=restaurant_id,
         )
         await result_callback(json.dumps(result))
 
@@ -1892,6 +2029,7 @@ async def browser_stream(websocket: WebSocket):
     query = websocket.scope.get("query_string", b"").decode()
     params = dict(parse_qsl(query))
     agent_mode = (params.get("agent") or "restaurant").strip().lower()
+    restaurant_index = 0
 
     if agent_mode == "corporate":
         site = {"name": "Tuvi Solutions"}
@@ -1914,22 +2052,33 @@ async def browser_stream(websocket: WebSocket):
         restaurant_id = str(site.get("restaurant_id") or "")
         system_prompt = build_restaurant_prompt(site)
         greeting_text = build_restaurant_greeting(site)
-        agent_tools = RESTAURANT_TOOLS
+        agent_tools = RESTAURANT_BROWSER_TOOLS
 
     session_id = f"browser-{uuid.uuid4().hex[:8]}"
+    contact_name = str(site.get("name") or "").strip()
     call_db_id = start_call(
         session_id,
         "",
         channel="browser",
         agent_mode=agent_mode,
+        contact_name=contact_name,
+        restaurant_index=restaurant_index if agent_mode == "restaurant" else None,
     )
 
-    logger.info(f"Browser session started: {session_id}  DB id={call_db_id}")
+    logger.info(
+        f"Browser session started: {session_id}  DB id={call_db_id}  "
+        f"agent={agent_mode}  restaurant={contact_name or '—'}"
+    )
 
     # Tell the browser immediately so it can start mic streaming before greeting audio.
     try:
         await websocket.send_text(
-            json.dumps({"event": "ready", "session_id": session_id, "restaurant": site.get("name")})
+            json.dumps({
+                "event": "ready",
+                "session_id": session_id,
+                "call_db_id": call_db_id,
+                "restaurant": contact_name or site.get("name"),
+            })
         )
     except Exception:
         pass
@@ -2022,6 +2171,7 @@ async def browser_stream(websocket: WebSocket):
             call_sid=session_id,
             is_browser=True,
             restaurant_id=restaurant_id,
+            restaurant_index=restaurant_index,
         )
 
         if function_name in check_tools:

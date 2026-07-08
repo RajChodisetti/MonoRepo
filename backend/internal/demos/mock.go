@@ -54,6 +54,21 @@ func (mock *Mock) Create(ctx context.Context, input CreateInput) (Site, error) {
 	return record, nil
 }
 
+func (mock *Mock) UpdateTokenHash(ctx context.Context, id uuid.UUID, tokenHash string) error {
+	if mock.Sites == nil {
+		return repository.ErrNotFound
+	}
+	for slug, record := range mock.Sites {
+		if record.ID == id {
+			record.TokenHash = tokenHash
+			record.UpdatedAt = time.Now().UTC()
+			mock.Sites[slug] = record
+			return nil
+		}
+	}
+	return repository.ErrNotFound
+}
+
 var _ Repository = (*Mock)(nil)
 
 func DefaultPublicPayload() json.RawMessage {

@@ -31,6 +31,7 @@ const (
 var (
 	ErrNotEligible    = ErrEligibility("campaign is not eligible to send")
 	ErrAlreadyStopped = ErrEligibility("campaign is stopped")
+	ErrNoSiteIndex    = ErrEligibility("restaurant is not published on the public site index")
 )
 
 type ErrEligibility string
@@ -107,5 +108,7 @@ type Repository interface {
 	AddSuppression(ctx context.Context, email, reason string) error
 	GetSendContext(ctx context.Context, campaignID uuid.UUID) (SendContext, error)
 	GetRestaurantContext(ctx context.Context, restaurantID uuid.UUID) (SendContext, error)
+	GetSiteIndexByRestaurantID(ctx context.Context, restaurantID uuid.UUID) (int, error)
 	MarkRestaurantEmailed(ctx context.Context, restaurantID uuid.UUID) error
+	GetLatestDemoTokenByDemoSiteID(ctx context.Context, demoSiteID uuid.UUID) (string, error)
 }

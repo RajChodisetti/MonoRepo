@@ -105,4 +105,31 @@ RESTAURANT_TOOLS = [
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "place_restaurant_callback",
+            "description": (
+                "Call the guest on their phone so they can speak with you as the restaurant "
+                "receptionist. Use when they ask to be called or prefer a phone conversation."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "phone_number": {
+                        "type": "string",
+                        "description": "Guest phone with country code, e.g. +61 412 345 678.",
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "Guest name if known.",
+                    },
+                },
+                "required": ["phone_number"],
+            },
+        },
+    },
 ]
+
+# Browser sessions only — phone pipeline uses RESTAURANT_TOOLS without callback dial tool.
+RESTAURANT_BROWSER_TOOLS = RESTAURANT_TOOLS

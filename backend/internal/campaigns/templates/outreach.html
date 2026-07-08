@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Your live restaurant demo</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#111111;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f5f7;padding:28px 12px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:#ffffff;border:1px solid #e6e8ec;border-radius:16px;overflow:hidden;">
+
+          <!-- Header -->
+          <tr>
+            <td style="background:#111111;padding:0;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td style="height:4px;background:#d4a853;font-size:0;line-height:0;">&nbsp;</td>
+                </tr>
+                <tr>
+                  <td align="center" style="padding:28px 28px 24px;">
+                    <p style="margin:0;font-size:11px;letter-spacing:0.22em;font-weight:700;color:#d4a853;text-transform:uppercase;">Tuvi Solutions</p>
+                    <p style="margin:10px 0 0;font-size:11px;letter-spacing:0.16em;font-weight:600;color:#9ca3af;text-transform:uppercase;">Restaurant growth platform</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Greeting + hook -->
+          <tr>
+            <td style="padding:32px 28px 8px;">
+              <p style="margin:0;font-size:15px;line-height:1.6;color:#5b6470;">
+                Hi there —
+              </p>
+              <p style="margin:14px 0 0;font-size:15px;line-height:1.6;color:#5b6470;">
+                Most restaurants lose bookings to missed calls and outdated websites. We help owners fix that with modern apps — without adding headcount.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Who we are -->
+          <tr>
+            <td style="padding:8px 28px 8px;">
+              <p style="margin:0;font-size:15px;line-height:1.6;color:#374151;">
+                <strong style="color:#111111;">Tuvi Solutions</strong> builds restaurant software: presentation websites, AI voice receptionists, online reservations, and custom apps (ordering, loyalty, and more).
+              </p>
+            </td>
+          </tr>
+
+          <!-- Services -->
+          <tr>
+            <td style="padding:20px 28px 8px;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f7f8fa;border:1px solid #e6e8ec;border-radius:14px;">
+                <tr>
+                  <td style="padding:18px 20px;">
+                    <p style="margin:0;font-size:11px;letter-spacing:0.14em;font-weight:700;color:#6b7280;text-transform:uppercase;">What we build for restaurants</p>
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:14px;">
+                      {{range .ServiceRows}}
+                      <tr>
+                        {{range .}}
+                        <td width="50%" valign="top" style="padding:0 8px 14px 0;">
+                          <p style="margin:0;font-size:13px;font-weight:700;line-height:1.4;color:#111111;">{{.Title}}</p>
+                          <p style="margin:4px 0 0;font-size:12px;line-height:1.5;color:#5b6470;">{{.Description}}</p>
+                        </td>
+                        {{end}}
+                      </tr>
+                      {{end}}
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Demo proof intro -->
+          <tr>
+            <td style="padding:20px 28px 8px;">
+              <h1 style="margin:0;font-size:22px;line-height:1.3;font-weight:700;color:#111111;">We already built a preview for {{.RestaurantName}}</h1>
+              <p style="margin:10px 0 0;font-size:14px;line-height:1.6;color:#5b6470;">
+                Using your real menu, photos, hours, and reviews — explore three design styles below.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Template cards -->
+          {{range .Templates}}
+          <tr>
+            <td style="padding:10px 28px 0;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #e6e8ec;border-radius:14px;overflow:hidden;">
+                <tr>
+                  <td style="width:6px;background:{{.AccentColor}};font-size:0;line-height:0;">&nbsp;</td>
+                  <td style="padding:16px 18px;">
+                    <p style="margin:0;font-size:11px;letter-spacing:0.14em;font-weight:700;color:#6b7280;text-transform:uppercase;">Style {{.Number}}</p>
+                    <h2 style="margin:4px 0 0;font-size:18px;font-weight:700;color:#111111;">{{.Name}}</h2>
+                    <p style="margin:6px 0 0;font-size:13px;line-height:1.5;color:#5b6470;">{{.Tagline}}</p>
+                    <table role="presentation" cellspacing="0" cellpadding="0" style="margin:10px 0 0;">
+                      {{range .Bullets}}
+                      <tr>
+                        <td style="padding:2px 0;font-size:12px;line-height:1.5;color:#374151;">
+                          <span style="color:{{$.AccentFallback}};">&#8226;</span>&nbsp; {{.}}
+                        </td>
+                      </tr>
+                      {{end}}
+                    </table>
+                    <table role="presentation" cellspacing="0" cellpadding="0" style="margin:12px 0 0;">
+                      <tr>
+                        <td>
+                          <a href="__{{.PreviewPlaceholder}}__" style="display:inline-block;background:#111111;color:#ffffff;text-decoration:none;font-weight:600;font-size:12px;padding:10px 18px;border-radius:8px;border:1px solid #111111;">
+                            Preview {{.Name}}
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          {{end}}
+
+          <!-- Primary CTA -->
+          <tr>
+            <td align="center" style="padding:24px 28px 8px;">
+              <a href="__CLICK_URL__" style="display:inline-block;background:#d4a853;color:#111111;text-decoration:none;font-weight:700;font-size:15px;padding:15px 32px;border-radius:10px;">
+                Explore your live demo
+              </a>
+              <p style="margin:12px 0 0;font-size:12px;line-height:1.5;color:#6b7280;">Preview all three styles on your personalized site.</p>
+            </td>
+          </tr>
+
+          <!-- Sales close + footer -->
+          <tr>
+            <td style="padding:20px 28px 32px;">
+              <p style="margin:0;font-size:13px;line-height:1.6;color:#5b6470;">
+                Which direction fits {{.RestaurantName}} best? Reply to this email or explore the demo — happy to walk you through it in 10 minutes.
+              </p>
+              <p style="margin:16px 0 0;font-size:12px;line-height:1.5;color:#9ca3af;">
+                If you would rather not receive these emails,
+                <a href="__UNSUBSCRIBE_URL__" style="color:#6b7280;text-decoration:underline;">unsubscribe here</a>.
+              </p>
+              <p style="margin:16px 0 0;font-size:13px;color:#111111;font-weight:600;">— Tuvi Solutions</p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

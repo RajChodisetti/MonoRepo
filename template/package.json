@@ -6,9 +6,11 @@
     "dev": "next dev",
     "dev:cinematic": "TEMPLATE=1 next dev",
     "dev:aurora": "TEMPLATE=2 next dev",
+    "dev:elysian": "TEMPLATE=3 next dev",
     "build": "next build",
     "build:cinematic": "TEMPLATE=1 next build",
     "build:aurora": "TEMPLATE=2 next build",
+    "build:elysian": "TEMPLATE=3 next build",
     "start": "next start",
     "lint": "next lint"
   },

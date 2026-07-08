@@ -28,6 +28,7 @@ export interface ExperienceCard {
 
 export interface RestaurantContent {
   index: number;
+  restaurantId: string;
   name: string;
   tagline: string;
   subheadline: string;

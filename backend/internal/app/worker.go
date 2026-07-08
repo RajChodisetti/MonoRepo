@@ -9,6 +9,7 @@ import (
 
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/campaigns"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/jobs"
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/outreach"
 	emailprovider "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/email"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/config"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/db"
@@ -53,7 +54,7 @@ func NewWorker(ctx context.Context) (*WorkerApp, error) {
 
 	accessService := restaurants.NewService(dataStore.Restaurants, dataStore.Memberships)
 	campaignService := campaigns.NewService(dataStore.Campaigns, dataStore.Demos, accessService, &jobs.CampaignEnqueuer{Queue: queue}, cfg.AppURLs)
-	emailProvider, err := emailprovider.NewFromConfig(cfg.Email, cfg.SMTP)
+	emailProvider, err := emailprovider.NewFromConfig(cfg.Email, cfg.ZohoMail)
 	if err != nil {
 		return nil, err
 	}
@@ -63,6 +64,29 @@ func NewWorker(ctx context.Context) (*WorkerApp, error) {
 		Email:            emailProvider,
 		EmailCfg:         cfg.Email,
 		AppURLs:          cfg.AppURLs,
+	}, log)); err != nil {
+		return nil, err
+	}
+
+	outreachRepo := outreach.NewPostgres(dataStore.Pool())
+	outreachAccountPool, outreachPoolErr := emailprovider.NewAccountPoolFromConfig(cfg.Email, cfg.Outreach)
+	if outreachPoolErr != nil {
+		log.WarnContext(ctx, "outreach_account_pool_unavailable", "error", outreachPoolErr)
+	}
+	outreachService := outreach.NewService(
+		outreachRepo,
+		dataStore.Pool(),
+		dataStore.Campaigns,
+		campaignService,
+		outreach.DemoTokenResolver{Campaigns: dataStore.Campaigns, Demos: dataStore.Demos},
+		outreachAccountPool,
+		cfg.Email,
+		cfg.Outreach,
+		nil,
+		log,
+	)
+	if err := worker.Register(jobs.OutreachBulkSendJobType, jobs.OutreachBulkSendHandler(jobs.OutreachBulkSendDeps{
+		Outreach: outreachService,
 	}, log)); err != nil {
 		return nil, err
 	}

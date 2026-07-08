@@ -10,6 +10,7 @@ import (
 func TestBuildDraftIncludesPlaceholders(t *testing.T) {
 	draft := campaigns.BuildDraft(campaigns.DraftInput{
 		RestaurantName: "Aurora Cafe",
+		SiteIndex:      2,
 		DemoWebURL:     "http://localhost:3000",
 		DemoSlug:       "aurora-cafe",
 		DemoToken:      "demo-token",
@@ -18,36 +19,58 @@ func TestBuildDraftIncludesPlaceholders(t *testing.T) {
 	if !strings.Contains(draft.Subject, "Aurora Cafe") {
 		t.Fatalf("subject = %q, want restaurant name", draft.Subject)
 	}
-	if !strings.Contains(draft.BodyHTML, "{{CLICK_URL}}") {
-		t.Fatal("body_html missing click placeholder")
+	if !strings.Contains(draft.Subject, "live demo") {
+		t.Fatalf("subject = %q, want sales hook", draft.Subject)
+	}
+	for _, placeholder := range []string{
+		"{{CLICK_URL}}",
+		"{{TEMPLATE_1_URL}}",
+		"{{TEMPLATE_2_URL}}",
+		"{{TEMPLATE_3_URL}}",
+	} {
+		if !strings.Contains(draft.BodyHTML, placeholder) {
+			t.Fatalf("body_html missing placeholder %s", placeholder)
+		}
 	}
 	if !strings.Contains(draft.BodyText, "{{UNSUBSCRIBE_URL}}") {
 		t.Fatal("body_text missing unsubscribe placeholder")
+	}
+	for _, name := range []string{"Cinematic", "Aurora", "Elysian"} {
+		if !strings.Contains(draft.BodyHTML, name) {
+			t.Fatalf("body_html missing template name %q", name)
+		}
 	}
 }
 
 func TestInjectTrackingReplacesPlaceholders(t *testing.T) {
 	draft := campaigns.DraftContent{
 		Subject:  "Hello",
-		BodyHTML: `<a href="{{CLICK_URL}}">Go</a>`,
-		BodyText: "Go: {{CLICK_URL}}",
+		BodyHTML: `<a href="{{CLICK_URL}}">Go</a><a href="{{TEMPLATE_2_URL}}">Aurora</a>`,
+		BodyText: "Go: {{CLICK_URL}} Aurora: {{TEMPLATE_2_URL}}",
 	}
 
 	result := campaigns.InjectTracking(
 		draft,
-		"http://localhost:8080/t/click/abc",
-		"http://localhost:8080/t/unsubscribe/xyz",
-		"http://localhost:8080/t/open/open.png",
+		campaigns.TrackingURLs{
+			Click:       "http://localhost:8080/t/click/abc",
+			Template1:   "http://localhost:8080/t/click/one",
+			Template2:   "http://localhost:8080/t/click/two",
+			Template3:   "http://localhost:8080/t/click/three",
+			Unsubscribe: "http://localhost:8080/t/unsubscribe/xyz",
+			Open:        "http://localhost:8080/t/open/open.png",
+		},
 		true,
 	)
 
-	if strings.Contains(result.BodyHTML, "{{CLICK_URL}}") {
-		t.Fatal("click placeholder was not replaced in html")
+	for _, placeholder := range []string{"{{CLICK_URL}}", "{{TEMPLATE_2_URL}}"} {
+		if strings.Contains(result.BodyHTML, placeholder) {
+			t.Fatalf("html still contains placeholder %s", placeholder)
+		}
 	}
 	if !strings.Contains(result.BodyHTML, "t/open/open.png") {
 		t.Fatal("open pixel missing from html")
 	}
-	if strings.Contains(result.BodyText, "{{CLICK_URL}}") {
-		t.Fatal("click placeholder was not replaced in text")
+	if strings.Contains(result.BodyText, "{{CLICK_URL}}") || strings.Contains(result.BodyText, "{{TEMPLATE_2_URL}}") {
+		t.Fatal("text placeholders were not replaced")
 	}
 }

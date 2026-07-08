@@ -52,6 +52,25 @@ def verify_schema(cur) -> None:
         )
 
 
+def verify_ocr_schema(cur) -> None:
+    verify_schema(cur)
+    cur.execute(
+        """
+        SELECT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'restaurant_profiles'
+              AND column_name = 'ocr_verified'
+        )
+        """
+    )
+    if not cur.fetchone()[0]:
+        raise SystemExit(
+            "Migration 000013 not applied — ocr_verified column missing.\n"
+            "Run: make migrate-up"
+        )
+
+
 def get_conn(database_url: str):
     try:
         import psycopg2
@@ -290,6 +309,175 @@ def upsert_lead(cur, lead: dict) -> uuid.UUID | None:
     return restaurant_id
 
 
+def _menu_board_urls(record: dict) -> set[str]:
+    urls: set[str] = set()
+    for img in (record.get("images") or {}).get("menu_photos") or []:
+        u = image_record_url(img)
+        if u:
+            urls.add(u)
+    return urls
+
+
+def ensure_menu_id(cur, restaurant_id: uuid.UUID) -> uuid.UUID:
+    cur.execute(
+        "SELECT id FROM menus WHERE restaurant_id = %s AND name = %s LIMIT 1",
+        (restaurant_id, IMPORTED_MENU_NAME),
+    )
+    row = cur.fetchone()
+    if row:
+        return row[0]
+    cur.execute(
+        "INSERT INTO menus (restaurant_id, name, status) VALUES (%s, %s, 'active') RETURNING id",
+        (restaurant_id, IMPORTED_MENU_NAME),
+    )
+    return cur.fetchone()[0]
+
+
+def sync_menu_items_and_reviews(
+    cur,
+    restaurant_id: uuid.UUID,
+    record: dict,
+    *,
+    sync_reviews: bool = True,
+) -> tuple[int, int]:
+    """Sync menu items, optional reviews, and classified image tables."""
+    board_urls = _menu_board_urls(record)
+    menu_id = ensure_menu_id(cur, restaurant_id)
+
+    cur.execute("DELETE FROM menu_items WHERE menu_id = %s", (menu_id,))
+    for i, item in enumerate(record.get("menu_items") or []):
+        name = (item.get("name") or "").strip()
+        category = (item.get("category") or "").strip()
+        if not name and not category:
+            continue
+        if not name:
+            name = category
+        cur.execute(
+            """
+            INSERT INTO menu_items (
+                menu_id, name, description, price, price_text, category,
+                image_url, images, sort_order
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s)
+            """,
+            (
+                menu_id,
+                name,
+                (item.get("description") or "").strip(),
+                item.get("price_numeric"),
+                (item.get("price") or "").strip(),
+                category,
+                first_menu_image_url(item.get("images"), board_urls),
+                jdump(item.get("images") or []),
+                i,
+            ),
+        )
+
+    if sync_reviews:
+        cur.execute("DELETE FROM restaurant_reviews WHERE restaurant_id = %s", (restaurant_id,))
+        for i, rev in enumerate(record.get("reviews") or []):
+            cur.execute(
+                """
+                INSERT INTO restaurant_reviews (
+                    restaurant_id, reviewer, review_text, stars, review_date, images, source, sort_order
+                ) VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s, %s)
+                """,
+                (
+                    restaurant_id,
+                    (rev.get("reviewer") or "").strip(),
+                    (rev.get("review") or "").strip(),
+                    rev.get("stars"),
+                    (rev.get("date") or "").strip(),
+                    jdump(rev.get("images") or []),
+                    (rev.get("source") or "").strip(),
+                    i,
+                ),
+            )
+
+    return sync_classified_images(cur, restaurant_id, record)
+
+
+def apply_verified_record(cur, restaurant_id: uuid.UUID, record: dict) -> tuple[int, int]:
+    """
+    Write OCR-verified scrape JSON back to an existing restaurant row.
+    Updates profile images/raw_public_data, menu items, and classified image tables.
+    """
+    raw_record = json.dumps(record)
+    cur.execute(
+        """
+        UPDATE restaurant_profiles
+        SET
+            images = %s::jsonb,
+            raw_public_data = %s::jsonb,
+            scrape_errors = %s::jsonb,
+            updated_at = now()
+        WHERE restaurant_id = %s
+        """,
+        (
+            jdump(record.get("images") or {}),
+            raw_record,
+            jdump(record.get("errors") or []),
+            restaurant_id,
+        ),
+    )
+    return sync_menu_items_and_reviews(cur, restaurant_id, record, sync_reviews=False)
+
+
+def mark_ocr_verified(cur, restaurant_id: uuid.UUID, *, note: str = "") -> None:
+    errors = jdump([note]) if note else "[]"
+    cur.execute(
+        """
+        UPDATE restaurant_profiles
+        SET
+            ocr_verified = true,
+            ocr_verified_at = now(),
+            ocr_verification_errors = %s::jsonb,
+            updated_at = now()
+        WHERE restaurant_id = %s
+        """,
+        (errors if note else "[]", restaurant_id),
+    )
+
+
+def append_ocr_verification_error(cur, restaurant_id: uuid.UUID, message: str) -> None:
+    cur.execute(
+        """
+        UPDATE restaurant_profiles
+        SET
+            ocr_verification_errors = COALESCE(ocr_verification_errors, '[]'::jsonb) || %s::jsonb,
+            updated_at = now()
+        WHERE restaurant_id = %s
+        """,
+        (jdump([message]), restaurant_id),
+    )
+
+
+def fetch_unverified_leads(cur, limit: int) -> list[tuple[uuid.UUID, dict, str]]:
+    cur.execute(
+        """
+        SELECT rp.restaurant_id, rp.raw_public_data, r.name
+        FROM restaurant_profiles rp
+        JOIN restaurants r ON r.id = rp.restaurant_id
+        WHERE rp.ocr_verified = false
+          AND rp.raw_public_data IS NOT NULL
+          AND rp.raw_public_data <> '{}'::jsonb
+        ORDER BY rp.created_at ASC
+        LIMIT %s
+        FOR UPDATE OF rp SKIP LOCKED
+        """,
+        (limit,),
+    )
+    rows = []
+    for restaurant_id, raw_public_data, name in cur.fetchall():
+        if isinstance(raw_public_data, dict):
+            record = raw_public_data
+        elif isinstance(raw_public_data, str):
+            record = json.loads(raw_public_data)
+        else:
+            record = json.loads(json.dumps(raw_public_data))
+        rows.append((restaurant_id, record, name or ""))
+    return rows
+
+
 def upsert_restaurant_record(cur, record: dict, source_file: str) -> tuple[uuid.UUID, bool]:
     """Returns (restaurant_id, skipped_duplicate)."""
     try:
@@ -297,8 +485,6 @@ def upsert_restaurant_record(cur, record: dict, source_file: str) -> tuple[uuid.
         _sanitize_menu_item_images(record)
     except ImportError:
         pass
-
-    board_urls = _menu_board_urls(record)
 
     google = record.get("google") or {}
     place_id = (google.get("place_id") or "").strip()
@@ -379,6 +565,9 @@ def upsert_restaurant_record(cur, record: dict, source_file: str) -> tuple[uuid.
             scrape_errors = EXCLUDED.scrape_errors,
             dietary_options = EXCLUDED.dietary_options,
             raw_public_data = EXCLUDED.raw_public_data,
+            ocr_verified = false,
+            ocr_verified_at = NULL,
+            ocr_verification_errors = '[]'::jsonb,
             updated_at = now()
         """,
         (
@@ -408,81 +597,9 @@ def upsert_restaurant_record(cur, record: dict, source_file: str) -> tuple[uuid.
         ),
     )
 
-    cur.execute(
-        "SELECT id FROM menus WHERE restaurant_id = %s AND name = %s LIMIT 1",
-        (restaurant_id, IMPORTED_MENU_NAME),
-    )
-    row = cur.fetchone()
-    if row:
-        menu_id = row[0]
-    else:
-        cur.execute(
-            "INSERT INTO menus (restaurant_id, name, status) VALUES (%s, %s, 'active') RETURNING id",
-            (restaurant_id, IMPORTED_MENU_NAME),
-        )
-        menu_id = cur.fetchone()[0]
-
-    cur.execute("DELETE FROM menu_items WHERE menu_id = %s", (menu_id,))
-    for i, item in enumerate(record.get("menu_items") or []):
-        name = (item.get("name") or "").strip()
-        category = (item.get("category") or "").strip()
-        if not name and not category:
-            continue
-        if not name:
-            name = category
-        cur.execute(
-            """
-            INSERT INTO menu_items (
-                menu_id, name, description, price, price_text, category,
-                image_url, images, sort_order
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s)
-            """,
-            (
-                menu_id,
-                name,
-                (item.get("description") or "").strip(),
-                item.get("price_numeric"),
-                (item.get("price") or "").strip(),
-                category,
-                first_menu_image_url(item.get("images"), board_urls),
-                jdump(item.get("images") or []),
-                i,
-            ),
-        )
-
-    cur.execute("DELETE FROM restaurant_reviews WHERE restaurant_id = %s", (restaurant_id,))
-    for i, rev in enumerate(record.get("reviews") or []):
-        cur.execute(
-            """
-            INSERT INTO restaurant_reviews (
-                restaurant_id, reviewer, review_text, stars, review_date, images, source, sort_order
-            ) VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s, %s)
-            """,
-            (
-                restaurant_id,
-                (rev.get("reviewer") or "").strip(),
-                (rev.get("review") or "").strip(),
-                rev.get("stars"),
-                (rev.get("date") or "").strip(),
-                jdump(rev.get("images") or []),
-                (rev.get("source") or "").strip(),
-                i,
-            ),
-        )
-
-    menu_img_count, gallery_img_count = sync_classified_images(cur, restaurant_id, record)
-    _ = menu_img_count, gallery_img_count
+    sync_menu_items_and_reviews(cur, restaurant_id, record, sync_reviews=True)
 
     return restaurant_id, False
-
-
-def _menu_board_urls(record: dict) -> set[str]:
-    urls: set[str] = set()
-    for img in (record.get("images") or {}).get("menu_photos") or []:
-        u = image_record_url(img)
-        if u:
-            urls.add(u)
-    return urls
 
 
 def import_leads(cur) -> int:
@@ -542,6 +659,47 @@ def import_restaurant_data(cur, extra_files: list[Path] | None = None) -> tuple[
     return imported, skipped
 
 
+def run_import(
+    *,
+    restaurants_only: bool = False,
+    data_files: list[Path] | None = None,
+    do_import_leads: bool = True,
+    niche_type: str = "restaurant",
+) -> tuple[int, int]:
+    """Import leads and/or scrape data into PostgreSQL. Returns (imported, skipped)."""
+    database_url = load_env()
+    conn = get_conn(database_url)
+    conn.autocommit = False
+
+    files = list(data_files or [])
+    if niche_type == "restaurant" and DEFAULT_RESTAURANTS_FILE.is_file():
+        if DEFAULT_RESTAURANTS_FILE not in files:
+            files.insert(0, DEFAULT_RESTAURANTS_FILE)
+
+    try:
+        with conn.cursor() as cur:
+            verify_schema(cur)
+            if do_import_leads and not restaurants_only:
+                print("\n[1/2] Importing leads…")
+                import_leads(cur)
+            elif restaurants_only:
+                print("\nSkipping leads import (--restaurants-only)")
+
+            step = "[2/2]" if do_import_leads and not restaurants_only else "[1/1]"
+            print(f"\n{step} Importing restaurant scrape data…")
+            if files:
+                for path in files:
+                    print(f"  including: {path}")
+            imported, skipped = import_restaurant_data(cur, files or None)
+        conn.commit()
+        return imported, skipped
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Import outreach leads and scraped restaurant JSON into PostgreSQL.",
@@ -558,50 +716,29 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help="Extra restaurant JSON file to import (default includes MonoRepo/data/restaurants_data.json).",
     )
+    parser.add_argument(
+        "--type",
+        default="restaurant",
+        help="Niche type for default data file glob (restaurant, dentist, plumber).",
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
-    database_url = load_env()
-    print("Connecting to database…")
-    conn = get_conn(database_url)
-    conn.autocommit = False
-
-    data_files = list(args.data_file)
-    if DEFAULT_RESTAURANTS_FILE.is_file():
-        data_files.insert(0, DEFAULT_RESTAURANTS_FILE)
-
     try:
-        with conn.cursor() as cur:
-            verify_schema(cur)
-            lead_count = 0
-            if not args.restaurants_only:
-                print("\n[1/2] Importing leads…")
-                lead_count = import_leads(cur)
-            else:
-                print("\nSkipping leads import (--restaurants-only)")
-
-            step = "[2/2]" if not args.restaurants_only else "[1/1]"
-            print(f"\n{step} Importing restaurant scrape data…")
-            if data_files:
-                for path in data_files:
-                    print(f"  including: {path}")
-            imported, skipped = import_restaurant_data(cur, data_files or None)
-
-        conn.commit()
-        print("\nDone.")
-        if not args.restaurants_only:
-            print(f"  Leads upserted: {lead_count}")
-        print(f"  Restaurants imported/updated: {imported}")
-        print(f"  Duplicates skipped: {skipped}")
-        return 0
+        imported, skipped = run_import(
+            restaurants_only=args.restaurants_only,
+            data_files=list(args.data_file),
+            do_import_leads=not args.restaurants_only,
+            niche_type=args.type,
+        )
     except Exception as exc:
-        conn.rollback()
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
-    finally:
-        conn.close()
+
+    print("\nDone.")
+    return 0
 
 
 if __name__ == "__main__":

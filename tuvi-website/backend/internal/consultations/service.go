@@ -234,7 +234,7 @@ func (s *Service) Book(ctx context.Context, req BookRequest) (BookSuccess, *Book
 		return BookSuccess{}, nil, err
 	}
 
-	// Email via SMTP can take several seconds — do not block the voice agent.
+	// Email via Zoho/Resend HTTP API can take a few seconds — do not block the voice agent.
 	go s.sendBookingEmail(context.Background(), req, code, slotStart, event.HTMLLink)
 
 	return BookSuccess{

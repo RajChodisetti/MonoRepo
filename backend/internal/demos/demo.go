@@ -38,4 +38,5 @@ type Repository interface {
 	GetBySlug(ctx context.Context, slug string) (Site, error)
 	GetByID(ctx context.Context, id uuid.UUID) (Site, error)
 	Create(ctx context.Context, input CreateInput) (Site, error)
+	UpdateTokenHash(ctx context.Context, id uuid.UUID, tokenHash string) error
 }

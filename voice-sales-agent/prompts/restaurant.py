@@ -40,7 +40,7 @@ def build_restaurant_greeting(site: dict[str, Any]) -> str:
     )
 
 
-def build_restaurant_prompt(site: dict[str, Any]) -> str:
+def build_restaurant_prompt(site: dict[str, Any], *, channel: str = "browser") -> str:
     name = site.get("name") or "the restaurant"
     city = site.get("city") or ""
     address = site.get("address") or ""
@@ -48,6 +48,15 @@ def build_restaurant_prompt(site: dict[str, Any]) -> str:
     cuisine = _cuisine_summary(site.get("cuisines"))
     hours = _hours_summary(site.get("hours"))
     greeting = build_restaurant_greeting(site)
+    is_phone = channel == "phone"
+    booking_confirm = (
+        "After demo_book_table succeeds, read the confirmation_code aloud clearly."
+        if is_phone
+        else (
+            'After demo_book_table succeeds, you MUST say: "Your table is booked" and read the\n'
+            "   confirmation_code aloud. The guest's screen will show the confirmation when you say this."
+        )
+    )
 
     return f"""
 You are the AI receptionist for {name}{f" in {city}" if city else ""}.
@@ -84,8 +93,7 @@ When the guest wants to book but hasn't given full details (e.g. "book a table",
    c) "What time works for you?" (time — must be within restaurant hours: {hours})
    d) Optionally: "What name should I put the booking under?"
 3. Only call demo_book_table AFTER you have party_size, date (YYYY-MM-DD), and time.
-4. After demo_book_table succeeds, you MUST say: "Your table is booked" and read the
-   confirmation_code aloud. The guest's screen will show the confirmation when you say this.
+4. {booking_confirm}
 
 NEVER call demo_book_table on the first booking request — always ask follow-up questions first.
 If the guest already gave party size, date, or time in earlier messages, use those — don't re-ask.

@@ -11,12 +11,12 @@ import (
 const ProviderDisabled = "disabled"
 
 type SendRequest struct {
-	To          string
-	Subject     string
-	HTMLBody    string
-	TextBody    string
-	ReplyTo     string
-	Metadata    map[string]string
+	To       string
+	Subject  string
+	HTMLBody string
+	TextBody string
+	ReplyTo  string
+	Metadata map[string]string
 }
 
 type SendResult struct {
@@ -29,16 +29,20 @@ type Provider interface {
 	Send(ctx context.Context, req SendRequest) (SendResult, error)
 }
 
-func NewFromConfig(emailCfg config.EmailConfig, smtpCfg config.SMTPConfig) (Provider, error) {
+func NewFromConfig(emailCfg config.EmailConfig, zohoCfg config.ZohoMailConfig) (Provider, error) {
 	provider := strings.ToLower(strings.TrimSpace(emailCfg.Provider))
 	if provider == "" || provider == ProviderDisabled || emailCfg.DisableSending {
 		return NewDisabled(), nil
 	}
 
 	switch provider {
+	case ProviderResend, "http", "https":
+		return NewResend(emailCfg)
+	case "zoho":
+		return NewZoho(emailCfg, zohoCfg)
 	case "smtp":
-		return NewSMTP(emailCfg, smtpCfg)
+		return nil, fmt.Errorf("email provider smtp is no longer supported; use EMAIL_PROVIDER=resend or zoho")
 	default:
-		return nil, fmt.Errorf("unsupported email provider %q", emailCfg.Provider)
+		return nil, fmt.Errorf("unsupported email provider %q (supported: resend, zoho, http, https, disabled)", emailCfg.Provider)
 	}
 }

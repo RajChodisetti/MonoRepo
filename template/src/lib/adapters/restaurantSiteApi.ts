@@ -41,6 +41,7 @@ export type ApiSiteContent = {
     price?: string;
     price_numeric?: number;
     image_url?: string;
+    images?: { url?: string; thumbnail?: string; image_type?: string }[];
   }[];
   menu_images?: {
     url: string;
@@ -90,6 +91,10 @@ function normalizeCategory(cat: string): string {
   return cat.replace(/^A LA CARTE\s*-\s*/i, "").replace(/\s+/g, " ").trim();
 }
 
+function pickMenuItemImage(item: NonNullable<ApiSiteContent["menu_items"]>[number]): string | undefined {
+  return item.image_url || item.images?.[0]?.thumbnail || item.images?.[0]?.url || undefined;
+}
+
 function galleryType(imageType?: string): GalleryImage["type"] {
   const t = (imageType || "").toLowerCase();
   if (t === "food_photo" || t === "food") return "food";
@@ -122,7 +127,7 @@ function buildMenuCategories(data: ApiSiteContent): MenuCategory[] {
       name: item.name,
       description: item.description || "",
       price: item.price,
-      image: item.image_url || undefined,
+      image: pickMenuItemImage(item),
       category: cat,
     });
   }
@@ -148,13 +153,13 @@ function buildGalleryImages(data: ApiSiteContent): GalleryImage[] {
 
 function buildSignatureDishes(data: ApiSiteContent): MenuItem[] {
   return (data.menu_items || [])
-    .filter((item) => item.image_url)
+    .filter((item) => pickMenuItemImage(item))
     .slice(0, 6)
     .map((item) => ({
       name: item.name,
       description: item.description || `${item.name} — a guest favorite.`,
       price: item.price,
-      image: item.image_url,
+      image: pickMenuItemImage(item),
       isChefSpecial: true,
       category: normalizeCategory(item.category || "Menu"),
     }));
@@ -230,6 +235,7 @@ export function adaptSiteContent(data: ApiSiteContent): RestaurantContent {
 
   return {
     index: data.index,
+    restaurantId: data.restaurant_id,
     name: data.name,
     tagline: "Fire, flavor, and a table waiting for you.",
     subheadline: `A ${cuisine.toLowerCase()} experience built around seasonal ingredients and warm hospitality in ${city || "your city"}.`,

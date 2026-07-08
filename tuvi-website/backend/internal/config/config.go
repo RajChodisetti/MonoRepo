@@ -18,18 +18,25 @@ type Config struct {
 
 	NotifyEmail string
 
+	EmailProvider    string
 	EmailFromAddress string
 	EmailFromName    string
-	SMTPHost         string
-	SMTPPort         int
-	SMTPUsername     string
-	SMTPPassword     string
-	SMTPUseTLS       bool
 	EmailDisabled    bool
 
-	GoogleCalendarID          string
-	GoogleServiceAccountJSON  string
-	GoogleCalendarDisabled    bool
+	ZohoAccountID    string
+	ZohoFromEmail    string
+	ZohoRegion       string
+	ZohoAPIBaseURL   string
+	ZohoClientID     string
+	ZohoClientSecret string
+	ZohoRefreshToken string
+
+	ResendAPIKey     string
+	ResendAPIBaseURL string
+
+	GoogleCalendarID         string
+	GoogleServiceAccountJSON string
+	GoogleCalendarDisabled   bool
 
 	Timezone            *time.Location
 	BusinessHourStart   int
@@ -47,14 +54,19 @@ func Load() (Config, error) {
 		APIToken:                 strings.TrimSpace(os.Getenv("TUVI_API_TOKEN")),
 		DatabaseURL:              strings.TrimSpace(os.Getenv("DATABASE_URL")),
 		NotifyEmail:              envOr("NOTIFY_EMAIL", "contact@tuvisolutions.com"),
+		EmailProvider:            envOr("EMAIL_PROVIDER", "zoho"),
 		EmailFromAddress:         envOr("EMAIL_FROM_ADDRESS", "noreply@tuvisolutions.com"),
 		EmailFromName:            envOr("EMAIL_FROM_NAME", "Tuvi Solutions"),
-		SMTPHost:                 strings.TrimSpace(os.Getenv("SMTP_HOST")),
-		SMTPPort:                 envInt("SMTP_PORT", 587),
-		SMTPUsername:             strings.TrimSpace(os.Getenv("SMTP_USERNAME")),
-		SMTPPassword:             strings.TrimSpace(os.Getenv("SMTP_PASSWORD")),
-		SMTPUseTLS:               envBool("SMTP_USE_TLS", true),
 		EmailDisabled:            envBool("EMAIL_DISABLED", false),
+		ZohoAccountID:            strings.TrimSpace(os.Getenv("ZOHO_ACCOUNT_ID")),
+		ZohoFromEmail:            strings.TrimSpace(os.Getenv("ZOHO_FROM_EMAIL")),
+		ZohoRegion:               envOr("ZOHO_REGION", "com"),
+		ZohoAPIBaseURL:           envOr("ZOHO_API_BASE_URL", "https://mail.zoho.com/api/accounts"),
+		ZohoClientID:             strings.TrimSpace(os.Getenv("ZOHO_CLIENT_ID")),
+		ZohoClientSecret:         strings.TrimSpace(os.Getenv("ZOHO_CLIENT_SECRET")),
+		ZohoRefreshToken:         strings.TrimSpace(os.Getenv("ZOHO_REFRESH_TOKEN")),
+		ResendAPIKey:             strings.TrimSpace(os.Getenv("RESEND_API_KEY")),
+		ResendAPIBaseURL:         envOr("RESEND_API_BASE_URL", "https://api.resend.com"),
 		GoogleCalendarID:         strings.TrimSpace(os.Getenv("GOOGLE_CALENDAR_ID")),
 		GoogleServiceAccountJSON: strings.TrimSpace(os.Getenv("GOOGLE_SERVICE_ACCOUNT_JSON")),
 		GoogleCalendarDisabled:   envBool("GOOGLE_CALENDAR_DISABLED", false),
@@ -80,6 +92,25 @@ func Load() (Config, error) {
 	if !cfg.GoogleCalendarDisabled {
 		if cfg.GoogleCalendarID == "" || cfg.GoogleServiceAccountJSON == "" {
 			return Config{}, fmt.Errorf("GOOGLE_CALENDAR_ID and GOOGLE_SERVICE_ACCOUNT_JSON are required (or set GOOGLE_CALENDAR_DISABLED=true)")
+		}
+	}
+	if !cfg.EmailDisabled {
+		switch strings.ToLower(strings.TrimSpace(cfg.EmailProvider)) {
+		case "smtp":
+			return Config{}, fmt.Errorf("EMAIL_PROVIDER=smtp is no longer supported; use zoho or resend")
+		case "zoho", "http", "https":
+			if cfg.ZohoAccountID == "" || cfg.ZohoClientID == "" || cfg.ZohoClientSecret == "" || cfg.ZohoRefreshToken == "" {
+				return Config{}, fmt.Errorf("ZOHO_ACCOUNT_ID, ZOHO_CLIENT_ID, ZOHO_CLIENT_SECRET, and ZOHO_REFRESH_TOKEN are required when EMAIL_PROVIDER=zoho")
+			}
+			if cfg.ZohoFromEmail == "" && cfg.EmailFromAddress == "" {
+				return Config{}, fmt.Errorf("ZOHO_FROM_EMAIL or EMAIL_FROM_ADDRESS is required when EMAIL_PROVIDER=zoho")
+			}
+		case "resend":
+			if cfg.ResendAPIKey == "" {
+				return Config{}, fmt.Errorf("RESEND_API_KEY is required when EMAIL_PROVIDER=resend")
+			}
+		default:
+			return Config{}, fmt.Errorf("unsupported EMAIL_PROVIDER %q (use zoho or resend)", cfg.EmailProvider)
 		}
 	}
 

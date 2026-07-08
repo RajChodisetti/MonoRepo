@@ -64,6 +64,11 @@ func (service *Service) CreateDraft(ctx context.Context, principal auth.Principa
 		return Campaign{}, err
 	}
 
+	siteIndex, err := service.repo.GetSiteIndexByRestaurantID(ctx, input.RestaurantID)
+	if err != nil {
+		return Campaign{}, err
+	}
+
 	campaignType := strings.TrimSpace(input.CampaignType)
 	if campaignType == "" {
 		campaignType = TypeOutreach
@@ -71,6 +76,7 @@ func (service *Service) CreateDraft(ctx context.Context, principal auth.Principa
 
 	draft := BuildDraft(DraftInput{
 		RestaurantName: profileCtx.RestaurantName,
+		SiteIndex:      siteIndex,
 		DemoWebURL:     service.publicWebURL,
 		DemoSlug:       demoSite.Slug,
 		DemoToken:      strings.TrimSpace(input.DemoToken),
@@ -191,32 +197,56 @@ func (service *Service) SendStep(ctx context.Context, principal auth.Principal, 
 	return updated, nil
 }
 
-func (service *Service) BuildTrackingURLs(ctx context.Context, campaign Campaign, sendCtx SendContext) (clickURL, openURL, unsubscribeURL, demoTarget string, err error) {
+func (service *Service) BuildTrackingURLs(ctx context.Context, campaign Campaign, sendCtx SendContext) (TrackingURLs, error) {
+	siteIndex, err := service.repo.GetSiteIndexByRestaurantID(ctx, campaign.RestaurantID)
+	if err != nil {
+		return TrackingURLs{}, err
+	}
+
+	token := strings.TrimSpace(campaign.DemoToken)
+	template1Target := buildTemplatePreviewURL(service.publicWebURL, siteIndex, "1", token)
+	template2Target := buildTemplatePreviewURL(service.publicWebURL, siteIndex, "2", token)
+	template3Target := buildTemplatePreviewURL(service.publicWebURL, siteIndex, "3", token)
+
 	clickToken, err := newTrackingToken()
 	if err != nil {
-		return "", "", "", "", err
+		return TrackingURLs{}, err
+	}
+	template1Token, err := newTrackingToken()
+	if err != nil {
+		return TrackingURLs{}, err
+	}
+	template2Token, err := newTrackingToken()
+	if err != nil {
+		return TrackingURLs{}, err
+	}
+	template3Token, err := newTrackingToken()
+	if err != nil {
+		return TrackingURLs{}, err
 	}
 	openToken, err := newTrackingToken()
 	if err != nil {
-		return "", "", "", "", err
+		return TrackingURLs{}, err
 	}
 	unsubToken, err := newTrackingToken()
 	if err != nil {
-		return "", "", "", "", err
+		return TrackingURLs{}, err
 	}
 
-	demoTarget = buildDemoURL(service.publicWebURL, sendCtx.DemoSlug, campaign.DemoToken)
 	demoSiteID := campaign.DemoSiteID
 	expires := time.Now().UTC().Add(30 * 24 * time.Hour)
 
 	tokens := []TrackingToken{
-		{Token: clickToken, CampaignID: campaign.ID, RestaurantID: campaign.RestaurantID, DemoSiteID: &demoSiteID, TokenType: TokenClick, TargetURL: demoTarget, ExpiresAt: &expires},
+		{Token: clickToken, CampaignID: campaign.ID, RestaurantID: campaign.RestaurantID, DemoSiteID: &demoSiteID, TokenType: TokenClick, TargetURL: template1Target, ExpiresAt: &expires},
+		{Token: template1Token, CampaignID: campaign.ID, RestaurantID: campaign.RestaurantID, DemoSiteID: &demoSiteID, TokenType: TokenClick, TargetURL: template1Target, ExpiresAt: &expires},
+		{Token: template2Token, CampaignID: campaign.ID, RestaurantID: campaign.RestaurantID, DemoSiteID: &demoSiteID, TokenType: TokenClick, TargetURL: template2Target, ExpiresAt: &expires},
+		{Token: template3Token, CampaignID: campaign.ID, RestaurantID: campaign.RestaurantID, DemoSiteID: &demoSiteID, TokenType: TokenClick, TargetURL: template3Target, ExpiresAt: &expires},
 		{Token: openToken, CampaignID: campaign.ID, RestaurantID: campaign.RestaurantID, DemoSiteID: &demoSiteID, TokenType: TokenOpen, TargetURL: "", ExpiresAt: &expires},
 		{Token: unsubToken, CampaignID: campaign.ID, RestaurantID: campaign.RestaurantID, DemoSiteID: &demoSiteID, TokenType: TokenUnsubscribe, TargetURL: "", ExpiresAt: &expires},
 	}
-	for _, token := range tokens {
-		if err := service.repo.CreateTrackingToken(ctx, token); err != nil {
-			return "", "", "", "", err
+	for _, tokenRecord := range tokens {
+		if err := service.repo.CreateTrackingToken(ctx, tokenRecord); err != nil {
+			return TrackingURLs{}, err
 		}
 	}
 
@@ -224,11 +254,14 @@ func (service *Service) BuildTrackingURLs(ctx context.Context, campaign Campaign
 	if base == "" {
 		base = "http://localhost:8080"
 	}
-	return base + "/t/click/" + clickToken,
-		base + "/t/open/" + openToken,
-		base + "/t/unsubscribe/" + unsubToken,
-		demoTarget,
-		nil
+	return TrackingURLs{
+		Click:       base + "/t/click/" + clickToken,
+		Template1:   base + "/t/click/" + template1Token,
+		Template2:   base + "/t/click/" + template2Token,
+		Template3:   base + "/t/click/" + template3Token,
+		Open:        base + "/t/open/" + openToken,
+		Unsubscribe: base + "/t/unsubscribe/" + unsubToken,
+	}, nil
 }
 
 func newTrackingToken() (string, error) {

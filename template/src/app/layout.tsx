@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Cormorant_Garamond, Outfit, Inter, Space_Grotesk } from "next/font/google";
+import { Cormorant_Garamond, Outfit, Inter, Space_Grotesk, Playfair_Display, Poppins } from "next/font/google";
 import SmoothScrollProvider from "@/components/SmoothScrollProvider";
 import TemplateShell from "@/components/TemplateShell";
 import { getActiveTemplate } from "@/lib/templateConfig";
@@ -29,6 +29,25 @@ const auroraBody = Inter({
   weight: ["300", "400", "500", "600"],
 });
 
+const elysianDisplay = Playfair_Display({
+  subsets: ["latin"],
+  variable: "--font-elysian-display",
+  weight: ["400", "500", "600", "700", "800"],
+  style: ["normal", "italic"],
+});
+
+const elysianBody = Poppins({
+  subsets: ["latin"],
+  variable: "--font-elysian-body",
+  weight: ["200", "300", "400", "500", "600"],
+});
+
+const elysianBtn = Inter({
+  subsets: ["latin"],
+  variable: "--font-elysian-btn",
+  weight: ["400", "500", "600", "700"],
+});
+
 export const metadata: Metadata = {
   title: "Restaurant Demo | Tuvi",
   description: "Premium restaurant website templates",
@@ -43,7 +62,7 @@ export default function RootLayout({
     <html
       lang="en"
       data-template={templateId}
-      className={`${cinematicDisplay.variable} ${cinematicBody.variable} ${auroraDisplay.variable} ${auroraBody.variable}`}
+      className={`${cinematicDisplay.variable} ${cinematicBody.variable} ${auroraDisplay.variable} ${auroraBody.variable} ${elysianDisplay.variable} ${elysianBody.variable} ${elysianBtn.variable}`}
     >
       <body>
         <TemplateShell templateId={templateId}>

@@ -13,6 +13,8 @@ Run all commands from **`MonoRepo/automation/outreach/`**.
 | `scrape_restaurant_data.py` | Scrape restaurants via SerpAPI (legacy) |
 | `scrape_tripadvisor.py` | TripAdvisor scrape (SerpAPI) — menu photos **TripAdvisor-only** |
 | `cron_tripadvisor.sh` | Daily cron wrapper for TripAdvisor + merge |
+| `verify_leads_from_db.py` | Nightly OCR verification for unverified DB leads |
+| `cron_lead_ocr_verify.sh` | Daily cron wrapper for lead OCR verification |
 | `city_pipeline.py` | Fetch leads + scrape in one command per city |
 | `fetch_restaurants_no_website.py` | Filter scraped JSON for restaurants without a website |
 | `tuvi_outreach_agent.py` | Full outreach: scrape sites, draft emails, Zoho/Slack |
@@ -42,7 +44,45 @@ python city_pipeline.py --city Melbourne --total 100 --fetch-only
 
 # Scrape only (leads already in leads/lead_<city>.json)
 python city_pipeline.py --city Perth --total 100 --scrape-only
+
+# Budget-aware mode (500 combined Apollo + Places requests)
+python city_pipeline.py --city Sydney --type restaurant --max-requests 500
 ```
+
+## Daily lead ingestion (cron)
+
+Fetches **new** leads only (dedup against DB + local JSON), respects a **500 combined API request** budget (Apollo + Google Places), then imports to Postgres.
+
+```bash
+# Manual run (same as cron)
+make ingest-daily
+
+# Or directly
+LEAD_INGESTION_ENABLED=true python daily_ingestion.py --type restaurant
+
+# Other niches (beta filters)
+python daily_ingestion.py --city Sydney --type dentist --max-requests 500
+python daily_ingestion.py --city Sydney --type plumber --max-requests 500
+```
+
+Cron (daily 02:00):
+
+```bash
+chmod +x cron_lead_ingestion.sh
+crontab -e
+# 0 2 * * * LEAD_INGESTION_ENABLED=true /ABS/PATH/MonoRepo/automation/outreach/cron_lead_ingestion.sh
+```
+
+| Env var | Default | Purpose |
+|---------|---------|---------|
+| `LEAD_INGESTION_ENABLED` | `false` | Gate for cron script |
+| `LEAD_INGESTION_MAX_REQUESTS` | `500` | Combined Apollo + Places cap |
+| `INGESTION_TYPE` | `restaurant` | Business niche |
+| `INGESTION_CITIES` | all 5 AU cities | Comma-separated cities |
+
+State file (Apollo page cursor): `state/ingestion_state.json` (gitignored)
+
+Logs: `logs/lead_ingestion_YYYYMMDD.log`
 
 ## Fetch leads only
 
@@ -122,6 +162,41 @@ crontab -e
 ```
 
 Logs: `logs/tripadvisor_cron_YYYYMMDD.log`
+
+## Lead OCR verification (cron)
+
+After restaurants are imported into PostgreSQL (`import_to_db.py`), a nightly job can OCR/classify photos, clean dish-card images, sync `menu_images` / `gallery_images`, and mark each profile `ocr_verified=true`.
+
+Requires migration `000013_lead_ocr_verified` and menu OCR API keys (`HUGGING_FACE_API_KEY`, etc. in `backend/.env`).
+
+```bash
+# Manual run (from MonoRepo root)
+make verify-leads-ocr
+
+# Or directly
+cd automation/outreach
+LEAD_OCR_VERIFICATION_ENABLED=true python verify_leads_from_db.py --force --dry-run
+LEAD_OCR_VERIFICATION_ENABLED=true python verify_leads_from_db.py --force --limit 5
+```
+
+| Env | Description |
+|-----|-------------|
+| `LEAD_OCR_VERIFICATION_ENABLED` | `true` enables cron + script (default `false`) |
+| `LEAD_OCR_BATCH_SIZE` | Max restaurants per run (default `50`) |
+| `MENU_OCR_ENABLED` | Reuses existing menu OCR pipeline flags |
+
+Re-importing scrape JSON resets `ocr_verified=false` on that profile.
+
+### Crontab
+
+```bash
+chmod +x cron_lead_ocr_verify.sh
+crontab -e
+# Daily 03:00 — edit path to your checkout:
+# 0 3 * * * LEAD_OCR_VERIFICATION_ENABLED=true /ABS/PATH/MonoRepo/automation/outreach/cron_lead_ocr_verify.sh
+```
+
+Logs: `logs/lead_ocr_verify_YYYYMMDD.log`
 
 Merged menu photos look like:
 

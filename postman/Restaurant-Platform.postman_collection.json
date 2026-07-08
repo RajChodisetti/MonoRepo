@@ -1028,6 +1028,48 @@
           }
         }
       ]
+    },
+    {
+      "name": "10 — Bulk Outreach",
+      "description": "One-click bulk invitation emails to OCR-verified leads (`email_sent=false`). Requires `make worker`, migration `000014`, and `OUTREACH_ZOHO_ACCOUNTS_JSON` in backend/.env.",
+      "item": [
+        {
+          "name": "Bulk Send Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/outreach/bulk-send/status"
+          }
+        },
+        {
+          "name": "Trigger Bulk Send",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('accepted', () => pm.expect([202,409,503]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/outreach/bulk-send"
+          }
+        }
+      ]
     }
   ]
 }

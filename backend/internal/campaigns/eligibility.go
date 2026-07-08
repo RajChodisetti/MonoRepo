@@ -15,6 +15,25 @@ type EligibilityInput struct {
 	Suppressed      bool
 }
 
+type BulkEligibilityInput struct {
+	RestaurantEmail string
+	DemoStatus      string
+	Suppressed      bool
+}
+
+func CheckBulkEligibility(input BulkEligibilityInput) error {
+	if strings.TrimSpace(input.RestaurantEmail) == "" {
+		return fmt.Errorf("%w: restaurant has no contact email", ErrNotEligible)
+	}
+	if input.Suppressed {
+		return fmt.Errorf("%w: recipient is suppressed", ErrNotEligible)
+	}
+	if input.DemoStatus != demos.StatusPublished {
+		return fmt.Errorf("%w: demo site is not published", ErrNotEligible)
+	}
+	return nil
+}
+
 func CheckEligibility(input EligibilityInput) error {
 	if strings.TrimSpace(input.RestaurantEmail) == "" {
 		return fmt.Errorf("%w: restaurant has no contact email", ErrNotEligible)

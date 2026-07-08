@@ -357,16 +357,63 @@ func (repo *Postgres) GetRestaurantContext(ctx context.Context, restaurantID uui
 	return ctxData, nil
 }
 
+func (repo *Postgres) GetSiteIndexByRestaurantID(ctx context.Context, restaurantID uuid.UUID) (int, error) {
+	const query = `
+		WITH ranked AS (
+			SELECT
+				r.id,
+				ROW_NUMBER() OVER (ORDER BY r.created_at ASC, r.name ASC) - 1 AS site_index
+			FROM restaurants r
+			JOIN restaurant_profiles rp ON rp.restaurant_id = r.id
+			WHERE rp.google_place_id IS NOT NULL AND rp.google_place_id <> ''
+		)
+		SELECT site_index
+		FROM ranked
+		WHERE id = $1`
+
+	var siteIndex int
+	err := repo.pool.QueryRow(ctx, query, restaurantID).Scan(&siteIndex)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, ErrNoSiteIndex
+	}
+	if err != nil {
+		return 0, fmt.Errorf("get site index: %w", err)
+	}
+	return siteIndex, nil
+}
+
 func (repo *Postgres) MarkRestaurantEmailed(ctx context.Context, restaurantID uuid.UUID) error {
 	const query = `
 		UPDATE restaurants
-		SET is_contacted = true, status = 'emailed', updated_at = now()
+		SET is_contacted = true,
+		    email_sent = true,
+		    status = 'emailed',
+		    updated_at = now()
 		WHERE id = $1`
 	_, err := repo.pool.Exec(ctx, query, restaurantID)
 	if err != nil {
 		return fmt.Errorf("mark restaurant emailed: %w", err)
 	}
 	return nil
+}
+
+func (repo *Postgres) GetLatestDemoTokenByDemoSiteID(ctx context.Context, demoSiteID uuid.UUID) (string, error) {
+	const query = `
+		SELECT demo_token
+		FROM email_campaigns
+		WHERE demo_site_id = $1 AND trim(demo_token) <> ''
+		ORDER BY created_at DESC
+		LIMIT 1`
+
+	var token string
+	err := repo.pool.QueryRow(ctx, query, demoSiteID).Scan(&token)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("get latest demo token: %w", err)
+	}
+	return strings.TrimSpace(token), nil
 }
 
 var _ Repository = (*Postgres)(nil)

@@ -1,0 +1,27 @@
+Hi there —
+
+Most restaurants lose bookings to missed calls and outdated websites. We help owners fix that with modern apps — without adding headcount.
+
+Tuvi Solutions builds restaurant software: presentation websites, AI voice receptionists, online reservations, and custom apps (ordering, loyalty, and more).
+
+WHAT WE BUILD FOR RESTAURANTS
+{{range .ServiceRows}}{{range .}}
+- {{.Title}}: {{.Description}}
+{{end}}{{end}}
+We already built a preview for {{.RestaurantName}} using your real menu, photos, hours, and reviews. Explore three design styles:
+
+{{range .Templates}}
+{{.Name}} (Style {{.Number}})
+{{.Tagline}}
+{{range .Bullets}}- {{.}}
+{{end}}Preview: {{.PreviewURL}}
+
+{{end}}
+Explore your live demo: {{.ClickURL}}
+(Preview all three styles on your personalized site.)
+
+Which direction fits {{.RestaurantName}} best? Reply to this email or explore the demo — happy to walk you through it in 10 minutes.
+
+If you would rather not receive these emails, unsubscribe here: {{.UnsubscribeURL}}
+
+— Tuvi Solutions

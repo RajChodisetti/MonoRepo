@@ -34,3 +34,26 @@ func TestCheckEligibilityPassesWhenReady(t *testing.T) {
 		t.Fatalf("CheckEligibility() error = %v, want nil", err)
 	}
 }
+
+func TestCheckBulkEligibilityIgnoresReviewStatus(t *testing.T) {
+	err := campaigns.CheckBulkEligibility(campaigns.BulkEligibilityInput{
+		RestaurantEmail: "owner@example.com",
+		DemoStatus:      demos.StatusPublished,
+	})
+	if err != nil {
+		t.Fatalf("CheckBulkEligibility() error = %v, want nil", err)
+	}
+}
+
+func TestCheckBulkEligibilityRequiresPublishedDemo(t *testing.T) {
+	err := campaigns.CheckBulkEligibility(campaigns.BulkEligibilityInput{
+		RestaurantEmail: "owner@example.com",
+		DemoStatus:      demos.StatusDraft,
+	})
+	if err == nil {
+		t.Fatal("CheckBulkEligibility() error = nil, want eligibility error")
+	}
+	if !errors.Is(err, campaigns.ErrNotEligible) {
+		t.Fatalf("CheckBulkEligibility() error = %v, want ErrNotEligible", err)
+	}
+}

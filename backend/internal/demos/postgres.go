@@ -121,4 +121,24 @@ func (repo *Postgres) GetByID(ctx context.Context, id uuid.UUID) (Site, error) {
 	return record, nil
 }
 
+func (repo *Postgres) UpdateTokenHash(ctx context.Context, id uuid.UUID, tokenHash string) error {
+	if repo.pool == nil {
+		return fmt.Errorf("database pool is not configured")
+	}
+
+	const query = `
+		UPDATE demo_sites
+		SET token_hash = $2, updated_at = now()
+		WHERE id = $1`
+
+	tag, err := repo.pool.Exec(ctx, query, id, tokenHash)
+	if err != nil {
+		return fmt.Errorf("update demo token hash: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return repository.ErrNotFound
+	}
+	return nil
+}
+
 var _ Repository = (*Postgres)(nil)

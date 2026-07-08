@@ -53,7 +53,7 @@ func EmailSendHandler(deps EmailSendDeps, log *slog.Logger) Handler {
 			return err
 		}
 
-		clickURL, openURL, unsubURL, _, err := deps.CampaignsService.BuildTrackingURLs(ctx, campaign, sendCtx)
+		trackingURLs, err := deps.CampaignsService.BuildTrackingURLs(ctx, campaign, sendCtx)
 		if err != nil {
 			return err
 		}
@@ -62,7 +62,7 @@ func EmailSendHandler(deps EmailSendDeps, log *slog.Logger) Handler {
 			Subject:  campaign.Subject,
 			BodyHTML: campaign.BodyHTML,
 			BodyText: campaign.BodyText,
-		}, clickURL, unsubURL, openURL, deps.EmailCfg.OpenTrackingEnabled)
+		}, trackingURLs, deps.EmailCfg.OpenTrackingEnabled)
 
 		result, err := deps.Email.Send(ctx, emailprovider.SendRequest{
 			To:       sendCtx.RestaurantEmail,

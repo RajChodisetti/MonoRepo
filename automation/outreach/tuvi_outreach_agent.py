@@ -217,28 +217,36 @@ def city_slug(city: str) -> str:
 def default_leads_output_path(
     cities: list[str],
     cfg: Config | None = None,
+    niche: str = "restaurant",
 ) -> Path:
     """
     Auto-name lead JSON by city:
-      all 5 cities  → leads/lead.json
-      one city      → leads/lead_sydney.json
-      multiple      → leads/lead_sydney_perth.json
+      restaurant + one city  → leads/lead_sydney.json
+      other niche            → leads/lead_{niche}_sydney.json
     """
     cfg = cfg or Config()
+    niche_slug = (niche or "restaurant").strip().lower()
+    prefix = "lead" if niche_slug == "restaurant" else f"lead_{niche_slug}"
     if len(cities) == 1:
-        return Path(cfg.LEADS_DIR) / f"lead_{city_slug(cities[0])}.json"
-    if set(cities) == set(AUSTRALIAN_RESTAURANT_CITIES):
+        return Path(cfg.LEADS_DIR) / f"{prefix}_{city_slug(cities[0])}.json"
+    if niche_slug == "restaurant" and set(cities) == set(AUSTRALIAN_RESTAURANT_CITIES):
         return Path(cfg.LEADS_DIR) / cfg.LEADS_FILE
     slugs = "_".join(city_slug(c) for c in cities)
-    return Path(cfg.LEADS_DIR) / f"lead_{slugs}.json"
+    return Path(cfg.LEADS_DIR) / f"{prefix}_{slugs}.json"
 
 
-def default_scrape_output_path(city: str | None, cfg: Config | None = None) -> Path:
-    """data/restaurants_data_sydney.json for single-city scrape."""
+def default_scrape_output_path(
+    city: str | None,
+    cfg: Config | None = None,
+    niche: str = "restaurant",
+) -> Path:
+    """data/restaurants_data_sydney.json for restaurant; data/{niche}_data_sydney.json otherwise."""
     cfg = cfg or Config()
+    niche_slug = (niche or "restaurant").strip().lower()
+    data_prefix = "restaurants_data" if niche_slug == "restaurant" else f"{niche_slug}_data"
     if city:
-        return Path("data") / f"restaurants_data_{city_slug(normalize_city_name(city))}.json"
-    return Path("data") / "restaurants_data.json"
+        return Path("data") / f"{data_prefix}_{city_slug(normalize_city_name(city))}.json"
+    return Path("data") / f"{data_prefix}.json"
 
 RESTAURANT_KEYWORD_TAGS: list[str] = [
     "restaurant",
@@ -537,6 +545,7 @@ def build_leads_document(
     per_page: int,
     max_pages: int,
     target_per_city: int | None = None,
+    lead_type: str = "restaurant",
 ) -> dict:
     """Build the full lead.json document with metadata and nested lead records."""
     leads_by_city: dict[str, int] = {}
@@ -549,7 +558,7 @@ def build_leads_document(
             "version": "1.0",
             "fetched_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
             "source": "apollo.io",
-            "lead_type": "restaurant",
+            "lead_type": lead_type,
             "total_leads": len(leads),
             "cities_searched": cities,
             "leads_by_city": dict(sorted(leads_by_city.items())),
@@ -570,6 +579,7 @@ def save_leads_to_json(
     per_page: int = 100,
     max_pages: int = 20,
     target_per_city: int | None = 100,
+    lead_type: str = "restaurant",
 ) -> Path:
     """Save fetched leads to a well-formatted JSON file."""
     path = Path(filepath)
@@ -581,6 +591,7 @@ def save_leads_to_json(
         per_page=per_page,
         max_pages=max_pages,
         target_per_city=target_per_city,
+        lead_type=lead_type,
     )
 
     path.write_text(
@@ -728,93 +739,18 @@ def _fetch_restaurant_leads_for_city(
     cfg: Config | None = None,
 ) -> list[Lead]:
     """Fetch restaurant decision-maker leads for one Australian city via Apollo.io."""
-    cfg = cfg or Config()
-    url = "https://api.apollo.io/v1/mixed_people/api_search"
-    headers = {
-        "Cache-Control": "no-cache",
-        "Content-Type": "application/json",
-        "X-Api-Key": api_key,
-    }
+    from lead_fetch import fetch_leads_for_city
 
-    city_leads: list[Lead] = []
-    seen_local: set[str] = set()
-    city_label = city.split(",")[0].strip()
-    page = 1
-
-    while page <= max_pages:
-        if target_leads and len(city_leads) >= target_leads:
-            log.info(f"  {city_label}: reached target of {target_leads} leads")
-            break
-
-        payload = {
-            "organization_locations": [city],
-            "q_organization_keyword_tags": RESTAURANT_KEYWORD_TAGS,
-            "person_titles": RESTAURANT_DECISION_MAKER_TITLES,
-            "organization_num_employees_ranges": ["1,10", "11,50", "51,200", "201,500"],
-            "per_page": per_page,
-            "page": page,
-        }
-
-        def _call_apollo():
-            response = requests.post(url, headers=headers, json=payload, timeout=30)
-            if response.status_code != 200:
-                raise RuntimeError(f"Apollo API {response.status_code}: {response.text}")
-            return response.json()
-
-        try:
-            data = with_retry(
-                _call_apollo,
-                attempts=cfg.RETRY_ATTEMPTS,
-                backoff=cfg.RETRY_BACKOFF,
-                label=f"Apollo:{city_label}:p{page}",
-            )
-        except Exception as exc:
-            log.error(f"  Apollo fetch failed for {city_label} (page {page}): {exc}")
-            break
-
-        people = data.get("people") or []
-        if not people:
-            log.info(f"  {city_label}: no more results on page {page}")
-            break
-
-        added_this_page = 0
-        for person in people:
-            lead = _apollo_person_to_lead(person, city)
-            if not lead:
-                continue
-            key = _lead_dedup_key(lead)
-            if key in seen_local:
-                continue
-            seen_local.add(key)
-            city_leads.append(lead)
-            added_this_page += 1
-            if target_leads and len(city_leads) >= target_leads:
-                break
-
-        pagination = data.get("pagination") or {}
-        total_pages = pagination.get("total_pages")
-        log.info(
-            f"  {city_label}: page {page}"
-            + (f"/{total_pages}" if total_pages else "")
-            + f" — {len(people)} raw, +{added_this_page} new, {len(city_leads)} total"
-        )
-
-        # Apollo often omits pagination — keep going while pages are full
-        if total_pages and page >= total_pages:
-            break
-        if len(people) < per_page:
-            break
-
-        page += 1
-        time.sleep(cfg.SCRAPE_DELAY)
-
-    if target_leads and len(city_leads) < target_leads:
-        log.warning(
-            f"  {city_label}: only found {len(city_leads)}/{target_leads} leads "
-            f"(Apollo returned no more results)"
-        )
-
-    return city_leads
+    leads, _, _ = fetch_leads_for_city(
+        api_key,
+        city,
+        "restaurant",
+        per_page=per_page,
+        max_pages=max_pages,
+        target_leads=target_leads,
+        cfg=cfg,
+    )
+    return leads
 
 
 def fetch_restaurant_leads_from_cities(
@@ -880,6 +816,7 @@ def run_lead_fetch_pipeline(
     max_pages: int = 20,
     target_per_city: int | None = 100,
     output_path: str | Path | None = None,
+    niche_type: str = "restaurant",
 ) -> tuple[list[Lead], Path]:
     """
     End-to-end lead fetch: Apollo (multi-city) → dedupe → JSON export.
@@ -901,7 +838,7 @@ def run_lead_fetch_pipeline(
     )
 
     if output_path is None:
-        output_path = default_leads_output_path(cities, cfg)
+        output_path = default_leads_output_path(cities, cfg, niche=niche_type)
     else:
         output_path = Path(output_path)
 
@@ -912,6 +849,7 @@ def run_lead_fetch_pipeline(
         per_page=per_page,
         max_pages=max_pages,
         target_per_city=target_per_city,
+        lead_type=niche_type,
     )
 
     return leads, json_path
