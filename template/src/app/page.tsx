@@ -13,6 +13,9 @@ import { buildMetadata as buildCinematicMetadata } from "@/templates/cinematic/s
 import { buildAuroraMetadata } from "@/templates/aurora/seo";
 import { buildElysianMetadata, buildElysianJsonLd } from "@/templates/elysian/seo";
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 interface PageProps {
   searchParams: Promise<{ id?: string; template?: string }>;
 }

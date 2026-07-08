@@ -1,5 +1,8 @@
 import { getVoiceAgentBaseUrl } from "@/lib/voiceAgentConfig";
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 /** Simple in-memory IP throttle for outbound dial proxy. */
 const hits = new Map<string, { count: number; resetAt: number }>();
 const WINDOW_MS = 60_000;

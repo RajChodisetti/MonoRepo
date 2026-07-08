@@ -1,0 +1,157 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-tuvi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-restaurant_platform}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tuvi} -d ${POSTGRES_DB:-restaurant_platform}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  migrate:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.backend
+    command: ["/app/migrate", "up"]
+    env_file:
+      - path: ${TUVI_ENV_DIR:-/opt/tuvi/env}/stack.env
+        required: false
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-tuvi}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-restaurant_platform}?sslmode=disable
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.backend
+    command: ["/app/api"]
+    env_file:
+      - path: ${TUVI_ENV_DIR:-/opt/tuvi/env}/stack.env
+        required: false
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-tuvi}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-restaurant_platform}?sslmode=disable
+      REDIS_URL: redis://redis:6379
+      HTTP_ADDR: ":8080"
+    ports:
+      - "127.0.0.1:${TUVI_API_PORT:-18080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.backend
+    command: ["/app/worker"]
+    env_file:
+      - path: ${TUVI_ENV_DIR:-/opt/tuvi/env}/stack.env
+        required: false
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-tuvi}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-restaurant_platform}?sslmode=disable
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      api:
+        condition: service_started
+    restart: unless-stopped
+
+  restaurant-services-catalog:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.catalog
+    ports:
+      - "127.0.0.1:${TUVI_CATALOG_PORT:-15173}:80"
+    restart: unless-stopped
+
+  template:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.template
+      args:
+        TEMPLATE: ${TEMPLATE:-2}
+        NEXT_PUBLIC_API_URL: ${TEMPLATE_NEXT_PUBLIC_API_URL:-https://api.tuvisolutions.com}
+        NEXT_PUBLIC_VOICE_AGENT_URL: ${TEMPLATE_NEXT_PUBLIC_VOICE_AGENT_URL:-https://voice.tuvisolutions.com}
+    env_file:
+      - path: ${TUVI_ENV_DIR:-/opt/tuvi/env}/template.env
+        required: false
+    environment:
+      TEMPLATE: ${TEMPLATE:-2}
+      NEXT_PUBLIC_API_URL: ${TEMPLATE_NEXT_PUBLIC_API_URL:-https://api.tuvisolutions.com}
+      NEXT_PUBLIC_VOICE_AGENT_URL: ${TEMPLATE_NEXT_PUBLIC_VOICE_AGENT_URL:-https://voice.tuvisolutions.com}
+      VOICE_AGENT_URL: http://voice-agent:8000
+    ports:
+      - "127.0.0.1:${TUVI_TEMPLATE_PORT:-13000}:3000"
+    depends_on:
+      api:
+        condition: service_started
+      voice-agent:
+        condition: service_started
+    restart: unless-stopped
+
+  voice-agent:
+    build:
+      context: ../../voice-sales-agent
+      dockerfile: Dockerfile
+    env_file:
+      - path: ${TUVI_ENV_DIR:-/opt/tuvi/env}/voice.env
+        required: false
+    environment:
+      ENVIRONMENT: production
+      PORT: "8000"
+      PUBLIC_BASE_URL: ${VOICE_PUBLIC_BASE_URL:-https://voice.tuvisolutions.com}
+      REDIS_URL: redis://redis:6379
+      CALL_LOG_DB: /app/data/calls.db
+      MONOREPO_API_URL: http://api:8080
+      TUVI_API_TOKEN: ${TUVI_API_TOKEN:?TUVI_API_TOKEN is required}
+      TUVI_API_TIMEOUT_MS: "20000"
+      API_TIMEOUT_MS: "20000"
+    volumes:
+      - voice_agent_data:/app/data
+    ports:
+      - "127.0.0.1:${TUVI_VOICE_PORT:-18000}:8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  voice_agent_data:

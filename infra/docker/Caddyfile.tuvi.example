@@ -1,0 +1,22 @@
+# Append these blocks to the VM host-level /etc/caddy/Caddyfile.
+# Keep the existing Tilnest, SustainabilityWise, and n8n routes unchanged.
+
+tuvisolutions.com, www.tuvisolutions.com {
+  encode zstd gzip
+  reverse_proxy 127.0.0.1:15173
+}
+
+api.tuvisolutions.com {
+  encode zstd gzip
+  reverse_proxy 127.0.0.1:18080
+}
+
+voice.tuvisolutions.com {
+  encode zstd gzip
+  reverse_proxy 127.0.0.1:18000
+}
+
+demo.tuvisolutions.com {
+  encode zstd gzip
+  reverse_proxy 127.0.0.1:13000
+}

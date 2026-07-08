@@ -1,11 +1,11 @@
 # Session Summary
 
-**Latest (2026-07-08):** The `~/MonoRepo` `phase1_03/backend` branch was rebased on the latest fetched `origin/phase1_03/backend`, with Raj's local restaurant services catalog work preserved in one local commit.
+**Latest (2026-07-08):** Added `docs/runbooks/vm-deployment-plan.md`, a complete VM deployment draft for the current MonoRepo services.
 
-**Frontend state:** `apps/restaurant-services-catalog` keeps the FAL-generated videos, including `qr-ordering-kitchen-v2.mp4` and `rewards-reception-v3-pro.mp4`; previous QR/rewards MP4s remain as fallback assets.
+**Deployment state:** The repo already containerizes the Go API, worker, migrations, PostgreSQL, voice agent, and Redis; the catalog, Tuvi Next site, demo template, reverse proxy, TLS, backups, and production env wiring still need VM Compose/proxy work.
 
-**Command state:** Use `make restaurant-services-catalog-dev` to start it and `make restaurant-services-catalog-build` to verify it.
+**VM audit:** Local SSH config has no VM alias, so live VM inspection is pending; the runbook includes exact audit commands to run once the VM host/deploy user is available.
 
-**Verification:** `make restaurant-services-catalog-build`, `make test`, built catalog video-reference checks, and live `5174` MP4 smoke checks passed after conflict resolution.
+**Branch state:** `phase1_03/backend` remains clean and ahead of `origin/phase1_03/backend` by the local catalog preservation commit plus this planning doc update.
 
-**Next:** Push the one local preservation commit when ready, and authenticate Wrangler for a permanent Cloudflare Pages deploy.
+**Next:** Confirm the VM SSH target and preferred domain/subdomain layout, then convert the plan into Compose/proxy files.

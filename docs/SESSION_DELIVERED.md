@@ -12,6 +12,37 @@ Each entry should explain:
 - how the work fits with the rest of the Phase 1 or Phase 2 plan;
 - risks, gaps, or follow-ups.
 
+## 2026-07-08 — VM Deployment Plan Draft
+
+**Role:** DevOps / Documentation Agent
+
+**Delivered:** Added `docs/runbooks/vm-deployment-plan.md`, a VM deployment
+plan based on the repo's current runnable services and Compose setup. The plan
+covers the main Go API, worker, migrations, PostgreSQL, voice agent, Redis,
+restaurant services catalog, optional Tuvi Next site, restaurant demo template,
+automation jobs, reverse proxy/TLS, env files, backups, rollback, smoke checks,
+and open decisions.
+
+**Why:** Raj asked for a complete plan to deploy all services on a VM and asked
+that the existing setup be considered before planning.
+
+**Business Value:** Creates a concrete deployment path from local Phase 1
+services to one VM, while making clear which pieces are already containerized
+and which pieces still need VM Compose/proxy work.
+
+**Plan Fit:** Supports Phase 1 deployment/runbook work by turning the existing
+Docker stack into a fuller VM production plan with no intentional service gaps.
+
+**Tests / Checks Run:** Inspection only. Reviewed `AGENTS.md`, `git status`,
+`README.md`, `Makefile`, `docs/SERVICES.md`, Phase 1 docs, Docker Compose,
+backend Dockerfile/config, stack env example, startup scripts, Tuvi website
+runtime docs, restaurant catalog docs, template env, and voice agent Docker/env
+docs. Checked local SSH config for a VM alias; none was configured.
+
+**Risks / Follow-ups:** Live VM audit is still pending because this workstation
+does not have a usable VM SSH alias in `~/.ssh/config`. The plan includes the
+exact audit commands to run once the VM host/deploy user is known.
+
 ## 2026-07-08 — Local Catalog Work Rebased on Phase Branch
 
 **Role:** Frontend / Documentation Agent
