@@ -12,6 +12,42 @@ Each entry should explain:
 - how the work fits with the rest of the Phase 1 or Phase 2 plan;
 - risks, gaps, or follow-ups.
 
+## 2026-07-07 — Phase Branch Catalog Videos Preserved
+
+**Role:** Frontend / Documentation Agent
+
+**Delivered:** Pulled `origin/phase1_03/backend` into a local
+`phase1_03/backend` branch and applied the safe local catalog changes on top:
+root Makefile shortcuts for the restaurant services catalog, catalog README, and
+public `.env.example`. Preserved the branch's FAL-generated restaurant feature
+videos (`qr-ordering-kitchen-v2.mp4` and `rewards-reception-v3-pro.mp4`) and the
+video-enabled catalog page.
+
+**Why:** Raj asked to apply local changes on top of `phase1_03/backend` and
+clarified that the target website is the catalog version with two FAL-generated
+videos.
+
+**Business Value:** The current branch now has the latest backend work and the
+video-enabled restaurant services site, with simple root commands for local
+startup and build verification.
+
+**Plan Fit:** Keeps the Phase 1 restaurant services marketing surface aligned
+with the active backend branch.
+
+**Tests / Checks Run:**
+- `rtk npm --prefix apps/restaurant-services-catalog install` — dependencies current; no vulnerabilities reported
+- `rtk make restaurant-services-catalog-build` — initially failed on broken `lucide@0.547.1`; passed after pinning `lucide` to `0.547.0`
+- `rtk make test` — backend tests passed
+- `rtk curl -I http://127.0.0.1:5173` — catalog dev server returned `200 OK`
+- `rtk curl -s http://127.0.0.1:5173 | rtk rg -n "qr-ordering-kitchen-v2.mp4|rewards-reception-v3-pro.mp4"` — served page references both FAL videos
+- `rtk curl -I http://127.0.0.1:5173/media/qr-ordering-kitchen-v2.mp4` — returned `200 OK` with `video/mp4`
+- `rtk curl -I http://127.0.0.1:5173/media/rewards-reception-v3-pro.mp4` — returned `200 OK` with `video/mp4`
+
+**Risks / Follow-ups:** The local changes from the older restored catalog app
+were not applied wholesale because they would replace the newer video-enabled
+catalog implementation. `lucide` is pinned to `0.547.0` because `0.547.1`
+installed locally without matching icon module files and broke the Vite build.
+
 ## 2026-07-06 — Tuvi Scheduler and Voice Agent Unified API Alignment
 
 **Role:** Backend / Frontend / AI Workflow Agent

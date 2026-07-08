@@ -1,9 +1,9 @@
 # Session Summary
 
-**Latest (2026-07-06):** Tuvi scheduler and corporate voice bookings now call the main MonoRepo company consultation API for availability, slot checks, and booking creation.
+**Latest (2026-07-07):** Local work has been applied on top of `origin/phase1_03/backend` without replacing the video-enabled restaurant services catalog.
 
-**Endpoint state:** `GET /api/v1/company/consultations/availability`, `GET /api/v1/company/consultations/availability/check`, and `POST /api/v1/company/consultations` are shared by the web scheduler and corporate voice agent; source is recorded as `web` or `voice`.
+**Frontend state:** `apps/restaurant-services-catalog` keeps the two FAL-generated videos, `qr-ordering-kitchen-v2.mp4` and `rewards-reception-v3-pro.mp4`, plus restored README and public env example.
 
-**Config needed:** Set the same `TUVI_API_TOKEN` in the main API, Tuvi website server env, and corporate voice-agent env.
+**Command state:** Use `make restaurant-services-catalog-dev` to start it and `make restaurant-services-catalog-build` to verify it.
 
-**Verification:** Backend tests, Python syntax compile, Tuvi TypeScript check, Node 22 Next build, and normal Tuvi `npm run build` all passed.
+**Verification:** Catalog dependency install, Vite build, backend tests, served-page video references, and both `video/mp4` asset smoke checks passed.

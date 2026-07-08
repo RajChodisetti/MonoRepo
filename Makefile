@@ -1,8 +1,9 @@
 GO ?= go
 COMPOSE_FILE ?= infra/docker/docker-compose.yml
 COMPOSE_DIR ?= infra/docker
+RESTAURANT_SERVICES_CATALOG_DIR ?= apps/restaurant-services-catalog
 
-.PHONY: api worker test fmt db-up db-down db-reset migrate-up migrate-down setup dev seed-admin seed-demo-fixture seed-restaurants-data import-outreach ocr-all sanitize-import verify-leads-ocr import-restaurants-outreach ingest-daily openapi swagger up down logs start stop-all voice-up voice-down voice-logs
+.PHONY: api worker test fmt db-up db-down db-reset migrate-up migrate-down setup dev seed-admin seed-demo-fixture seed-restaurants-data import-outreach ocr-all sanitize-import verify-leads-ocr import-restaurants-outreach ingest-daily openapi swagger up down logs start stop-all voice-up voice-down voice-logs restaurant-services-catalog-dev restaurant-services-catalog-build
 
 OPENAPI_SPEC ?= docs/openapi/openapi.yaml
 OPENAPI_DIR ?= docs/openapi
@@ -117,6 +118,12 @@ voice-down:
 
 voice-logs:
 	docker compose -f $(COMPOSE_FILE) --profile voice logs -f voice-sales-agent
+
+restaurant-services-catalog-dev:
+	npm --prefix $(RESTAURANT_SERVICES_CATALOG_DIR) run dev
+
+restaurant-services-catalog-build:
+	npm --prefix $(RESTAURANT_SERVICES_CATALOG_DIR) run build
 
 openapi:
 	@command -v npx >/dev/null 2>&1 || { echo "npx required: install Node.js or validate manually at editor.swagger.io"; exit 1; }

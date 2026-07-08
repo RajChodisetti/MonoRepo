@@ -793,7 +793,7 @@ Rules:
 
 ## Current Repo Shape
 
-_Last updated: 2026-06-22_
+_Last updated: 2026-07-07_
 
 ```text
 Root Go module with backend under backend/.
@@ -802,7 +802,7 @@ Placeholder packages: menus, reservations, campaigns, analytics, ai/*, providers
 HTTP layer: internal/http with handlers and middleware.
 Platform: internal/platform/{config,db,logger,errors,metadata,migrations,telemetry}.
 SQL migrations: backend/migrations. Integration test slot: backend/tests.
-Frontend placeholder: apps/web.
+Frontend apps: apps/web placeholder and apps/restaurant-services-catalog Vite Tuvi restaurant growth website with FAL-generated feature videos.
 Phase 1 docs: docs/phase1/PHASE1_IMPLEMENTATION_GUIDE.md and PHASE1_TECHNICAL_BACKLOG.md.
 Phase 2 docs: docs/phase2/ (placeholders). ADRs: docs/adr/.
 Session docs: docs/SESSION_DELIVERED.md and docs/SESSION_SUMMARY.md.
@@ -820,9 +820,10 @@ Immediate next build priority: P1-011 restaurant profiles and P1-012 demo payloa
 
 ## Recent Agent Updates
 
-_Last updated: 2026-06-22_
+_Last updated: 2026-07-07_
 
 ```text
+2026-07-07 — Frontend Agent — Pulled phase1_03/backend with restaurant-services-catalog videos; applied local catalog README/env and root Makefile shortcuts while preserving video assets.
 2026-06-22 — Backend Agent — Restructured backend from layered repositories/services into domain packages (restaurants, demos, auth) per Phase 1 implementation guide; moved phase1 docs to docs/phase1/; all backend tests passing.
 2026-06-22 — Backend Agent — Completed P1-010 restaurant CRUD, lifecycle status, and list query filters.
 2026-06-17 — Documentation Agent — Added session delivery documentation rules requiring docs/SESSION_DELIVERED.md and docs/SESSION_SUMMARY.md updates before final responses.
