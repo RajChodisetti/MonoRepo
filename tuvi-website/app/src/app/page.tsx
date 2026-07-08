@@ -5,7 +5,6 @@ import StatsStrip from "@/components/sections/StatsStrip";
 import AboutSection from "@/components/sections/AboutSection";
 import TestimonialsMarquee from "@/components/sections/TestimonialsMarquee";
 import GuaranteeSection from "@/components/sections/GuaranteeSection";
-import TeamSection from "@/components/sections/TeamSection";
 import ContactCTA from "@/components/sections/ContactCTA";
 import VoiceAssistantWidget from "@/components/VoiceAssistantWidget";
 
@@ -19,7 +18,6 @@ export default function HomePage() {
         <AboutSection />
         <TestimonialsMarquee />
         <GuaranteeSection />
-        <TeamSection />
         <ContactCTA />
       </main>
       <Footer />

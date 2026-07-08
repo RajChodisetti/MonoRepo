@@ -9,7 +9,6 @@ export const siteContent = {
     { href: "/#about", label: "About" },
     { href: "/#testimonials", label: "Clients" },
     { href: "/#guarantee", label: "Guarantee" },
-    { href: "/#team", label: "Team" },
     { href: "/#contact", label: "Contact" },
   ],
 
@@ -109,20 +108,6 @@ export const siteContent = {
       },
     ],
     cta: "Claim Your Risk-Free Trial",
-  },
-
-  team: {
-    id: "team",
-    eyebrow: "Meet the Leadership Team",
-    title: "Elite expertise meets authentic partnership",
-    members: [
-      {
-        name: "Sri Raj",
-        role: "CEO",
-        initials: "SR",
-        bio: "Over 10+ years of elite experience in software development, AI/Machine Learning, and cross-platform app development. Having engineered solutions for global giants like Bank of America alongside dynamic SMBs, Sri bridges complex technical systems and practical, revenue-driving business strategies.",
-      },
-    ],
   },
 
   contact: {
