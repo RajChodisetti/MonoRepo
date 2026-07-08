@@ -23,8 +23,9 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 
 COPY . .
 
-# Do not run as root in production
-RUN useradd -m appuser && chown -R appuser /app
+# Do not run as root in production. Ensure /app/data exists before Docker
+# initializes a named volume there so call logs remain writable by appuser.
+RUN useradd -m appuser && mkdir -p /app/data && chown -R appuser /app
 USER appuser
 
 EXPOSE 8000

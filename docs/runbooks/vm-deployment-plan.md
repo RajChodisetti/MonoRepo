@@ -1,7 +1,7 @@
 # VM Deployment Plan
 
 Date: 2026-07-08
-Status: Implementation runbook for `root@170.64.154.143`
+Status: VM stack deployed; public DNS cutover pending
 
 ## Goal
 
@@ -68,6 +68,13 @@ The VM deployment adds `infra/docker/docker-compose.vm.yml`,
   - `www.tuvisolutions.com` -> Vercel CNAME/IPs
   - `api.tuvisolutions.com`, `voice.tuvisolutions.com`, and
     `demo.tuvisolutions.com` have no records.
+- Deployed Tuvi loopback services:
+  - catalog: `127.0.0.1:15173`
+  - API: `127.0.0.1:18080`
+  - voice: `127.0.0.1:18000`
+  - demo template: `127.0.0.1:13000`
+- Caddy routes for the Tuvi domains are installed and validated; they will serve
+  public HTTPS after DNS points to the VM.
 
 ## Recommended VM Layout
 

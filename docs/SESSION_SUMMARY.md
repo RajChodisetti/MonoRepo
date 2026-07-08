@@ -1,11 +1,11 @@
 # Session Summary
 
-**Latest (2026-07-08):** Added `docs/runbooks/vm-deployment-plan.md`, a complete VM deployment draft for the current MonoRepo services.
+**Latest (2026-07-08):** Tuvi VM stack is deployed on `root@170.64.154.143` from `/opt/tuvi/MonoRepo`; Caddy routes for Tuvi domains are installed and validated.
 
-**Deployment state:** The repo already containerizes the Go API, worker, migrations, PostgreSQL, voice agent, and Redis; the catalog, Tuvi Next site, demo template, reverse proxy, TLS, backups, and production env wiring still need VM Compose/proxy work.
+**Deployment state:** Catalog (`15173`), API (`18080`), voice (`18000`), template (`13000`), Postgres, Redis, worker, and migrations are running under Compose project `tuvi`.
 
-**VM audit:** Local SSH config has no VM alias, so live VM inspection is pending; the runbook includes exact audit commands to run once the VM host/deploy user is available.
+**Public cutover:** DNS still points `tuvisolutions.com`/`www` at Vercel and Tuvi subdomains are missing; update DNS to `170.64.154.143` for public HTTPS.
 
-**Branch state:** `phase1_03/backend` remains clean and ahead of `origin/phase1_03/backend` by the local catalog preservation commit plus this planning doc update.
+**Voice state:** Voice service is running, but `/readyz/browser` reports missing Deepgram/OpenAI/Cartesia keys in `/opt/tuvi/env/voice.env`.
 
-**Next:** Confirm the VM SSH target and preferred domain/subdomain layout, then convert the plan into Compose/proxy files.
+**Git state:** Local branch has deployment commits ahead of origin; GitHub HTTPS push failed with RPC 400 and SSH push is not authorized, so VM deploy used rsync.

@@ -12,6 +12,54 @@ Each entry should explain:
 - how the work fits with the rest of the Phase 1 or Phase 2 plan;
 - risks, gaps, or follow-ups.
 
+## 2026-07-08 — Tuvi VM Stack Deployed
+
+**Role:** DevOps / Frontend / Backend Agent
+
+**Delivered:** Implemented the VM deployment stack for `tuvisolutions.com` on
+`root@170.64.154.143`. Added VM Docker Compose, catalog and template Dockerfiles,
+catalog Nginx config, Caddy route example, Docker build excludes, and production
+template route fixes. Synced the committed source to `/opt/tuvi/MonoRepo`,
+created `/opt/tuvi/env` production env files with generated internal secrets,
+started the Tuvi Compose project, repaired voice-agent data-volume ownership,
+and appended validated Caddy routes for `tuvisolutions.com`,
+`www.tuvisolutions.com`, `api.tuvisolutions.com`, `voice.tuvisolutions.com`, and
+`demo.tuvisolutions.com`.
+
+**Why:** Raj approved moving TuviSolutions.com off the older Vercel/presentation
+site and onto the VM, with `apps/restaurant-services-catalog` as the canonical
+public Tuvi website.
+
+**Business Value:** The VM is now ready to serve the current restaurant services
+catalog, API, worker, demo template, and voice service behind Caddy without
+disturbing existing Tilnest, SustainabilityWise, or n8n services.
+
+**Plan Fit:** Completes the Phase 1 deployment groundwork for the Tuvi marketing
+site and related service endpoints. Public traffic still requires DNS cutover.
+
+**Tests / Checks Run:**
+- `rtk make restaurant-services-catalog-build` — passed locally
+- `rtk make test` — backend Go tests passed locally
+- `docker compose --env-file /opt/tuvi/env/stack.env -p tuvi -f infra/docker/docker-compose.vm.yml up -d --build`
+  — built and started VM stack
+- VM loopback `GET/HEAD http://127.0.0.1:15173` — catalog returned `200 OK`
+- VM loopback `HEAD /media/qr-ordering-kitchen-v2.mp4` and
+  `HEAD /media/rewards-reception-v3-pro.mp4` — both returned `200 OK` with
+  `video/mp4`
+- VM loopback `HEAD http://127.0.0.1:18080/api/public/v1/site/restaurants` —
+  API returned `200 OK`
+- VM loopback `HEAD http://127.0.0.1:13000` — template returned `200 OK`
+- VM loopback `GET http://127.0.0.1:18000/readyz/browser` — voice service is
+  running but reports missing voice provider keys
+- `caddy validate --config /etc/caddy/Caddyfile` — passed after Tuvi route append
+
+**Risks / Follow-ups:** DNS still points `tuvisolutions.com` and `www` at
+Vercel, and the Tuvi subdomains are not yet configured. Voice readiness requires
+real `DEEPGRAM_API_KEY`, `OPENAI_API_KEY`, `CARTESIA_API_KEY`, and
+`CARTESIA_VOICE_ID` in `/opt/tuvi/env/voice.env`. GitHub HTTPS push failed with
+an RPC 400 and SSH push was not authorized, so the VM was deployed by rsync from
+the local committed branch.
+
 ## 2026-07-08 — VM Deployment Plan Draft
 
 **Role:** DevOps / Documentation Agent
