@@ -1,27 +1,18 @@
-Hi there —
+Hi there — most restaurants lose bookings to missed calls and outdated websites.
 
-Most restaurants lose bookings to missed calls and outdated websites. We help owners fix that with modern apps — without adding headcount.
+Tuvi Solutions builds restaurant apps that fix that — and we've already created a live website preview for {{.RestaurantName}} with AI receptionist, online reservations, and more. No extra headcount needed.
 
-Tuvi Solutions builds restaurant software: presentation websites, AI voice receptionists, online reservations, and custom apps (ordering, loyalty, and more).
+Preview: __CLICK_URL__
 
-WHAT WE BUILD FOR RESTAURANTS
-{{range .ServiceRows}}{{range .}}
+Explore what we offer:
+{{range .Services}}
 - {{.Title}}: {{.Description}}
-{{end}}{{end}}
-We already built a preview for {{.RestaurantName}} using your real menu, photos, hours, and reviews. Explore three design styles:
-
-{{range .Templates}}
-{{.Name}} (Style {{.Number}})
-{{.Tagline}}
-{{range .Bullets}}- {{.}}
-{{end}}Preview: {{.PreviewURL}}
-
+  {{.URL}}
 {{end}}
-Explore your live demo: {{.ClickURL}}
-(Preview all three styles on your personalized site.)
+Open {{.RestaurantName}} demo: __CLICK_URL__
 
-Which direction fits {{.RestaurantName}} best? Reply to this email or explore the demo — happy to walk you through it in 10 minutes.
+Reply anytime — happy to walk you through it in 10 minutes.
 
-If you would rather not receive these emails, unsubscribe here: {{.UnsubscribeURL}}
+Prefer not to get these emails? Unsubscribe: {{.UnsubscribeURL}}
 
 — Tuvi Solutions

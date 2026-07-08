@@ -38,7 +38,7 @@ func BuildDraft(input DraftInput) DraftContent {
 		}
 		return DraftContent{
 			Subject:  outreachSubject(name),
-			BodyHTML: fmt.Sprintf("<p>We built a live demo for %s. View: {{CLICK_URL}}</p>", name),
+			BodyHTML: fmt.Sprintf("<p>A live demo for %s. View: {{CLICK_URL}}</p>", name),
 			BodyText: fmt.Sprintf("View your demo: {{CLICK_URL}}\nUnsubscribe: {{UNSUBSCRIBE_URL}}\n"),
 		}
 	}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"html"
 	htmltemplate "html/template"
+	"os"
 	"strings"
 	texttemplate "text/template"
 )
@@ -19,21 +20,16 @@ const (
 	placeholderTemplate2URL   = "{{TEMPLATE_2_URL}}"
 	placeholderTemplate3URL   = "{{TEMPLATE_3_URL}}"
 	placeholderUnsubscribeURL = "{{UNSUBSCRIBE_URL}}"
+
+	defaultPresentationURL = "http://localhost:5500"
+	defaultMarketingURL    = "http://localhost:3001"
 )
 
-type OutreachServiceBullet struct {
+type OutreachServiceLink struct {
 	Title       string
 	Description string
-}
-
-type OutreachTemplateCard struct {
-	Number             string
-	Name               string
-	Tagline            string
-	Bullets            []string
-	AccentColor        string
-	PreviewPlaceholder string
-	PreviewURL         string
+	// URL is raw href content (may include tracking placeholders like {{CLICK_URL}}).
+	URL htmltemplate.URL
 }
 
 type OutreachEmailData struct {
@@ -41,61 +37,7 @@ type OutreachEmailData struct {
 	ClickURL       string
 	UnsubscribeURL string
 	AccentFallback string
-	ServiceRows    [][]OutreachServiceBullet
-	Templates      []OutreachTemplateCard
-}
-
-var outreachServices = []OutreachServiceBullet{
-	{
-		Title:       "AI Voice Receptionist",
-		Description: "Answers calls 24/7, handles reservations, and offers callbacks — so you never miss a booking.",
-	},
-	{
-		Title:       "Presentation Websites",
-		Description: "Modern sites built from your real menu, photos, hours, and reviews.",
-	},
-	{
-		Title:       "Online Reservations",
-		Description: "Table booking integrated into your site — guests reserve without picking up the phone.",
-	},
-	{
-		Title:       "Custom Apps",
-		Description: "QR ordering, loyalty programs, and other tools tailored to how you run service.",
-	},
-}
-
-var outreachTemplateCards = []struct {
-	Number             string
-	Name               string
-	Tagline            string
-	Bullets            []string
-	AccentColor        string
-	PreviewPlaceholder string
-}{
-	{
-		Number:             "1",
-		Name:               "Cinematic",
-		Tagline:            "Warm editorial dining with scroll storytelling.",
-		Bullets:            []string{"Elegant hero and menu sections", "Ideal for classic and upscale dining"},
-		AccentColor:        "#c9a96e",
-		PreviewPlaceholder: "TEMPLATE_1_URL",
-	},
-	{
-		Number:             "2",
-		Name:               "Aurora",
-		Tagline:            "Futuristic glass design with a bold, modern feel.",
-		Bullets:            []string{"Interactive sections and motion", "Great for trend-forward brands"},
-		AccentColor:        "#22d3ee",
-		PreviewPlaceholder: "TEMPLATE_2_URL",
-	},
-	{
-		Number:             "3",
-		Name:               "Elysian",
-		Tagline:            "Ultra-premium gold and black fine dining aesthetic.",
-		Bullets:            []string{"Curated dish and gallery focus", "Built for high-end hospitality"},
-		AccentColor:        "#D4AF37",
-		PreviewPlaceholder: "TEMPLATE_3_URL",
-	},
+	Services       []OutreachServiceLink
 }
 
 func outreachSubject(restaurantName string) string {
@@ -103,7 +45,21 @@ func outreachSubject(restaurantName string) string {
 	if name == "" {
 		name = "your restaurant"
 	}
-	return fmt.Sprintf("We built a live demo for %s — website, AI receptionist & more", name)
+	return fmt.Sprintf("A live demo for %s — AI receptionist, website & more", name)
+}
+
+func presentationSiteURL() string {
+	if v := strings.TrimSpace(os.Getenv("PRESENTATION_SITE_URL")); v != "" {
+		return v
+	}
+	return defaultPresentationURL
+}
+
+func marketingSiteURL() string {
+	if v := strings.TrimSpace(os.Getenv("PUBLIC_MARKETING_URL")); v != "" {
+		return v
+	}
+	return defaultMarketingURL
 }
 
 func buildOutreachEmailData(restaurantName string) OutreachEmailData {
@@ -112,25 +68,30 @@ func buildOutreachEmailData(restaurantName string) OutreachEmailData {
 		name = "your restaurant"
 	}
 
-	cards := make([]OutreachTemplateCard, 0, len(outreachTemplateCards))
-	for _, card := range outreachTemplateCards {
-		cards = append(cards, OutreachTemplateCard{
-			Number:             card.Number,
-			Name:               card.Name,
-			Tagline:            card.Tagline,
-			Bullets:            append([]string(nil), card.Bullets...),
-			AccentColor:        card.AccentColor,
-			PreviewPlaceholder: card.PreviewPlaceholder,
-			PreviewURL:         "{{" + card.PreviewPlaceholder + "}}",
-		})
-	}
-
-	services := make([]OutreachServiceBullet, len(outreachServices))
-	copy(services, outreachServices)
-
-	serviceRows := [][]OutreachServiceBullet{
-		{services[0], services[1]},
-		{services[2], services[3]},
+	// Use __CLICK_URL__ (not {{CLICK_URL}}) so html/template does not URL-escape braces;
+	// injectOutreachPlaceholders rewrites these after render.
+	demoURL := htmltemplate.URL("__CLICK_URL__")
+	services := []OutreachServiceLink{
+		{
+			Title:       "AI Voice Receptionist",
+			Description: "24/7 calls, bookings & callbacks",
+			URL:         demoURL,
+		},
+		{
+			Title:       "Presentation Websites",
+			Description: "Modern sites from your real menu & photos",
+			URL:         htmltemplate.URL(presentationSiteURL()),
+		},
+		{
+			Title:       "Online Reservations",
+			Description: "Guests book tables on your demo site",
+			URL:         demoURL,
+		},
+		{
+			Title:       "Custom Apps",
+			Description: "QR ordering, loyalty & more",
+			URL:         htmltemplate.URL(marketingSiteURL()),
+		},
 	}
 
 	return OutreachEmailData{
@@ -138,8 +99,7 @@ func buildOutreachEmailData(restaurantName string) OutreachEmailData {
 		ClickURL:       placeholderClickURL,
 		UnsubscribeURL: placeholderUnsubscribeURL,
 		AccentFallback: "#d4a853",
-		ServiceRows:    serviceRows,
-		Templates:      cards,
+		Services:       services,
 	}
 }
 
@@ -165,11 +125,12 @@ func RenderOutreachEmail(restaurantName string) (DraftContent, error) {
 	if err := textTmpl.Execute(&textBuf, data); err != nil {
 		return DraftContent{}, fmt.Errorf("render outreach text: %w", err)
 	}
+	textBody := injectOutreachPlaceholders(textBuf.String())
 
 	return DraftContent{
 		Subject:  outreachSubject(restaurantName),
 		BodyHTML: htmlBody,
-		BodyText: textBuf.String(),
+		BodyText: textBody,
 	}, nil
 }
 

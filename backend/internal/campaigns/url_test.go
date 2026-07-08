@@ -24,17 +24,32 @@ func TestRenderOutreachEmail(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RenderOutreachEmail() error = %v", err)
 	}
-	if draft.Subject != "We built a live demo for Spice Garden — website, AI receptionist & more" {
+	if draft.Subject != "A live demo for Spice Garden — AI receptionist, website & more" {
 		t.Fatalf("subject = %q", draft.Subject)
 	}
-	for _, token := range []string{"Cinematic", "Aurora", "Elysian", "{{CLICK_URL}}", "{{TEMPLATE_3_URL}}"} {
+	for _, token := range []string{
+		"{{CLICK_URL}}",
+		"{{UNSUBSCRIBE_URL}}",
+		"AI Voice Receptionist",
+		"Presentation Websites",
+		"Online Reservations",
+		"Custom Apps",
+		"http://localhost:5500",
+		"http://localhost:3001",
+		"live website preview for Spice Garden",
+		"Open Spice Garden demo",
+	} {
 		if !strings.Contains(draft.BodyHTML, token) {
 			t.Fatalf("body_html missing %q", token)
 		}
 	}
-	for _, keyword := range []string{"AI Voice Receptionist", "Presentation Websites", "Explore your live demo"} {
-		if !strings.Contains(draft.BodyHTML, keyword) {
-			t.Fatalf("body_html missing service/cta keyword %q", keyword)
+	if strings.Contains(draft.BodyHTML, "%7b") {
+		t.Fatal("body_html has URL-escaped CLICK_URL braces")
+	}
+	// Long template-card section removed
+	for _, banned := range []string{"We already built a preview", "Cinematic", "Aurora", "Elysian"} {
+		if strings.Contains(draft.BodyHTML, banned) {
+			t.Fatalf("body_html should not contain %q", banned)
 		}
 	}
 	if !strings.Contains(draft.BodyText, "AI Voice Receptionist") {

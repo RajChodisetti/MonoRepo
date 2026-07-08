@@ -24,9 +24,7 @@ func TestBuildDraftIncludesPlaceholders(t *testing.T) {
 	}
 	for _, placeholder := range []string{
 		"{{CLICK_URL}}",
-		"{{TEMPLATE_1_URL}}",
-		"{{TEMPLATE_2_URL}}",
-		"{{TEMPLATE_3_URL}}",
+		"{{UNSUBSCRIBE_URL}}",
 	} {
 		if !strings.Contains(draft.BodyHTML, placeholder) {
 			t.Fatalf("body_html missing placeholder %s", placeholder)
@@ -35,9 +33,14 @@ func TestBuildDraftIncludesPlaceholders(t *testing.T) {
 	if !strings.Contains(draft.BodyText, "{{UNSUBSCRIBE_URL}}") {
 		t.Fatal("body_text missing unsubscribe placeholder")
 	}
-	for _, name := range []string{"Cinematic", "Aurora", "Elysian"} {
+	for _, name := range []string{"AI Voice Receptionist", "Custom Apps"} {
 		if !strings.Contains(draft.BodyHTML, name) {
-			t.Fatalf("body_html missing template name %q", name)
+			t.Fatalf("body_html missing service %q", name)
+		}
+	}
+	for _, banned := range []string{"Cinematic", "Elysian", "We already built"} {
+		if strings.Contains(draft.BodyHTML, banned) {
+			t.Fatalf("body_html should not contain %q", banned)
 		}
 	}
 }
