@@ -12,6 +12,50 @@ Each entry should explain:
 - how the work fits with the rest of the Phase 1 or Phase 2 plan;
 - risks, gaps, or follow-ups.
 
+## 2026-07-08 — Local Catalog Work Rebased on Phase Branch
+
+**Role:** Frontend / Documentation Agent
+
+**Delivered:** Preserved Raj's local `apps/restaurant-services-catalog` work by
+committing it locally, creating a safety branch at `local/pre-pull-catalog-work`,
+and rebasing the local `phase1_03/backend` branch on top of the latest fetched
+`origin/phase1_03/backend`. Resolved the pull-blocking conflicts in the catalog
+package files and session summary without replacing the video-enabled restaurant
+services catalog.
+
+**Why:** A direct `git pull` was blocked because local session docs and
+untracked catalog files would have been overwritten by the incoming branch.
+
+**Business Value:** The active phase branch now has the latest backend work plus
+the restored restaurant services catalog assets, including the FAL-generated QR
+ordering and rewards reception videos needed for the sales presentation flow.
+
+**Plan Fit:** Keeps the Phase 1 restaurant services marketing surface aligned
+with the backend branch while preserving local catalog iteration work for
+outreach and demo conversations.
+
+**Tests / Checks Run:**
+- `rtk git fetch origin phase1_03/backend` — fetched latest remote branch state
+- `rtk git rebase origin/phase1_03/backend` — completed after conflict
+  resolution
+- `rtk make restaurant-services-catalog-build` — Vite production build passed
+- `rtk make test` — backend Go test suite passed
+- `rtk rg -n 'qr-ordering-kitchen-v2|rewards-reception-v3-pro' apps/restaurant-services-catalog/src apps/restaurant-services-catalog/dist/index.html`
+  — built catalog references both approved video files
+- `rtk ls -lh apps/restaurant-services-catalog/public/media/*.mp4` — confirmed
+  the current and fallback MP4 assets are present
+- `rtk curl -I http://127.0.0.1:5174` — catalog dev server returned `200 OK`
+- `rtk curl -s http://127.0.0.1:5174 | rtk rg -n 'qr-ordering-kitchen-v2.mp4|rewards-reception-v3-pro.mp4'`
+  — served page references both approved video files
+- `rtk curl -I http://127.0.0.1:5174/media/qr-ordering-kitchen-v2.mp4`
+  — returned `200 OK` with `video/mp4`
+- `rtk curl -I http://127.0.0.1:5174/media/rewards-reception-v3-pro.mp4`
+  — returned `200 OK` with `video/mp4`
+
+**Risks / Follow-ups:** The local commit is intentionally still ahead of
+`origin/phase1_03/backend` by one commit and has not been pushed. Permanent
+Cloudflare Pages deployment still requires Wrangler authentication.
+
 ## 2026-07-07 — Phase Branch Catalog Videos Preserved
 
 **Role:** Frontend / Documentation Agent
@@ -154,6 +198,180 @@ rather than `docs/phase2/`.
 **Tests / Checks Run:** `go test ./backend/...` — all passing
 
 **Follow-ups:** Optional PATCH `/api/v1/user/me` for profile updates
+
+## 2026-07-03 — Restaurant Services Catalog App
+
+**Role:** Frontend Agent
+
+**Delivered:** Added a new standalone Vite JavaScript app at
+`apps/restaurant-services-catalog` for an interactive Tuvi restaurant services
+catalog. The app uses the existing `presentation/index.html` service story as
+content grounding, adds a premium visual system, scroll-driven motion sections,
+interactive service selection, QR/rewards/voice/service modules, an ROI
+estimator, Cloudflare Pages config, and locally stored fal-generated media
+assets.
+
+**Why:** Tuvi needs a polished services catalog that can be shared with
+restaurant owners after demo outreach, showing the full platform package beyond
+one personalized demo website.
+
+**Business Value:** The catalog turns the service offering into a sales asset:
+owners can see demo websites, QR ordering, rewards, AI receptionist,
+reservations, outreach, content automation, and token-gated demos in one guided
+experience.
+
+**Plan Fit:** Supports Phase 1 sales positioning and demo/outreach workflows by
+giving campaigns a richer Tuvi services destination after the restaurant-specific
+demo link.
+
+**Checks Run:**
+- `npm install` in `apps/restaurant-services-catalog` — success, 0 vulnerabilities.
+- `npm run build` — success.
+- `curl` smoke checks for local and Cloudflare tunnel page/media assets — 200.
+- Playwright screenshots for desktop/mobile hero and services sections.
+
+**Risks / Follow-ups:** Cloudflare Pages direct deploy was blocked because
+Wrangler is not authenticated in this shell. The app is currently hosted via a
+Cloudflare quick tunnel backed by a local static server. Run
+`npm run deploy` after `wrangler login` or with a Cloudflare API token to publish
+to Pages.
+
+## 2026-07-03 — Restaurant Services Catalog Polish
+
+**Role:** Frontend Agent
+
+**Delivered:** Polished the hosted restaurant services catalog by removing
+visible AI-generation/provider labels from the UI, replacing the hero background
+video with pointer/touch-reactive canvas motion graphics, and tightening the
+desktop/mobile visual presentation after screenshot review.
+
+**Why:** The catalog should read as a premium Tuvi-owned sales experience, not
+as an asset-generation demo. The hero needed a lighter, interactive motion layer
+without relying on a background video.
+
+**Business Value:** Restaurant owners see a cleaner services story with fewer
+technical labels and a more polished first impression, improving the catalog's
+fit as an outreach and sales destination.
+
+**Plan Fit:** Supports Phase 1 demo/outreach by improving the public-facing
+services destination already hosted through the Cloudflare quick tunnel.
+
+**Checks Run:**
+- `npm run build` in `apps/restaurant-services-catalog` — success.
+- Source/dist scan confirmed the removed AI-generation/provider phrases are no
+  longer visible in the app markup.
+- Cloudflare tunnel smoke check for the hosted catalog — 200.
+- Playwright screenshot review for desktop hero, mobile hero, and media section.
+
+**Risks / Follow-ups:** The Cloudflare Pages permanent deploy remains blocked
+until Wrangler is authenticated. The current hosted preview depends on the local
+static server and Cloudflare quick tunnel staying up.
+
+## 2026-07-03 — Restaurant Services Catalog Offer Revision
+
+**Role:** Frontend Agent
+
+**Delivered:** Updated the hosted catalog to focus only on restaurant-facing
+Tuvi services. Renamed "Premium Demo Websites" to "Custom Premium Websites",
+removed the scroll-driven "invisible lead to booked sales call" transformation
+block, removed internal sales-pipeline/token-gated demo language from the
+service catalog, and replaced the obsolete single generated loop with two new
+fal-generated cinematic service-flow videos: QR table ordering routed to the
+kitchen, and reception ordering with QR rewards. Follow-up cleanup removed
+client-facing production/style language such as "cinematic product moments",
+changed the section to "Guest Experience", changed the nav label from "Media" to
+"Experience", neutralized public media filenames, and removed the public media
+manifest so provider/generation details are not exposed in the hosted page. A
+later client-facing cleanup removed the value estimator, removed the two extra
+image tiles from the QR/rewards section, simplified the top-left Tuvi wordmark,
+removed vague catalog/guest-experience phrasing, tightened hero/section spacing,
+and upgraded service cards with a glass treatment plus color highlight on hover,
+focus, touch, and selected state.
+
+**Why:** Raj clarified that the catalog should sell what Tuvi can do for
+restaurants, not describe Tuvi's internal lead-acquisition and sales process.
+
+**Business Value:** Restaurant owners now see concrete guest-facing outcomes:
+custom websites, QR ordering, rewards, voice agents, reservations, promotions,
+menu/photo automation, and owner dashboards. The new videos make the QR ordering
+and rewards flows easier to understand quickly.
+
+**Plan Fit:** Improves the Phase 1 services destination that can be linked from
+demo-site conversations and used as a Tuvi walkthrough for restaurant owners.
+
+**Checks Run:**
+- `npm run build` in `apps/restaurant-services-catalog` — success.
+- Source/dist phrase scan confirmed removed internal labels and old video
+  references are gone.
+- Hosted page-source scan confirmed provider/generation/prompt/style wording is
+  not present in client-facing HTML.
+- Source/dist scan confirmed estimator code, estimator markup, old vague labels,
+  and unused image references are gone.
+- Cloudflare tunnel smoke checks for the hosted page and both new MP4 assets —
+  200; old generated/provider-named asset paths — 404.
+- Playwright screenshots for desktop hero, mobile hero, services section, and
+  QR/rewards media section.
+
+**Risks / Follow-ups:** Permanent Cloudflare Pages deploy still needs Wrangler
+authentication. The current hosted URL depends on the local static server and
+Cloudflare quick tunnel staying online.
+
+## 2026-07-03 — Restaurant Services Catalog Tuvi Solutions Update
+
+**Role:** Frontend Agent
+
+**Delivered:** Updated the hosted catalog to use "Tuvi Solutions" consistently
+instead of standalone "Tuvi", replaced the services grid with a sticky parallax
+service-card stack, and added animated icon/symbol treatments to every service
+card using the existing Lucide icon system plus CSS motion. Cleaned the services
+section copy so it sells restaurant outcomes instead of explaining the scroll
+interaction. Tightened the landing hero first fold from mobile screenshot
+feedback by making the hero height content-driven, brightening the restaurant
+background layer, softening the dark overlay, adding topbar separation, hiding
+the mobile scroll cue, and trimming the lower hero gap.
+Added viewport-managed video loading/playback so large MP4 walkthroughs use
+poster frames initially, load only when near view, pause when offscreen, and
+resume only when visible to reduce mobile buffering and stutter through the
+Cloudflare quick tunnel.
+
+**Video Work:** After fal billing was recharged, generated and downloaded two
+new service videos without deleting the previous files. The approved QR ordering
+video remains `qr-ordering-kitchen-v2.mp4`. The rewards video was regenerated
+again with Kling V3 Pro using a tighter script focused on scan, order
+confirmation, points added, and redeem options, then wired as
+`rewards-reception-v3-pro.mp4` with `rewards-reception-v3-pro-poster.png`. Older
+rewards files remain in `public/media` for fallback/reference.
+
+**Why:** Raj asked the catalog to present the company as Tuvi Solutions, make the
+services area feel more premium and progressive, and produce clearer service-flow
+videos without removing the current assets.
+
+**Business Value:** Restaurant owners now see one premium service module at a
+time with clearer visual emphasis, plus clearer service-flow videos for table QR
+ordering to kitchen operations and counter QR rewards.
+
+**Plan Fit:** Keeps the hosted Tuvi Solutions sales destination aligned with the
+demo/outreach path while preserving reusable media assets for future iteration.
+
+**Checks Run:**
+- `npm run build` in `apps/restaurant-services-catalog` — success.
+- Rebuilt the live-served catalog `dist` and confirmed the Cloudflare tunnel
+  serves the updated CSS bundle with the brighter background, mobile topbar, and
+  tighter hero spacing rules.
+- Confirmed the live tunnel serves deferred video tags (`data-src`,
+  `preload="none"`) and the JS bundle contains the managed video playback logic.
+- Source scan confirmed no standalone "Tuvi" remains in the catalog source.
+- Source scan confirmed removed internal labels such as AI-generated wording,
+  prompts, estimator text, and scroll-driven/catalog labels remain absent.
+- Local and Cloudflare tunnel smoke checks for page, `qr-ordering-kitchen-v2.mp4`,
+  `rewards-reception-v3-pro.mp4`, and `rewards-reception-v3-pro-poster.png`
+  returned 200.
+- Playwright screenshot confirmed the latest walkthrough labels, V2 posters, and
+  captions render cleanly in the media section.
+
+**Risks / Follow-ups:** The first pre-recharge ordering request stayed queued at
+position 0, so a fresh ordering retry was used for the live V2 file. Permanent
+Cloudflare Pages deploy still requires Wrangler authentication.
 
 ## 2026-06-24 — Scraped Restaurant Data Schema and Import
 
