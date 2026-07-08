@@ -6,12 +6,23 @@ export const siteContent = {
   },
 
   nav: [
-    { href: "#about", label: "About" },
-    { href: "#testimonials", label: "Clients" },
-    { href: "#guarantee", label: "Guarantee" },
-    { href: "#team", label: "Team" },
-    { href: "#contact", label: "Contact" },
+    { href: "/#about", label: "About" },
+    { href: "/#testimonials", label: "Clients" },
+    { href: "/#guarantee", label: "Guarantee" },
+    { href: "/#team", label: "Team" },
+    { href: "/#contact", label: "Contact" },
   ],
+
+  servicesNav: {
+    label: "Services",
+    items: [
+      {
+        href: "/services/restaurants",
+        label: "Restaurants",
+        description: "QR ordering, rewards, reservations, and guest growth systems.",
+      },
+    ],
+  },
 
   hero: {
     eyebrow: "Custom Software Solutions",
@@ -127,7 +138,7 @@ export const siteContent = {
     legal: [
       { label: "Privacy Policy", href: "#" },
       { label: "Terms of Service", href: "#" },
-      { label: "Contact", href: "#contact" },
+      { label: "Contact", href: "/#contact" },
     ],
   },
 } as const;
