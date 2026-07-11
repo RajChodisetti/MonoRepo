@@ -3,7 +3,7 @@
 
 tuvisolutions.com, www.tuvisolutions.com {
   encode zstd gzip
-  reverse_proxy 127.0.0.1:15173
+  reverse_proxy 127.0.0.1:15174
 }
 
 api.tuvisolutions.com {

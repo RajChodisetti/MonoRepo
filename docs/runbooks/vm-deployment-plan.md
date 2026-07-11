@@ -1,14 +1,15 @@
 # VM Deployment Plan
 
-Date: 2026-07-08
-Status: VM stack deployed; public DNS cutover pending
+Date: 2026-07-11
+Status: VM stack deployed; public DNS active
 
 ## Goal
 
-Move `tuvisolutions.com` and `www.tuvisolutions.com` from the older Vercel site
-to the VM at `170.64.154.143`, serving `apps/restaurant-services-catalog` as the
-canonical Tuvi website. Do not deploy `presentation/` or make the older
-`tuvi-website/app` the public homepage.
+Serve `tuvisolutions.com` and `www.tuvisolutions.com` from the VM at
+`170.64.154.143`, using `tuvi-website/app` as the canonical corporate website.
+Keep the standalone restaurant services catalog deployed on loopback for
+internal verification while `/services/restaurants` is served by the corporate
+website. Do not deploy `presentation/`.
 
 ## Current Repo Setup Found
 
@@ -22,8 +23,8 @@ The repo already has these deployable surfaces:
 | PostgreSQL | `infra/docker/docker-compose.yml` | `postgres:16-alpine` | Persistent Docker volume `postgres_data` |
 | Voice agent | `voice-sales-agent/` | Python/FastAPI in Docker | Containerized through Compose profile `voice` with Redis |
 | Voice Redis | Compose service | `redis:7-alpine` | Persistent Docker volume `voice_sales_redis_data` |
-| Restaurant services website | `apps/restaurant-services-catalog` | Vite static build | Build exists; currently not in VM Compose |
-| Tuvi corporate website | `tuvi-website/app` | Next.js app on `3001` | Legacy for this deployment; do not use as the public homepage |
+| Restaurant services website | `apps/restaurant-services-catalog` | Vite static build | Containerized and exposed on VM loopback |
+| Tuvi corporate website | `tuvi-website/app` | Next.js app | Canonical public website, containerized on VM loopback |
 | Restaurant demo template | `template` | Next.js app on `3000` | Runtime depends on main API and voice agent; currently not in VM Compose |
 | Automation jobs | `automation/outreach` | Python scripts | One-shot/manual jobs; not a long-running web service |
 
@@ -70,6 +71,7 @@ The VM deployment adds `infra/docker/docker-compose.vm.yml`,
     `demo.tuvisolutions.com` have no records.
 - Deployed Tuvi loopback services:
   - catalog: `127.0.0.1:15173`
+  - corporate website: `127.0.0.1:15174`
   - API: `127.0.0.1:18080`
   - voice: `127.0.0.1:18000`
   - demo template: `127.0.0.1:13000`
@@ -103,8 +105,8 @@ Recommended hostnames:
 
 | Hostname | Target |
 | --- | --- |
-| `tuvisolutions.com` | catalog container at `127.0.0.1:15173` |
-| `www.tuvisolutions.com` | catalog container at `127.0.0.1:15173` |
+| `tuvisolutions.com` | corporate website at `127.0.0.1:15174` |
+| `www.tuvisolutions.com` | corporate website at `127.0.0.1:15174` |
 | `api.tuvisolutions.com` | Go API container at `127.0.0.1:18080` |
 | `voice.tuvisolutions.com` | voice agent container at `127.0.0.1:18000` |
 | `demo.tuvisolutions.com` | template container at `127.0.0.1:13000` |
@@ -186,7 +188,8 @@ Serve `apps/restaurant-services-catalog/dist`.
 
 ### Tuvi Corporate Website
 
-Do not deploy as the public homepage in this cutover.
+Build `tuvi-website/app` with `infra/docker/Dockerfile.tuvi-website` and serve
+the production Next.js process on VM loopback port `15174`.
 
 ### Restaurant Demo Template
 
@@ -204,15 +207,16 @@ Use `infra/docker/docker-compose.vm.yml`. It defines:
 
 1. `postgres`, `redis`, `migrate`, `api`, and `worker`.
 2. `restaurant-services-catalog`, built from the Vite app and served by Nginx.
-3. `template`, built as a Next.js production server.
-4. `voice-agent`, built from `voice-sales-agent/`.
-5. Only loopback host ports; public traffic stays on host-level Caddy.
+3. `tuvi-website`, built as the canonical corporate Next.js site.
+4. `template`, built as a Next.js production server.
+5. `voice-agent`, built from `voice-sales-agent/`.
+6. Only loopback host ports; public traffic stays on host-level Caddy.
 
 Minimal service dependency graph:
 
 ```text
 Caddy :80/:443
-  -> 127.0.0.1:15173 restaurant-services-catalog
+  -> 127.0.0.1:15174 tuvi-website
   -> 127.0.0.1:18080 api
   -> 127.0.0.1:18000 voice-agent
   -> 127.0.0.1:13000 template
@@ -239,7 +243,7 @@ template -> api, voice-agent
 
 3. Build and start VM stack
    - Run `docker compose --env-file /opt/tuvi/env/stack.env -p tuvi -f infra/docker/docker-compose.vm.yml up -d --build`.
-   - Confirm API, worker, Postgres, Redis, catalog, template, and voice
+   - Confirm API, worker, Postgres, Redis, corporate website, catalog, template, and voice
      containers are running.
 
 4. Reverse proxy and TLS

@@ -98,6 +98,38 @@ services:
       - "127.0.0.1:${TUVI_CATALOG_PORT:-15173}:80"
     restart: unless-stopped
 
+  tuvi-website:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.tuvi-website
+      args:
+        NEXT_PUBLIC_CONTACT_EMAIL: ${NEXT_PUBLIC_CONTACT_EMAIL:-contact@tuvisolutions.com}
+        NEXT_PUBLIC_LINKEDIN_URL: ${NEXT_PUBLIC_LINKEDIN_URL:-https://linkedin.com/company/tuvi-solutions}
+        NEXT_PUBLIC_VOICE_AGENT_URL: ${NEXT_PUBLIC_VOICE_AGENT_URL:-https://voice.tuvisolutions.com}
+        NEXT_PUBLIC_CALL_IN_NUMBER: ${NEXT_PUBLIC_CALL_IN_NUMBER:-}
+    env_file:
+      - path: ${TUVI_ENV_DIR:-/opt/tuvi/env}/stack.env
+        required: false
+    environment:
+      NODE_ENV: production
+      CONSULTATION_API_URL: http://api:8080
+      MONOREPO_API_URL: http://api:8080
+      TUVI_API_TOKEN: ${TUVI_API_TOKEN:?TUVI_API_TOKEN is required}
+      NEXT_PUBLIC_CONTACT_EMAIL: ${NEXT_PUBLIC_CONTACT_EMAIL:-contact@tuvisolutions.com}
+      NEXT_PUBLIC_LINKEDIN_URL: ${NEXT_PUBLIC_LINKEDIN_URL:-https://linkedin.com/company/tuvi-solutions}
+      NEXT_PUBLIC_VOICE_AGENT_URL: ${NEXT_PUBLIC_VOICE_AGENT_URL:-https://voice.tuvisolutions.com}
+      NEXT_PUBLIC_CALL_IN_NUMBER: ${NEXT_PUBLIC_CALL_IN_NUMBER:-}
+      VOICE_AGENT_URL: http://voice-agent:8000
+      CALL_API_SECRET: ${CALL_API_SECRET:?CALL_API_SECRET is required}
+    ports:
+      - "127.0.0.1:${TUVI_WEBSITE_PORT:-15174}:3000"
+    depends_on:
+      api:
+        condition: service_started
+      voice-agent:
+        condition: service_started
+    restart: unless-stopped
+
   template:
     build:
       context: ../..
