@@ -8,6 +8,8 @@ type RestaurantFeatureVideoProps = {
   title: string;
 };
 
+let activeRestaurantVideo: HTMLVideoElement | null = null;
+
 export default function RestaurantFeatureVideo({
   poster,
   src,
@@ -32,10 +34,20 @@ export default function RestaurantFeatureVideo({
 
     setIsLoading(video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA);
 
+    if (activeRestaurantVideo && activeRestaurantVideo !== video) {
+      activeRestaurantVideo.pause();
+    }
+
+    activeRestaurantVideo = video;
+
     try {
       await video.play();
       setAutoplayBlocked(false);
     } catch {
+      if (activeRestaurantVideo === video) {
+        activeRestaurantVideo = null;
+      }
+
       // Mobile browsers can reject autoplay even for muted video. Keep a clear
       // manual play action visible so the demo never looks broken.
       setAutoplayBlocked(true);
@@ -93,6 +105,16 @@ export default function RestaurantFeatureVideo({
   useEffect(() => {
     const video = videoRef.current;
 
+    return () => {
+      if (activeRestaurantVideo === video) {
+        activeRestaurantVideo = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const video = videoRef.current;
+
     if (!shouldLoad || !video) {
       return;
     }
@@ -129,7 +151,13 @@ export default function RestaurantFeatureVideo({
         playsInline
         preload="none"
         onCanPlay={() => setIsLoading(false)}
-        onPause={() => setIsPlaying(false)}
+        onPause={() => {
+          if (activeRestaurantVideo === videoRef.current) {
+            activeRestaurantVideo = null;
+          }
+
+          setIsPlaying(false);
+        }}
         onPlay={() => {
           manualPlayRequestedRef.current = false;
           setIsLoading(false);
