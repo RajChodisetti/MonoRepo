@@ -12,7 +12,8 @@ export const metadata: Metadata = {
     "QR ordering, rewards, reservations, voice AI, and guest growth systems — built for restaurants by Tuvi Solutions.",
 };
 
-const mediaBase = "/services/restaurants";
+const mediaBase =
+  "https://sw-prod-files-syd1.syd1.cdn.digitaloceanspaces.com/tuvi/public/restaurant-services/v2";
 
 const featureVideos = [
   {

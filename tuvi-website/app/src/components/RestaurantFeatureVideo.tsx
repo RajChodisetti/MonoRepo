@@ -14,21 +14,17 @@ export default function RestaurantFeatureVideo({
   title,
 }: RestaurantFeatureVideoProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const objectUrlRef = useRef<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
 
   const playVideo = useCallback(() => {
     const video = videoRef.current;
 
-    if (!video || !objectUrlRef.current) {
+    if (!video) {
       return;
     }
 
-    // Keep play() directly in the click call stack so mobile browsers can use
-    // the user gesture when autoplay policy requires it.
+    video.muted = true;
     const playPromise = video.play();
 
     void playPromise
@@ -36,69 +32,8 @@ export default function RestaurantFeatureVideo({
         setAutoplayBlocked(false);
         setLoadFailed(false);
       })
-      .catch(() => setAutoplayBlocked(true))
-      .finally(() => setIsLoading(false));
+      .catch(() => setAutoplayBlocked(true));
   }, []);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    const video = videoRef.current;
-    let disposed = false;
-
-    setIsLoading(true);
-    setIsPlaying(false);
-    setAutoplayBlocked(false);
-    setLoadFailed(false);
-
-    void (async () => {
-      try {
-        const response = await fetch(src, {
-          cache: "force-cache",
-          signal: controller.signal,
-        });
-
-        if (!response.ok) {
-          throw new Error(`Video request failed with status ${response.status}`);
-        }
-
-        // Materialize the complete MP4 before playback. The retained Blob URL
-        // then loops from browser memory instead of streaming from the VM.
-        const blob = await response.blob();
-
-        if (disposed || !video) {
-          return;
-        }
-
-        const objectUrl = URL.createObjectURL(blob);
-        objectUrlRef.current = objectUrl;
-        video.src = objectUrl;
-        video.muted = true;
-        video.load();
-        playVideo();
-      } catch {
-        if (!disposed && !controller.signal.aborted) {
-          setLoadFailed(true);
-          setIsLoading(false);
-        }
-      }
-    })();
-
-    return () => {
-      disposed = true;
-      controller.abort();
-
-      if (video) {
-        video.pause();
-        video.removeAttribute("src");
-        video.load();
-      }
-
-      if (objectUrlRef.current) {
-        URL.revokeObjectURL(objectUrlRef.current);
-        objectUrlRef.current = null;
-      }
-    };
-  }, [playVideo, src]);
 
   useEffect(() => {
     const resumePlayback = () => {
@@ -118,35 +53,24 @@ export default function RestaurantFeatureVideo({
         ref={videoRef}
         aria-label={`${title} product demo`}
         className="aspect-video w-full bg-zinc-900 object-cover"
+        src={src}
         poster={poster}
         autoPlay
         loop
         muted
         playsInline
         preload="auto"
-        onPause={() => setIsPlaying(false)}
+        onCanPlay={playVideo}
+        onError={() => setLoadFailed(true)}
         onPlaying={() => {
           setAutoplayBlocked(false);
-          setIsLoading(false);
-          setIsPlaying(true);
+          setLoadFailed(false);
         }}
-        onWaiting={() => setIsLoading(true)}
       >
         Your browser does not support embedded videos.
       </video>
 
-      {!isPlaying && isLoading ? (
-        <div
-          role="status"
-          className="absolute inset-0 flex items-center justify-center bg-ink/10"
-        >
-          <span className="rounded-full bg-ink/90 px-5 py-3 text-sm font-semibold text-white shadow-lg backdrop-blur">
-            Loading video…
-          </span>
-        </div>
-      ) : null}
-
-      {!isPlaying && autoplayBlocked ? (
+      {autoplayBlocked ? (
         <button
           type="button"
           aria-label={`Start ${title} video`}
@@ -167,7 +91,7 @@ export default function RestaurantFeatureVideo({
         </button>
       ) : null}
 
-      {!isPlaying && loadFailed ? (
+      {loadFailed ? (
         <div
           role="alert"
           className="absolute inset-0 flex items-center justify-center bg-ink/20"
