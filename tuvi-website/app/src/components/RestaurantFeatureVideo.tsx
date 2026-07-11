@@ -8,180 +8,150 @@ type RestaurantFeatureVideoProps = {
   title: string;
 };
 
-let activeRestaurantVideo: HTMLVideoElement | null = null;
-
 export default function RestaurantFeatureVideo({
   poster,
   src,
   title,
 }: RestaurantFeatureVideoProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const sourceAttachedRef = useRef(false);
-  const isVisibleRef = useRef(false);
-  const manualPlayRequestedRef = useRef(false);
-  const [shouldLoad, setShouldLoad] = useState(false);
+  const objectUrlRef = useRef<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
 
-  const attemptPlayback = useCallback(async () => {
+  const playVideo = useCallback(() => {
     const video = videoRef.current;
 
-    if (!video) {
+    if (!video || !objectUrlRef.current) {
       return;
     }
 
-    setIsLoading(video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA);
+    // Keep play() directly in the click call stack so mobile browsers can use
+    // the user gesture when autoplay policy requires it.
+    const playPromise = video.play();
 
-    if (activeRestaurantVideo && activeRestaurantVideo !== video) {
-      activeRestaurantVideo.pause();
-    }
+    void playPromise
+      .then(() => {
+        setAutoplayBlocked(false);
+        setLoadFailed(false);
+      })
+      .catch(() => setAutoplayBlocked(true))
+      .finally(() => setIsLoading(false));
+  }, []);
 
-    activeRestaurantVideo = video;
+  useEffect(() => {
+    const controller = new AbortController();
+    const video = videoRef.current;
+    let disposed = false;
 
-    try {
-      await video.play();
-      setAutoplayBlocked(false);
-    } catch {
-      if (activeRestaurantVideo !== video) {
-        // Another visible demo took focus while this play request was pending.
-        setIsLoading(false);
-        return;
+    setIsLoading(true);
+    setIsPlaying(false);
+    setAutoplayBlocked(false);
+    setLoadFailed(false);
+
+    void (async () => {
+      try {
+        const response = await fetch(src, {
+          cache: "force-cache",
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error(`Video request failed with status ${response.status}`);
+        }
+
+        // Materialize the complete MP4 before playback. The retained Blob URL
+        // then loops from browser memory instead of streaming from the VM.
+        const blob = await response.blob();
+
+        if (disposed || !video) {
+          return;
+        }
+
+        const objectUrl = URL.createObjectURL(blob);
+        objectUrlRef.current = objectUrl;
+        video.src = objectUrl;
+        video.muted = true;
+        video.load();
+        playVideo();
+      } catch {
+        if (!disposed && !controller.signal.aborted) {
+          setLoadFailed(true);
+          setIsLoading(false);
+        }
       }
-
-      activeRestaurantVideo = null;
-
-      // Mobile browsers can reject autoplay even for muted video. Keep a clear
-      // manual play action visible so the demo never looks broken.
-      setAutoplayBlocked(true);
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    const container = containerRef.current;
-
-    if (!container) {
-      return;
-    }
-
-    const preloadObserver = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setShouldLoad(true);
-          preloadObserver.disconnect();
-        }
-      },
-      { rootMargin: "400px 0px" },
-    );
-
-    preloadObserver.observe(container);
-
-    return () => preloadObserver.disconnect();
-  }, []);
-
-  useEffect(() => {
-    const container = containerRef.current;
-
-    if (!container) {
-      return;
-    }
-
-    const playbackObserver = new IntersectionObserver(
-      ([entry]) => {
-        isVisibleRef.current = entry.isIntersecting;
-
-        if (entry.isIntersecting && sourceAttachedRef.current) {
-          void attemptPlayback();
-        } else if (!entry.isIntersecting) {
-          videoRef.current?.pause();
-        }
-      },
-      { threshold: 0.25 },
-    );
-
-    playbackObserver.observe(container);
-
-    return () => playbackObserver.disconnect();
-  }, [attemptPlayback]);
-
-  useEffect(() => {
-    const video = videoRef.current;
+    })();
 
     return () => {
-      if (activeRestaurantVideo === video) {
-        activeRestaurantVideo = null;
+      disposed = true;
+      controller.abort();
+
+      if (video) {
+        video.pause();
+        video.removeAttribute("src");
+        video.load();
+      }
+
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current);
+        objectUrlRef.current = null;
       }
     };
-  }, []);
+  }, [playVideo, src]);
 
   useEffect(() => {
-    const video = videoRef.current;
+    const resumePlayback = () => {
+      if (!document.hidden && videoRef.current?.paused) {
+        playVideo();
+      }
+    };
 
-    if (!shouldLoad || !video) {
-      return;
-    }
+    document.addEventListener("visibilitychange", resumePlayback);
 
-    sourceAttachedRef.current = true;
-    setIsLoading(true);
-    video.load();
-
-    if (isVisibleRef.current || manualPlayRequestedRef.current) {
-      void attemptPlayback();
-    }
-  }, [attemptPlayback, shouldLoad]);
-
-  const handlePlay = () => {
-    manualPlayRequestedRef.current = true;
-    setIsLoading(true);
-
-    if (!shouldLoad) {
-      setShouldLoad(true);
-      return;
-    }
-
-    void attemptPlayback();
-  };
-
-  const showPlayButton = !isPlaying && (!shouldLoad || isLoading || autoplayBlocked);
+    return () => document.removeEventListener("visibilitychange", resumePlayback);
+  }, [playVideo]);
 
   return (
-    <div ref={containerRef} className="relative">
+    <div className="relative">
       <video
         ref={videoRef}
         aria-label={`${title} product demo`}
         className="aspect-video w-full bg-zinc-900 object-cover"
         poster={poster}
+        autoPlay
         loop
         muted
         playsInline
-        preload={shouldLoad ? "auto" : "none"}
-        onCanPlay={() => setIsLoading(false)}
-        onPause={() => {
-          if (activeRestaurantVideo === videoRef.current) {
-            activeRestaurantVideo = null;
-          }
-
-          setIsPlaying(false);
-        }}
-        onPlay={() => {
-          manualPlayRequestedRef.current = false;
+        preload="auto"
+        onPause={() => setIsPlaying(false)}
+        onPlaying={() => {
+          setAutoplayBlocked(false);
           setIsLoading(false);
           setIsPlaying(true);
         }}
         onWaiting={() => setIsLoading(true)}
       >
-        {shouldLoad ? <source src={src} type="video/mp4" /> : null}
         Your browser does not support embedded videos.
       </video>
 
-      {showPlayButton ? (
+      {!isPlaying && isLoading ? (
+        <div
+          role="status"
+          className="absolute inset-0 flex items-center justify-center bg-ink/10"
+        >
+          <span className="rounded-full bg-ink/90 px-5 py-3 text-sm font-semibold text-white shadow-lg backdrop-blur">
+            Loading video…
+          </span>
+        </div>
+      ) : null}
+
+      {!isPlaying && autoplayBlocked ? (
         <button
           type="button"
-          aria-label={`Play ${title} demo`}
+          aria-label={`Start ${title} video`}
           className="absolute inset-0 flex items-center justify-center bg-ink/10 transition hover:bg-ink/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-white"
-          onClick={handlePlay}
+          onClick={playVideo}
         >
           <span className="flex items-center gap-3 rounded-full bg-ink/90 px-5 py-3 text-sm font-semibold text-white shadow-lg backdrop-blur">
             <svg
@@ -192,13 +162,20 @@ export default function RestaurantFeatureVideo({
             >
               <path d="M8 5.14v13.72a1 1 0 0 0 1.52.85l10.28-6.86a1 1 0 0 0 0-1.66L9.52 4.29A1 1 0 0 0 8 5.14Z" />
             </svg>
-            {isLoading
-              ? "Loading preview…"
-              : autoplayBlocked
-                ? "Tap to play demo"
-                : "Play demo"}
+            Tap to start video
           </span>
         </button>
+      ) : null}
+
+      {!isPlaying && loadFailed ? (
+        <div
+          role="alert"
+          className="absolute inset-0 flex items-center justify-center bg-ink/20"
+        >
+          <span className="rounded-full bg-ink/90 px-5 py-3 text-sm font-semibold text-white shadow-lg backdrop-blur">
+            Video unavailable
+          </span>
+        </div>
       ) : null}
     </div>
   );
