@@ -1,6 +1,8 @@
 import Nav from "@/components/layout/Nav";
 import Footer from "@/components/layout/Footer";
 import Hero from "@/components/sections/Hero";
+import WhatWeBuild from "@/components/sections/WhatWeBuild";
+import HowWeWork from "@/components/sections/HowWeWork";
 import StatsStrip from "@/components/sections/StatsStrip";
 import AboutSection from "@/components/sections/AboutSection";
 import TestimonialsMarquee from "@/components/sections/TestimonialsMarquee";
@@ -14,6 +16,8 @@ export default function HomePage() {
       <Nav />
       <main>
         <Hero />
+        <WhatWeBuild />
+        <HowWeWork />
         <StatsStrip />
         <AboutSection />
         <TestimonialsMarquee />

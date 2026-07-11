@@ -25,13 +25,13 @@ export default function AboutSection() {
 
         <Reveal delay={0.15}>
           <div className="relative">
-            <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-gold/10 to-cyan/10 blur-2xl" />
+            <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-primary/15 to-accent/10 blur-2xl" />
             <motion.div
               whileHover={{ scale: 1.02 }}
               transition={{ type: "spring", stiffness: 300 }}
-              className="relative rounded-3xl border border-border bg-surface p-8"
+              className="card-soft relative rounded-3xl p-8"
             >
-              <p className="text-xs font-bold uppercase tracking-widest text-gold">Core strengths</p>
+              <p className="text-xs font-bold uppercase tracking-widest text-accent">Core strengths</p>
               <ul className="mt-6 space-y-4">
                 {about.highlights.map((item, i) => (
                   <motion.li
@@ -42,7 +42,7 @@ export default function AboutSection() {
                     transition={{ delay: i * 0.1 }}
                     className="flex items-start gap-3 border-b border-border pb-4 last:border-0 last:pb-0"
                   >
-                    <span className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gold/15 text-xs font-bold text-gold">
+                    <span className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary/30 to-accent/30 text-xs font-bold text-accent">
                       {i + 1}
                     </span>
                     <span className="text-text">{item}</span>

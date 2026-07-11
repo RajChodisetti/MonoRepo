@@ -53,7 +53,7 @@ export default function RequestCallbackForm({
   }
 
   const inputClass =
-    "w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2.5 text-sm text-text placeholder:text-muted/70 outline-none transition focus:border-cyan/50";
+    "w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-text placeholder:text-muted/70 outline-none transition focus:border-primary/60";
 
   return (
     <div className={compact ? "space-y-3" : "mx-auto mt-8 max-w-md space-y-3 text-left"}>
@@ -91,7 +91,7 @@ export default function RequestCallbackForm({
         <button
           type="submit"
           disabled={status === "loading"}
-          className="w-full rounded-xl bg-gradient-to-r from-gold-dim to-gold px-4 py-3 text-sm font-semibold text-bg transition hover:opacity-90 disabled:opacity-60"
+          className="w-full rounded-xl bg-gradient-to-r from-gold-dim to-gold px-4 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
         >
           {status === "loading" ? "Calling…" : "Call me now"}
         </button>
@@ -101,10 +101,10 @@ export default function RequestCallbackForm({
         <p
           className={`text-xs leading-relaxed ${
             status === "success"
-              ? "text-emerald-300"
+              ? "text-emerald-600"
               : status === "queued"
-                ? "text-amber-200"
-                : "text-red-300"
+                ? "text-amber-600"
+                : "text-rose-600"
           }`}
           role="status"
         >

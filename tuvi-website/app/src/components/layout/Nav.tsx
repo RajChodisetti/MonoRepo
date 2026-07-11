@@ -50,29 +50,34 @@ export default function Nav() {
       }`}
     >
       <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-5 md:h-[72px] md:px-8">
-        <Link href="/" className="shrink-0 font-display text-lg font-bold tracking-tight text-text md:text-xl">
-          Tuvi<span className="text-gold">.</span>
+        <Link
+          href="/"
+          className="shrink-0 font-display text-xl font-bold tracking-tight text-ink"
+        >
+          Tuvi<span className="text-primary">.</span>
         </Link>
 
-        <ul className="hidden min-w-0 items-center gap-4 xl:flex xl:gap-7">
+        <ul className="hidden min-w-0 items-center gap-1 xl:flex">
           <li className="group relative shrink-0">
             <button
               type="button"
-              className="whitespace-nowrap text-[10px] font-medium uppercase tracking-[0.12em] text-muted transition hover:text-cyan focus:text-cyan focus:outline-none xl:text-xs xl:tracking-[0.14em]"
+              className="whitespace-nowrap rounded-full px-3.5 py-2 text-sm font-medium text-muted transition hover:bg-zinc-100 hover:text-ink focus:text-ink focus:outline-none"
               aria-haspopup="true"
             >
               {siteContent.servicesNav.label}
             </button>
-            <div className="invisible absolute left-1/2 top-full min-w-72 -translate-x-1/2 pt-5 opacity-0 transition duration-200 group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100">
-              <div className="rounded-2xl border border-white/10 bg-bg-elevated/95 p-2 shadow-2xl shadow-black/40 backdrop-blur-xl">
+            <div className="invisible absolute left-1/2 top-full min-w-72 -translate-x-1/2 pt-4 opacity-0 transition duration-200 group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100">
+              <div className="rounded-2xl border border-border bg-white p-2 shadow-xl shadow-zinc-900/10">
                 {siteContent.servicesNav.items.map((item) => (
                   <Link
                     key={item.href}
                     href={item.href}
-                    className="block rounded-xl px-4 py-3 transition hover:bg-white/5"
+                    className="block rounded-xl px-4 py-3 transition hover:bg-zinc-50"
                   >
-                    <span className="block text-sm font-semibold text-text">{item.label}</span>
-                    <span className="mt-1 block text-xs leading-5 text-muted">{item.description}</span>
+                    <span className="block text-sm font-semibold text-ink">{item.label}</span>
+                    <span className="mt-1 block text-xs leading-5 text-muted">
+                      {item.description}
+                    </span>
                   </Link>
                 ))}
               </div>
@@ -82,22 +87,22 @@ export default function Nav() {
             <li key={link.href} className="shrink-0">
               <Link
                 href={link.href}
-                className="whitespace-nowrap text-[10px] font-medium uppercase tracking-[0.12em] text-muted transition hover:text-cyan xl:text-xs xl:tracking-[0.14em]"
+                className="whitespace-nowrap rounded-full px-3.5 py-2 text-sm font-medium text-muted transition hover:bg-zinc-100 hover:text-ink"
               >
                 {link.label}
               </Link>
             </li>
           ))}
-          <li className="shrink-0">
-            <Button href={getBookCallUrl()} variant="primary" className="!px-4 !py-2.5 !text-xs xl:!px-5">
-              Book a Call
+          <li className="ml-3 shrink-0">
+            <Button href={getBookCallUrl()} variant="primary" className="!px-5 !py-2.5 !text-sm">
+              Book a call
             </Button>
           </li>
         </ul>
 
         <div className="flex shrink-0 items-center gap-3 xl:hidden">
           <Button href={getBookCallUrl()} variant="primary" className="!px-4 !py-2 text-xs">
-            Book a Call
+            Book a call
           </Button>
           <button
             type="button"
@@ -105,19 +110,19 @@ export default function Nav() {
             aria-label="Open menu"
             onClick={toggleMenu}
           >
-            <span className="block h-0.5 w-5 bg-text" />
-            <span className="block h-0.5 w-5 bg-text" />
+            <span className="block h-0.5 w-5 bg-ink" />
+            <span className="block h-0.5 w-5 bg-ink" />
           </button>
         </div>
       </nav>
 
       {open && (
-        <div className="border-t border-white/5 bg-bg/80 backdrop-blur-xl xl:hidden">
+        <div className="border-t border-border bg-white/95 backdrop-blur-xl xl:hidden">
           <div className="flex flex-col gap-1 px-5 py-4">
             <div className="py-2">
               <button
                 type="button"
-                className="flex w-full items-center justify-between rounded-xl px-1 py-2 text-left text-xs font-semibold uppercase tracking-[0.16em] text-muted transition hover:text-cyan"
+                className="flex w-full items-center justify-between rounded-xl px-1 py-2 text-left text-sm font-semibold text-ink transition hover:text-primary"
                 aria-expanded={servicesOpen}
                 aria-controls="mobile-services-menu"
                 onClick={() => setServicesOpen((value) => !value)}
@@ -135,10 +140,12 @@ export default function Nav() {
                         setOpen(false);
                         setServicesOpen(false);
                       }}
-                      className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-3 text-sm text-text transition hover:border-cyan/40"
+                      className="rounded-xl border border-border bg-zinc-50 px-3 py-3 text-sm text-ink transition hover:border-primary/40"
                     >
                       <span className="block font-semibold">{item.label}</span>
-                      <span className="mt-1 block text-xs leading-5 text-muted">{item.description}</span>
+                      <span className="mt-1 block text-xs leading-5 text-muted">
+                        {item.description}
+                      </span>
                     </Link>
                   ))}
                 </div>
@@ -152,17 +159,13 @@ export default function Nav() {
                   setOpen(false);
                   setServicesOpen(false);
                 }}
-                className="py-2.5 text-sm text-muted transition hover:text-text"
+                className="py-2.5 text-sm font-medium text-muted transition hover:text-ink"
               >
                 {link.label}
               </Link>
             ))}
-            <Button
-              href={getBookCallUrl()}
-              variant="primary"
-              className="mt-3 w-full"
-            >
-              Book a Call
+            <Button href={getBookCallUrl()} variant="primary" className="mt-3 w-full">
+              Book a call
             </Button>
           </div>
         </div>

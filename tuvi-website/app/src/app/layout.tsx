@@ -1,18 +1,18 @@
 import type { Metadata } from "next";
-import { DM_Sans, Syne } from "next/font/google";
+import { Inter, Space_Grotesk } from "next/font/google";
 import SmoothScrollProvider from "@/components/SmoothScrollProvider";
 import { siteContent } from "@/content/site";
 import "./globals.css";
 
-const syne = Syne({
+const grotesk = Space_Grotesk({
   subsets: ["latin"],
-  variable: "--font-syne",
-  weight: ["500", "600", "700", "800"],
+  variable: "--font-grotesk",
+  weight: ["500", "600", "700"],
 });
 
-const dmSans = DM_Sans({
+const inter = Inter({
   subsets: ["latin"],
-  variable: "--font-dm-sans",
+  variable: "--font-inter",
   weight: ["400", "500", "600", "700"],
 });
 
@@ -28,7 +28,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${syne.variable} ${dmSans.variable}`}>
+    <html lang="en" className={`${grotesk.variable} ${inter.variable}`}>
       <body className="font-body antialiased">
         <SmoothScrollProvider>{children}</SmoothScrollProvider>
       </body>

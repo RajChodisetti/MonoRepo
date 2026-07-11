@@ -12,18 +12,19 @@ export default function Footer() {
         <div>
           <p className="font-display text-xl font-bold text-text">
             {siteContent.brand.name}
+            <span className="text-accent">.</span>
           </p>
           <p className="mt-1 text-sm text-muted">{siteContent.brand.tagline}</p>
           <a
             href={`mailto:${getContactEmail()}`}
-            className="mt-3 inline-block text-sm text-cyan transition hover:text-gold"
+            className="mt-3 inline-block text-sm text-accent transition hover:text-primary"
           >
             {getContactEmail()}
           </a>
           {callInHref && callInDisplay ? (
             <a
               href={callInHref}
-              className="mt-2 block text-sm text-muted transition hover:text-cyan"
+              className="mt-2 block text-sm text-muted transition hover:text-accent"
             >
               Call our AI assistant · {callInDisplay}
             </a>
@@ -35,7 +36,7 @@ export default function Footer() {
             href={getLinkedInUrl()}
             target="_blank"
             rel="noopener noreferrer"
-            className="transition hover:text-cyan"
+            className="transition hover:text-accent"
           >
             LinkedIn
           </a>

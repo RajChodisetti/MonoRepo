@@ -1,13 +1,13 @@
 export const siteContent = {
   brand: {
     name: "Tuvi Solutions",
-    tagline: "Engineered for Strength. Built for Scale.",
+    tagline: "We build software that grows businesses.",
     email: "contact@tuvisolutions.com",
   },
 
   nav: [
-    { href: "/#about", label: "About" },
-    { href: "/#testimonials", label: "Clients" },
+    { href: "/#about", label: "Why Tuvi" },
+    { href: "/#testimonials", label: "Results" },
     { href: "/#guarantee", label: "Guarantee" },
     { href: "/#contact", label: "Contact" },
   ],
@@ -18,50 +18,50 @@ export const siteContent = {
       {
         href: "/services/restaurants",
         label: "Restaurants",
-        description: "QR ordering, rewards, reservations, and guest growth systems.",
+        description: "QR ordering, rewards & guest growth — watch the live demos.",
       },
     ],
   },
 
   hero: {
-    eyebrow: "Custom Software Solutions",
-    headline: ["Engineered for Strength.", "Built for Scale."],
+    eyebrow: "Websites · Apps · AI — built for you",
+    headline: ["We build websites, apps & AI", "that grow your business."],
     subcopy:
-      "We deliver custom software development solutions that streamline your business processes, reduce operational costs, and drive measurable growth through smart technology.",
-    primaryCta: "Schedule a Free Consultation",
-    secondaryCta: "Explore our approach",
-    secondaryHref: "#about",
-    trust: "4.7 out of 5 (30+ clients)",
-    note: "No commitment required.",
+      "Tuvi is a software studio for ambitious businesses. Bring us the outcome you want — we design, build, and launch the product that gets you there. No jargon, no agency runaround.",
+    primaryCta: "Start your project",
+    secondaryCta: "See a live demo",
+    secondaryHref: "/services/restaurants",
+    trust: "4.7/5 from 30+ clients",
+    note: "Free consultation. No commitment.",
   },
 
   stats: [
-    { value: 10, suffix: "+", label: "Years Experience" },
-    { value: 50, suffix: "+", label: "Projects Delivered" },
-    { value: 3, suffix: "x", label: "Average Growth" },
-    { value: 100, suffix: "%", label: "Client Satisfaction" },
+    { value: 10, suffix: "+", label: "Years building software" },
+    { value: 50, suffix: "+", label: "Products shipped" },
+    { value: 3, suffix: "x", label: "Average client growth" },
+    { value: 100, suffix: "%", label: "Client satisfaction" },
   ],
 
   about: {
     id: "about",
-    eyebrow: "What does Tuvi mean?",
-    title: "Strength and Capability.",
+    eyebrow: "Why Tuvi",
+    title: "Small team. Serious engineering.",
     paragraphs: [
-      "Tuvi is built on the concept of unyielding strength. We engineer robust software architectures and provide the deep, data-driven consulting needed to scale your operations.",
-      "From complex system integrations to overarching business strategy, we build solutions strong enough to handle your most critical challenges.",
+      "Tuvi means strength — and that's the bar for everything we ship. Robust architecture, sharp design, and software that holds up when your business takes off.",
+      "From your first landing page to AI that answers your phones, we build it, launch it, and stay until it works.",
     ],
     highlights: [
-      "Custom software architecture",
-      "AI & machine learning systems",
-      "Cross-platform app development",
-      "Data-driven business strategy",
+      "Custom websites & web apps",
+      "AI assistants & voice agents",
+      "Mobile apps for iOS & Android",
+      "Data, dashboards & integrations",
     ],
   },
 
   testimonials: {
     id: "testimonials",
-    eyebrow: "What Our Clients Say",
-    title: "Real results from real partnerships",
+    eyebrow: "Results",
+    title: "In our clients' words.",
     items: [
       {
         quote:
@@ -89,34 +89,34 @@ export const siteContent = {
 
   guarantee: {
     id: "guarantee",
-    eyebrow: "100% Risk-Free",
-    title: "The Tuvi Confidence Guarantee",
+    eyebrow: "Zero risk",
+    title: "Your first $1,000 of work is free.",
     description:
-      "We believe in proving our capability before asking for your commitment. We will complete the first $1,000 of product development work absolutely free.",
+      "We'd rather prove it than pitch it. We complete the first $1,000 of development at no cost — if you don't love the direction, walk away and pay nothing.",
     pillars: [
       {
-        title: "See Progress First",
-        description: "See tangible progress before you pay a dime.",
+        title: "Watch it take shape",
+        description: "See real, working progress before you spend a cent.",
       },
       {
-        title: "No Risk",
-        description: "If you don't love the direction, walk away. You pay nothing.",
+        title: "Walk away anytime",
+        description: "Not feeling it? You owe us nothing. No fine print.",
       },
       {
-        title: "Start Small",
-        description: "Standard payments only begin after the initial phase.",
+        title: "Scale when ready",
+        description: "Payments only start once you're convinced.",
       },
     ],
-    cta: "Claim Your Risk-Free Trial",
+    cta: "Claim your free build",
   },
 
   contact: {
     id: "contact",
-    eyebrow: "Let's build",
-    title: "Ready to engineer your next phase of growth?",
+    eyebrow: "Let's talk",
+    title: "Tell us what you want to build.",
     description:
-      "Talk in browser, call our AI assistant, or get an immediate callback. No sales pitch — just a deep dive into data-driven solutions.",
-    primaryCta: "Schedule a Free Consultation",
+      "Book a call, talk to our AI assistant, or get a callback in minutes. No sales pitch — just a clear plan you can keep.",
+    primaryCta: "Book a free consultation",
   },
 
   footer: {

@@ -162,13 +162,13 @@ function BookingProgressOverlay({
     >
       <div className="flex flex-col items-center gap-3 px-6 text-center">
         {isSuccess ? (
-          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
             <CheckIcon />
           </div>
         ) : (
           <SpinnerIcon className="text-cyan" />
         )}
-        <p className={`text-sm font-semibold ${isSuccess ? "text-emerald-300" : "text-text"}`}>
+        <p className={`text-sm font-semibold ${isSuccess ? "text-emerald-600" : "text-text"}`}>
           {message || (phase === "checking_slots" ? "Checking slots…" : "Booking slot…")}
         </p>
         {!isSuccess && (
@@ -275,7 +275,7 @@ export default function VoiceAssistantWidget() {
           aria-modal="true"
           aria-label="Consultation confirmation"
         >
-          <div className="w-full max-w-sm rounded-2xl border border-white/15 bg-bg-elevated p-6 text-center shadow-2xl">
+          <div className="w-full max-w-sm rounded-2xl border border-slate-300 bg-bg-elevated p-6 text-center shadow-2xl">
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan">
               Consultation booked
             </p>
@@ -285,7 +285,7 @@ export default function VoiceAssistantWidget() {
               Save your confirmation number below.
             </p>
 
-            <div className="mt-5 space-y-3 rounded-xl border border-white/10 bg-white/5 px-4 py-4 text-left">
+            <div className="mt-5 space-y-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-left">
               <div className="flex justify-between gap-3">
                 <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">Day</span>
                 <span className="text-sm font-medium text-text">
@@ -323,7 +323,7 @@ export default function VoiceAssistantWidget() {
               <button
                 type="button"
                 onClick={dismissConsultation}
-                className="rounded-xl border border-white/15 px-4 py-3 text-sm font-medium text-muted transition hover:text-text"
+                className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium text-muted transition hover:text-text"
               >
                 Got it
               </button>
@@ -336,7 +336,7 @@ export default function VoiceAssistantWidget() {
         {open && (
           <div
             ref={panelRef}
-            className="pointer-events-auto relative mb-3 w-[min(440px,calc(100vw-2.5rem))] overflow-hidden rounded-2xl border border-white/15 bg-bg-elevated/95 p-5 text-text shadow-2xl backdrop-blur-xl"
+            className="pointer-events-auto relative mb-3 w-[min(440px,calc(100vw-2.5rem))] overflow-hidden rounded-2xl border border-slate-300 bg-bg-elevated/95 p-5 text-text shadow-2xl backdrop-blur-xl"
             role="dialog"
             aria-label="Tuvi AI assistant"
           >
@@ -372,7 +372,7 @@ export default function VoiceAssistantWidget() {
                     placeholder="you@company.com"
                     value={emailInput}
                     onChange={(e) => setEmailInput(e.target.value)}
-                    className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2.5 text-sm text-text outline-none placeholder:text-muted/70 focus:border-cyan/50"
+                    className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm text-text outline-none placeholder:text-muted/70 focus:border-cyan/50"
                   />
                   <button
                     type="submit"
@@ -392,7 +392,7 @@ export default function VoiceAssistantWidget() {
               <button
                 type="button"
                 onClick={closePanel}
-                className="rounded-lg p-1.5 text-muted transition hover:bg-white/10 hover:text-text"
+                className="rounded-lg p-1.5 text-muted transition hover:bg-slate-100 hover:text-text"
                 aria-label="Close assistant"
               >
                 <CloseIcon />
@@ -404,7 +404,7 @@ export default function VoiceAssistantWidget() {
                 className="mb-3 rounded-xl border border-red-400/40 bg-red-500/15 px-3 py-2.5 text-red-100"
                 role="alert"
               >
-                <p className="text-[11px] font-bold uppercase tracking-wider text-red-300">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-rose-600">
                   Configuration error
                 </p>
                 <p className="mt-1 text-sm leading-relaxed">{error}</p>
@@ -423,7 +423,7 @@ export default function VoiceAssistantWidget() {
                   <button
                     type="button"
                     onClick={() => setShowCallback(false)}
-                    className="rounded-lg p-1.5 text-muted transition hover:bg-white/10 hover:text-text"
+                    className="rounded-lg p-1.5 text-muted transition hover:bg-slate-100 hover:text-text"
                     aria-label="Close callback form"
                   >
                     <CloseIcon />
@@ -441,7 +441,7 @@ export default function VoiceAssistantWidget() {
                 <VoiceOrbCanvas status={status} size={176} className="mx-auto bg-transparent" />
 
                 <div
-                  className="mt-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5"
+                  className="mt-3 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5"
                   style={{ borderColor: `${glow}40` }}
                 >
                   <span
@@ -461,7 +461,7 @@ export default function VoiceAssistantWidget() {
                   <button
                     type="button"
                     onClick={() => setShowCallback(true)}
-                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/5 text-text transition hover:border-cyan/40 hover:bg-white/10 hover:text-cyan"
+                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-slate-300 bg-slate-50 text-text transition hover:border-cyan/40 hover:bg-slate-100 hover:text-cyan"
                     aria-label="Get a callback"
                     title="Get a callback"
                   >
@@ -482,7 +482,7 @@ export default function VoiceAssistantWidget() {
                     <button
                       type="button"
                       onClick={reset}
-                      className="h-12 shrink-0 rounded-full border border-white/15 px-3 text-sm text-muted transition hover:bg-white/5"
+                      className="h-12 shrink-0 rounded-full border border-slate-300 px-3 text-sm text-muted transition hover:bg-slate-50"
                     >
                       Reset
                     </button>

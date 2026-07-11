@@ -1,17 +1,37 @@
 @import "tailwindcss";
 
+/*
+ * Tuvi — sharp, modern studio aesthetic.
+ * Ink-on-white with a single electric violet accent, hairline borders,
+ * confident tracking-tight type (Space Grotesk + Inter).
+ * Legacy token names (gold/cyan) are kept as aliases so existing components
+ * (e.g. the voice assistant widget) re-skin automatically.
+ */
 @theme {
-  --color-bg: #08080c;
-  --color-bg-elevated: #101018;
-  --color-surface: #14141f;
-  --color-border: rgba(255, 255, 255, 0.08);
-  --color-gold: #d4a853;
-  --color-gold-dim: #b88a44;
-  --color-cyan: #38bdf8;
-  --color-muted: #8b8b9e;
-  --color-text: #f4f4f8;
-  --font-display: var(--font-syne), system-ui, sans-serif;
-  --font-body: var(--font-dm-sans), system-ui, sans-serif;
+  --color-bg: #fafafa;
+  --color-bg-elevated: #ffffff;
+  --color-surface: #ffffff;
+  --color-border: rgba(9, 9, 11, 0.08);
+
+  --color-ink: #09090b;
+  --color-primary: #7c3aed; /* electric violet */
+  --color-primary-dim: #6d28d9;
+  --color-accent: #7c3aed;
+  --color-secondary: #2563eb;
+  --color-success: #059669;
+  --color-warning: #d97706;
+  --color-danger: #e11d48;
+
+  /* legacy aliases (widget CTAs become violet) */
+  --color-gold: #7c3aed;
+  --color-gold-dim: #6d28d9;
+  --color-cyan: #2563eb;
+
+  --color-muted: #52525c;
+  --color-text: #09090b;
+
+  --font-display: var(--font-grotesk), system-ui, sans-serif;
+  --font-body: var(--font-inter), system-ui, sans-serif;
 }
 
 @layer base {
@@ -27,14 +47,19 @@
   }
 
   ::selection {
-    background: rgba(212, 168, 83, 0.35);
-    color: #fff;
+    background: rgba(124, 58, 237, 0.2);
+    color: #09090b;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
   }
 }
 
 @layer utilities {
   .text-gradient {
-    background: linear-gradient(135deg, #f4f4f8 0%, #d4a853 55%, #38bdf8 100%);
+    background: linear-gradient(100deg, #7c3aed 0%, #2563eb 55%, #0891b2 100%);
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
@@ -43,31 +68,64 @@
 
   .grid-bg {
     background-image:
-      linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-    background-size: 64px 64px;
+      linear-gradient(rgba(9, 9, 11, 0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(9, 9, 11, 0.035) 1px, transparent 1px);
+    background-size: 72px 72px;
   }
 
   .glass {
-    background: rgba(16, 16, 24, 0.72);
+    background: rgba(255, 255, 255, 0.8);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     border: 1px solid var(--color-border);
   }
 
   .nav-glass {
-    background: rgba(8, 8, 12, 0.45);
-    backdrop-filter: blur(18px) saturate(160%);
-    -webkit-backdrop-filter: blur(18px) saturate(160%);
+    background: rgba(250, 250, 250, 0.7);
+    backdrop-filter: blur(16px) saturate(160%);
+    -webkit-backdrop-filter: blur(16px) saturate(160%);
     border: none;
     box-shadow: none;
   }
 
   .nav-glass-scrolled {
-    background: rgba(8, 8, 12, 0.72);
-    backdrop-filter: blur(22px) saturate(180%);
-    -webkit-backdrop-filter: blur(22px) saturate(180%);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+    background: rgba(255, 255, 255, 0.88);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border-bottom: 1px solid rgba(9, 9, 11, 0.06);
+    box-shadow: 0 1px 0 rgba(9, 9, 11, 0.04);
+  }
+
+  .card-soft {
+    background: #ffffff;
+    border: 1px solid rgba(9, 9, 11, 0.08);
+    box-shadow: 0 1px 2px rgba(9, 9, 11, 0.04);
+  }
+
+  .card-lift {
+    transition:
+      transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+      border-color 0.3s;
+  }
+
+  .card-lift:hover {
+    transform: translateY(-4px);
+    border-color: rgba(124, 58, 237, 0.35);
+    box-shadow: 0 20px 48px -16px rgba(9, 9, 11, 0.18);
+  }
+
+  .hero-blob {
+    background:
+      radial-gradient(42rem 26rem at 12% 0%, rgba(124, 58, 237, 0.09), transparent 60%),
+      radial-gradient(36rem 22rem at 92% 18%, rgba(37, 99, 235, 0.08), transparent 60%);
+  }
+
+  .ink-panel {
+    background:
+      radial-gradient(38rem 22rem at 12% 0%, rgba(124, 58, 237, 0.35), transparent 55%),
+      radial-gradient(32rem 20rem at 92% 100%, rgba(37, 99, 235, 0.3), transparent 55%),
+      #09090b;
   }
 }
 
@@ -91,15 +149,19 @@
 @keyframes float {
   0%,
   100% {
-    transform: translateY(0) scale(1);
+    transform: translateY(0);
   }
   50% {
-    transform: translateY(-12px) scale(1.02);
+    transform: translateY(-10px);
   }
 }
 
 .animate-float {
-  animation: float 8s ease-in-out infinite;
+  animation: float 6s ease-in-out infinite;
+}
+
+.animate-float-delayed {
+  animation: float 6s ease-in-out 1.5s infinite;
 }
 
 @keyframes pulse-glow {
@@ -114,4 +176,13 @@
 
 .animate-pulse-glow {
   animation: pulse-glow 6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee,
+  .animate-float,
+  .animate-float-delayed,
+  .animate-pulse-glow {
+    animation: none;
+  }
 }

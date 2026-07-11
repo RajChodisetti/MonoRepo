@@ -1,6 +1,5 @@
 import { siteContent } from "@/content/site";
 import { getBookCallUrl, getCallInDisplay, getCallInTelHref, getContactEmail } from "@/lib/env";
-import Button from "@/components/ui/Button";
 import SectionShell from "@/components/ui/SectionShell";
 import Reveal from "@/components/ui/Reveal";
 import RequestCallbackForm from "@/components/RequestCallbackForm";
@@ -13,39 +12,44 @@ export default function ContactCTA() {
   return (
     <SectionShell id={contact.id}>
       <Reveal>
-        <div className="relative overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-surface via-bg-elevated to-surface p-10 text-center md:p-16">
-          <div className="pointer-events-none absolute -left-20 top-0 h-64 w-64 rounded-full bg-gold/10 blur-[80px]" />
-          <div className="pointer-events-none absolute -right-20 bottom-0 h-64 w-64 rounded-full bg-cyan/10 blur-[80px]" />
-
-          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-cyan">
+        <div className="ink-panel relative overflow-hidden rounded-[2rem] p-10 text-center md:p-16">
+          <span className="relative inline-flex items-center gap-2.5 rounded-full border border-white/20 bg-white/10 px-3.5 py-1.5 text-xs font-semibold text-white">
+            <span className="h-2 w-2 rounded-full bg-primary" aria-hidden />
             {contact.eyebrow}
-          </p>
-          <h2 className="relative mt-4 font-display text-3xl font-bold leading-tight text-text md:text-4xl lg:text-5xl">
+          </span>
+          <h2 className="relative mx-auto mt-5 max-w-2xl font-display text-3xl font-bold leading-[1.08] tracking-tight text-white md:text-4xl lg:text-5xl">
             {contact.title}
           </h2>
-          <p className="relative mx-auto mt-4 max-w-xl text-base text-muted md:text-lg">
+          <p className="relative mx-auto mt-4 max-w-xl text-base leading-relaxed text-zinc-300 md:text-lg">
             {contact.description}
           </p>
 
           <div className="relative mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
-            <Button href={getBookCallUrl()}>{contact.primaryCta}</Button>
+            <a
+              href={getBookCallUrl()}
+              className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-ink shadow-lg transition duration-300 hover:-translate-y-0.5 hover:shadow-xl"
+            >
+              {contact.primaryCta} <span aria-hidden>→</span>
+            </a>
             {callInHref && callInDisplay ? (
               <a
                 href={callInHref}
-                className="rounded-xl border border-white/15 px-5 py-3 text-sm font-semibold text-text transition hover:border-cyan/40 hover:text-cyan"
+                className="rounded-full border border-white/25 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
               >
                 Call our AI · {callInDisplay}
               </a>
             ) : null}
             <a
               href={`mailto:${getContactEmail()}`}
-              className="text-sm text-muted transition hover:text-cyan"
+              className="text-sm text-zinc-300 transition hover:text-white"
             >
               {getContactEmail()}
             </a>
           </div>
 
-          <RequestCallbackForm />
+          <div className="relative mx-auto mt-9 max-w-md rounded-2xl bg-white p-6 text-left shadow-2xl">
+            <RequestCallbackForm />
+          </div>
         </div>
       </Reveal>
     </SectionShell>

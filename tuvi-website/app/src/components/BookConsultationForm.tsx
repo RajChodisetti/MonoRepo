@@ -98,7 +98,7 @@ export default function BookConsultationForm() {
 
   if (success) {
     return (
-      <div className="rounded-3xl border border-white/10 bg-bg-elevated/80 p-8 text-center shadow-2xl backdrop-blur-xl md:p-10">
+      <div className="rounded-3xl border border-slate-200 bg-bg-elevated/80 p-8 text-center shadow-2xl backdrop-blur-xl md:p-10">
         <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-400">
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
             <path d="M20 6 9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
@@ -112,7 +112,7 @@ export default function BookConsultationForm() {
           Confirmation email sent to {success.prospect_email}
         </p>
 
-        <div className="mt-6 space-y-3 rounded-xl border border-white/10 bg-white/5 px-4 py-4 text-left text-sm">
+        <div className="mt-6 space-y-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-left text-sm">
           <div className="flex justify-between gap-3">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">Day</span>
             <span className="font-medium text-text">{formatDayLabel(success.booking_date)}</span>
@@ -143,7 +143,7 @@ export default function BookConsultationForm() {
           ) : null}
           <Link
             href="/"
-            className="rounded-full border border-white/15 px-6 py-3 text-sm font-medium text-muted transition hover:text-text"
+            className="rounded-full border border-slate-300 px-6 py-3 text-sm font-medium text-muted transition hover:text-text"
           >
             Back to home
           </Link>
@@ -153,7 +153,7 @@ export default function BookConsultationForm() {
   }
 
   return (
-    <div className="relative rounded-3xl border border-white/10 bg-bg-elevated/80 p-6 shadow-2xl backdrop-blur-xl md:p-8">
+    <div className="relative rounded-3xl border border-slate-200 bg-bg-elevated/80 p-6 shadow-2xl backdrop-blur-xl md:p-8">
       {submitting && (
         <div className="absolute inset-0 z-10 flex items-center justify-center rounded-3xl bg-bg/75 backdrop-blur-md">
           <div className="text-center">
@@ -215,7 +215,7 @@ export default function BookConsultationForm() {
                       className={`rounded-xl border px-4 py-2.5 text-sm font-medium transition ${
                         isSelected
                           ? "border-gold bg-gold/15 text-gold"
-                          : "border-white/10 bg-white/5 text-text hover:border-cyan/40 hover:text-cyan"
+                          : "border-slate-200 bg-slate-50 text-text hover:border-cyan/40 hover:text-cyan"
                       }`}
                     >
                       {formatTimeLabel(slot.time)}
@@ -229,7 +229,7 @@ export default function BookConsultationForm() {
       )}
 
       {selected && (
-        <form onSubmit={(e) => void handleSubmit(e)} className="mt-6 border-t border-white/10 pt-6">
+        <form onSubmit={(e) => void handleSubmit(e)} className="mt-6 border-t border-slate-200 pt-6">
           <p className="text-sm text-muted">
             Selected:{" "}
             <span className="font-medium text-text">
@@ -246,7 +246,7 @@ export default function BookConsultationForm() {
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="mt-1.5 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-text outline-none transition focus:border-cyan/50"
+                className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-text outline-none transition focus:border-cyan/50"
                 placeholder="Jane Smith"
               />
             </label>
@@ -259,7 +259,7 @@ export default function BookConsultationForm() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="mt-1.5 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-text outline-none transition focus:border-cyan/50"
+                className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-text outline-none transition focus:border-cyan/50"
                 placeholder="you@company.com"
               />
             </label>
@@ -272,14 +272,14 @@ export default function BookConsultationForm() {
                 type="tel"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                className="mt-1.5 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-text outline-none transition focus:border-cyan/50"
+                className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-text outline-none transition focus:border-cyan/50"
                 placeholder="+61 400 000 000"
               />
             </label>
           </div>
 
           {submitError && (
-            <p className="mt-3 text-sm text-red-300" role="alert">
+            <p className="mt-3 text-sm text-rose-600" role="alert">
               {submitError}
             </p>
           )}

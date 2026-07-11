@@ -16,14 +16,17 @@ function TestimonialCard({
   initial: string;
 }) {
   return (
-    <div className="w-[min(380px,85vw)] shrink-0 rounded-2xl border border-border bg-surface/80 p-6 backdrop-blur transition hover:border-gold/30 hover:shadow-[0_0_40px_rgba(212,168,83,0.08)]">
-      <p className="text-sm leading-relaxed text-muted md:text-base">&ldquo;{quote}&rdquo;</p>
-      <div className="mt-6 flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-gold/30 to-cyan/20 font-display text-sm font-bold text-gold">
+    <div className="card-soft w-[min(400px,85vw)] shrink-0 rounded-2xl p-6 transition hover:border-primary/30">
+      <span className="font-display text-3xl font-bold leading-none text-primary" aria-hidden>
+        &ldquo;
+      </span>
+      <p className="mt-1 text-sm leading-relaxed text-ink md:text-[15px]">{quote}</p>
+      <div className="mt-5 flex items-center gap-3 border-t border-border pt-4">
+        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-ink font-display text-sm font-bold text-white">
           {initial}
         </div>
         <div>
-          <p className="text-sm font-semibold text-text">{author}</p>
+          <p className="text-sm font-semibold text-ink">{author}</p>
           <p className="text-xs text-muted">{company}</p>
         </div>
       </div>
