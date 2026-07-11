@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import Nav from "@/components/layout/Nav";
 import Footer from "@/components/layout/Footer";
+import RestaurantFeatureVideo from "@/components/RestaurantFeatureVideo";
 import VoiceAssistantWidget from "@/components/VoiceAssistantWidget";
 import Button from "@/components/ui/Button";
 
@@ -21,8 +22,8 @@ const featureVideos = [
     description:
       "Guests scan at the table, browse the menu, customize, and send clean orders straight to the team. No app to download, no waving for a waiter.",
     outcomes: ["Faster table turns", "Fewer order errors", "Works on any phone"],
-    video: `${mediaBase}/qr-ordering-kitchen-v2.mp4`,
-    poster: `${mediaBase}/qr-ordering-kitchen-v2-poster.png`,
+    video: `${mediaBase}/qr-ordering-kitchen-v3-web.mp4`,
+    poster: `${mediaBase}/qr-ordering-kitchen-v3-web-poster.jpg`,
   },
   {
     id: "rewards",
@@ -31,8 +32,8 @@ const featureVideos = [
     description:
       "Guests check in, earn points, and see offers worth coming back for — without slowing down your counter for a second.",
     outcomes: ["Repeat visits tracked", "Points & perks built in", "Zero counter slowdown"],
-    video: `${mediaBase}/rewards-reception-v3-pro.mp4`,
-    poster: `${mediaBase}/rewards-reception-v3-pro-poster.png`,
+    video: `${mediaBase}/rewards-reception-v4-web.mp4`,
+    poster: `${mediaBase}/rewards-reception-v4-web-poster.jpg`,
   },
 ];
 
@@ -82,17 +83,11 @@ function FeatureVideo({
     <article id={feature.id} className="grid items-center gap-8 lg:grid-cols-[7fr_5fr] lg:gap-12">
       <div className={`relative ${reversed ? "lg:order-2" : ""}`}>
         <div className="relative overflow-hidden rounded-2xl shadow-[0_32px_64px_-24px_rgba(9,9,11,0.35)] ring-1 ring-border">
-          <video
-            className="aspect-video w-full bg-zinc-900 object-cover"
+          <RestaurantFeatureVideo
+            title={feature.title}
             poster={feature.poster}
-            autoPlay
-            loop
-            muted
-            playsInline
-            preload="auto"
-          >
-            <source src={feature.video} type="video/mp4" />
-          </video>
+            src={feature.video}
+          />
           <span className="absolute left-4 top-4 rounded-full bg-ink/90 px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-white backdrop-blur">
             {feature.badge}
           </span>
