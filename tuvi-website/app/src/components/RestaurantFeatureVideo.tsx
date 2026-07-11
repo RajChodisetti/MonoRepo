@@ -149,7 +149,7 @@ export default function RestaurantFeatureVideo({
         loop
         muted
         playsInline
-        preload="none"
+        preload={shouldLoad ? "auto" : "none"}
         onCanPlay={() => setIsLoading(false)}
         onPause={() => {
           if (activeRestaurantVideo === videoRef.current) {
