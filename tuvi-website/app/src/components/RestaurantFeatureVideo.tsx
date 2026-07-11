@@ -44,9 +44,13 @@ export default function RestaurantFeatureVideo({
       await video.play();
       setAutoplayBlocked(false);
     } catch {
-      if (activeRestaurantVideo === video) {
-        activeRestaurantVideo = null;
+      if (activeRestaurantVideo !== video) {
+        // Another visible demo took focus while this play request was pending.
+        setIsLoading(false);
+        return;
       }
+
+      activeRestaurantVideo = null;
 
       // Mobile browsers can reject autoplay even for muted video. Keep a clear
       // manual play action visible so the demo never looks broken.
@@ -120,6 +124,7 @@ export default function RestaurantFeatureVideo({
     }
 
     sourceAttachedRef.current = true;
+    setIsLoading(true);
     video.load();
 
     if (isVisibleRef.current || manualPlayRequestedRef.current) {
@@ -138,6 +143,8 @@ export default function RestaurantFeatureVideo({
 
     void attemptPlayback();
   };
+
+  const showPlayButton = !isPlaying && (!shouldLoad || isLoading || autoplayBlocked);
 
   return (
     <div ref={containerRef} className="relative">
@@ -169,7 +176,7 @@ export default function RestaurantFeatureVideo({
         Your browser does not support embedded videos.
       </video>
 
-      {!isPlaying ? (
+      {showPlayButton ? (
         <button
           type="button"
           aria-label={`Play ${title} demo`}
