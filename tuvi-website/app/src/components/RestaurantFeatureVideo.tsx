@@ -94,9 +94,7 @@ export default function RestaurantFeatureVideo({
           videoRef.current?.pause();
         }
       },
-      // A narrow center band makes the focused demo switch cleanly in either
-      // scroll direction and prevents two decoders from competing.
-      { rootMargin: "-46% 0px -46% 0px", threshold: 0.01 },
+      { threshold: 0.25 },
     );
 
     playbackObserver.observe(container);
