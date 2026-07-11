@@ -36,6 +36,8 @@ export default function RestaurantFeatureVideo({
   }, []);
 
   useEffect(() => {
+    playVideo();
+
     const resumePlayback = () => {
       if (!document.hidden && videoRef.current?.paused) {
         playVideo();
@@ -45,7 +47,7 @@ export default function RestaurantFeatureVideo({
     document.addEventListener("visibilitychange", resumePlayback);
 
     return () => document.removeEventListener("visibilitychange", resumePlayback);
-  }, [playVideo]);
+  }, [playVideo, src]);
 
   return (
     <div className="relative">
