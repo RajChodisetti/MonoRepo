@@ -158,6 +158,32 @@ HF_VISION_MODEL=<supported vision model>
 `OPENAI_API_KEY` or `GEMINI_API_KEY` may be used instead of Hugging Face. Keep
 provider keys out of logs and source control.
 
+### Administer the VM PostgreSQL database from the workstation
+
+The dedicated `monorepo` database is exposed only on VM loopback port `15432`.
+The ignored root `.env` contains the local-tunnel `DATABASE_URL` and standard
+`PG*` variables; it must remain mode `0600`. Start the tunnel in one terminal:
+
+```bash
+ssh -i ~/.ssh/tuvi_vm_root_ed25519 \
+  -L 127.0.0.1:15432:127.0.0.1:15432 \
+  root@170.64.154.143 -N
+```
+
+Then connect from another terminal without copying the password into shell
+history:
+
+```bash
+set -a
+source .env
+set +a
+psql "$DATABASE_URL"
+```
+
+The VM application uses the separate internal URL stored in root-owned
+`/opt/tuvi/env/monorepo.env`. Port `15432` must remain bound to `127.0.0.1`; do
+not publish PostgreSQL on the VM's public interface.
+
 ## Migrate and start services in lease-safe order
 
 After disabling legacy ingestion, stopping the old API/workers, and taking the

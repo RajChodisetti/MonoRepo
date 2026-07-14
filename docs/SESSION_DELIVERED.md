@@ -12,6 +12,59 @@ Each entry should explain:
 - how the work fits with the rest of the Phase 1 or Phase 2 plan;
 - risks, gaps, or follow-ups.
 
+## 2026-07-14 — Isolated Monorepo Database and VM Workflow Deployment
+
+**Role:** Backend, DevOps, Security, and Documentation Agent
+
+**Delivered:** Published the durable scrape/OCR/outreach release to
+`origin/phase1_03/backend` and deployed application commit `ffdf1e6` to the
+Tuvi VM. The VM's available managed-PostgreSQL credential belongs to the
+restricted SustainabilityWise role and cannot administer roles or databases,
+so that cluster was left untouched. Instead, the existing dedicated Tuvi
+PostgreSQL 16 instance now contains a separate `monorepo` login role and
+`monorepo` database. The role owns only that database and has no superuser,
+database-creation, role-creation, replication, or row-security-bypass powers.
+A generated 64-character hexadecimal password was never printed: it is stored
+in the ignored local `.env` and `/opt/tuvi/env/monorepo.env`, both mode `0600`.
+
+Took a fresh pre-cutover custom-format backup, restored the existing Tuvi data
+into the isolated database, and applied all 23 migrations. The source held no
+users, restaurants, profiles, demos, campaigns, or reservations and one
+completed job record; those counts were preserved. Added a loopback-only VM
+PostgreSQL binding on port `15432` and verified the local `.env` connection
+through an SSH tunnel. The database port is closed publicly.
+
+Built and deployed the updated API, Go worker, durable scrape worker, OCR image,
+restaurant template, and voice agent. API, website, docs, demo template, voice
+health, and browser-voice readiness all return HTTP 200. PostgreSQL and Redis
+are healthy; every long-running Tuvi service is running. The OCR image is
+available but no OCR container is scheduled. Email remains disabled, and the
+new `/opt/tuvi/env/ingestion.env` deliberately has empty Places, Apollo, and OCR
+provider keys. No Melbourne scrape, provider request, email attempt, or OCR
+claim was triggered during deployment.
+
+**Checks Run:** `git diff --check`; YAML parsing; local and VM Compose config
+validation; local Go command build; VM Docker builds (including the Next.js
+production build/type check); migration execution; database ownership/role
+flags/migration-count checks; local SSH-tunnel login; container-state/log
+inspection; and public HTTP health checks. Per the user's earlier instruction,
+no automated test suites were run. The first VM build exposed one unused Go
+import before cutover; commit `ffdf1e6` removed it, after which all images built.
+
+**Backups / Rollback:** Pre-cutover database backup:
+`/opt/tuvi/backups/postgres/tuvi-pre-monorepo-20260714T215600Z.dump`. Post-
+migration baseline:
+`/opt/tuvi/backups/postgres/monorepo-post-migrate-20260714T221326Z.dump`.
+Previous source tree:
+`/opt/tuvi/MonoRepo.prev-20260714T220742Z`. The VM records the active release in
+`/opt/tuvi/current-release`.
+
+**Risks / Follow-ups:** Configure workload-restricted Google Places and Apollo
+keys plus one approved OCR vision provider before creating a city job. Keep OCR
+and email disabled until their controlled enablement steps are followed. The VM
+still has no automated PostgreSQL backup schedule; add one separately with a
+retention and restore policy.
+
 ## 2026-07-14 — Durable City Scrape, OCR, Review, and Outreach Workflow
 
 **Role:** Backend, Security, DevOps, and Documentation Agent
