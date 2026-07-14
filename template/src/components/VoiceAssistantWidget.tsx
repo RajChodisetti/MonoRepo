@@ -241,16 +241,16 @@ export default function VoiceAssistantWidget({
           className="pointer-events-auto fixed inset-0 z-[90] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
-          aria-label="Table booking confirmation"
+          aria-label="Reservation request receipt"
         >
           <div className={`w-full max-w-sm rounded-2xl p-6 text-center shadow-2xl ${panelClass}`}>
             <p className={`text-xs font-semibold uppercase tracking-[0.16em] ${accentClass}`}>
-              Table booked
+              Request received
             </p>
-            <h2 className="mt-2 text-xl font-semibold">Your reservation is confirmed</h2>
+            <h2 className="mt-2 text-xl font-semibold">Your reservation request is pending</h2>
             <p className={`mt-2 text-sm ${dimClass}`}>
               {booking.guestName ? `Thanks, ${booking.guestName}. ` : ""}
-              Save this confirmation number.
+              {booking.message || "The restaurant will contact you to confirm availability."}
             </p>
 
             <div
@@ -260,7 +260,7 @@ export default function VoiceAssistantWidget({
             >
               <div className="flex items-start justify-between gap-3">
                 <span className={`text-[11px] font-semibold uppercase tracking-[0.12em] ${dimClass}`}>
-                  Day
+                  Requested day
                 </span>
                 <span className="text-right text-sm font-medium">
                   {formatBookingDay(booking.slot, booking.bookingDate)}
@@ -268,7 +268,7 @@ export default function VoiceAssistantWidget({
               </div>
               <div className="flex items-start justify-between gap-3">
                 <span className={`text-[11px] font-semibold uppercase tracking-[0.12em] ${dimClass}`}>
-                  Time
+                  Requested time
                 </span>
                 <span className="text-right text-sm font-medium">
                   {formatBookingTime(booking.slot, booking.bookingTime)}
@@ -290,11 +290,12 @@ export default function VoiceAssistantWidget({
               }`}
             >
               <p className={`text-[11px] font-semibold uppercase tracking-[0.14em] ${dimClass}`}>
-                Confirmation ID
+                Request ID
               </p>
-              <p className={`mt-2 font-mono text-3xl font-bold tracking-[0.2em] ${accentClass}`}>
-                {booking.confirmationCode}
+              <p className={`mt-2 break-all font-mono text-sm font-bold ${accentClass}`}>
+                {booking.reservationId}
               </p>
+              <p className={`mt-2 text-xs capitalize ${dimClass}`}>Status: {booking.status}</p>
             </div>
 
             <button

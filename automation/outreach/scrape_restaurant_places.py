@@ -21,9 +21,9 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from dotenv import load_dotenv
+from env_loader import load_project_env
 
-load_dotenv()
+load_project_env()
 
 from google_places_scraper import (  # noqa: E402
     get_places_api_key,
@@ -49,7 +49,7 @@ def _build_document(restaurants: list[dict], meta_extra: dict) -> dict:
         "meta": {
             "version": "1.0",
             "scraped_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "source": "google_places_api",
+            "source": "google_places_api_new",
             "data_fields": [
                 "name", "cuisines", "reviews", "rating", "contact",
                 "owners", "images", "hours", "location",
@@ -149,7 +149,9 @@ def run_places_scrape_pipeline(
             log.info(f"[{idx}/{len(leads_data)}] SKIP {name} ({reason})")
             continue
 
-        if budget is not None and not budget.can_consume(2):
+        existing_place_id = str((lead_dict.get("google") or {}).get("place_id") or "").strip()
+        requests_needed = 1 if existing_place_id else 2
+        if budget is not None and not budget.can_consume(requests_needed):
             meta_extra["stopped_reason"] = "request_budget_exhausted"
             log.info("Places scrape stopped — request budget exhausted")
             break

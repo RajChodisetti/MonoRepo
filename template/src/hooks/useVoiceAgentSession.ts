@@ -13,8 +13,9 @@ export type VoiceSessionStatus =
   | "speaking"
   | "user-speaking";
 
-export type BookingConfirmation = {
-  confirmationCode: string;
+export type ReservationRequestReceipt = {
+  reservationId: string;
+  status: string;
   guestName: string;
   guestPhone: string;
   partySize: number;
@@ -23,8 +24,6 @@ export type BookingConfirmation = {
   bookingTime: string;
   message: string;
 };
-
-const BOOKING_CONFIRMED_PATTERN = /table.{0,40}booked|booked.{0,20}confirmation|confirmation\s+number/i;
 
 type ReadinessResult =
   | { ok: true }
@@ -115,7 +114,7 @@ export function useVoiceAgentSession(restaurantIndex = 0) {
   const [status, setStatus] = useState<VoiceSessionStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const [active, setActive] = useState(false);
-  const [booking, setBooking] = useState<BookingConfirmation | null>(null);
+  const [booking, setBooking] = useState<ReservationRequestReceipt | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -130,7 +129,6 @@ export function useVoiceAgentSession(restaurantIndex = 0) {
   const connectInFlightRef = useRef(false);
   const connectGenRef = useRef(0);
   const thinkingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingBookingRef = useRef<BookingConfirmation | null>(null);
 
   const fail = useCallback((message: string) => {
     setError(message);
@@ -172,7 +170,6 @@ export function useVoiceAgentSession(restaurantIndex = 0) {
     connectGenRef.current += 1;
     connectInFlightRef.current = false;
     clearThinkingTimer();
-    pendingBookingRef.current = null;
     sessionActiveRef.current = false;
     readyReceivedRef.current = false;
     setActive(false);
@@ -244,7 +241,8 @@ export function useVoiceAgentSession(restaurantIndex = 0) {
           message?: string;
           session_id?: string;
           call_db_id?: number;
-          confirmation_code?: string;
+          status?: string;
+          reservation_id?: string;
           guest_name?: string;
           guest_phone?: string;
           party_size?: number;
@@ -294,18 +292,12 @@ export function useVoiceAgentSession(restaurantIndex = 0) {
         // Transcript is audio-only in the UI; voice-sales-agent persists every turn via log_turn.
         if (msg.event === "transcript" && msg.role && msg.text) {
           clearThinkingTimer();
-          if (
-            msg.role === "assistant" &&
-            BOOKING_CONFIRMED_PATTERN.test(msg.text) &&
-            pendingBookingRef.current
-          ) {
-            setBooking(pendingBookingRef.current);
-          }
         }
 
-        if (msg.event === "booking" && msg.confirmation_code) {
-          const confirmation: BookingConfirmation = {
-            confirmationCode: msg.confirmation_code,
+        if (msg.event === "booking" && msg.status === "pending" && msg.reservation_id) {
+          const receipt: ReservationRequestReceipt = {
+            reservationId: msg.reservation_id,
+            status: msg.status,
             guestName: msg.guest_name ?? "",
             guestPhone: msg.guest_phone ?? "",
             partySize: msg.party_size ?? 2,
@@ -314,8 +306,7 @@ export function useVoiceAgentSession(restaurantIndex = 0) {
             bookingTime: msg.booking_time ?? "",
             message: msg.message ?? "",
           };
-          pendingBookingRef.current = confirmation;
-          setBooking(confirmation);
+          setBooking(receipt);
         }
         return;
       }
@@ -354,7 +345,6 @@ export function useVoiceAgentSession(restaurantIndex = 0) {
 
     setError(null);
     setStatus("checking");
-    pendingBookingRef.current = null;
     setSessionId(null);
 
     const readiness = await checkVoiceAgentReadiness();
@@ -458,7 +448,6 @@ export function useVoiceAgentSession(restaurantIndex = 0) {
   }, [cleanup]);
 
   const reset = useCallback(() => {
-    pendingBookingRef.current = null;
     setError(null);
     setStatus("idle");
     setBooking(null);

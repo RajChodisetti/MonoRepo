@@ -1,5 +1,5 @@
 import type { RestaurantContent } from "@/data/types/restaurant";
-import { fetchSiteRestaurant, getRestaurantCountFromApi } from "./restaurantSiteApi";
+import { fetchSignedDemo, fetchSiteRestaurant, getRestaurantCountFromApi } from "./restaurantSiteApi";
 import { loadRestaurant as loadRestaurantFromJson, getRestaurantCount as getJsonRestaurantCount } from "./scrapedRestaurant";
 
 export { parseRestaurantIndex } from "./scrapedRestaurant";
@@ -16,6 +16,14 @@ export async function loadRestaurantFromApiOnly(index: number): Promise<Restaura
     throw new Error(
       `Restaurant index ${index} not found via API. Ensure NEXT_PUBLIC_API_URL is set and the API is running.`,
     );
+  }
+  return fromApi;
+}
+
+export async function loadSignedDemo(slug: string, token: string, index: number): Promise<RestaurantContent> {
+  const fromApi = await fetchSignedDemo(slug, token, index);
+  if (!fromApi) {
+    throw new Error("This signed demo is invalid, unpublished, or expired.");
   }
   return fromApi;
 }

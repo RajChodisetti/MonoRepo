@@ -15,8 +15,6 @@ func NewDisabled() Provider {
 
 func (provider *disabledProvider) Send(ctx context.Context, req SendRequest) (SendResult, error) {
 	provider.log.InfoContext(ctx, "email_send_skipped",
-		"to", req.To,
-		"subject", req.Subject,
 		"reason", "email sending disabled",
 	)
 	return SendResult{Skipped: true}, nil

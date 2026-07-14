@@ -1,4 +1,4 @@
-"""Known lead registry for dedup before Apollo fetch and Places scrape."""
+"""Known business registry for database- and file-backed scrape deduplication."""
 
 from __future__ import annotations
 
@@ -21,6 +21,14 @@ def _apollo_id_from_lead_dict(data: dict) -> str:
     return (extra.get("apollo_id") or "").strip()
 
 
+def _place_id_from_lead_dict(data: dict) -> str:
+    google = data.get("google") or {}
+    if google.get("place_id"):
+        return str(google["place_id"]).strip()
+    source = data.get("source") or {}
+    return str(source.get("place_id") or "").strip()
+
+
 def _dedup_key_from_lead_dict(data: dict) -> str:
     contact = data.get("contact") or {}
     company = data.get("company") or {}
@@ -40,18 +48,22 @@ class KnownLeadsRegistry:
     def is_apollo_known(self, apollo_id: str) -> bool:
         return bool(apollo_id) and apollo_id in self.apollo_ids
 
+    def is_place_known(self, place_id: str) -> bool:
+        return bool(place_id) and place_id in self.place_ids
+
     def is_dedup_known(self, lead_dict: dict) -> bool:
         key = _dedup_key_from_lead_dict(lead_dict)
         return bool(key) and key in self.dedup_keys
 
     def should_skip_scrape(self, lead_dict: dict) -> tuple[bool, str]:
+        place_id = _place_id_from_lead_dict(lead_dict)
+        if self.is_place_known(place_id):
+            return True, "known_place_id"
         apollo_id = _apollo_id_from_lead_dict(lead_dict)
         if apollo_id and apollo_id in self.apollo_id_to_place_id:
-            place_id = self.apollo_id_to_place_id[apollo_id]
-            if place_id:
+            mapped_place_id = self.apollo_id_to_place_id[apollo_id]
+            if mapped_place_id:
                 return True, "known_apollo_with_place_id"
-        if self.is_dedup_known(lead_dict) and apollo_id and self.is_apollo_known(apollo_id):
-            return True, "known_lead_already_imported"
         return False, ""
 
     def register_lead_dict(self, lead_dict: dict) -> None:
@@ -75,20 +87,31 @@ class KnownLeadsRegistry:
             self.apollo_ids.add(apollo_id)
 
     @classmethod
-    def load_from_db(cls, database_url: str | None = None) -> KnownLeadsRegistry:
+    def load_from_db(
+        cls,
+        database_url: str | None = None,
+        *,
+        required: bool = False,
+    ) -> KnownLeadsRegistry:
         registry = cls()
         url = (database_url or os.getenv("DATABASE_URL") or "").strip()
         if not url:
+            if required:
+                raise ValueError("DATABASE_URL is required for database-backed ingestion deduplication")
             return registry
 
         try:
             import psycopg2
-        except ImportError:
+        except ImportError as exc:
+            if required:
+                raise RuntimeError("psycopg2 is required for database-backed ingestion deduplication") from exc
             return registry
 
         try:
-            conn = psycopg2.connect(url)
-        except Exception:
+            conn = psycopg2.connect(url, connect_timeout=10)
+        except Exception as exc:
+            if required:
+                raise RuntimeError("Could not connect to PostgreSQL for ingestion deduplication") from exc
             return registry
 
         try:
@@ -169,8 +192,13 @@ class KnownLeadsRegistry:
         return registry
 
     @classmethod
-    def load_combined(cls, niche_slug: str = "restaurant") -> KnownLeadsRegistry:
-        db_registry = cls.load_from_db()
+    def load_combined(
+        cls,
+        niche_slug: str = "restaurant",
+        *,
+        require_database: bool = False,
+    ) -> KnownLeadsRegistry:
+        db_registry = cls.load_from_db(required=require_database)
         file_registry = cls.load_from_files(niche_slug=niche_slug)
         merged = cls()
         merged.place_ids = db_registry.place_ids | file_registry.place_ids

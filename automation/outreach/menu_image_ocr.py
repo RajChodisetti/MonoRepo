@@ -14,15 +14,17 @@ from __future__ import annotations
 
 import argparse
 import base64
+import ipaddress
 import json
 import logging
 import os
 import re
+import socket
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import requests
 from env_loader import load_project_env
@@ -41,6 +43,9 @@ IMAGE_TYPES = frozenset({
 })
 
 MENU_TYPES = frozenset({"menu_document"})
+MAX_IMAGE_DOWNLOAD_BYTES = 10 * 1024 * 1024
+HARD_MAX_IMAGE_DOWNLOAD_BYTES = 25 * 1024 * 1024
+MAX_IMAGE_REDIRECTS = 3
 
 CLASSIFY_AND_OCR_PROMPT = """You analyze restaurant photos for a data pipeline.
 
@@ -87,6 +92,9 @@ class MenuOCRConfig:
     gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
     max_images: int = int(os.getenv("MENU_OCR_MAX_IMAGES", "15"))
     timeout: int = int(os.getenv("MENU_OCR_TIMEOUT", "45"))
+    max_image_bytes: int = int(
+        os.getenv("MENU_OCR_MAX_IMAGE_BYTES", str(MAX_IMAGE_DOWNLOAD_BYTES))
+    )
     delay: float = float(os.getenv("MENU_OCR_DELAY", "0.5"))
     min_confidence: float = float(os.getenv("MENU_OCR_MIN_CONFIDENCE", "0.55"))
 
@@ -153,13 +161,117 @@ def _validate_image_url(url: str) -> str:
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https") or not parsed.netloc:
         raise ValueError(f"Invalid URL: {url!r}")
+    if parsed.username is not None or parsed.password is not None:
+        raise ValueError("Image URLs must not contain credentials.")
+    if len(url) > 4096:
+        raise ValueError("Image URL is too long.")
+    hostname = (parsed.hostname or "").rstrip(".").lower()
+    if not hostname:
+        raise ValueError(f"Invalid URL host: {url!r}")
+    if (
+        hostname == "localhost"
+        or hostname.endswith(".localhost")
+        or hostname.endswith(".local")
+        or hostname.endswith(".internal")
+        or hostname.endswith(".home.arpa")
+    ):
+        raise ValueError("Private or local image hosts are not allowed.")
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError("Image URL has an invalid port.") from exc
+    expected_port = 443 if parsed.scheme == "https" else 80
+    if port is not None and port != expected_port:
+        raise ValueError("Image URLs must use the standard HTTP or HTTPS port.")
+    try:
+        address = ipaddress.ip_address(hostname)
+    except ValueError:
+        address = None
+    if address is not None and not address.is_global:
+        raise ValueError("Private or local image addresses are not allowed.")
     if len(url) < 40:
         raise ValueError(f"URL looks truncated ({len(url)} chars): {url!r}")
     return url
 
 
-def download_image(url: str, timeout: int = 45) -> tuple[bytes, str]:
+def _validate_public_image_target(url: str) -> str:
     url = _validate_image_url(url)
+    parsed = urlparse(url)
+    hostname = (parsed.hostname or "").rstrip(".").lower()
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    try:
+        addresses = {
+            item[4][0]
+            for item in socket.getaddrinfo(
+                hostname,
+                port,
+                type=socket.SOCK_STREAM,
+            )
+        }
+    except socket.gaierror as exc:
+        raise ValueError("Image host could not be resolved.") from exc
+    if not addresses:
+        raise ValueError("Image host did not resolve to an address.")
+    for raw_address in addresses:
+        try:
+            address = ipaddress.ip_address(raw_address.split("%", 1)[0])
+        except ValueError as exc:
+            raise ValueError("Image host resolved to an invalid address.") from exc
+        if not address.is_global:
+            raise ValueError("Image host resolved to a private or local address.")
+    return url
+
+
+def _is_google_image_host(hostname: str) -> bool:
+    hostname = (hostname or "").rstrip(".").lower()
+    return hostname == "googleusercontent.com" or hostname.endswith(".googleusercontent.com") or (
+        hostname == "ggpht.com" or hostname.endswith(".ggpht.com")
+    )
+
+
+def is_trusted_automated_image_url(url: str) -> bool:
+    """Allow unattended OCR to fetch only HTTPS Google-hosted direct images.
+
+    The durable Places flow resolves first-party photo resources separately.
+    Arbitrary restaurant/CDN URLs remain available to explicit manual tooling,
+    but are not fetched by the unattended database job where DNS rebinding
+    could otherwise turn image retrieval into an internal-network request.
+    """
+    try:
+        parsed = urlparse(str(url or "").strip())
+    except ValueError:
+        return False
+    return parsed.scheme == "https" and _is_google_image_host(parsed.hostname or "")
+
+
+def _validate_response_peer(resp: requests.Response) -> None:
+    connection = getattr(resp.raw, "connection", None) or getattr(
+        resp.raw,
+        "_connection",
+        None,
+    )
+    sock = getattr(connection, "sock", None)
+    if sock is None:
+        try:
+            sock = resp.raw._fp.fp.raw._sock  # type: ignore[attr-defined]
+        except AttributeError as exc:
+            raise RuntimeError("Could not verify the image server address.") from exc
+    try:
+        raw_address = sock.getpeername()[0]
+        address = ipaddress.ip_address(str(raw_address).split("%", 1)[0])
+    except (OSError, ValueError) as exc:
+        raise RuntimeError("Could not verify the image server address.") from exc
+    if not address.is_global:
+        raise RuntimeError("Image request connected to a private or local address.")
+
+
+def download_image(
+    url: str,
+    timeout: int = 45,
+    max_bytes: int = MAX_IMAGE_DOWNLOAD_BYTES,
+) -> tuple[bytes, str]:
+    current_url = _validate_public_image_target(url)
+    max_bytes = min(max(1, int(max_bytes)), HARD_MAX_IMAGE_DOWNLOAD_BYTES)
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -168,22 +280,80 @@ def download_image(url: str, timeout: int = 45) -> tuple[bytes, str]:
         "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
         "Referer": "https://www.google.com/",
     }
-    resp = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True)
-    if resp.status_code >= 400:
-        raise RuntimeError(
-            f"Could not download image (HTTP {resp.status_code}). "
-            "Use the full URL from restaurants_data.json — not '...' placeholder."
-        )
-    content_type = (resp.headers.get("Content-Type") or "image/jpeg").split(";")[0].strip()
-    if not content_type.startswith("image/"):
-        content_type = "image/jpeg"
-    return resp.content, content_type
+    session = requests.Session()
+    session.trust_env = False
+    try:
+        for redirect_count in range(MAX_IMAGE_REDIRECTS + 1):
+            with session.get(
+                current_url,
+                headers=headers,
+                timeout=(min(max(1, timeout), 10), max(1, timeout)),
+                allow_redirects=False,
+                stream=True,
+            ) as resp:
+                _validate_response_peer(resp)
+                if resp.is_redirect or resp.is_permanent_redirect:
+                    if redirect_count >= MAX_IMAGE_REDIRECTS:
+                        raise RuntimeError("Image download exceeded the redirect limit.")
+                    location = (resp.headers.get("Location") or "").strip()
+                    if not location:
+                        raise RuntimeError("Image redirect did not include a target URL.")
+                    next_url = urljoin(current_url, location)
+                    if (
+                        urlparse(current_url).scheme == "https"
+                        and urlparse(next_url).scheme != "https"
+                    ):
+                        raise RuntimeError("Image redirect attempted an HTTPS downgrade.")
+                    current_url = _validate_public_image_target(next_url)
+                    continue
+                if resp.status_code < 200 or resp.status_code >= 300:
+                    raise RuntimeError(
+                        f"Could not download image (HTTP {resp.status_code}). "
+                        "Use the full URL from restaurants_data.json — not '...' placeholder."
+                    )
+
+                content_type = (resp.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower()
+                if not content_type.startswith("image/") or content_type in {
+                    "image/svg+xml",
+                    "image/svg",
+                }:
+                    raise RuntimeError("Image URL returned a non-raster content type.")
+
+                content_length = (resp.headers.get("Content-Length") or "").strip()
+                if content_length:
+                    try:
+                        declared_length = int(content_length)
+                    except ValueError as exc:
+                        raise RuntimeError("Image response had an invalid Content-Length.") from exc
+                    if declared_length < 0 or declared_length > max_bytes:
+                        raise RuntimeError(
+                            f"Image exceeds the {max_bytes}-byte download limit."
+                        )
+
+                chunks: list[bytes] = []
+                total = 0
+                for chunk in resp.iter_content(chunk_size=64 * 1024):
+                    if not chunk:
+                        continue
+                    total += len(chunk)
+                    if total > max_bytes:
+                        raise RuntimeError(
+                            f"Image exceeds the {max_bytes}-byte download limit."
+                        )
+                    chunks.append(chunk)
+                if total == 0:
+                    raise RuntimeError("Image response was empty.")
+                return b"".join(chunks), content_type
+    finally:
+        session.close()
+
+    raise RuntimeError("Image download did not produce a response.")
 
 
 def _image_ref_for_openai(url: str, image_bytes: bytes, content_type: str) -> dict:
     """Prefer URL for Google-hosted images; base64 for others if needed."""
-    host = urlparse(url).netloc.lower()
-    if "googleusercontent.com" in host or "ggpht.com" in host:
+    host = (urlparse(url).hostname or "").lower()
+    if _is_google_image_host(host):
         return {"type": "image_url", "image_url": {"url": url, "detail": "high"}}
     encoded = base64.b64encode(image_bytes).decode("ascii")
     data_url = f"data:{content_type};base64,{encoded}"
@@ -207,14 +377,18 @@ class MenuImageAnalyzer:
             self._gemini = genai.Client(api_key=self.cfg.gemini_api_key)
 
     def analyze_image_url(self, url: str) -> dict:
-        url = _validate_image_url(url)
-        host = urlparse(url).netloc.lower()
-        is_google = "googleusercontent.com" in host or "ggpht.com" in host
+        url = _validate_public_image_target(url)
+        host = (urlparse(url).hostname or "").lower()
+        is_google = _is_google_image_host(host)
 
         if self._hf and is_google:
             return self._analyze_huggingface(url, b"", "image/jpeg")
 
-        image_bytes, content_type = download_image(url, timeout=self.cfg.timeout)
+        image_bytes, content_type = download_image(
+            url,
+            timeout=self.cfg.timeout,
+            max_bytes=self.cfg.max_image_bytes,
+        )
 
         if self._hf:
             return self._analyze_huggingface(url, image_bytes, content_type)
@@ -445,6 +619,7 @@ def enrich_restaurant_with_menu_ocr(
     record: dict,
     cfg: MenuOCRConfig | None = None,
     analyzer: MenuImageAnalyzer | None = None,
+    analysis_candidates: list[dict] | None = None,
 ) -> dict:
     """
     Classify images, split menu_photos vs gallery, OCR menus, merge menu_items.
@@ -456,7 +631,20 @@ def enrich_restaurant_with_menu_ocr(
         return record
 
     analyzer = analyzer or MenuImageAnalyzer(cfg)
-    candidates = collect_candidate_image_urls(record)[: cfg.max_images]
+    if analysis_candidates is None:
+        analysis_candidates = [
+            {
+                "analysis_url": url,
+                "persistent_url": url,
+                "source": "public_url",
+            }
+            for url in collect_candidate_image_urls(record)
+        ]
+    candidates = [
+        candidate
+        for candidate in analysis_candidates
+        if isinstance(candidate, dict) and str(candidate.get("analysis_url") or "").strip()
+    ][: cfg.max_images]
     if not candidates:
         return record
 
@@ -466,32 +654,74 @@ def enrich_restaurant_with_menu_ocr(
     ocr_items: list[dict] = []
     classifications: list[dict] = []
     url_types: dict[str, str] = {}
+    images_succeeded = 0
+    images_failed = 0
 
     log.info(f"  Menu OCR: analyzing {len(candidates)} image(s)…")
 
-    for idx, url in enumerate(candidates, start=1):
+    for idx, candidate in enumerate(candidates, start=1):
+        url = str(candidate.get("analysis_url") or "").strip()
+        persistent_url = str(candidate.get("persistent_url") or "").strip()
+        source = str(candidate.get("source") or "public_url").strip()
+        source_ref = str(candidate.get("source_ref") or "").strip()
+        google_place_id = str(candidate.get("google_place_id") or "").strip()
+        attribution = candidate.get("author_attributions") or []
+        source_metadata = {"source": source}
+        if source == "google_places_photo":
+            if google_place_id:
+                source_metadata["google_place_id"] = google_place_id
+        elif source_ref:
+            source_metadata["source_ref"] = source_ref
+        if attribution:
+            source_metadata["author_attributions"] = attribution
         try:
             result = analyzer.analyze_image_url(url)
-            classifications.append(result)
+            images_succeeded += 1
             image_type = result["image_type"]
             confidence = result["confidence"]
-            url_types[url] = image_type
+            if persistent_url:
+                url_types[persistent_url] = image_type
+
+            normalized_items = list(result.get("menu_items") or [])
+            if not persistent_url:
+                # Photo Media photoUri values are short-lived. Keep extracted text,
+                # but strip the transient URI from every persisted menu item.
+                normalized_items = [
+                    {**item, "images": []}
+                    for item in normalized_items
+                    if isinstance(item, dict)
+                ]
+
+            persisted_classification = {
+                key: value
+                for key, value in result.items()
+                if key not in ("url", "menu_items")
+            }
+            persisted_classification["menu_items"] = normalized_items
+            if persistent_url:
+                persisted_classification["url"] = persistent_url
+            else:
+                persisted_classification.update(source_metadata)
+            classifications.append(persisted_classification)
 
             entry = {
-                "url": url,
-                "thumbnail": url,
                 "image_type": image_type,
                 "confidence": confidence,
                 "reason": result.get("reason", ""),
             }
+            if persistent_url:
+                entry.update({"url": persistent_url, "thumbnail": persistent_url})
+            else:
+                entry.update(source_metadata)
 
             if image_type in MENU_TYPES and confidence >= cfg.min_confidence:
                 menu_photos.append(entry)
-                ocr_items.extend(result.get("menu_items") or [])
-                log.info(f"    [{idx}] menu_document ({confidence:.0%}) — {len(result.get('menu_items') or [])} items")
+                ocr_items.extend(normalized_items)
+                log.info(f"    [{idx}] menu_document ({confidence:.0%}) — {len(normalized_items)} items")
             elif image_type == "food_photo":
                 gallery.append({**entry, "title": ""})
-                _attach_food_image_to_item(record.get("menu_items") or [], url)
+                if persistent_url:
+                    _attach_food_image_to_item(record.get("menu_items") or [], persistent_url)
                 log.info(f"    [{idx}] food_photo ({confidence:.0%})")
             elif image_type in ("interior", "logo", "other"):
                 gallery.append({**entry, "title": image_type})
@@ -500,8 +730,19 @@ def enrich_restaurant_with_menu_ocr(
                 gallery.append({**entry, "title": "uncertain"})
 
         except Exception as exc:
-            log.warning(f"    [{idx}] OCR failed for {url[:60]}…: {exc}")
-            gallery.append({"url": url, "thumbnail": url, "image_type": "error", "error": str(exc)})
+            images_failed += 1
+            display_ref = persistent_url or source_ref or source
+            if persistent_url:
+                log.warning(f"    [{idx}] OCR failed for {display_ref[:60]}…: {exc}")
+            else:
+                log.warning(f"    [{idx}] OCR failed for {display_ref[:60]}…")
+            persisted_error = str(exc) if persistent_url else "Google Places photo analysis failed"
+            error_entry = {"image_type": "error", "error": persisted_error}
+            if persistent_url:
+                error_entry.update({"url": persistent_url, "thumbnail": persistent_url})
+            else:
+                error_entry.update(source_metadata)
+            gallery.append(error_entry)
 
         if idx < len(candidates):
             time.sleep(cfg.delay)
@@ -534,6 +775,8 @@ def enrich_restaurant_with_menu_ocr(
         "provider": provider,
         "model": model,
         "images_analyzed": len(candidates),
+        "images_succeeded": images_succeeded,
+        "images_failed": images_failed,
         "menu_photos_found": len(menu_photos),
         "items_extracted": len(ocr_items),
         "classifications": classifications,

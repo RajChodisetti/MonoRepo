@@ -1,4 +1,4 @@
-"""Business niche configs for Apollo fetch + Google Places scrape."""
+"""Business niche settings for Places discovery and Apollo contact enrichment."""
 
 from __future__ import annotations
 

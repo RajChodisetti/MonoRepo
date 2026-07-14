@@ -90,13 +90,17 @@ func (handler *ReservationPublicHandler) writeAvailabilityError(w http.ResponseW
 		handler.writeError(w, http.StatusNotFound, "not_found", "Restaurant was not found.")
 		return
 	}
+	if errors.Is(err, reservations.ErrClientRequestConflict) {
+		handler.writeError(w, http.StatusConflict, "client_request_conflict", err.Error())
+		return
+	}
+	if errors.Is(err, reservations.ErrSlotUnavailable) {
+		handler.writeError(w, http.StatusConflict, "slot_unavailable", err.Error())
+		return
+	}
 	msg := err.Error()
 	if strings.Contains(msg, "party_size") || strings.Contains(msg, "date") || strings.Contains(msg, "guest_") || strings.Contains(msg, "slot") || strings.Contains(msg, "source") {
 		handler.writeError(w, http.StatusBadRequest, "validation_error", msg)
-		return
-	}
-	if strings.Contains(msg, "not available") {
-		handler.writeError(w, http.StatusConflict, "slot_unavailable", msg)
 		return
 	}
 	handler.writeError(w, http.StatusInternalServerError, "internal_error", "An internal error occurred.")

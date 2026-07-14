@@ -67,7 +67,7 @@ mkdir -p "$RUN_DIR/bin"
 go build -o "$RUN_DIR/bin/api" ./backend/cmd/api
 
 echo "==> Starting API :8080"
-# Run the binary directly (not `go run`) so SMTP/network works reliably.
+# Run the binary directly (not `go run`) so HTTP provider/network calls work reliably.
 nohup "$RUN_DIR/bin/api" >"$RUN_DIR/api.log" 2>&1 &
 echo $! >"$RUN_DIR/api.pid"
 

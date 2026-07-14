@@ -26,6 +26,8 @@ func NewEmailSendJob(campaignID uuid.UUID, step int) (Job, error) {
 		Type:           EmailSendJobType,
 		Payload:        payload,
 		IdempotencyKey: fmt.Sprintf("email.send:%s:step:%d", campaignID, step),
-		MaxAttempts:    3,
+		// Providers do not currently expose a cross-provider idempotency contract.
+		// Retrying after a successful send and failed state update could duplicate outreach.
+		MaxAttempts: 1,
 	}, nil
 }

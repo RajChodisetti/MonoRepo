@@ -2,6 +2,7 @@ package campaigns
 
 import (
 	"fmt"
+	"html"
 	"net/url"
 	"strings"
 )
@@ -13,11 +14,13 @@ type DraftContent struct {
 }
 
 type DraftInput struct {
-	RestaurantName string
-	SiteIndex      int
-	DemoWebURL     string
-	DemoSlug       string
-	DemoToken      string
+	RestaurantName      string
+	SiteIndex           int
+	DemoWebURL          string
+	DemoSlug            string
+	DemoToken           string
+	PresentationSiteURL string
+	MarketingSiteURL    string
 }
 
 type TrackingURLs struct {
@@ -30,15 +33,21 @@ type TrackingURLs struct {
 }
 
 func BuildDraft(input DraftInput) DraftContent {
-	draft, err := RenderOutreachEmail(input.RestaurantName)
+	draft, err := RenderOutreachEmailWithLinks(input.RestaurantName, OutreachLinkConfig{
+		PresentationURL: input.PresentationSiteURL,
+		MarketingURL:    input.MarketingSiteURL,
+	})
 	if err != nil {
 		name := strings.TrimSpace(input.RestaurantName)
 		if name == "" {
 			name = "your restaurant"
 		}
 		return DraftContent{
-			Subject:  outreachSubject(name),
-			BodyHTML: fmt.Sprintf("<p>A live demo for %s. View: {{CLICK_URL}}</p>", name),
+			Subject: outreachSubject(name),
+			BodyHTML: fmt.Sprintf(
+				`<p>A live demo for %s. <a href="{{CLICK_URL}}">View the demo</a>.</p><p><a href="{{UNSUBSCRIBE_URL}}">Unsubscribe</a>.</p>`,
+				html.EscapeString(name),
+			),
 			BodyText: fmt.Sprintf("View your demo: {{CLICK_URL}}\nUnsubscribe: {{UNSUBSCRIBE_URL}}\n"),
 		}
 	}
@@ -51,15 +60,23 @@ func buildDemoURL(webBase, slug, demoToken string) string {
 		base = "http://localhost:3000"
 	}
 	values := url.Values{}
+	values.Set("slug", strings.TrimSpace(slug))
 	if demoToken != "" {
 		values.Set("token", demoToken)
 	}
-	query := values.Encode()
-	path := fmt.Sprintf("%s/demo/%s", base, strings.TrimSpace(slug))
-	if query == "" {
-		return path
+	return base + "/?" + values.Encode()
+}
+
+func buildTokenGatedDemoPreviewURL(webBase, slug, demoToken, templateID string) string {
+	baseURL := buildDemoURL(webBase, slug, demoToken)
+	parsed, err := url.Parse(baseURL)
+	if err != nil {
+		return baseURL
 	}
-	return path + "?" + query
+	values := parsed.Query()
+	values.Set("template", strings.TrimSpace(templateID))
+	parsed.RawQuery = values.Encode()
+	return parsed.String()
 }
 
 func buildTemplatePreviewURL(webBase string, siteIndex int, templateID, demoToken string) string {

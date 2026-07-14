@@ -25,9 +25,64 @@ func NewPostgres(pool *pgxpool.Pool) *Postgres {
 const eligibleLeadsBaseQuery = `
 	FROM restaurants r
 	JOIN restaurant_profiles rp ON rp.restaurant_id = r.id
-	JOIN demo_sites d ON d.restaurant_id = r.id AND d.status = 'published'
-	WHERE rp.ocr_verified = true
+	JOIN LATERAL (
+	  SELECT c.id AS campaign_id,
+	         c.approved_at,
+	         c.approved_by,
+	         d.id AS demo_site_id,
+	         d.status AS demo_status,
+	         d.published_at,
+	         d.published_by,
+	         d.expires_at,
+	         c.auto_generated AS campaign_auto_generated,
+	         c.source_ocr_fingerprint AS campaign_source_ocr_fingerprint,
+	         c.source_profile_fingerprint AS campaign_source_profile_fingerprint,
+	         d.auto_generated AS demo_auto_generated,
+	         d.source_ocr_fingerprint AS demo_source_ocr_fingerprint,
+	         d.source_profile_fingerprint AS demo_source_profile_fingerprint
+	  FROM email_campaigns c
+	  JOIN demo_sites d ON d.id = c.demo_site_id
+	  WHERE c.restaurant_id = r.id
+	    AND d.restaurant_id = r.id
+	    AND c.campaign_type = 'outreach'
+	    AND c.status = 'approved'
+	    AND d.status = 'published'
+	    AND (d.expires_at IS NULL OR d.expires_at > now())
+	  ORDER BY c.approved_at DESC NULLS LAST, c.created_at DESC
+	  LIMIT 1
+	) eligible ON true
+	WHERE rp.ocr_status = 'verified'
+	  AND rp.review_status = 'approved'
+	  AND rp.reviewed_at IS NOT NULL
+	  AND rp.reviewed_by IS NOT NULL
+	  AND rp.reviewed_at >= rp.updated_at
+	  AND rp.reviewed_at >= r.updated_at
+	  AND eligible.demo_status = 'published'
+	  AND eligible.published_at IS NOT NULL
+	  AND eligible.published_by IS NOT NULL
+	  AND (eligible.expires_at IS NULL OR eligible.expires_at > now())
+	  AND eligible.approved_at IS NOT NULL
+	  AND eligible.approved_by IS NOT NULL
+	  AND (
+	    NOT eligible.campaign_auto_generated
+	    OR (
+	      eligible.campaign_source_ocr_fingerprint <> ''
+	      AND eligible.campaign_source_ocr_fingerprint = rp.ocr_input_fingerprint
+	      AND eligible.campaign_source_profile_fingerprint <> ''
+	      AND eligible.campaign_source_profile_fingerprint = COALESCE(lead_artifact_current_profile_fingerprint(r.id), '')
+	    )
+	  )
+	  AND (
+	    NOT eligible.demo_auto_generated
+	    OR (
+	      eligible.demo_source_ocr_fingerprint <> ''
+	      AND eligible.demo_source_ocr_fingerprint = rp.ocr_input_fingerprint
+	      AND eligible.demo_source_profile_fingerprint <> ''
+	      AND eligible.demo_source_profile_fingerprint = COALESCE(lead_artifact_current_profile_fingerprint(r.id), '')
+	    )
+	  )
 	  AND r.email_sent = false
+	  AND r.email_send_count = 0
 	  AND trim(r.email) <> ''
 	  AND NOT EXISTS (
 	    SELECT 1 FROM email_suppressions s WHERE s.email = lower(trim(r.email))
@@ -42,7 +97,7 @@ func (repo *Postgres) ListEligibleLeads(ctx context.Context, limit int) ([]Eligi
 	}
 
 	query := `
-		SELECT r.id, r.email, r.name, d.id, d.slug` + eligibleLeadsBaseQuery + `
+		SELECT eligible.campaign_id, r.id, eligible.demo_site_id` + eligibleLeadsBaseQuery + `
 		ORDER BY r.created_at ASC
 		LIMIT $1`
 
@@ -55,7 +110,7 @@ func (repo *Postgres) ListEligibleLeads(ctx context.Context, limit int) ([]Eligi
 	var leads []EligibleLead
 	for rows.Next() {
 		var lead EligibleLead
-		if err := rows.Scan(&lead.RestaurantID, &lead.Email, &lead.Name, &lead.DemoSiteID, &lead.DemoSlug); err != nil {
+		if err := rows.Scan(&lead.CampaignID, &lead.RestaurantID, &lead.DemoSiteID); err != nil {
 			return nil, fmt.Errorf("scan eligible lead: %w", err)
 		}
 		leads = append(leads, lead)

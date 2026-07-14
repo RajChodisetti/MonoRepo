@@ -6,6 +6,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+from scrape_safety import sanitize_sensitive_urls
 from tuvi_outreach_agent import Lead, _lead_dedup_key, lead_to_dict
 
 
@@ -75,7 +76,7 @@ def merge_scrape_file(path: Path, new_records: list[dict]) -> int:
     existing: list[dict] = []
     meta: dict = {}
     if path.is_file():
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload = sanitize_sensitive_urls(json.loads(path.read_text(encoding="utf-8")))
         existing = list(payload.get("restaurants") or [])
         meta = dict(payload.get("meta") or {})
 
@@ -91,7 +92,8 @@ def merge_scrape_file(path: Path, new_records: list[dict]) -> int:
 
     added = 0
     merged = list(existing)
-    for record in new_records:
+    for raw_record in new_records:
+        record = sanitize_sensitive_urls(raw_record)
         google = record.get("google") or {}
         pid = (google.get("place_id") or "").strip()
         loc = record.get("location") or {}

@@ -13,6 +13,7 @@ import (
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/demos"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/http/handlers"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/jobs"
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/leadreview"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/outreach"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/config"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/db"
@@ -20,6 +21,7 @@ import (
 	emailprovider "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/email"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/reservations"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/restaurants"
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/scrapejobs"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/store"
 )
 
@@ -40,7 +42,7 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	if dataStore.Pool() == nil {
 		jobEnqueuer = &jobs.CampaignEnqueuer{Queue: jobs.NewInMemoryQueue(cfg.Jobs.BufferSize)}
 	}
-	campaignService := campaigns.NewService(dataStore.Campaigns, dataStore.Demos, accessService, jobEnqueuer, cfg.AppURLs)
+	campaignService := campaigns.NewService(dataStore.Campaigns, dataStore.Demos, accessService, jobEnqueuer, cfg.AppURLs, cfg.Demo.TokenTTL)
 	calendarProvider := calendarprovider.NewFromConfig(context.Background(), cfg.Consultations, log)
 	emailProvider, err := emailprovider.NewFromConfig(cfg.Email, cfg.ZohoMail)
 	if err != nil {
@@ -57,7 +59,12 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	demoAdminHandler := handlers.NewDemoAdminHandler(demoService, writeJSON, writeError)
 	campaignHandler := handlers.NewCampaignHandler(campaignService, writeJSON, writeError)
 	outreachRepo := outreach.NewPostgres(dataStore.Pool())
-	outreachAccountPool, outreachPoolErr := emailprovider.NewAccountPoolFromConfig(cfg.Email, cfg.Outreach)
+	outreachAccountPool, outreachPoolErr := emailprovider.NewPersistentAccountPoolFromConfig(
+		context.Background(),
+		cfg.Email,
+		cfg.Outreach,
+		outreachRepo,
+	)
 	if outreachPoolErr != nil {
 		log.WarnContext(context.Background(), "outreach_account_pool_unavailable", "error", outreachPoolErr)
 	}
@@ -74,6 +81,11 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 		log,
 	)
 	outreachBulkHandler := handlers.NewOutreachBulkHandler(outreachService, writeJSON, writeError)
+	scrapeJobRepo := scrapejobs.NewPostgres(dataStore.Pool())
+	scrapeJobService := scrapejobs.NewService(scrapeJobRepo)
+	scrapeJobHandler := handlers.NewScrapeJobHandler(scrapeJobService, writeJSON, writeError)
+	leadReviewService := leadreview.NewService(dataStore.Pool())
+	leadReviewHandler := handlers.NewLeadReviewHandler(leadReviewService, writeJSON, writeError)
 	trackingHandler := handlers.NewTrackingHandler(dataStore.Campaigns, writeError)
 	restaurantPublicHandler := handlers.NewRestaurantPublicHandler(dataStore.Profiles, writeJSON, writeError)
 	reservationService := reservations.NewService(dataStore.Reservations)
@@ -122,14 +134,22 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	mux.Handle("GET /api/v1/restaurants/{id}/members", protectRestaurantAdmin(http.HandlerFunc(restaurantHandler.ListMembers)))
 	mux.Handle("POST /api/v1/restaurants/{id}/members", protectRestaurantAdmin(http.HandlerFunc(restaurantHandler.AddMember)))
 	mux.Handle("POST /api/v1/restaurants/{id}/demo-sites", protectRestaurantAdmin(http.HandlerFunc(demoAdminHandler.Create)))
+	mux.Handle("GET /api/v1/demo-sites/{id}/review-preview", protectInternalAdmin(http.HandlerFunc(demoAdminHandler.ReviewPreview)))
+	mux.Handle("GET /api/v1/restaurants/{id}/profile/review-preview", protectRestaurantAdmin(http.HandlerFunc(leadReviewHandler.GetProfileReviewPreview)))
+	mux.Handle("PATCH /api/v1/restaurants/{id}/profile/review", protectRestaurantAdmin(http.HandlerFunc(leadReviewHandler.ReviewProfile)))
+	mux.Handle("PATCH /api/v1/demo-sites/{id}/status", protectInternalAdmin(http.HandlerFunc(leadReviewHandler.SetDemoStatus)))
 	mux.Handle("POST /api/v1/restaurants/{id}/campaigns", protectRestaurantAdmin(http.HandlerFunc(campaignHandler.Create)))
 	mux.Handle("GET /api/v1/restaurants/{id}/campaigns", protectRestaurantAdmin(http.HandlerFunc(campaignHandler.List)))
 	mux.Handle("GET /api/v1/campaigns/{id}", protectInternalAdmin(http.HandlerFunc(campaignHandler.Get)))
 	mux.Handle("POST /api/v1/campaigns/{id}/approve", protectInternalAdmin(http.HandlerFunc(campaignHandler.Approve)))
-	mux.Handle("POST /api/v1/campaigns/{id}/send-step", protectInternalAdmin(http.HandlerFunc(campaignHandler.SendStep)))
+	mux.Handle("POST /api/v1/campaigns/{id}/regenerate", protectInternalAdmin(http.HandlerFunc(campaignHandler.Regenerate)))
 	mux.Handle("POST /api/v1/campaigns/{id}/stop", protectInternalAdmin(http.HandlerFunc(campaignHandler.Stop)))
 	mux.Handle("POST /api/v1/outreach/bulk-send", protectInternalAdmin(http.HandlerFunc(outreachBulkHandler.Trigger)))
 	mux.Handle("GET /api/v1/outreach/bulk-send/status", protectInternalAdmin(http.HandlerFunc(outreachBulkHandler.Status)))
+	mux.Handle("POST /api/v1/scrape-jobs", protectInternalAdmin(http.HandlerFunc(scrapeJobHandler.Trigger)))
+	mux.Handle("GET /api/v1/scrape-jobs", protectInternalAdmin(http.HandlerFunc(scrapeJobHandler.List)))
+	mux.Handle("GET /api/v1/scrape-jobs/{id}", protectInternalAdmin(http.HandlerFunc(scrapeJobHandler.Get)))
+	mux.Handle("POST /api/v1/scrape-jobs/{id}/retry", protectInternalAdmin(http.HandlerFunc(scrapeJobHandler.Retry)))
 
 	mux.HandleFunc("GET /t/click/{token}", trackingHandler.Click)
 	mux.HandleFunc("GET /t/open/{token}", trackingHandler.Open)

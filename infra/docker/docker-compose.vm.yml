@@ -3,6 +3,10 @@ services:
     # Retained as the rollback source after an external DATABASE_URL cutover.
     image: postgres:16-alpine
     restart: unless-stopped
+    # Loopback-only access supports an SSH tunnel for approved administration;
+    # PostgreSQL is never exposed directly on the public interface.
+    ports:
+      - "127.0.0.1:${TUVI_POSTGRES_PORT:-15432}:5432"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-tuvi}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
@@ -40,6 +44,8 @@ services:
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
       REDIS_URL: redis://redis:6379
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
     restart: "no"
@@ -84,6 +90,43 @@ services:
       api:
         condition: service_started
     restart: unless-stopped
+
+  scrape-worker:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.outreach
+    command: ["python", "city_scrape_worker.py"]
+    env_file:
+      - path: ${TUVI_ENV_DIR:-/opt/tuvi/env}/stack.env
+        required: false
+      - path: ${TUVI_ENV_DIR:-/opt/tuvi/env}/ingestion.env
+        required: false
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      api:
+        condition: service_started
+    restart: unless-stopped
+
+  ocr-job:
+    profiles: [jobs]
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.ocr
+    command: ["python", "verify_leads_from_db.py"]
+    env_file:
+      - path: ${TUVI_ENV_DIR:-/opt/tuvi/env}/stack.env
+        required: false
+      - path: ${TUVI_ENV_DIR:-/opt/tuvi/env}/ingestion.env
+        required: false
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
 
   restaurant-services-catalog:
     build:

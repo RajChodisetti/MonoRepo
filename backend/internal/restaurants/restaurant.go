@@ -7,14 +7,18 @@ import (
 )
 
 type Restaurant struct {
-	ID            uuid.UUID
-	Name          string
-	Email         string
-	Status        string
-	IsContacted   bool
-	ShownInterest bool
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ID                    uuid.UUID
+	Name                  string
+	Email                 string
+	Status                string
+	IsContacted           bool
+	ShownInterest         bool
+	EmailSent             bool
+	EmailSendCount        int
+	LastEmailSentAt       *time.Time
+	LastEmailSendSequence *int64
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
 }
 
 type CreateInput struct {

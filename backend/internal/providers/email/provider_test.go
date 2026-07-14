@@ -142,3 +142,52 @@ func TestResendProviderRedirectsRecipient(t *testing.T) {
 		t.Fatalf("RedirectedTo = %q", result.RedirectedTo)
 	}
 }
+
+func TestResendProviderRedactsRecipientFromAPIError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"message":"owner@restaurant.com was rejected"}`))
+	}))
+	defer server.Close()
+
+	provider := emailprovider.NewResendWithClient(config.EmailConfig{
+		APIKey:      "re_test_key",
+		FromAddress: "noreply@tuvisolutions.com",
+	}, server.Client(), server.URL)
+
+	_, err := provider.Send(context.Background(), emailprovider.SendRequest{
+		To:       "owner@restaurant.com",
+		Subject:  "Test",
+		HTMLBody: "<p>Hi</p>",
+	})
+	if err == nil {
+		t.Fatal("Send() error = nil")
+	}
+	if strings.Contains(err.Error(), "owner@restaurant.com") {
+		t.Fatalf("Send() error leaked recipient: %q", err)
+	}
+}
+
+func TestResendProviderDoesNotUseRecipientAsFallbackMessageID(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer server.Close()
+
+	provider := emailprovider.NewResendWithClient(config.EmailConfig{
+		APIKey:      "re_test_key",
+		FromAddress: "noreply@tuvisolutions.com",
+	}, server.Client(), server.URL)
+
+	result, err := provider.Send(context.Background(), emailprovider.SendRequest{
+		To:       "owner@restaurant.com",
+		Subject:  "Test",
+		HTMLBody: "<p>Hi</p>",
+	})
+	if err != nil {
+		t.Fatalf("Send() error = %v", err)
+	}
+	if strings.Contains(result.ProviderMessageID, "owner@restaurant.com") {
+		t.Fatalf("ProviderMessageID leaked recipient: %q", result.ProviderMessageID)
+	}
+}

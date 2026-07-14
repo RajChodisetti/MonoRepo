@@ -4,9 +4,7 @@ import (
 	"bytes"
 	"embed"
 	"fmt"
-	"html"
 	htmltemplate "html/template"
-	"os"
 	"strings"
 	texttemplate "text/template"
 )
@@ -28,8 +26,12 @@ const (
 type OutreachServiceLink struct {
 	Title       string
 	Description string
-	// URL is raw href content (may include tracking placeholders like {{CLICK_URL}}).
-	URL htmltemplate.URL
+	URL         htmltemplate.URL
+}
+
+type OutreachLinkConfig struct {
+	PresentationURL string
+	MarketingURL    string
 }
 
 type OutreachEmailData struct {
@@ -48,54 +50,48 @@ func outreachSubject(restaurantName string) string {
 	return fmt.Sprintf("A live demo for %s — AI receptionist, website & more", name)
 }
 
-func presentationSiteURL() string {
-	if v := strings.TrimSpace(os.Getenv("PRESENTATION_SITE_URL")); v != "" {
-		return v
-	}
-	return defaultPresentationURL
-}
-
-func marketingSiteURL() string {
-	if v := strings.TrimSpace(os.Getenv("PUBLIC_MARKETING_URL")); v != "" {
-		return v
-	}
-	return defaultMarketingURL
-}
-
-func buildOutreachEmailData(restaurantName string) OutreachEmailData {
+func buildOutreachEmailData(restaurantName string, links OutreachLinkConfig) OutreachEmailData {
 	name := strings.TrimSpace(restaurantName)
 	if name == "" {
 		name = "your restaurant"
 	}
+	presentationURL := strings.TrimSpace(links.PresentationURL)
+	if presentationURL == "" {
+		presentationURL = defaultPresentationURL
+	}
+	marketingURL := strings.TrimSpace(links.MarketingURL)
+	if marketingURL == "" {
+		marketingURL = defaultMarketingURL
+	}
 
-	// Use __CLICK_URL__ (not {{CLICK_URL}}) so html/template does not URL-escape braces;
-	// injectOutreachPlaceholders rewrites these after render.
-	demoURL := htmltemplate.URL("__CLICK_URL__")
+	// Use an internal marker so html/template does not URL-escape placeholder
+	// braces; injectOutreachPlaceholders rewrites it after render.
+	reservationDemoURL := htmltemplate.URL("__TEMPLATE_3_URL__")
 	services := []OutreachServiceLink{
 		{
 			Title:       "AI Voice Receptionist",
-			Description: "24/7 calls, bookings & callbacks",
-			URL:         demoURL,
+			Description: "24/7 calls, reservation requests & callbacks",
+			URL:         htmltemplate.URL(presentationURL),
 		},
 		{
 			Title:       "Presentation Websites",
 			Description: "Modern sites from your real menu & photos",
-			URL:         htmltemplate.URL(presentationSiteURL()),
+			URL:         htmltemplate.URL(presentationURL),
 		},
 		{
-			Title:       "Online Reservations",
-			Description: "Guests book tables on your demo site",
-			URL:         demoURL,
+			Title:       "Reservation Requests",
+			Description: "Guests submit table requests on your demo site",
+			URL:         reservationDemoURL,
 		},
 		{
 			Title:       "Custom Apps",
 			Description: "QR ordering, loyalty & more",
-			URL:         htmltemplate.URL(marketingSiteURL()),
+			URL:         htmltemplate.URL(marketingURL),
 		},
 	}
 
 	return OutreachEmailData{
-		RestaurantName: html.EscapeString(name),
+		RestaurantName: name,
 		ClickURL:       placeholderClickURL,
 		UnsubscribeURL: placeholderUnsubscribeURL,
 		AccentFallback: "#d4a853",
@@ -104,7 +100,11 @@ func buildOutreachEmailData(restaurantName string) OutreachEmailData {
 }
 
 func RenderOutreachEmail(restaurantName string) (DraftContent, error) {
-	data := buildOutreachEmailData(restaurantName)
+	return RenderOutreachEmailWithLinks(restaurantName, OutreachLinkConfig{})
+}
+
+func RenderOutreachEmailWithLinks(restaurantName string, links OutreachLinkConfig) (DraftContent, error) {
+	data := buildOutreachEmailData(restaurantName, links)
 
 	htmlTmpl, err := htmltemplate.ParseFS(outreachTemplates, "templates/outreach.html")
 	if err != nil {

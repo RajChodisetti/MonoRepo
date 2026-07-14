@@ -9,11 +9,12 @@ import (
 
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/campaigns"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/jobs"
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/leadprep"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/outreach"
-	emailprovider "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/email"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/config"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/db"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/logger"
+	emailprovider "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/email"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/restaurants"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/store"
 )
@@ -52,8 +53,13 @@ func NewWorker(ctx context.Context) (*WorkerApp, error) {
 		return nil, err
 	}
 
+	leadPreparationService := leadprep.NewService(dataStore.Pool(), cfg.Demo.TokenTTL, cfg.AppURLs)
+	if err := worker.Register(jobs.LeadPrepareJobType, jobs.LeadPrepareHandler(leadPreparationService, log)); err != nil {
+		return nil, err
+	}
+
 	accessService := restaurants.NewService(dataStore.Restaurants, dataStore.Memberships)
-	campaignService := campaigns.NewService(dataStore.Campaigns, dataStore.Demos, accessService, &jobs.CampaignEnqueuer{Queue: queue}, cfg.AppURLs)
+	campaignService := campaigns.NewService(dataStore.Campaigns, dataStore.Demos, accessService, &jobs.CampaignEnqueuer{Queue: queue}, cfg.AppURLs, cfg.Demo.TokenTTL)
 	emailProvider, err := emailprovider.NewFromConfig(cfg.Email, cfg.ZohoMail)
 	if err != nil {
 		return nil, err
@@ -69,7 +75,12 @@ func NewWorker(ctx context.Context) (*WorkerApp, error) {
 	}
 
 	outreachRepo := outreach.NewPostgres(dataStore.Pool())
-	outreachAccountPool, outreachPoolErr := emailprovider.NewAccountPoolFromConfig(cfg.Email, cfg.Outreach)
+	outreachAccountPool, outreachPoolErr := emailprovider.NewPersistentAccountPoolFromConfig(
+		ctx,
+		cfg.Email,
+		cfg.Outreach,
+		outreachRepo,
+	)
 	if outreachPoolErr != nil {
 		log.WarnContext(ctx, "outreach_account_pool_unavailable", "error", outreachPoolErr)
 	}

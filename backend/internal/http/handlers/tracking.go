@@ -98,12 +98,27 @@ func (handler *TrackingHandler) Unsubscribe(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	sendCtx, err := handler.repo.GetSendContext(r.Context(), record.CampaignID)
-	if err == nil && strings.TrimSpace(sendCtx.RestaurantEmail) != "" {
-		_ = handler.repo.AddSuppression(r.Context(), sendCtx.RestaurantEmail, "unsubscribed via link")
+	recipientEmail := strings.ToLower(strings.TrimSpace(record.RecipientEmail))
+	if recipientEmail == "" {
+		handler.writeError(w, http.StatusInternalServerError, "unsubscribe_failed", "Your unsubscribe request could not be saved. Please retry.")
+		return
+	}
+	reason := "unsubscribed via link"
+	if !record.RecipientSnapshot {
+		// Pre-000021 tokens have no immutable recipient history. Preserve the
+		// formerly supported opt-out by suppressing the restaurant's current
+		// normalized address; all newly created tokens use the exact snapshot.
+		reason = "legacy unsubscribe fallback via current restaurant email"
+	}
+	if err := handler.repo.AddSuppression(r.Context(), recipientEmail, reason); err != nil {
+		handler.writeError(w, http.StatusInternalServerError, "unsubscribe_failed", "Your unsubscribe request could not be saved. Please retry.")
+		return
 	}
 
-	meta, _ := json.Marshal(map[string]string{"token": token})
+	meta, _ := json.Marshal(map[string]any{
+		"token":              token,
+		"recipient_snapshot": record.RecipientSnapshot,
+	})
 	_ = handler.repo.InsertEvent(r.Context(), record.CampaignID, record.RestaurantID, campaigns.EventUnsubscribed, meta)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

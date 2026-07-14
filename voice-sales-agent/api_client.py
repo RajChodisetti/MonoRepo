@@ -69,9 +69,13 @@ async def get_table_availability(
                 return _error("Restaurant not found.")
             if resp.status_code == 400:
                 body = resp.json()
-                return _error(body.get("message") or "Invalid availability request.")
+                error = body.get("error") if isinstance(body, dict) else None
+                message = error.get("message") if isinstance(error, dict) else None
+                return _error(message or body.get("message") or "Invalid availability request.")
             resp.raise_for_status()
             data = resp.json()
+            if not isinstance(data, dict):
+                return _error("Availability service returned an invalid response.")
             return {"status": "success", **data}
     except httpx.TimeoutException:
         log.warning("get_table_availability timeout")
@@ -90,13 +94,17 @@ async def put_reservation(restaurant_id: str, body: dict[str, Any]) -> dict[str,
                 return _error("Restaurant not found.")
             if resp.status_code in (400, 409):
                 payload = resp.json()
-                return _error(payload.get("message") or "Could not book that table.")
+                error = payload.get("error") if isinstance(payload, dict) else None
+                message = error.get("message") if isinstance(error, dict) else None
+                return _error(message or payload.get("message") or "Could not submit that table request.")
             resp.raise_for_status()
             data = resp.json()
-            return {"status": "success", **data}
+            if not isinstance(data, dict):
+                return _error("Reservation service returned an invalid response.")
+            return data
     except httpx.TimeoutException:
         log.warning("put_reservation timeout")
-        return _error("Could not complete the booking — the system timed out.")
+        return _error("Could not submit the reservation request — the system timed out.")
     except Exception as exc:
         log.warning("put_reservation failed: %s", exc)
-        return _error("Could not complete the booking right now.")
+        return _error("Could not submit the reservation request right now.")

@@ -35,20 +35,24 @@ func TestCheckEligibilityPassesWhenReady(t *testing.T) {
 	}
 }
 
-func TestCheckBulkEligibilityIgnoresReviewStatus(t *testing.T) {
+func TestCheckBulkEligibilityRequiresApprovedReviewAndCampaign(t *testing.T) {
 	err := campaigns.CheckBulkEligibility(campaigns.BulkEligibilityInput{
 		RestaurantEmail: "owner@example.com",
+		ReviewStatus:    "draft",
 		DemoStatus:      demos.StatusPublished,
+		CampaignStatus:  campaigns.StatusApproved,
 	})
-	if err != nil {
-		t.Fatalf("CheckBulkEligibility() error = %v, want nil", err)
+	if err == nil || !errors.Is(err, campaigns.ErrNotEligible) {
+		t.Fatalf("CheckBulkEligibility() error = %v, want ErrNotEligible", err)
 	}
 }
 
 func TestCheckBulkEligibilityRequiresPublishedDemo(t *testing.T) {
 	err := campaigns.CheckBulkEligibility(campaigns.BulkEligibilityInput{
 		RestaurantEmail: "owner@example.com",
+		ReviewStatus:    "approved",
 		DemoStatus:      demos.StatusDraft,
+		CampaignStatus:  campaigns.StatusApproved,
 	})
 	if err == nil {
 		t.Fatal("CheckBulkEligibility() error = nil, want eligibility error")

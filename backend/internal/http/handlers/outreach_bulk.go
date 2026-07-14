@@ -42,6 +42,10 @@ func (handler *OutreachBulkHandler) Trigger(w http.ResponseWriter, r *http.Reque
 		handler.writeError(w, http.StatusServiceUnavailable, "outreach_not_configured", "Bulk outreach email accounts are not configured.")
 		return
 	}
+	if errors.Is(err, outreach.ErrSendingDisabled) {
+		handler.writeError(w, http.StatusServiceUnavailable, "email_sending_disabled", "Email sending is disabled.")
+		return
+	}
 	if err != nil {
 		handler.writeError(w, http.StatusInternalServerError, "bulk_send_failed", err.Error())
 		return

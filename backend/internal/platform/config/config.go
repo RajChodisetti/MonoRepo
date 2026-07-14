@@ -3,6 +3,8 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -47,8 +49,10 @@ type AppConfig struct {
 }
 
 type AppURLsConfig struct {
-	PublicBaseURL string
-	PublicWebURL  string
+	PublicBaseURL       string
+	PublicWebURL        string
+	PublicMarketingURL  string
+	PresentationSiteURL string
 }
 
 type HTTPConfig struct {
@@ -85,9 +89,12 @@ type EmailConfig struct {
 	DisableSending      bool
 	RedirectTo          string
 	OpenTrackingEnabled bool
+	RequireHTTPSLinks   bool
+	AllowedLinkHosts    []string
 }
 
 type ZohoMailConfig struct {
+	AccountKey   string
 	AccountID    string
 	FromEmail    string
 	Region       string
@@ -98,10 +105,12 @@ type ZohoMailConfig struct {
 }
 
 type OutreachConfig struct {
-	BulkMax           int
-	EmailsPerAccount  int
-	ZohoAccounts      []ZohoMailConfig
-	ZohoAccountsJSON  string
+	BulkMax          int
+	EmailsPerAccount int
+	SendInterval     time.Duration
+	AccountCooldown  time.Duration
+	ZohoAccounts     []ZohoMailConfig
+	ZohoAccountsJSON string
 }
 
 type LLMConfig struct {
@@ -130,8 +139,7 @@ type TokenConfig struct {
 }
 
 type DemoConfig struct {
-	TokenSecret string
-	TokenTTL    time.Duration
+	TokenTTL time.Duration
 }
 
 type JobsConfig struct {
@@ -167,8 +175,10 @@ func Load() (Config, error) {
 			Version: parser.string("APP_VERSION", "dev"),
 		},
 		AppURLs: AppURLsConfig{
-			PublicBaseURL: parser.string("PUBLIC_BASE_URL", "http://localhost:8080"),
-			PublicWebURL:  parser.string("PUBLIC_WEB_URL", "http://localhost:3000"),
+			PublicBaseURL:       parser.string("PUBLIC_BASE_URL", "http://localhost:8080"),
+			PublicWebURL:        parser.string("PUBLIC_WEB_URL", "http://localhost:3000"),
+			PublicMarketingURL:  parser.string("PUBLIC_MARKETING_URL", "http://localhost:3001"),
+			PresentationSiteURL: parser.string("PRESENTATION_SITE_URL", "http://localhost:5500"),
 		},
 		HTTP: HTTPConfig{
 			Addr:               parser.listenAddr(),
@@ -233,8 +243,7 @@ func Load() (Config, error) {
 			AccessTokenTTL: parser.duration("JWT_ACCESS_TOKEN_TTL", 24*time.Hour),
 		},
 		Demo: DemoConfig{
-			TokenSecret: parser.string("DEMO_TOKEN_SECRET", localDevToken),
-			TokenTTL:    parser.duration("DEMO_TOKEN_TTL", 30*24*time.Hour),
+			TokenTTL: parser.duration("DEMO_TOKEN_TTL", 30*24*time.Hour),
 		},
 		Jobs: JobsConfig{
 			BufferSize: parser.int("JOB_BUFFER_SIZE", 32),
@@ -253,6 +262,14 @@ func Load() (Config, error) {
 			GoogleServiceAccountJSON: parser.string("CONSULTATION_GOOGLE_SERVICE_ACCOUNT_JSON", ""),
 			GoogleCalendarDisabled:   parser.bool("CONSULTATION_GOOGLE_CALENDAR_DISABLED", true),
 		},
+	}
+	cfg.Email.RequireHTTPSLinks = cfg.requiresExplicitSecrets()
+	if cfg.App.Env == EnvProduction {
+		cfg.Email.AllowedLinkHosts = []string{
+			"api.tuvisolutions.com",
+			"demo.tuvisolutions.com",
+			"tuvisolutions.com",
+		}
 	}
 
 	if err := parser.join(); err != nil {
@@ -300,9 +317,6 @@ func (c Config) Validate() error {
 	if len(c.Token.Secret) < 32 {
 		errs = append(errs, fmt.Errorf("TOKEN_SECRET must be at least 32 characters"))
 	}
-	if len(c.Demo.TokenSecret) < 32 {
-		errs = append(errs, fmt.Errorf("DEMO_TOKEN_SECRET must be at least 32 characters"))
-	}
 	if c.Demo.TokenTTL <= 0 {
 		errs = append(errs, fmt.Errorf("DEMO_TOKEN_TTL must be positive"))
 	}
@@ -311,6 +325,21 @@ func (c Config) Validate() error {
 	}
 	if c.Jobs.RetryDelay <= 0 {
 		errs = append(errs, fmt.Errorf("JOB_RETRY_DELAY must be positive"))
+	}
+	if c.Outreach.BulkMax < 1 || c.Outreach.BulkMax > 150 {
+		errs = append(errs, fmt.Errorf("OUTREACH_BULK_MAX must be between 1 and 150"))
+	}
+	if c.Outreach.EmailsPerAccount < 1 || c.Outreach.EmailsPerAccount > 40 {
+		errs = append(errs, fmt.Errorf("OUTREACH_EMAILS_PER_ACCOUNT must be between 1 and 40"))
+	}
+	if c.Outreach.SendInterval < time.Second {
+		errs = append(errs, fmt.Errorf("OUTREACH_SEND_INTERVAL must be at least 1s"))
+	}
+	if c.Outreach.AccountCooldown < 24*time.Hour {
+		errs = append(errs, fmt.Errorf("OUTREACH_EMAIL_COOLDOWN must be at least 24h"))
+	}
+	if c.App.Env == EnvProduction && strings.TrimSpace(c.Email.RedirectTo) != "" {
+		errs = append(errs, fmt.Errorf("EMAIL_REDIRECT_TO must be empty in production"))
 	}
 	if strings.TrimSpace(c.Consultations.APIToken) == "" {
 		errs = append(errs, fmt.Errorf("TUVI_API_TOKEN is required"))
@@ -355,9 +384,99 @@ func (c Config) Validate() error {
 	}
 
 	errs = append(errs, c.validateProviders()...)
+	errs = append(errs, c.validateEmailURLs()...)
 	errs = append(errs, c.validateDeployedSecrets()...)
 
 	return errors.Join(errs...)
+}
+
+func (c Config) validateEmailURLs() []error {
+	if c.Email.DisableSending {
+		return nil
+	}
+
+	values := []struct {
+		name  string
+		value string
+	}{
+		{name: "PUBLIC_BASE_URL", value: c.AppURLs.PublicBaseURL},
+		{name: "PUBLIC_WEB_URL", value: c.AppURLs.PublicWebURL},
+		{name: "PUBLIC_MARKETING_URL", value: c.AppURLs.PublicMarketingURL},
+		{name: "PRESENTATION_SITE_URL", value: c.AppURLs.PresentationSiteURL},
+	}
+
+	var errs []error
+	for _, item := range values {
+		parsed, err := url.Parse(strings.TrimSpace(item.value))
+		if err != nil || parsed.Scheme == "" || parsed.Hostname() == "" || parsed.User != nil {
+			errs = append(errs, fmt.Errorf("%s must be an absolute public URL", item.name))
+			continue
+		}
+		if !c.Email.RequireHTTPSLinks {
+			continue
+		}
+		if !strings.EqualFold(parsed.Scheme, "https") {
+			errs = append(errs, fmt.Errorf("%s must use https in %s", item.name, c.App.Env))
+			continue
+		}
+		if isLocalHostname(parsed.Hostname()) {
+			errs = append(errs, fmt.Errorf("%s must not use a loopback or local hostname in %s", item.name, c.App.Env))
+		}
+	}
+	if c.App.Env == EnvProduction {
+		expectedHosts := []struct {
+			name string
+			url  string
+			host string
+		}{
+			{name: "PUBLIC_BASE_URL", url: c.AppURLs.PublicBaseURL, host: "api.tuvisolutions.com"},
+			{name: "PUBLIC_WEB_URL", url: c.AppURLs.PublicWebURL, host: "demo.tuvisolutions.com"},
+			{name: "PUBLIC_MARKETING_URL", url: c.AppURLs.PublicMarketingURL, host: "tuvisolutions.com"},
+			{name: "PRESENTATION_SITE_URL", url: c.AppURLs.PresentationSiteURL, host: "tuvisolutions.com"},
+		}
+		for _, expected := range expectedHosts {
+			parsed, err := url.Parse(strings.TrimSpace(expected.url))
+			if err != nil {
+				continue
+			}
+			if !strings.EqualFold(parsed.Hostname(), expected.host) {
+				errs = append(errs, fmt.Errorf("%s must use %s in production", expected.name, expected.host))
+			}
+			if parsed.Port() != "" {
+				errs = append(errs, fmt.Errorf("%s must not use a custom port in production", expected.name))
+			}
+		}
+		productionPaths := []struct {
+			name string
+			url  string
+			path string
+		}{
+			{name: "PUBLIC_BASE_URL", url: c.AppURLs.PublicBaseURL, path: ""},
+			{name: "PUBLIC_WEB_URL", url: c.AppURLs.PublicWebURL, path: ""},
+			{name: "PUBLIC_MARKETING_URL", url: c.AppURLs.PublicMarketingURL, path: ""},
+			{name: "PRESENTATION_SITE_URL", url: c.AppURLs.PresentationSiteURL, path: "/services/restaurants"},
+		}
+		for _, expected := range productionPaths {
+			parsed, err := url.Parse(strings.TrimSpace(expected.url))
+			if err != nil {
+				continue
+			}
+			path := strings.TrimSuffix(parsed.EscapedPath(), "/")
+			if path != expected.path || parsed.RawQuery != "" || parsed.Fragment != "" {
+				errs = append(errs, fmt.Errorf("%s must use the canonical production path %q without query or fragment", expected.name, expected.path))
+			}
+		}
+	}
+	return errs
+}
+
+func isLocalHostname(host string) bool {
+	host = strings.Trim(strings.ToLower(strings.TrimSpace(host)), "[]")
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") || strings.HasSuffix(host, ".local") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && (ip.IsLoopback() || ip.IsUnspecified())
 }
 
 func (c Config) validateProviders() []error {

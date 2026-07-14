@@ -29,10 +29,11 @@ func TestRenderOutreachEmail(t *testing.T) {
 	}
 	for _, token := range []string{
 		"{{CLICK_URL}}",
+		"{{TEMPLATE_3_URL}}",
 		"{{UNSUBSCRIBE_URL}}",
 		"AI Voice Receptionist",
 		"Presentation Websites",
-		"Online Reservations",
+		"Reservation Requests",
 		"Custom Apps",
 		"http://localhost:5500",
 		"http://localhost:3001",

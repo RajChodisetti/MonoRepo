@@ -12,6 +12,236 @@ Each entry should explain:
 - how the work fits with the rest of the Phase 1 or Phase 2 plan;
 - risks, gaps, or follow-ups.
 
+## 2026-07-14 — Durable City Scrape, OCR, Review, and Outreach Workflow
+
+**Role:** Backend, Security, DevOps, and Documentation Agent
+
+**Delivered:** Implemented the requested workflow as a durable, fail-closed
+pipeline. Migrations `000015`–`000023` add city scrape jobs/grid cells/candidate
+checkpoints, explicit OCR states and claims, automatic draft provenance, audited
+human review gates, PostgreSQL email-account quota state, delivery sequences,
+recoverable worker leases, and immutable per-send recipient attribution for
+delivery and unsubscribe records. The private scrape-job API now creates and
+reports city work. The worker discovers through Google Places first, dynamically
+subdivides saturated grid cells, deduplicates Place IDs, then invokes Apollo only
+for missing owner/work-email details; an Apollo no-match retains the valid Places
+lead. Places and Apollo share one persisted
+500-request window; the job resumes from its saved cell/page/candidate state
+after 24 hours and starts recurring coverage cycles to find newly listed Places.
+Provider-capped leaves subdivide to depth 12 by default and remain visibly
+`coverage_incomplete` rather than falsely completing a city pass.
+
+OCR now transitions through `pending`, `running`, `verified`, `no_images`, and
+`failed`. It refreshes Google Places photo resources just in time, persists
+neither expirable resource names nor short-lived photo URIs, accepts only trusted Google-hosted
+fallback images in unattended operation, and never treats `no_images` as
+verified. Failed unchanged inputs retry after a 24-hour cooldown up to three
+attempts, including a hard cap on repeatedly abandoned stale claims. A verified
+claim transactionally queues reusable idempotent `lead.prepare`,
+which creates only a demo draft and outreach campaign draft. Real delivery
+requires separate audited profile approval, demo publication, campaign
+approval, and an internal administrator starting bulk outreach.
+
+Bulk outreach now uses durable PostgreSQL account state: at most 40 reserved
+attempts per account cycle, automatic account rotation, a 24-hour `available_at`
+cooldown, automatic continuation, global and per-account sequences, and
+delivery leases that fail ambiguous outcomes closed as `send_unknown`. External
+email uses HTTP(S) provider APIs only. Production rendering validates the
+canonical API, demo, marketing, and presentation links before any provider
+call. Each confirmed send retains the delivery attempt's immutable normalized
+recipient and global sequence; legacy unsubscribe tokens use an audited current-
+address fallback so their opt-out links remain usable. A shared per-restaurant
+transaction lock serializes import, preparation, review, campaign state, and
+delivery finalization. The obsolete per-campaign `send-step` route and legacy one-shot ingestion
+entrypoint are retired so they cannot bypass quota/request ledgers. Added ADRs,
+OpenAPI coverage, Compose services/images, environment examples, and the
+operator runbook at `docs/runbooks/lead-scrape-ocr-outreach.md`.
+
+The public reservation flow now binds an idempotency key to the complete request,
+uses each supported Australian city's IANA timezone, handles split and overnight
+hours, returns typed conflicts, and continues to create only `pending` requests.
+
+**Why / Business Value:** This supplies the Phase 1 lead-to-demo-to-reviewed
+outreach loop while controlling provider rate limits, preventing duplicate
+scrapes/sends, preserving work across restarts and cooldowns, and retaining the
+required human approval before contacting a real lead.
+
+**Checks Run:** Applied `gofmt` to changed Go files; `git diff --check`
+passed; Ruby parsed `docs/openapi/openapi.yaml` and
+both Docker Compose YAML files successfully. Independent read-only static
+reviews of the Go workflow, Python workflow, migrations, Compose, OpenAPI, and
+runbook were used to identify and close correctness/safety discrepancies.
+Context7 supplied the current official Google Places Photo Media contract.
+Per the user's instruction, no tests, builds, Python execution, migrations,
+provider calls, containers, or smoke checks were run.
+
+**Deployment / Risk Boundary:** This work exists only in the local worktree.
+No SSH deployment, production migration, Melbourne scrape trigger, OCR run, or
+real email send occurred. Before deployment, back up PostgreSQL, reconcile the
+legacy states listed in the runbook, install migrations in order, configure
+restricted provider credentials, keep email disabled, and re-record every human
+review gate reset by migration `000018`. Deployment, migrations, and real
+outreach remain approval-gated external actions.
+
+The final static consistency pass also made administrator regeneration of an
+automatic demo/campaign draft atomically refresh its verified OCR and current
+profile provenance, preventing an expired-token refresh from retaining stale
+review evidence.
+
+## 2026-07-11 — Tuvi Restaurant Video Delivery Optimized
+
+**Role:** Frontend / DevOps Agent
+
+**Delivered:** Diagnosed the live restaurant-services page and found that it
+eagerly downloaded two below-the-fold MP4s plus PNG posters, totaling about
+40 MB, from the VM at roughly 0.5 MB/s. Transcoded the videos to web-ready
+H.264 720p/24 fps MP4s with fast-start metadata and no unused audio, converted
+the posters to compact JPEGs, and reduced the combined media payload to about
+3.7 MB. Added immutable caching for the versioned media paths. Early iterations
+used viewport-managed playback and then single-active-video coordination, but
+the final user direction was to never pause either clip. Replaced all viewport
+and active-video logic with immediate full-file fetches. The visible loading
+message was subsequently removed and the four optimized assets were uploaded as
+public, immutable objects under the dedicated
+`tuvi/public/restaurant-services/v2/` prefix in the VM-configured DigitalOcean
+Spaces bucket. The website now uses direct CDN URLs, native eager preload, and
+an explicit post-hydration `play()` call; both videos autoplay and loop without
+application-driven pauses. `Tap to start video` remains available only when
+mobile autoplay policy actually rejects muted playback. No storage credentials
+were added to the website or repository. Initial commit `a667c74` plus follow-up
+commits `4e3431f`, `af96fd0`, `fb3d670`, `32a4b78`, `71a3cf1`, `1259950`,
+`69467a7`, and final website release `07ebe32` were
+pushed and deployed by rebuilding only the `tuvi-website` service; API, worker,
+PostgreSQL, migrations, Caddy, and the pending managed-database cutover were not
+restarted.
+
+**Why / Business Value:** The two sales demos now become playable in a few
+seconds on the same VM connection instead of competing over approximately
+40 MB of eager downloads for 17–24 seconds. The page initially loads at most the
+nearby preview, defers the second video until the visitor approaches it, and
+still gives phone users a clear play action when browser policy blocks autoplay.
+This improves the Phase 1 restaurant sales page without changing application or
+database behavior.
+
+**Tests / Checks Run:** TypeScript `tsc --noEmit` passed; both optimized MP4s
+decoded end-to-end with FFmpeg without errors; `git diff --check` passed. The
+clean Node 22 production Docker build compiled, type-checked, generated all
+pages, and recreated the website container successfully. VM loopback returned
+`200` for the page and `206` for byte-range video requests. Public Caddy checks
+returned `200`/`206`, correct `video/mp4` and `image/jpeg` types, exact content
+lengths, `Accept-Ranges`, and `Cache-Control: public, max-age=31536000,
+immutable`. Full public downloads measured 3.76 seconds and 2.51 seconds.
+In-app browser verification confirmed deferred media attachment, ready-state 4,
+active playback after scrolling, no media errors, and no browser console errors.
+The final live verification confirmed no loading label is rendered; both videos
+use direct Spaces CDN URLs, become fully buffered, remain unpaused below the
+fold, and advance together at real time without media or browser-console errors.
+All four CDN objects return the correct MIME types, exact lengths, byte ranges,
+public-read access, and one-year immutable cache headers. Warm-edge full-video
+downloads measured about 0.15 seconds each versus roughly 2.5–3 seconds from the
+VM in the comparison run.
+Context7 was used to confirm Next.js public-asset cache behavior and current
+FFmpeg encoding guidance.
+
+**Build Notes / Rollback:** The workstation's pre-existing Node 23 cache still
+fails Next's build with `Unexpected end of JSON input`, and the repo has no
+ESLint 9 flat config; neither failure is caused by this change. The authoritative
+clean Node 22 VM build passed. The pre-deploy source tree is preserved at
+`/opt/tuvi/MonoRepo.prev-20260711184731`; rebuilding `tuvi-website` from that
+tree restores the previous version. VM release records identify the website as
+`07ebe32`, while the rest of the stack remains `f18ed02` and database cutover
+commit `ed36120` remains pending.
+
+**Risks / Follow-ups:** The assets use a dedicated Tuvi prefix but currently
+share the existing Spaces bucket and upload credential configured on the VM;
+provision a dedicated Tuvi bucket/key when stronger storage-level isolation is
+needed. Runtime delivery is public and credential-free. A browser or operating
+system may still suspend media in a hidden tab or power-saving mode; application
+code no longer pauses it.
+
+## 2026-07-11 — Managed PostgreSQL Cutover Prepared
+
+**Role:** DevOps / Backend / Security Agent
+
+**Delivered:** Audited the VM database topology without exposing credentials.
+Confirmed Tuvi currently uses its dedicated PostgreSQL 16 container/database
+`tuvi_api`, while SustainabilityWise uses managed PostgreSQL 18 database
+`sustainability_wise` with role `sw_api`. Confirmed the managed cluster already
+contains isolated database/role `monorepo`; that role is non-superuser and has
+no database/role creation rights or SustainabilityWise role membership. Updated
+VM Compose so migrate/API/worker honor the supplied `DATABASE_URL`, committed
+and pushed as `ed36120`, synced the pending config to the VM, and created a
+root-only placeholder for the managed connection URI.
+
+**Data Safety:** No SustainabilityWise/EcoAudit/SolarSense schema or data was
+read or changed. The live Tuvi API and worker still use the original source DB
+and remain healthy. A fresh source-only custom-format dump was saved at
+`/opt/tuvi/backups/postgres/tuvi_api-pre-managed-2026-07-11-171439.dump` with
+mode `0600`.
+
+**Checks Run:** Source identity/version/extensions/migrations were audited;
+migrations 1–14 are present, PostgreSQL is 16.14, `pgcrypto` is installed, and
+the database has no restaurant/user records plus one completed job. Managed
+PostgreSQL 18.4 and private-network connectivity from the Tuvi API container
+were verified. Compose validation passed with an external TLS URL. The public
+restaurants API remains `200`; API and worker are running with zero restarts.
+
+**Blocker / Next Step:** The VM does not contain the password for the existing
+managed `monorepo` role, and the SustainabilityWise role correctly cannot create
+or alter roles/databases. Complete `/opt/tuvi/env/managed-db.env` with the
+DigitalOcean private URI, then quiesce writes, take a final dump, restore and
+validate counts/migrations, update `stack.env`, restart, and run isolation/smoke
+checks. Logical database isolation shares the managed cluster's resource and
+failure domain; physical independence would mean retaining the current Tuvi
+Postgres container.
+
+## 2026-07-11 — Full Tuvi VM Redeploy And Corporate Site Cutover
+
+**Role:** DevOps / Frontend Agent
+
+**Delivered:** Fetched `origin/phase1_03/backend` at `95c776b`, created a clean
+release that excluded unrelated local worktree changes, backed up PostgreSQL and
+the previous VM source tree, rebuilt every service in
+`infra/docker/docker-compose.vm.yml`, and deployed the redesigned
+`tuvi-website/app` as the canonical site. Restored the corporate website service
+to the committed VM Compose definition, tracked the Swagger UI entrypoint, and
+mapped Caddy root/www traffic to `127.0.0.1:15174` while preserving API, voice,
+demo, catalog, and unrelated host routes. The reproducible deployment support
+was committed and pushed as `f18ed02`, which is the VM's recorded release.
+
+**Why:** The latest remote release redesigned the corporate website, but the VM
+Compose source no longer contained the service definition needed to rebuild it.
+The deployment needed all MonoRepo services rebuilt and Caddy aligned with the
+new canonical site.
+
+**Business Value:** Tuvi's current corporate design and restaurant-services page
+are now publicly served from the VM, with the API, worker, voice agent, demo
+template, standalone catalog, database, Redis, and API documentation operating
+behind the existing production routing.
+
+**Plan Fit:** Advances Phase 1 production deployment readiness and keeps the
+full VM stack reproducible from source instead of relying on an orphaned website
+container.
+
+**Tests / Checks Run:** `go test ./backend/...` — 115 tests passed;
+`npm --prefix apps/restaurant-services-catalog run build` — passed; VM Docker
+Compose config validation and full `up -d --build` — passed; migration container
+exited `0`; all eight long-running containers are running; Caddy validation and
+reload passed. Public root, www, restaurant services, API root, Swagger UI,
+OpenAPI, public restaurants API, voice readiness, and demo endpoints all returned
+`200`.
+
+**Backups / Rollback:** PostgreSQL backup:
+`/opt/tuvi/backups/postgres/restaurant_platform-2026-07-11-165111.sql`.
+Previous source tree: `/opt/tuvi/MonoRepo.prev-20260711165431`. Previous Caddy
+config: `/etc/caddy/Caddyfile.prev-20260711165727`.
+
+**Risks / Follow-ups:** The workstation's Node 23 build path still produces a
+webpack JSON parsing failure; the supported clean Node 22 Docker build passed on
+the VM. Context7 was used to confirm clean `npm ci`/fresh `.next` Docker build
+guidance. The root VM source directory must remain executable/readable by Caddy
+so static API docs continue to work.
+
 ## 2026-07-08 — Tuvi VM Stack Deployed
 
 **Role:** DevOps / Frontend / Backend Agent
@@ -720,3 +950,96 @@ endpoints (auth, admin, restaurants, members, demo sites, public demo, health).
 Added `docs/openapi/README.md`, `make openapi` validation target, and README/Postman links.
 
 **Checks Run:** `make openapi` — pass
+
+## 2026-07-09 — VM Catalog Redeploy From Latest Local Source
+
+**Role:** DevOps Agent
+
+**Delivered:** Deployed the clean local source from
+`/Users/rajchodisetti/MonoRepo` commit `c4a2146` to `/opt/tuvi/MonoRepo` on VM
+`170.64.154.143`. Rebuilt and restarted the `restaurant-services-catalog`
+container from that source. Updated host Caddy so `tuvisolutions.com` and
+`www.tuvisolutions.com` route to the catalog service on `127.0.0.1:15173`
+instead of the old Tuvi Next website on `127.0.0.1:15174`.
+
+**Why:** Local `http://127.0.0.1:5174/` was serving the latest restaurant
+services catalog, while the VM/public `/services/restaurants` route was still
+coming from the older Next website. Public root and `/services/restaurants`
+needed to use the same latest catalog code.
+
+**Checks Run:** `npm --prefix apps/restaurant-services-catalog run build` —
+pass. `npm --prefix tuvi-website/app run build` — failed locally with webpack
+`Unexpected end of JSON input`, so the Next website was not used for this
+deployment. VM `docker compose ... config` — pass. VM
+`docker compose ... up -d --build --no-deps restaurant-services-catalog` —
+pass. `caddy validate --config /etc/caddy/Caddyfile` — pass.
+
+**Verification:** `https://tuvisolutions.com` and
+`https://tuvisolutions.com/services/restaurants` both return
+`<title>Tuvi Solutions Restaurant Services`. The FAL catalog video endpoint
+returns `content-type: video/mp4`. `https://api.tuvisolutions.com/` and
+`https://api.tuvisolutions.com/docs/` still respond.
+
+**Operational Notes:** Previous VM source tree was preserved as
+`/opt/tuvi/MonoRepo.prev-20260708191646`. The old `tuvi-tuvi-website-1`
+container remains as an orphan but no public Caddy route points to it.
+
+## 2026-07-14 — Places-First Ingestion, Apollo Contact Enrichment, and Outreach Safety Gates
+
+**Role:** Backend, Security, and Documentation Agent
+
+**Delivered:** Reordered scheduled ingestion to bounded, paginated Google Places
+API (New) discovery and Place Details first, followed by targeted Apollo contact
+enrichment only when the resulting lead lacks an owner or contact email. Apollo
+People Search is constrained to an owned business domain and approved
+decision-maker titles; People Match retrieves the selected person's full owner
+details and work email with personal-email and phone reveal disabled. Ambiguous
+free/social domains are skipped. The shared request budget accounts for both
+providers, and both credentials are required while their default stages are
+enabled.
+
+Scheduled ingestion deduplicates by Place ID against PostgreSQL and local
+canonical JSON, requires the database when import is enabled, and loads an
+explicit host env file with correct precedence. Provider credentials are sent in
+headers. Credential-bearing URLs are scrubbed from merged/imported payloads and
+Google photo resource metadata is stored instead. Website email extraction now
+rejects private-network targets, validates manual redirects, limits response
+size, and stays on the business host.
+
+Fixed the Apollo-era dedup bug that skipped newly registered leads before their
+first Places scrape. Added the Places-first/Apollo-enrichment decision ADR and updated environment
+templates, service inventory, runbook, OpenAPI, Phase 1 backlog, Makefile, and
+operator README.
+
+Hardened email automation so bulk jobs only consume individually approved
+campaigns attached to approved, OCR-verified profiles and published demos. Bulk
+sending now obeys the global disable switch, enforces a 150-send/50-per-account
+ceiling, adds a configurable delay, and never creates or auto-approves drafts.
+Disabled or redirected sends produce a `skipped` event, return the campaign to
+`approved`, and do not mark the restaurant contacted. Provider errors and logs
+redact recipient addresses, and provider sends use one job attempt to avoid
+duplicate real-world delivery after a partial state-update failure.
+
+**VM Status:** Inspection found no completed Melbourne ingestion and no usable
+Places/Apollo/database ingestion credentials on the VM. The Python virtual
+environment was prepared, but no Places or Apollo request, database import,
+deployment, or outreach email was triggered. Production still has email sending
+disabled and no configured bulk account pool.
+
+**Checks Run:** `go test ./backend/...` — pass; outreach Python `py_compile` —
+pass; `python -m unittest discover -p '*_test.py'` — 26 pass;
+`python -m pip check` — pass; `make openapi` — valid with two pre-existing lint
+warnings; `bash -n automation/outreach/cron_lead_ingestion.sh` — pass;
+`git diff --check` — pass. `shellcheck` was unavailable locally.
+
+**Business Value / Plan Fit:** Uses stable Place-ID restaurant discovery while
+spending Apollo calls only on missing owner/work-email data, closes credential
+and PII leaks, and restores Phase 1's required human approval boundary before
+external outreach.
+
+**Risks / Follow-ups:** A deployment still requires explicit approval. The VM
+needs a protected, host-reachable `DATABASE_URL`, a workload-restricted Places
+API (New) key, and an Apollo API key before a Melbourne run can start. Apollo
+People Match can consume credits and its match accuracy/yield needs measurement.
+Places does not provide menu items. Google photo rendering requires a future
+server-side photo proxy if those images are exposed publicly.

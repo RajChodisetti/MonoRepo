@@ -120,6 +120,23 @@ func TestLoadRejectsMalformedDuration(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsUnsafeOutreachLimits(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("OUTREACH_BULK_MAX", "151")
+	t.Setenv("OUTREACH_EMAILS_PER_ACCOUNT", "51")
+	t.Setenv("OUTREACH_SEND_INTERVAL", "500ms")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() error = nil, want outreach validation errors")
+	}
+	for _, want := range []string{"OUTREACH_BULK_MAX", "OUTREACH_EMAILS_PER_ACCOUNT", "OUTREACH_SEND_INTERVAL"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("Load() error = %q, want %s validation error", err.Error(), want)
+		}
+	}
+}
+
 func TestLoadRejectsMalformedBoolean(t *testing.T) {
 	clearEnv(t)
 	t.Setenv("EMAIL_DISABLE_SENDING", "maybe")
@@ -258,6 +275,10 @@ func clearEnv(t *testing.T) {
 		"EMAIL_FROM_ADDRESS",
 		"EMAIL_DISABLE_SENDING",
 		"EMAIL_REDIRECT_TO",
+		"OUTREACH_BULK_MAX",
+		"OUTREACH_EMAILS_PER_ACCOUNT",
+		"OUTREACH_SEND_INTERVAL",
+		"OUTREACH_ZOHO_ACCOUNTS_JSON",
 		"LLM_PROVIDER",
 		"LLM_API_KEY",
 		"LLM_MODEL",

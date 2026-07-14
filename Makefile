@@ -3,7 +3,7 @@ COMPOSE_FILE ?= infra/docker/docker-compose.yml
 COMPOSE_DIR ?= infra/docker
 RESTAURANT_SERVICES_CATALOG_DIR ?= apps/restaurant-services-catalog
 
-.PHONY: api worker test fmt db-up db-down db-reset migrate-up migrate-down setup dev seed-admin seed-demo-fixture seed-restaurants-data import-outreach ocr-all sanitize-import verify-leads-ocr import-restaurants-outreach ingest-daily openapi swagger up down logs start stop-all voice-up voice-down voice-logs restaurant-services-catalog-dev restaurant-services-catalog-build
+.PHONY: api worker test fmt db-up db-down db-reset migrate-up migrate-down setup dev seed-admin seed-demo-fixture seed-restaurants-data import-outreach ocr-all sanitize-import verify-leads-ocr ocr-job import-restaurants-outreach ingest-daily openapi swagger up down logs start stop-all voice-up voice-down voice-logs restaurant-services-catalog-dev restaurant-services-catalog-build
 
 OPENAPI_SPEC ?= docs/openapi/openapi.yaml
 OPENAPI_DIR ?= docs/openapi
@@ -50,11 +50,14 @@ verify-leads-ocr: db-up migrate-up
 	(test -d .venv && . .venv/bin/activate; \
 	LEAD_OCR_VERIFICATION_ENABLED=true python verify_leads_from_db.py --force)
 
-# Daily lead ingestion — Apollo fetch + Places scrape + DB import (500 req budget)
-ingest-daily: db-up migrate-up
-	cd automation/outreach && \
-	(test -d .venv && . .venv/bin/activate; \
-	LEAD_INGESTION_ENABLED=true python daily_ingestion.py)
+# Run OCR inside the database-networked Compose job image.
+ocr-job:
+	docker compose -f $(COMPOSE_FILE) --profile stack --profile jobs run --rm ocr-job
+
+# Retired: durable city ingestion must enter through POST /api/v1/scrape-jobs.
+ingest-daily:
+	@echo "ingest-daily is retired; use the private city-scrape API and scrape-worker (see docs/runbooks/lead-scrape-ocr-outreach.md)." >&2
+	@exit 1
 
 # Legacy: Go seed (uses backend/.env DATABASE_URL)
 import-restaurants-outreach: db-up migrate-up
@@ -95,7 +98,7 @@ stop-all:
 	@chmod +x scripts/stop-all.sh
 	@./scripts/stop-all.sh
 
-# VM / Docker: postgres + migrate + api + worker containers
+# VM / Docker stack: postgres + redis + migrate + api + worker + scrape-worker
 up:
 	@chmod +x scripts/up-stack.sh
 	@./scripts/up-stack.sh

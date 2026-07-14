@@ -1,0 +1,30 @@
+# Build from the repository root:
+# docker build -f infra/docker/Dockerfile.outreach .
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+RUN useradd --create-home --uid 10001 outreach
+
+WORKDIR /app/outreach
+
+COPY automation/outreach/requirements.ingestion.txt /tmp/requirements.ingestion.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.ingestion.txt
+
+# Copy only the durable ingestion runtime. Local .env files, generated lead
+# data, reports, and unrelated provider tooling never enter the image.
+COPY automation/outreach/city_scrape_worker.py ./
+COPY automation/outreach/scrape_job_store.py ./
+COPY automation/outreach/env_loader.py ./
+COPY automation/outreach/apollo_enrichment.py ./
+COPY automation/outreach/google_places_scraper.py ./
+COPY automation/outreach/import_to_db.py ./
+COPY automation/outreach/niche_config.py ./
+COPY automation/outreach/request_budget.py ./
+COPY automation/outreach/scrape_safety.py ./
+COPY automation/outreach/tuvi_outreach_agent.py ./
+
+USER outreach
+
+CMD ["python", "city_scrape_worker.py"]

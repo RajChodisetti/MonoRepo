@@ -17,6 +17,9 @@ function TemplateShellInner({
   const searchParams = useSearchParams();
   const templateId = parseTemplateId(searchParams.get("template")) ?? defaultTemplateId;
   const restaurantIndex = parseInt(searchParams.get("id") ?? "0", 10) || 0;
+  const signedSlug = searchParams.get("slug") ?? "";
+  const signedToken = searchParams.get("token") ?? "";
+  const signedDemo = Boolean(signedSlug || signedToken);
 
   useEffect(() => {
     document.documentElement.dataset.template = templateId;
@@ -25,8 +28,10 @@ function TemplateShellInner({
   return (
     <>
       {children}
-      <VoiceAssistantWidget templateId={templateId} restaurantIndex={restaurantIndex} />
-      <SiteWalkthrough templateId={templateId} />
+      {!signedDemo ? (
+        <VoiceAssistantWidget templateId={templateId} restaurantIndex={restaurantIndex} />
+      ) : null}
+      {!signedDemo ? <SiteWalkthrough templateId={templateId} /> : null}
     </>
   );
 }

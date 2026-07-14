@@ -10,6 +10,24 @@ from known_leads import KnownLeadsRegistry
 
 
 class KnownLeadsTest(unittest.TestCase):
+    def test_newly_registered_lead_is_not_mistaken_for_imported(self):
+        registry = KnownLeadsRegistry()
+        lead = {
+            "source": {"person_id": "apollo-new"},
+            "company": {"name": "New Cafe"},
+            "contact": {"email": "new@example.com"},
+        }
+        registry.register_lead_dict(lead)
+        self.assertEqual(registry.should_skip_scrape(lead), (False, ""))
+
+    def test_skip_scrape_when_place_id_is_known(self):
+        registry = KnownLeadsRegistry(place_ids={"place-known"})
+        lead = {
+            "google": {"place_id": "place-known"},
+            "company": {"name": "Known Cafe"},
+        }
+        self.assertEqual(registry.should_skip_scrape(lead), (True, "known_place_id"))
+
     def test_skip_scrape_when_apollo_has_place_id(self):
         registry = KnownLeadsRegistry()
         registry.apollo_ids.add("apollo-1")

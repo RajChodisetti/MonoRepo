@@ -5,11 +5,33 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/config"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/providers/email"
 )
 
 type countingProvider struct {
 	sends int
+}
+
+func TestNewAccountPoolFromConfigRejectsDisabledSending(t *testing.T) {
+	t.Parallel()
+
+	_, err := email.NewAccountPoolFromConfig(
+		config.EmailConfig{Provider: "zoho", DisableSending: true},
+		config.OutreachConfig{
+			BulkMax:          150,
+			EmailsPerAccount: 50,
+			ZohoAccounts: []config.ZohoMailConfig{{
+				AccountID:    "account",
+				ClientID:     "client",
+				ClientSecret: "secret",
+				RefreshToken: "refresh",
+			}},
+		},
+	)
+	if !errors.Is(err, email.ErrSendingDisabled) {
+		t.Fatalf("NewAccountPoolFromConfig() error = %v, want ErrSendingDisabled", err)
+	}
 }
 
 func (provider *countingProvider) Send(ctx context.Context, req email.SendRequest) (email.SendResult, error) {
@@ -45,5 +67,26 @@ func TestAccountPoolRotatesEveryFiftySends(t *testing.T) {
 		if counter.sends != 50 {
 			t.Fatalf("provider %d sends = %d, want 50", index+1, counter.sends)
 		}
+	}
+}
+
+func TestAccountPoolResetStartsANewManualRunAllowance(t *testing.T) {
+	t.Parallel()
+
+	provider := &countingProvider{}
+	pool, err := email.NewAccountPool([]email.Provider{provider}, 1, 1)
+	if err != nil {
+		t.Fatalf("NewAccountPool() error = %v", err)
+	}
+	if _, err := pool.Send(context.Background(), email.SendRequest{To: "lead@example.com", TextBody: "hi"}); err != nil {
+		t.Fatalf("first Send() error = %v", err)
+	}
+	if _, err := pool.Send(context.Background(), email.SendRequest{To: "lead@example.com", TextBody: "hi"}); !errors.Is(err, email.ErrAccountsExhausted) {
+		t.Fatalf("second Send() error = %v, want ErrAccountsExhausted", err)
+	}
+
+	pool.Reset()
+	if _, err := pool.Send(context.Background(), email.SendRequest{To: "lead@example.com", TextBody: "hi"}); err != nil {
+		t.Fatalf("Send() after Reset error = %v", err)
 	}
 }

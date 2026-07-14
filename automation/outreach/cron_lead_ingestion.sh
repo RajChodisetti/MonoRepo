@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Daily lead ingestion cron — fetch, scrape, import with 500-request budget.
+# RETIRED daily Google Places ingestion cron.
+# After migration 000015, daily_ingestion.py refuses to make provider calls;
+# use the durable city-scrape API and scrape-worker instead.
 #
 # Install (daily 02:00 local time):
 #   crontab -e
@@ -29,6 +31,18 @@ if [[ -f "${ROOT}/.env" ]]; then
   set -a
   # shellcheck disable=SC1091
   source "${ROOT}/.env"
+  set +a
+fi
+
+# An explicit host/secret file wins over local development defaults.
+if [[ -n "${INGESTION_ENV_FILE:-}" ]]; then
+  if [[ ! -f "${INGESTION_ENV_FILE}" ]]; then
+    echo "INGESTION_ENV_FILE does not exist" >&2
+    exit 1
+  fi
+  set -a
+  # shellcheck disable=SC1090
+  source "${INGESTION_ENV_FILE}"
   set +a
 fi
 

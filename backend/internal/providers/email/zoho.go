@@ -115,12 +115,12 @@ func (provider *zohoProvider) Send(ctx context.Context, req SendRequest) (SendRe
 		if msg == "" {
 			msg = resp.Status
 		}
-		return SendResult{}, fmt.Errorf("zoho api error (%d): %s", resp.StatusCode, msg)
+		return SendResult{}, fmt.Errorf("zoho api error (%d): %s", resp.StatusCode, redactEmailAddresses(msg))
 	}
 
 	messageID := strings.TrimSpace(parsed.Data.MessageID)
 	if messageID == "" {
-		messageID = "zoho:" + originalTo
+		messageID = "zoho:unavailable"
 	}
 
 	result := SendResult{ProviderMessageID: messageID}

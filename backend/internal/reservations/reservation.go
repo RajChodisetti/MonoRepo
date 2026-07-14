@@ -2,9 +2,15 @@ package reservations
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
+)
+
+var (
+	ErrSlotUnavailable       = errors.New("selected slot is not available")
+	ErrClientRequestConflict = errors.New("client_request_id is already bound to a different reservation request")
 )
 
 const (
@@ -61,4 +67,27 @@ type Repository interface {
 	CountBySlot(ctx context.Context, restaurantID uuid.UUID, date time.Time, slotTime string) (int, error)
 	GetOpeningHours(ctx context.Context, restaurantID uuid.UUID) (map[string]string, error)
 	RestaurantExists(ctx context.Context, restaurantID uuid.UUID) (bool, error)
+}
+
+// TimezoneRepository is optional so existing Repository implementations remain
+// compatible. Production repositories implement it to evaluate availability in
+// the restaurant's local Australian timezone.
+type TimezoneRepository interface {
+	GetRestaurantTimezone(ctx context.Context, restaurantID uuid.UUID) (string, error)
+}
+
+func reservationMatchesInput(record Reservation, input CreateInput) bool {
+	source := input.Source
+	if source == "" {
+		source = SourceVoiceAgent
+	}
+
+	return record.GuestName == input.GuestName &&
+		record.GuestPhone == input.GuestPhone &&
+		record.GuestEmail == input.GuestEmail &&
+		record.PartySize == input.PartySize &&
+		record.ReservationDate.Format("2006-01-02") == input.ReservationDate.Format("2006-01-02") &&
+		record.ReservationTime == input.ReservationTime &&
+		record.Source == source &&
+		record.Notes == input.Notes
 }

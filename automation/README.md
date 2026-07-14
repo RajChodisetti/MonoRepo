@@ -2,15 +2,16 @@
 
 ## Restaurant lead & outreach pipelines
 
-See **[outreach/README.md](outreach/README.md)** for Apollo lead fetch, Google Places scraping, city pipelines, and email outreach scripts.
+See **[outreach/README.md](outreach/README.md)** for the durable Places-first
+city worker with targeted Apollo contact enrichment, OCR preparation, and the
+remaining legacy/manual lead tools.
 
-```bash
-cd automation/outreach
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env
-python city_pipeline.py --city Sydney --total 100
-```
+Production city work starts through the private
+`POST /api/v1/scrape-jobs` endpoint and is consumed by the long-running
+`scrape-worker`; it must not be started through `city_pipeline.py` or the
+retired one-shot cron path. Follow
+**[the scrape/OCR/outreach runbook](../docs/runbooks/lead-scrape-ocr-outreach.md)**
+for setup and operation. `city_pipeline.py` remains legacy/manual tooling only.
 
 ---
 

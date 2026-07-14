@@ -4,38 +4,6 @@ RESTAURANT_TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "demo_book_table",
-            "description": (
-                "Complete a demo table booking after collecting party size, date, and time "
-                "from the guest. Call ONLY when all three are known — never on the first request."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "party_size": {
-                        "type": "integer",
-                        "description": "Number of guests dining.",
-                    },
-                    "date": {
-                        "type": "string",
-                        "description": "Reservation date in YYYY-MM-DD format.",
-                    },
-                    "time": {
-                        "type": "string",
-                        "description": "Reservation time, e.g. 19:00, 7:00 PM, or 7pm.",
-                    },
-                    "guest_name": {
-                        "type": "string",
-                        "description": "Name for the booking if provided.",
-                    },
-                },
-                "required": ["party_size", "date", "time"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
             "name": "check_table_availability",
             "description": (
                 "Check available table times for a date and party size. "
@@ -62,9 +30,9 @@ RESTAURANT_TOOLS = [
         "function": {
             "name": "book_table_reservation",
             "description": (
-                "Submit a table reservation after the guest confirms name, phone, and slot. "
+                "Submit a pending table request after the guest provides name, phone, and slot. "
                 "Use the exact slot ISO string returned by check_table_availability. "
-                "Returns a 6-character confirmation_code to share with the guest."
+                "Returns status pending, reservation_id, and a message; it does not confirm the table."
             ),
             "parameters": {
                 "type": "object",

@@ -18,12 +18,15 @@ import (
 )
 
 type Service struct {
-	repo         Repository
-	demos        demos.Repository
-	access       *restaurants.Service
-	enqueuer     SendJobEnqueuer
-	publicBase   string
-	publicWebURL string
+	repo                Repository
+	demos               demos.Repository
+	access              *restaurants.Service
+	enqueuer            SendJobEnqueuer
+	publicBase          string
+	publicWebURL        string
+	presentationSiteURL string
+	marketingSiteURL    string
+	demoTokenTTL        time.Duration
 }
 
 func NewService(
@@ -32,14 +35,22 @@ func NewService(
 	access *restaurants.Service,
 	enqueuer SendJobEnqueuer,
 	urls config.AppURLsConfig,
+	demoTokenTTL ...time.Duration,
 ) *Service {
+	tokenTTL := 30 * 24 * time.Hour
+	if len(demoTokenTTL) > 0 && demoTokenTTL[0] > 0 {
+		tokenTTL = demoTokenTTL[0]
+	}
 	return &Service{
-		repo:         repo,
-		demos:        demosRepo,
-		access:       access,
-		enqueuer:     enqueuer,
-		publicBase:   strings.TrimRight(urls.PublicBaseURL, "/"),
-		publicWebURL: strings.TrimRight(urls.PublicWebURL, "/"),
+		repo:                repo,
+		demos:               demosRepo,
+		access:              access,
+		enqueuer:            enqueuer,
+		publicBase:          strings.TrimRight(urls.PublicBaseURL, "/"),
+		publicWebURL:        strings.TrimRight(urls.PublicWebURL, "/"),
+		presentationSiteURL: strings.TrimRight(urls.PresentationSiteURL, "/"),
+		marketingSiteURL:    strings.TrimRight(urls.PublicMarketingURL, "/"),
+		demoTokenTTL:        tokenTTL,
 	}
 }
 
@@ -58,34 +69,40 @@ func (service *Service) CreateDraft(ctx context.Context, principal auth.Principa
 	if demoSite.RestaurantID != input.RestaurantID {
 		return Campaign{}, repository.ErrNotFound
 	}
+	demoToken := strings.TrimSpace(input.DemoToken)
+	if demoToken == "" || demos.CheckDemoToken(demoSite.TokenHash, demoToken) != nil {
+		return Campaign{}, fmt.Errorf("%w: demo token does not match the selected demo", ErrNotEligible)
+	}
+	if demoSite.ExpiresAt != nil && !demoSite.ExpiresAt.After(time.Now().UTC()) {
+		return Campaign{}, fmt.Errorf("%w: demo link has expired and must be regenerated", ErrNotEligible)
+	}
 
 	profileCtx, err := service.repo.GetRestaurantContext(ctx, input.RestaurantID)
 	if err != nil {
 		return Campaign{}, err
 	}
 
-	siteIndex, err := service.repo.GetSiteIndexByRestaurantID(ctx, input.RestaurantID)
-	if err != nil {
-		return Campaign{}, err
-	}
-
-	campaignType := strings.TrimSpace(input.CampaignType)
+	campaignType := strings.ToLower(strings.TrimSpace(input.CampaignType))
 	if campaignType == "" {
 		campaignType = TypeOutreach
 	}
+	if campaignType != TypeOutreach {
+		return Campaign{}, ErrUnsupportedType
+	}
 
 	draft := BuildDraft(DraftInput{
-		RestaurantName: profileCtx.RestaurantName,
-		SiteIndex:      siteIndex,
-		DemoWebURL:     service.publicWebURL,
-		DemoSlug:       demoSite.Slug,
-		DemoToken:      strings.TrimSpace(input.DemoToken),
+		RestaurantName:      profileCtx.RestaurantName,
+		DemoWebURL:          service.publicWebURL,
+		DemoSlug:            demoSite.Slug,
+		DemoToken:           demoToken,
+		PresentationSiteURL: service.presentationSiteURL,
+		MarketingSiteURL:    service.marketingSiteURL,
 	})
 
 	return service.repo.Create(ctx, CreateInput{
 		RestaurantID: input.RestaurantID,
 		DemoSiteID:   input.DemoSiteID,
-		DemoToken:    strings.TrimSpace(input.DemoToken),
+		DemoToken:    demoToken,
 		CampaignType: campaignType,
 	}, draft)
 }
@@ -118,7 +135,12 @@ func (service *Service) GetByID(ctx context.Context, principal auth.Principal, c
 	return campaign, events, nil
 }
 
-func (service *Service) Approve(ctx context.Context, principal auth.Principal, campaignID uuid.UUID) (Campaign, error) {
+func (service *Service) Approve(
+	ctx context.Context,
+	principal auth.Principal,
+	campaignID uuid.UUID,
+	expectedUpdatedAt time.Time,
+) (Campaign, error) {
 	campaign, err := service.repo.GetByID(ctx, campaignID)
 	if err != nil {
 		return Campaign{}, err
@@ -129,10 +151,98 @@ func (service *Service) Approve(ctx context.Context, principal auth.Principal, c
 	if !auth.IsInternalAdmin(principal.Role) {
 		return Campaign{}, restaurants.ErrForbidden
 	}
+	if expectedUpdatedAt.IsZero() || !campaign.UpdatedAt.Equal(expectedUpdatedAt) {
+		return Campaign{}, ErrStaleReview
+	}
 	if campaign.Status == StatusStopped {
 		return Campaign{}, ErrAlreadyStopped
 	}
-	return service.repo.Approve(ctx, campaignID, principal.UserID)
+	alreadyAudited := campaign.Status == StatusApproved && campaign.ApprovedAt != nil && campaign.ApprovedBy != nil
+	if campaign.Status != StatusDraft && campaign.Status != StatusApproved {
+		return Campaign{}, fmt.Errorf("%w: only a draft campaign can be approved", ErrNotEligible)
+	}
+	demoSite, err := service.demos.GetByID(ctx, campaign.DemoSiteID)
+	if err != nil {
+		return Campaign{}, err
+	}
+	if demoSite.RestaurantID != campaign.RestaurantID {
+		return Campaign{}, repository.ErrNotFound
+	}
+	if demoSite.ExpiresAt != nil && !demoSite.ExpiresAt.After(time.Now().UTC()) {
+		return Campaign{}, fmt.Errorf("%w: demo link has expired and must be regenerated", ErrNotEligible)
+	}
+	if strings.TrimSpace(campaign.DemoToken) == "" || demos.CheckDemoToken(demoSite.TokenHash, campaign.DemoToken) != nil {
+		return Campaign{}, fmt.Errorf("%w: campaign demo token is no longer valid", ErrNotEligible)
+	}
+	if alreadyAudited {
+		return campaign, nil
+	}
+	return service.repo.Approve(ctx, campaignID, principal.UserID, expectedUpdatedAt)
+}
+
+// RegenerateDraft rotates the opaque demo token and rebuilds the current email
+// content. It is deliberately limited to a draft demo and a draft/approved
+// campaign, and always clears campaign approval so the changed artifact must be
+// reviewed again before outreach.
+func (service *Service) RegenerateDraft(ctx context.Context, principal auth.Principal, campaignID uuid.UUID) (Campaign, error) {
+	campaign, err := service.repo.GetByID(ctx, campaignID)
+	if err != nil {
+		return Campaign{}, err
+	}
+	if err := service.access.CanAccessRestaurant(ctx, principal, campaign.RestaurantID); err != nil {
+		return Campaign{}, err
+	}
+	if !auth.IsInternalAdmin(principal.Role) {
+		return Campaign{}, restaurants.ErrForbidden
+	}
+	if campaign.CampaignType != TypeOutreach {
+		return Campaign{}, ErrUnsupportedType
+	}
+	if campaign.Status != StatusDraft && campaign.Status != StatusApproved {
+		return Campaign{}, fmt.Errorf("%w: only a draft or approved campaign can be regenerated", ErrNotEligible)
+	}
+
+	demoSite, err := service.demos.GetByID(ctx, campaign.DemoSiteID)
+	if err != nil {
+		return Campaign{}, err
+	}
+	if demoSite.RestaurantID != campaign.RestaurantID {
+		return Campaign{}, repository.ErrNotFound
+	}
+	if demoSite.Status != demos.StatusDraft {
+		return Campaign{}, fmt.Errorf("%w: unpublish the demo before regenerating its token", ErrNotEligible)
+	}
+
+	profileCtx, err := service.repo.GetRestaurantContext(ctx, campaign.RestaurantID)
+	if err != nil {
+		return Campaign{}, err
+	}
+	token, err := demos.GenerateDemoToken()
+	if err != nil {
+		return Campaign{}, err
+	}
+	tokenHash, err := demos.HashDemoToken(token)
+	if err != nil {
+		return Campaign{}, err
+	}
+	expiresAt := time.Now().UTC().Add(service.demoTokenTTL)
+	draft := BuildDraft(DraftInput{
+		RestaurantName:      profileCtx.RestaurantName,
+		DemoWebURL:          service.publicWebURL,
+		DemoSlug:            demoSite.Slug,
+		DemoToken:           token,
+		PresentationSiteURL: service.presentationSiteURL,
+		MarketingSiteURL:    service.marketingSiteURL,
+	})
+	return service.repo.RegenerateDraft(
+		ctx,
+		campaign.ID,
+		draft,
+		token,
+		tokenHash,
+		&expiresAt,
+		principal.UserID,
+	)
 }
 
 func (service *Service) Stop(ctx context.Context, principal auth.Principal, campaignID uuid.UUID, reason string) (Campaign, error) {
@@ -166,61 +276,36 @@ func (service *Service) SendStep(ctx context.Context, principal auth.Principal, 
 	if campaign.Status == StatusStopped {
 		return Campaign{}, ErrAlreadyStopped
 	}
-
-	sendCtx, err := service.repo.GetSendContext(ctx, campaignID)
-	if err != nil {
-		return Campaign{}, err
+	if campaign.CampaignType != TypeOutreach {
+		return Campaign{}, ErrUnsupportedType
 	}
-	suppressed, err := service.repo.IsSuppressed(ctx, sendCtx.RestaurantEmail)
-	if err != nil {
-		return Campaign{}, err
-	}
-	if err := CheckEligibility(EligibilityInput{
-		RestaurantEmail: sendCtx.RestaurantEmail,
-		ReviewStatus:    sendCtx.ReviewStatus,
-		DemoStatus:      sendCtx.DemoStatus,
-		CampaignStatus:  campaign.Status,
-		Suppressed:      suppressed,
-	}); err != nil {
-		return Campaign{}, err
-	}
-
-	updated, err := service.repo.MarkSending(ctx, campaignID, step)
-	if err != nil {
-		return Campaign{}, err
-	}
-
-	if err := service.enqueuer.EnqueueSendStep(ctx, campaignID, step); err != nil {
-		return Campaign{}, fmt.Errorf("enqueue email send job: %w", err)
-	}
-
-	return updated, nil
+	return Campaign{}, ErrOutreachRequiresBulk
 }
 
 func (service *Service) BuildTrackingURLs(ctx context.Context, campaign Campaign, sendCtx SendContext) (TrackingURLs, error) {
-	siteIndex, err := service.repo.GetSiteIndexByRestaurantID(ctx, campaign.RestaurantID)
+	demoSite, err := service.demos.GetByID(ctx, campaign.DemoSiteID)
 	if err != nil {
 		return TrackingURLs{}, err
 	}
-
+	if demoSite.RestaurantID != campaign.RestaurantID {
+		return TrackingURLs{}, fmt.Errorf("%w: campaign demo does not belong to the restaurant", ErrNotEligible)
+	}
+	if demoSite.Status != demos.StatusPublished || sendCtx.DemoStatus != demos.StatusPublished {
+		return TrackingURLs{}, fmt.Errorf("%w: demo site is not published", ErrNotEligible)
+	}
+	if demoSite.ExpiresAt != nil && !demoSite.ExpiresAt.After(time.Now().UTC()) {
+		return TrackingURLs{}, fmt.Errorf("%w: demo link has expired and must be regenerated and republished", ErrNotEligible)
+	}
 	token := strings.TrimSpace(campaign.DemoToken)
-	template1Target := buildTemplatePreviewURL(service.publicWebURL, siteIndex, "1", token)
-	template2Target := buildTemplatePreviewURL(service.publicWebURL, siteIndex, "2", token)
-	template3Target := buildTemplatePreviewURL(service.publicWebURL, siteIndex, "3", token)
+	if token == "" || demos.CheckDemoToken(demoSite.TokenHash, token) != nil {
+		return TrackingURLs{}, fmt.Errorf("%w: campaign demo token is no longer valid", ErrNotEligible)
+	}
+
+	template1Target := buildTokenGatedDemoPreviewURL(service.publicWebURL, demoSite.Slug, token, "1")
+	template2Target := buildTokenGatedDemoPreviewURL(service.publicWebURL, demoSite.Slug, token, "2")
+	template3Target := buildTokenGatedDemoPreviewURL(service.publicWebURL, demoSite.Slug, token, "3")
 
 	clickToken, err := newTrackingToken()
-	if err != nil {
-		return TrackingURLs{}, err
-	}
-	template1Token, err := newTrackingToken()
-	if err != nil {
-		return TrackingURLs{}, err
-	}
-	template2Token, err := newTrackingToken()
-	if err != nil {
-		return TrackingURLs{}, err
-	}
-	template3Token, err := newTrackingToken()
 	if err != nil {
 		return TrackingURLs{}, err
 	}
@@ -234,15 +319,55 @@ func (service *Service) BuildTrackingURLs(ctx context.Context, campaign Campaign
 	}
 
 	demoSiteID := campaign.DemoSiteID
+	recipientEmail := strings.ToLower(strings.TrimSpace(sendCtx.RestaurantEmail))
+	if recipientEmail == "" {
+		return TrackingURLs{}, fmt.Errorf("%w: outreach recipient is empty", ErrNotEligible)
+	}
 	expires := time.Now().UTC().Add(30 * 24 * time.Hour)
+	if demoSite.ExpiresAt != nil && demoSite.ExpiresAt.Before(expires) {
+		expires = *demoSite.ExpiresAt
+	}
 
 	tokens := []TrackingToken{
-		{Token: clickToken, CampaignID: campaign.ID, RestaurantID: campaign.RestaurantID, DemoSiteID: &demoSiteID, TokenType: TokenClick, TargetURL: template1Target, ExpiresAt: &expires},
-		{Token: template1Token, CampaignID: campaign.ID, RestaurantID: campaign.RestaurantID, DemoSiteID: &demoSiteID, TokenType: TokenClick, TargetURL: template1Target, ExpiresAt: &expires},
-		{Token: template2Token, CampaignID: campaign.ID, RestaurantID: campaign.RestaurantID, DemoSiteID: &demoSiteID, TokenType: TokenClick, TargetURL: template2Target, ExpiresAt: &expires},
-		{Token: template3Token, CampaignID: campaign.ID, RestaurantID: campaign.RestaurantID, DemoSiteID: &demoSiteID, TokenType: TokenClick, TargetURL: template3Target, ExpiresAt: &expires},
-		{Token: openToken, CampaignID: campaign.ID, RestaurantID: campaign.RestaurantID, DemoSiteID: &demoSiteID, TokenType: TokenOpen, TargetURL: "", ExpiresAt: &expires},
-		{Token: unsubToken, CampaignID: campaign.ID, RestaurantID: campaign.RestaurantID, DemoSiteID: &demoSiteID, TokenType: TokenUnsubscribe, TargetURL: "", ExpiresAt: &expires},
+		{Token: clickToken, CampaignID: campaign.ID, RestaurantID: campaign.RestaurantID, DemoSiteID: &demoSiteID, TokenType: TokenClick, TargetURL: template1Target, RecipientEmail: recipientEmail, ExpiresAt: &expires},
+		{Token: openToken, CampaignID: campaign.ID, RestaurantID: campaign.RestaurantID, DemoSiteID: &demoSiteID, TokenType: TokenOpen, TargetURL: "", RecipientEmail: recipientEmail, ExpiresAt: &expires},
+		// Opt-out links must remain usable after the demo/click preview expires.
+		{Token: unsubToken, CampaignID: campaign.ID, RestaurantID: campaign.RestaurantID, DemoSiteID: &demoSiteID, TokenType: TokenUnsubscribe, TargetURL: "", RecipientEmail: recipientEmail, ExpiresAt: nil},
+	}
+
+	base := service.publicBase
+	if base == "" {
+		base = "http://localhost:8080"
+	}
+	urls := TrackingURLs{
+		Click:       base + "/t/click/" + clickToken,
+		Template1:   base + "/t/click/" + clickToken,
+		Open:        base + "/t/open/" + openToken,
+		Unsubscribe: base + "/t/unsubscribe/" + unsubToken,
+	}
+
+	content := campaign.BodyHTML + "\n" + campaign.BodyText
+	if strings.Contains(content, placeholderTemplate2URL) {
+		template2Token, err := newTrackingToken()
+		if err != nil {
+			return TrackingURLs{}, err
+		}
+		tokens = append(tokens, TrackingToken{
+			Token: template2Token, CampaignID: campaign.ID, RestaurantID: campaign.RestaurantID,
+			DemoSiteID: &demoSiteID, TokenType: TokenClick, TargetURL: template2Target, RecipientEmail: recipientEmail, ExpiresAt: &expires,
+		})
+		urls.Template2 = base + "/t/click/" + template2Token
+	}
+	if strings.Contains(content, placeholderTemplate3URL) {
+		template3Token, err := newTrackingToken()
+		if err != nil {
+			return TrackingURLs{}, err
+		}
+		tokens = append(tokens, TrackingToken{
+			Token: template3Token, CampaignID: campaign.ID, RestaurantID: campaign.RestaurantID,
+			DemoSiteID: &demoSiteID, TokenType: TokenClick, TargetURL: template3Target, RecipientEmail: recipientEmail, ExpiresAt: &expires,
+		})
+		urls.Template3 = base + "/t/click/" + template3Token
 	}
 	for _, tokenRecord := range tokens {
 		if err := service.repo.CreateTrackingToken(ctx, tokenRecord); err != nil {
@@ -250,18 +375,7 @@ func (service *Service) BuildTrackingURLs(ctx context.Context, campaign Campaign
 		}
 	}
 
-	base := service.publicBase
-	if base == "" {
-		base = "http://localhost:8080"
-	}
-	return TrackingURLs{
-		Click:       base + "/t/click/" + clickToken,
-		Template1:   base + "/t/click/" + template1Token,
-		Template2:   base + "/t/click/" + template2Token,
-		Template3:   base + "/t/click/" + template3Token,
-		Open:        base + "/t/open/" + openToken,
-		Unsubscribe: base + "/t/unsubscribe/" + unsubToken,
-	}, nil
+	return urls, nil
 }
 
 func newTrackingToken() (string, error) {

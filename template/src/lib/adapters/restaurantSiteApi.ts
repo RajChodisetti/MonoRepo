@@ -69,6 +69,27 @@ export type SiteRestaurantList = {
   restaurants: { index: number; id: string; name: string; place_id?: string; city?: string }[];
 };
 
+export type SignedDemoPayload = {
+  restaurant_id: string;
+  restaurant_name: string;
+  cuisine?: string;
+  hero?: string;
+  hours?: Record<string, string>;
+  address?: string;
+  phone?: string;
+  menu_sections?: {
+    name?: string;
+    items?: {
+      name: string;
+      description?: string;
+      price?: string;
+      image_url?: string;
+    }[];
+  }[];
+  reservation_cta?: string;
+  ai_receptionist_cta?: string;
+};
+
 function apiBase(): string {
   return process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") || "";
 }
@@ -281,6 +302,60 @@ export function adaptSiteContent(data: ApiSiteContent): RestaurantContent {
     })),
     experienceCards: buildExperienceCards(data, poster),
   };
+}
+
+function adaptSignedDemoPayload(payload: SignedDemoPayload, fallbackIndex: number): RestaurantContent {
+  const restaurantId = payload.restaurant_id?.trim();
+  if (
+    !restaurantId ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      restaurantId,
+    ) ||
+    restaurantId === "00000000-0000-0000-0000-000000000000"
+  ) {
+    throw new Error("Signed demo payload has no valid restaurant identity.");
+  }
+  const menuItems = (payload.menu_sections || []).flatMap((section) =>
+    (section.items || []).map((item) => ({
+      ...item,
+      category: section.name || "Menu",
+    })),
+  );
+  const hero = payload.hero || "";
+  return adaptSiteContent({
+    index: fallbackIndex,
+    restaurant_id: restaurantId,
+    name: payload.restaurant_name,
+    cuisines: payload.cuisine ? [payload.cuisine] : [],
+    phone: payload.phone,
+    address: payload.address,
+    hours: payload.hours || {},
+    thumbnail: hero,
+    menu_items: menuItems,
+    gallery_images: hero
+      ? [{ url: hero, thumbnail_url: hero, image_type: "food_photo" }]
+      : [],
+  });
+}
+
+export async function fetchSignedDemo(
+  slug: string,
+  token: string,
+  index: number,
+): Promise<RestaurantContent | null> {
+  const base = apiBase();
+  if (!base || !slug.trim() || !token.trim()) return null;
+  try {
+    const query = new URLSearchParams({ token });
+    const res = await fetch(
+      `${base}/api/public/v1/demo/${encodeURIComponent(slug)}?${query.toString()}`,
+      { cache: "no-store" },
+    );
+    if (!res.ok) return null;
+    return adaptSignedDemoPayload((await res.json()) as SignedDemoPayload, index);
+  } catch {
+    return null;
+  }
 }
 
 export async function fetchSiteRestaurantList(): Promise<SiteRestaurantList | null> {

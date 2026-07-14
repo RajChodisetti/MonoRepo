@@ -1,7 +1,7 @@
 # VM Deployment Plan
 
-Date: 2026-07-11
-Status: VM stack deployed; public DNS active
+Date: 2026-07-14
+Status: VM stack deployed; durable scrape/OCR/outreach workflow pending controlled rollout
 
 ## Goal
 
@@ -25,8 +25,9 @@ The repo already has these deployable surfaces:
 | Voice Redis | Compose service | `redis:7-alpine` | Persistent Docker volume `voice_sales_redis_data` |
 | Restaurant services website | `apps/restaurant-services-catalog` | Vite static build | Containerized and exposed on VM loopback |
 | Tuvi corporate website | `tuvi-website/app` | Next.js app | Canonical public website, containerized on VM loopback |
-| Restaurant demo template | `template` | Next.js app on `3000` | Runtime depends on main API and voice agent; currently not in VM Compose |
-| Automation jobs | `automation/outreach` | Python scripts | One-shot/manual jobs; not a long-running web service |
+| Restaurant demo template | `template` | Next.js app on `3000` | Containerized in VM Compose and exposed only on VM loopback |
+| City scrape worker | `automation/outreach/city_scrape_worker.py` | Python worker in Docker | Long-running, database-backed poller with no public port |
+| OCR job | `automation/outreach/verify_leads_from_db.py` | One-shot Python job in Docker | Compose `jobs` profile; invoke manually or from a non-overlapping host schedule |
 
 Existing commands:
 
@@ -38,15 +39,20 @@ make voice-up
 make voice-logs
 make voice-down
 make restaurant-services-catalog-build
+make ocr-job
 make test
 ```
 
-The local Compose stack starts only:
+The application Compose stack starts:
 
 ```text
-postgres -> migrate -> api -> worker
-voice-sales-redis -> voice-sales-agent
+postgres, redis -> migrate -> api -> worker
+postgres, api -> scrape-worker
+redis, api -> voice-agent
 ```
+
+`ocr-job` is intentionally one-shot and is not started by the default service
+set. Run it through the `jobs` profile or a host timer/cron entry.
 
 The VM deployment adds `infra/docker/docker-compose.vm.yml`,
 `Dockerfile.catalog`, `Dockerfile.template`, and `Caddyfile.tuvi.example`.
@@ -125,28 +131,111 @@ APP_ENV=production
 APP_NAME=restaurant-platform
 HTTP_ADDR=:8080
 PUBLIC_BASE_URL=https://api.tuvisolutions.com
-PUBLIC_WEB_URL=https://tuvisolutions.com
+PUBLIC_WEB_URL=https://demo.tuvisolutions.com
+PUBLIC_MARKETING_URL=https://tuvisolutions.com
+PRESENTATION_SITE_URL=https://tuvisolutions.com/services/restaurants
 CORS_ALLOWED_ORIGINS=https://tuvisolutions.com,https://www.tuvisolutions.com,https://demo.tuvisolutions.com
-DATABASE_URL=postgres://postgres:<password>@postgres:5432/restaurant_platform?sslmode=disable
+POSTGRES_USER=tuvi
+POSTGRES_PASSWORD=<strong password>
+POSTGRES_DB=restaurant_platform
+DATABASE_URL=postgres://tuvi:<URL-encoded same password>@postgres:5432/restaurant_platform?sslmode=disable
 REDIS_URL=redis://redis:6379
 TOKEN_SECRET=<32+ chars>
-DEMO_TOKEN_SECRET=<32+ chars>
+DEMO_TOKEN_TTL=720h
 TUVI_API_TOKEN=<32+ chars>
+CALL_API_SECRET=<same server-side value used by voice/template services>
 CONSULTATION_NOTIFY_EMAIL=<team email>
 CONSULTATION_TIMEZONE=Australia/Sydney
 CONSULTATION_GOOGLE_CALENDAR_DISABLED=true
 EMAIL_PROVIDER=disabled
 EMAIL_DISABLE_SENDING=true
+
+OUTREACH_BULK_MAX=150
+OUTREACH_EMAILS_PER_ACCOUNT=40
+OUTREACH_EMAIL_COOLDOWN=24h
+OUTREACH_SEND_INTERVAL=2s
+OUTREACH_ZOHO_ACCOUNTS_JSON=[]
 ```
+
+Keep scrape/OCR credentials in a separate host-readable file
+(`/opt/tuvi/env/ingestion.env`, mode `0600`). The Compose services read this file
+directly and use the same container-network `DATABASE_URL` as the API:
+
+```text
+GOOGLE_PLACES_API_KEY=<restricted Places API key>
+PLACES_API_BASE_URL=https://places.googleapis.com/v1
+APOLLO_API_KEY=<restricted Apollo API key>
+APOLLO_API_BASE_URL=https://api.apollo.io/api/v1
+APOLLO_ENRICHMENT_ENABLED=true
+
+SCRAPE_WORKER_POLL_SECONDS=15
+SCRAPE_JOB_LEASE_SECONDS=900
+SCRAPE_INITIAL_GRID_ROWS=4
+SCRAPE_INITIAL_GRID_COLUMNS=4
+SCRAPE_CELL_PAGE_LIMIT=3
+SCRAPE_GRID_MAX_DEPTH=12
+
+LEAD_OCR_VERIFICATION_ENABLED=false
+LEAD_OCR_BATCH_SIZE=50
+HUGGING_FACE_API_KEY=<vision provider key>
+HF_VISION_MODEL=<supported vision model>
+```
+
+Keep OCR false for migration/startup. Run the first reviewed one-shot with
+`-e LEAD_OCR_VERIFICATION_ENABLED=true`; set the ingestion file to true only
+after that batch is accepted and the non-overlapping schedule is installed.
+
+The durable scrape worker runs Google Places first, then Apollo only for leads
+still missing an owner or work email and only when a usable business domain is
+available. Request reservations are persisted and capped at 500 combined
+Places/Apollo calls per window. Grid cell, Places page token, candidate state,
+request count, and `resume_at` survive process or VM restarts.
+
+Before starting `scrape-worker`, explicitly remove or disable every legacy host
+cron entry that invokes `automation/outreach/cron_lead_ingestion.sh`,
+`daily_ingestion.py`, or `make ingest-daily`. Running either legacy path beside
+the durable worker would bypass the shared scrape-job ledger and can duplicate
+provider usage and lead ingestion.
 
 Enable email only after confirming provider credentials and sender domain:
 
 ```text
 EMAIL_PROVIDER=resend
 EMAIL_API_KEY=<secret>
+EMAIL_API_BASE_URL=https://api.resend.com
 EMAIL_FROM_ADDRESS=<verified sender>
 EMAIL_DISABLE_SENDING=false
 ```
+
+For quota-managed bulk outreach, configure Zoho OAuth accounts instead:
+
+```text
+EMAIL_PROVIDER=zoho
+EMAIL_FROM_ADDRESS=<verified fallback sender>
+ZOHO_ACCOUNT_ID=<default account id>
+ZOHO_FROM_EMAIL=<verified sender>
+ZOHO_REGION=com.au
+ZOHO_CLIENT_ID=<secret>
+ZOHO_CLIENT_SECRET=<secret>
+ZOHO_REFRESH_TOKEN=<secret>
+OUTREACH_ZOHO_ACCOUNTS_JSON=[{"key":"sales-au-1","account_id":"<id>","from_email":"<verified sender>","client_id":"<secret>","client_secret":"<secret>","refresh_token":"<secret>","region":"com.au"}]
+EMAIL_DISABLE_SENDING=false
+```
+
+The singleton `ZOHO_*` values configure the generic Zoho email adapter; the
+JSON array configures the independently rotated, quota-managed outreach pool.
+The stable non-secret account `key` identifies the PostgreSQL quota row across
+credential rotations. PostgreSQL conservatively reserves 40 delivery attempts
+per account cycle, then sets that account's next availability 24 hours later.
+If all accounts are cooling down, the same bulk job is deferred and continues
+automatically at the earliest availability. Confirmed deliveries increment `email_send_count` and
+record the global `last_email_send_sequence`; ambiguous provider outcomes use
+campaign status `send_unknown` and are not retried automatically.
+
+Only HTTP(S) provider APIs are supported. `EMAIL_PROVIDER=smtp` is rejected at
+configuration validation. Keep sending disabled until the sender identities,
+human approval workflow, and all four canonical production URLs above have been
+reviewed.
 
 ### Voice Agent
 
@@ -164,7 +253,7 @@ TWILIO_PHONE_NUMBER=<E.164 number>
 DEEPGRAM_API_KEY=<secret>
 OPENAI_API_KEY=<secret>
 CARTESIA_API_KEY=<secret>
-REDIS_URL=redis://voice-sales-redis:6379
+REDIS_URL=redis://redis:6379
 CALL_LOG_DB=/app/data/calls.db
 ```
 
@@ -197,20 +286,22 @@ the production Next.js process on VM loopback port `15174`.
 TEMPLATE=2
 NEXT_PUBLIC_API_URL=https://api.tuvisolutions.com
 NEXT_PUBLIC_VOICE_AGENT_URL=https://voice.tuvisolutions.com
-VOICE_AGENT_URL=http://voice-sales-agent:8000
+VOICE_AGENT_URL=http://voice-agent:8000
 CALL_API_SECRET=<same value as voice agent>
 ```
 
-## Compose Changes Needed
+## VM Compose Service Inventory
 
 Use `infra/docker/docker-compose.vm.yml`. It defines:
 
-1. `postgres`, `redis`, `migrate`, `api`, and `worker`.
-2. `restaurant-services-catalog`, built from the Vite app and served by Nginx.
-3. `tuvi-website`, built as the canonical corporate Next.js site.
-4. `template`, built as a Next.js production server.
-5. `voice-agent`, built from `voice-sales-agent/`.
-6. Only loopback host ports; public traffic stays on host-level Caddy.
+1. `postgres`, `redis`, `migrate`, `api`, and the Go `worker`.
+2. Long-running `scrape-worker`, which uses the API database and exposes no port.
+3. One-shot `ocr-job` in the `jobs` profile, invoked by an operator or host schedule.
+4. `restaurant-services-catalog`, built from the Vite app and served by Nginx.
+5. `tuvi-website`, built as the canonical corporate Next.js site.
+6. `template`, built as a Next.js production server.
+7. `voice-agent`, built from `voice-sales-agent/`.
+8. Only loopback host ports; public traffic stays on host-level Caddy.
 
 Minimal service dependency graph:
 
@@ -224,6 +315,8 @@ Caddy :80/:443
 api -> postgres, redis
 worker -> postgres, redis
 migrate -> postgres, redis
+scrape-worker -> postgres, api
+ocr-job (scheduled one-shot) -> postgres -> lead.prepare jobs -> worker
 voice-agent -> redis, api
 template -> api, voice-agent
 ```
@@ -236,36 +329,76 @@ template -> api, voice-agent
    - Leave `/root/MonoRepo` untouched.
 
 2. Secret setup
-   - Create `/opt/tuvi/env/*.env`.
+   - Create `/opt/tuvi/env/stack.env`, `/opt/tuvi/env/ingestion.env`, and the
+     other required `/opt/tuvi/env/*.env` files with mode `0600`.
    - Do not commit or print secret values.
-   - Ensure `TOKEN_SECRET`, `DEMO_TOKEN_SECRET`, `TUVI_API_TOKEN`, and
+   - Ensure `TOKEN_SECRET`, `TUVI_API_TOKEN`, and
      `CALL_API_SECRET` are production values.
 
-3. Build and start VM stack
-   - Run `docker compose --env-file /opt/tuvi/env/stack.env -p tuvi -f infra/docker/docker-compose.vm.yml up -d --build`.
-   - Confirm API, worker, Postgres, Redis, corporate website, catalog, template, and voice
-     containers are running.
+3. Quiesce, migrate, and start the updated VM stack
+   - Follow the exact controlled-rollout order in
+     `docs/runbooks/lead-scrape-ocr-outreach.md`; keep OCR and email disabled.
+   - Remove/disable crontab entries for `cron_lead_ingestion.sh`,
+     `daily_ingestion.py`, and `make ingest-daily` before starting the durable worker.
+   - Stop the old API, Go worker, scrape worker, and any active OCR process before
+     migration `000020`; a pre-lease worker must not race the schema/state
+     reconciliation. Keep PostgreSQL and Redis running.
+   - Back up PostgreSQL and inventory the ambiguous states listed in the detailed
+     workflow runbook. Inventory `email_delivery_attempts` only if that table
+     already exists from a partial rollout.
+   - Run the separate build, database start, one-shot migration, API start, Go
+     worker start, and scrape-worker start commands from the detailed workflow
+     runbook. Do not replace that sequence with a broad `up -d --build` during
+     the `000020`/`000021` rollout.
+   - After the updated core processes are running, build/start the catalog,
+     corporate website, template, and voice services; these do not replace the
+     controlled migration sequence.
+   - Confirm API, Go worker, scrape worker, Postgres, Redis, corporate website,
+     catalog, template, and voice containers are running.
+   - Confirm the scrape-worker logs show polling without credential, schema, or
+     lease errors. Do not run the legacy ingestion scripts in parallel.
 
-4. Reverse proxy and TLS
+4. Install the OCR schedule
+   - Run one controlled batch and inspect its state transitions and generated drafts:
+
+     ```bash
+     docker compose --env-file /opt/tuvi/env/stack.env -p tuvi \
+       -f infra/docker/docker-compose.vm.yml --profile jobs run --rm \
+       -e LEAD_OCR_VERIFICATION_ENABLED=true ocr-job
+     ```
+
+   - Inspect that batch. Only after accepting its states and generated drafts,
+     set `LEAD_OCR_VERIFICATION_ENABLED=true` in `ingestion.env`, then schedule
+     the same one-shot command hourly with a non-overlapping lock:
+
+     ```cron
+     15 * * * * cd /opt/tuvi/MonoRepo && flock -n /var/lock/tuvi-ocr.lock docker compose --env-file /opt/tuvi/env/stack.env -p tuvi -f infra/docker/docker-compose.vm.yml --profile jobs run --rm ocr-job >> /opt/tuvi/logs/ocr.log 2>&1
+     ```
+
+   - OCR states are `pending`, `running`, `verified`, `no_images`, and `failed`.
+     Only `verified` enqueues `lead.prepare` and is eligible for later human
+     approval. `no_images` must never be treated as verified.
+
+5. Reverse proxy and TLS
    - Append `infra/docker/Caddyfile.tuvi.example` routes to `/etc/caddy/Caddyfile`.
    - Run `caddy validate --config /etc/caddy/Caddyfile`.
    - Reload Caddy only after validation passes.
 
-5. DNS cutover
+6. DNS cutover
    - Set `tuvisolutions.com`, `www.tuvisolutions.com`,
      `api.tuvisolutions.com`, `voice.tuvisolutions.com`, and
      `demo.tuvisolutions.com` to `170.64.154.143`.
    - Caddy can issue public certificates only after DNS points to this VM.
 
-6. Twilio setup
+7. Twilio setup
    - Configure Twilio inbound voice webhook after HTTPS works:
      `POST https://voice.tuvisolutions.com/twiml`.
 
-7. Seed data
+8. Seed data
    - Run `seed-admin` once if no admin exists.
    - Run `seed-demo-fixture` or import restaurant data only if needed.
 
-8. Smoke checks
+9. Smoke checks
     - `https://tuvisolutions.com`
     - `https://api.tuvisolutions.com/api/public/v1/site/restaurants`
     - `https://voice.tuvisolutions.com/readyz/browser`
@@ -273,6 +406,68 @@ template -> api, voice-agent
     - Tuvi booking availability and booking POST through the website.
     - Voice callback form through website to voice agent.
     - Twilio inbound call to `/twiml`.
+
+## Operate the Lead Workflow
+
+All workflow endpoints require an `internal_admin` bearer token. Triggering is
+idempotent while the city/niche pair already has an active job:
+
+```bash
+export TUVI_API=https://api.tuvisolutions.com
+export ADMIN_TOKEN=<short-lived internal-admin JWT>
+
+curl -fsS -X POST "$TUVI_API/api/v1/scrape-jobs" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H 'Content-Type: application/json' \
+  --data '{"city":"Melbourne","niche":"restaurant"}'
+
+curl -fsS "$TUVI_API/api/v1/scrape-jobs?limit=20" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+
+curl -fsS "$TUVI_API/api/v1/scrape-jobs/<scrape-job-uuid>" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+```
+
+The worker persists each grid cell, Places page token, candidate, current request
+window, and resume time. `waiting` with `request_limit` resumes after 24 hours;
+`waiting` with `revisit` begins another city coverage cycle after 24 hours so new
+Place IDs can be discovered without duplicating already imported Place IDs.
+
+After OCR has reached `verified` and the generated demo/campaign drafts have been
+reviewed, record each required human gate separately. Use the exact
+profile-preview → version-bound profile review → demo-preview → version-bound
+publication → campaign-detail → version-bound campaign approval commands in
+`docs/runbooks/lead-scrape-ocr-outreach.md`; unversioned approval requests are
+rejected.
+
+Generic `POST /api/v1/restaurants/{id}/demo-sites` creation is draft-only;
+publishing through its generic create request is rejected. Profile review records
+`reviewed_at/by`, demo publication records `published_at/by`, and campaign
+approval records `approved_at/by`. Bulk eligibility requires all three audited,
+still-current gates plus OCR `verified` status. A new profile decision returns
+older demo/campaign approvals to draft. Only a draft campaign can receive a new
+approval; `send_unknown` cannot be re-approved.
+
+Keep `EMAIL_DISABLE_SENDING=true` until all content and links are approved. Then
+restart the API and Go worker after changing it to `false`, and explicitly start
+one bulk workflow:
+
+```bash
+curl -fsS -X POST "$TUVI_API/api/v1/outreach/bulk-send" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+
+curl -fsS "$TUVI_API/api/v1/outreach/bulk-send/status" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+```
+
+The obsolete `/campaigns/{id}/send-step` route is not registered, so outreach
+can only use the durable 40/account quota and 24-hour continuation path.
+
+If a campaign contains stale links or its token-gated demo has expired, first set
+the demo back to `draft`, then call
+`POST /api/v1/campaigns/{id}/regenerate`. This rotates the opaque demo
+token/expiry, renders current links, records the administrator, and clears
+campaign approval; publish and approve again before outreach.
 
 ## Backup And Rollback
 
@@ -301,10 +496,15 @@ Minimum:
 
 ```bash
 docker compose --env-file /opt/tuvi/env/stack.env -p tuvi -f infra/docker/docker-compose.vm.yml ps
-docker compose --env-file /opt/tuvi/env/stack.env -p tuvi -f infra/docker/docker-compose.vm.yml logs -f --tail=200 api worker voice-agent restaurant-services-catalog template
+docker compose --env-file /opt/tuvi/env/stack.env -p tuvi -f infra/docker/docker-compose.vm.yml logs -f --tail=200 api worker scrape-worker voice-agent restaurant-services-catalog template
 docker stats
 df -h
 ```
+
+OCR is one-shot, so inspect `/opt/tuvi/logs/ocr.log` (or the host timer journal)
+and alert if scheduled runs stop completing. Monitor `scrape_jobs.resume_at`,
+`last_error`, failed cells, and `outreach_email_accounts.available_at` in
+PostgreSQL in addition to container health.
 
 Add later:
 
@@ -320,10 +520,20 @@ Add later:
   credentials.
 - Set production secrets before `APP_ENV=production`.
 - Use HTTPS for all public sites.
-- Put `CALL_API_SECRET` only in server-side env files.
+- Put `CALL_API_SECRET` only in server-side env files and keep its value aligned
+  across `stack.env`, `voice.env`, and `template.env`.
 - Keep `TUVI_API_TOKEN` server-side only.
 - Restrict CORS to actual public domains.
 - Keep email sending disabled until sender domain and review flow are approved.
+- Require audited profile approval, demo publication, and campaign approval for
+  every real outreach recipient; `no_images`, `failed`, and `send_unknown` are
+  not automatically sendable/retryable states.
+- Keep `PUBLIC_BASE_URL`, `PUBLIC_WEB_URL`, `PUBLIC_MARKETING_URL`, and
+  `PRESENTATION_SITE_URL` on the canonical HTTPS production values documented
+  above. Production startup/render validation must fail before a provider call
+  if a link is HTTP, local, unresolved, or on an unapproved host.
+- Do not configure SMTP; use only supported HTTP(S) provider APIs.
+- Keep legacy daily ingestion cron disabled while `scrape-worker` is active.
 - Keep outbound calls disabled or tightly gated until compliance rules are
   confirmed.
 
@@ -332,5 +542,8 @@ Add later:
 1. Change DNS records from Vercel to `170.64.154.143`.
 2. Add real `voice.env` provider secrets for Twilio, Deepgram, Cartesia, and
    OpenAI before expecting `/readyz/browser` or calls to pass.
-3. Enable email and Google Calendar only after those provider credentials are
-   reviewed and configured.
+3. Configure the OCR provider and install the locked one-shot schedule.
+4. Confirm legacy ingestion cron entries are removed, then trigger the first
+   city job through `POST /api/v1/scrape-jobs`.
+5. Enable email and Google Calendar only after provider credentials, canonical
+   HTTPS links, and the audited human approval flow are reviewed and configured.

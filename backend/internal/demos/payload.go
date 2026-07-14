@@ -5,6 +5,7 @@ import (
 )
 
 type PublicDemoPayload struct {
+	RestaurantID      string          `json:"restaurant_id"`
 	RestaurantName    string          `json:"restaurant_name"`
 	Cuisine           string          `json:"cuisine"`
 	Hero              string          `json:"hero"`

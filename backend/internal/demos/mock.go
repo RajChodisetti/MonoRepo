@@ -60,6 +60,9 @@ func (mock *Mock) UpdateTokenHash(ctx context.Context, id uuid.UUID, tokenHash s
 	}
 	for slug, record := range mock.Sites {
 		if record.ID == id {
+			if record.Status != StatusDraft {
+				return repository.ErrNotFound
+			}
 			record.TokenHash = tokenHash
 			record.UpdatedAt = time.Now().UTC()
 			mock.Sites[slug] = record

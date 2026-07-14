@@ -49,8 +49,6 @@ import asyncio
 import json
 import logging
 import os
-import random
-import string
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -827,46 +825,11 @@ async def lifespan(app: FastAPI):
     yield
 
 
-def _generate_confirmation_code() -> str:
-    """6-character alphanumeric confirmation code for table bookings."""
-    chars = string.ascii_uppercase + string.digits
-    return "".join(random.choices(chars, k=6))
-
-
-def _parse_demo_slot(date_str: str, time_str: str) -> datetime:
-    """Build a Sydney timezone datetime from date (YYYY-MM-DD) and a flexible time string."""
-    date_str = (date_str or "").strip()
-    time_str = (time_str or "").strip()
-    if not date_str:
-        raise ValueError("date is required")
-    base_date = datetime.strptime(date_str, "%Y-%m-%d").date()
-
-    time_formats = ("%H:%M", "%I:%M %p", "%I %p", "%I:%M%p", "%H:%M:%S")
-    parsed_time = None
-    for fmt in time_formats:
-        try:
-            parsed_time = datetime.strptime(time_str.upper(), fmt).time()
-            break
-        except ValueError:
-            continue
-    if parsed_time is None:
-        # Fallback: 7 PM
-        parsed_time = datetime.strptime("19:00", "%H:%M").time()
-
-    return datetime(
-        base_date.year,
-        base_date.month,
-        base_date.day,
-        parsed_time.hour,
-        parsed_time.minute,
-        tzinfo=SYDNEY_TZ,
-    )
-
-
 async def _emit_browser_booking_event(
     websocket,
     *,
-    confirmation_code: str,
+    reservation_id: str,
+    status: str,
     guest_name: str,
     guest_phone: str,
     party_size: int,
@@ -883,7 +846,8 @@ async def _emit_browser_booking_event(
             json.dumps(
                 {
                     "event": "booking",
-                    "confirmation_code": confirmation_code,
+                    "reservation_id": reservation_id,
+                    "status": status,
                     "guest_name": guest_name,
                     "guest_phone": guest_phone,
                     "party_size": party_size,
@@ -1033,46 +997,6 @@ async def _dispatch_tool(
 ) -> dict:
     logger.info(f"Tool: {function_name}  args={arguments}  browser={is_browser}  restaurant={restaurant_id}")
 
-    if function_name == "demo_book_table":
-        try:
-            party_size = int(arguments.get("party_size") or 2)
-        except (TypeError, ValueError):
-            return {"status": "error", "message": "party_size is required."}
-        date_str = (arguments.get("date") or "").strip()
-        time_str = (arguments.get("time") or "").strip()
-        if not date_str or not time_str:
-            return {
-                "status": "error",
-                "message": "Need party size, date (YYYY-MM-DD), and time before booking.",
-            }
-        guest_name = (arguments.get("guest_name") or "Guest").strip() or "Guest"
-        try:
-            slot_dt = _parse_demo_slot(date_str, time_str)
-        except ValueError as exc:
-            return {"status": "error", "message": str(exc)}
-        confirmation_code = _generate_confirmation_code()
-        slot = slot_dt.isoformat()
-        booking_state.update({
-            "type": "demo_table_reservation",
-            "confirmation_code": confirmation_code,
-            "slot": slot,
-            "booking_date": date_str,
-            "booking_time": time_str,
-            "guest_name": guest_name,
-            "party_size": party_size,
-        })
-        outcome_state[0] = "booked"
-        return {
-            "status": "success",
-            "confirmation_code": confirmation_code,
-            "guest_name": guest_name,
-            "party_size": party_size,
-            "slot": slot,
-            "booking_date": date_str,
-            "booking_time": time_str,
-            "message": f"Your table is booked. Confirmation number {confirmation_code}.",
-        }
-
     if function_name == "check_table_availability":
         if not restaurant_id:
             return {"status": "error", "message": "Restaurant booking is not configured for this session."}
@@ -1096,26 +1020,24 @@ async def _dispatch_tool(
             "client_request_id": call_sid,
         }
         result = await api_client.put_reservation(restaurant_id, body)
-        confirmation_code = _generate_confirmation_code()
-        if result.get("status") == "success":
+        if result.get("status") == "pending" and result.get("reservation_id"):
             booking_state.update({
                 "type": "table_reservation",
                 "reservation_id": result.get("reservation_id"),
-                "confirmation_code": confirmation_code,
+                "status": result.get("status"),
                 "slot": body["slot"],
                 "guest_name": body["guest_name"],
                 "guest_phone": body["guest_phone"],
                 "party_size": body["party_size"],
                 "message": result.get("message"),
             })
-            outcome_state[0] = "booked"
+            outcome_state[0] = "reservation_requested"
             result = {
                 **result,
-                "confirmation_code": confirmation_code,
-                "message": (
-                    f"Your table is booked. Confirmation number {confirmation_code}. "
-                    f"{result.get('message', '')}"
-                ).strip(),
+                "guest_name": body["guest_name"],
+                "guest_phone": body["guest_phone"],
+                "party_size": body["party_size"],
+                "slot": body["slot"],
             }
         return result
 
@@ -2128,7 +2050,11 @@ async def browser_stream(websocket: WebSocket):
 
     # ── Tool handler ──────────────────────────────────────────────────────────
     async def handle_browser_tool(function_name, tool_call_id, arguments, llm, context, result_callback):
-        check_tools = ("check_consultation_slot", "check_consultation_slots")
+        check_tools = (
+            "check_consultation_slot",
+            "check_consultation_slots",
+            "check_table_availability",
+        )
 
         if function_name == "request_typed_email":
             result = await _wait_for_typed_email(
@@ -2157,8 +2083,13 @@ async def browser_stream(websocket: WebSocket):
 
         if function_name in check_tools:
             await _emit_booking_progress(websocket, "checking_slots", "Checking slots…")
-        elif function_name == "book_consultation":
-            await _emit_booking_progress(websocket, "booking_slot", "Booking slot…")
+        elif function_name in ("book_consultation", "book_table_reservation"):
+            message = (
+                "Submitting request…"
+                if function_name == "book_table_reservation"
+                else "Booking slot…"
+            )
+            await _emit_booking_progress(websocket, "booking_slot", message)
 
         result = await _dispatch_tool(
             function_name=function_name,
@@ -2176,16 +2107,23 @@ async def browser_stream(websocket: WebSocket):
 
         if function_name in check_tools:
             await _emit_booking_progress(websocket, "idle", "")
-        elif function_name == "book_consultation":
+        elif function_name in ("book_consultation", "book_table_reservation"):
             if result.get("status") == "success":
                 await _emit_booking_progress(websocket, "success", "Slot booked successfully!")
+            elif result.get("status") == "pending":
+                await _emit_booking_progress(websocket, "success", "Reservation request received.")
             else:
                 await _emit_booking_progress(websocket, "idle", "")
 
-        if function_name in ("book_table_reservation", "demo_book_table") and result.get("status") == "success":
+        if (
+            function_name == "book_table_reservation"
+            and result.get("status") == "pending"
+            and result.get("reservation_id")
+        ):
             await _emit_browser_booking_event(
                 websocket,
-                confirmation_code=result.get("confirmation_code", ""),
+                reservation_id=result.get("reservation_id", ""),
+                status=result.get("status", ""),
                 guest_name=result.get("guest_name") or arguments.get("guest_name", "Guest"),
                 guest_phone=arguments.get("guest_phone", ""),
                 party_size=int(result.get("party_size") or arguments.get("party_size") or 2),

@@ -1,4 +1,4 @@
-"""Shared API request budget for daily ingestion (Apollo + Google Places)."""
+"""Shared API request budget for ingestion providers."""
 
 from __future__ import annotations
 

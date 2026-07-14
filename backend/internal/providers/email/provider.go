@@ -2,13 +2,18 @@ package email
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/google/uuid"
 
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/config"
 )
 
 const ProviderDisabled = "disabled"
+
+var ErrSendingDisabled = errors.New("email sending is disabled")
 
 type SendRequest struct {
 	To       string
@@ -17,12 +22,20 @@ type SendRequest struct {
 	TextBody string
 	ReplyTo  string
 	Metadata map[string]string
+	Delivery *DeliveryContext
 }
 
 type SendResult struct {
 	ProviderMessageID string
 	RedirectedTo      string
 	Skipped           bool
+	QuotaManaged      bool
+	Finalized         bool
+	DeliveryAttemptID uuid.UUID
+	SendSequence      int64
+	AccountKey        string
+	AccountCycle      int64
+	AccountSequence   int
 }
 
 type Provider interface {

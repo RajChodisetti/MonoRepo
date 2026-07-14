@@ -2,7 +2,12 @@ openapi: 3.0.3
 info:
   title: Restaurant Platform API
   description: |
-    Phase 1 backend API — auth, restaurant leads, memberships, demo sites, and **email outreach campaigns**.
+    Phase 1 backend API — auth, restaurant leads, durable city scraping, OCR/review gates,
+    demo sites, and **email outreach campaigns**.
+
+    This document covers the Phase 1 lead-to-outreach and reservation surface. The router
+    remains the source of truth for separate company-consultation and legacy public asset
+    routes that are outside this workflow specification.
 
     ## Authentication
     Protected routes use `Authorization: Bearer <access_token>` from signup or login.
@@ -12,17 +17,31 @@ info:
     - `restaurant_owner` — scoped to assigned restaurants only
     - `developer` — health endpoints (local/test signup only)
 
-    ## Email outreach flow (admin)
-    1. `POST /api/v1/restaurants/{id}/demo-sites` — create published demo; save one-time `token`
-    2. Ensure restaurant has email and `restaurant_profiles.review_status = approved`
-    3. `POST /api/v1/restaurants/{id}/campaigns` — create draft (requires `demo_site_id` + `demo_token`)
-    4. `POST /api/v1/campaigns/{id}/approve` — approve draft
-    5. `POST /api/v1/campaigns/{id}/send-step` — enqueue `email.send` job (worker must be running)
-    6. Track opens/clicks via public `/t/*` routes embedded in sent email
+    ## Lead preparation and outreach flow (admin)
+    1. `POST /api/v1/scrape-jobs` — create or return the active durable city/niche scrape job.
+    2. The scrape worker uses Google Places first and Apollo only for missing contact details.
+       It pauses at 500 combined provider requests and resumes after its durable `resume_at`.
+    3. OCR moves each profile through `pending`, `running`, then `verified`, `no_images`, or
+       `failed`. Only `verified` can advance to outreach.
+    4. OCR verification automatically creates or refreshes draft demo/campaign artifacts.
+    5. Inspect the protected profile and demo review-preview endpoints; neither discloses
+       the demo bearer token.
+    6. `PATCH /api/v1/restaurants/{id}/profile/review` — record the human profile decision.
+    7. `PATCH /api/v1/demo-sites/{id}/status` — publish the demo through the audited gate.
+    8. `POST /api/v1/campaigns/{id}/approve` — record human campaign approval.
+    9. `POST /api/v1/outreach/bulk-send` — enqueue quota-managed delivery.
+    10. Track opens/clicks via public `/t/*` routes embedded in sent email.
 
     ## Bulk outreach (one-click)
-    For OCR-verified leads at scale: `POST /api/v1/outreach/bulk-send` enqueues `outreach.bulk_send`
-    (max 150/run, 50 sends per Zoho account). Retrigger manually; only `email_sent=false` leads are processed.
+    For fully reviewed leads at scale, `POST /api/v1/outreach/bulk-send` enqueues
+    `outreach.bulk_send` (max 150 per batch). PostgreSQL conservatively reserves at most
+    40 delivery attempts per configured account and enforces a 24-hour cooldown. When every
+    account is cooling down, the same job is deferred until the next durable availability
+    time and continues automatically.
+
+    Email transport is HTTP(S)-only (`zoho` or `resend`); SMTP is rejected. In production,
+    rendered links must use the configured HTTPS hosts before a provider send is attempted,
+    and `EMAIL_REDIRECT_TO` must be empty.
 
     ## Local email testing
     Set `EMAIL_REDIRECT_TO` in `backend/.env` so all sends go to your inbox during dev.
@@ -40,6 +59,8 @@ info:
 servers:
   - url: http://localhost:8080
     description: Local development
+  - url: https://api.tuvisolutions.com
+    description: Production API
 
 tags:
   - name: Auth
@@ -54,6 +75,10 @@ tags:
     description: Restaurant membership (tenant scoping)
   - name: Demo Sites
     description: Admin demo site creation
+  - name: Lead Review
+    description: Audited profile approval and demo publication gates
+  - name: Scrape Jobs
+    description: Durable internal-admin city scraping jobs and progress
   - name: Email Campaigns
     description: |
       Outreach campaign drafts, approval, and send orchestration.
@@ -63,6 +88,8 @@ tags:
       Public click/open/unsubscribe endpoints (no JWT). Tokens are injected into sent emails.
   - name: Public Demo
     description: Public demo payload (slug + token, no JWT)
+  - name: Reservations
+    description: Public availability and pending reservation-request endpoints
   - name: Health
     description: Service and database readiness (developer role)
 
@@ -440,8 +467,12 @@ paths:
         - bearerAuth: []
       description: |
         Requires role `internal_admin`.
-        Returns a one-time `token` in the response. If `public_payload` is omitted,
-        a default template is stored server-side.
+        Creates a **draft-only** demo and returns a one-time `token` in the response.
+        If `public_payload` is omitted, a default template is stored server-side.
+
+        Supplying `status=published` is rejected. Publish through
+        `PATCH /api/v1/demo-sites/{id}/status` so OCR verification, human profile
+        approval, and the publishing actor/timestamp are enforced atomically.
       requestBody:
         required: true
         content:
@@ -450,7 +481,7 @@ paths:
               $ref: '#/components/schemas/CreateDemoSiteRequest'
             example:
               slug: pm-demo-thai-kitchen
-              status: published
+              status: draft
       responses:
         '201':
           description: Demo site created
@@ -466,6 +497,173 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+
+  /api/v1/restaurants/{id}/profile/review-preview:
+    parameters:
+      - $ref: '#/components/parameters/restaurantId'
+    get:
+      tags: [Lead Review]
+      summary: Inspect a profile and its review versions
+      operationId: getRestaurantProfileReviewPreview
+      security:
+        - bearerAuth: []
+      description: |
+        Requires role `internal_admin`. Returns the reviewed restaurant name/contact,
+        OCR/review state, allowlisted profile fields, and both version timestamps needed
+        for an attributable decision. No raw Apollo payload or demo bearer token is returned.
+        The response is marked `Cache-Control: no-store`.
+      responses:
+        '200':
+          description: Review-safe restaurant/profile artifact
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: Always `no-store`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileReviewPreview'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/restaurants/{id}/profile/review:
+    parameters:
+      - $ref: '#/components/parameters/restaurantId'
+    patch:
+      tags: [Lead Review]
+      summary: Record a human profile review decision
+      operationId: reviewRestaurantProfile
+      security:
+        - bearerAuth: []
+      description: |
+        Requires role `internal_admin`. Records `reviewed_at` and `reviewed_by` for
+        `approved` or `rejected`; returning the profile to `draft` clears both audit fields.
+        Approval is rejected unless OCR is currently `verified`. `no_images` and `failed`
+        are terminal OCR outcomes for that attempt, but are not outreach-eligible. Approved
+        or rejected decisions must submit both timestamps from the protected preview; a
+        changed restaurant/profile returns `409 stale_review`. Every new profile decision
+        returns published demos and approved campaigns to draft for downstream re-review.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileReviewRequest'
+            example:
+              status: approved
+              expected_restaurant_updated_at: '2026-07-14T10:00:00Z'
+              expected_profile_updated_at: '2026-07-14T10:01:00Z'
+      responses:
+        '200':
+          description: Profile review state and audit metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileReview'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: OCR has not reached `verified`, or the reviewed artifact changed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/demo-sites/{id}/review-preview:
+    parameters:
+      - $ref: '#/components/parameters/demoSiteId'
+    get:
+      tags: [Lead Review, Demo Sites]
+      summary: Inspect a demo's review-safe public payload
+      operationId: getDemoReviewPreview
+      security:
+        - bearerAuth: []
+      description: |
+        Requires role `internal_admin`. Returns the exact allowlisted payload that the
+        token-gated public demo would expose, including its server-derived restaurant ID,
+        while the demo is still a draft. The response never includes the demo token or
+        token hash and is marked `Cache-Control: no-store`.
+      responses:
+        '200':
+          description: Review-safe demo metadata and public payload
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: Always `no-store`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemoReviewPreview'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/demo-sites/{id}/status:
+    parameters:
+      - $ref: '#/components/parameters/demoSiteId'
+    patch:
+      tags: [Lead Review, Demo Sites]
+      summary: Publish or return a demo to draft
+      operationId: setDemoSiteStatus
+      security:
+        - bearerAuth: []
+      description: |
+        Requires role `internal_admin`. Publishing records `published_at` and
+        `published_by`, and is rejected unless OCR is `verified` and the restaurant
+        profile has been human-approved with an attributable reviewer. An expired token-gated
+        demo must be regenerated before it can be published. Returning to `draft` makes
+        the demo unavailable publicly and clears the publication audit fields. Publication
+        must include `expected_updated_at` from the protected demo review preview; stale
+        content is rejected with `409 stale_review`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DemoStatusRequest'
+            example:
+              status: published
+              expected_updated_at: '2026-07-14T10:02:00Z'
+      responses:
+        '200':
+          description: Demo status and publication audit metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemoReview'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: OCR/profile review is incomplete, the demo expired, or the reviewed artifact changed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /api/v1/restaurants/{id}/campaigns:
     parameters:
@@ -500,10 +698,13 @@ paths:
         Requires role `internal_admin`.
 
         Builds a personalized HTML/text draft from the restaurant profile and demo site.
-        The demo site's one-time `token` from create demo site must be supplied here
-        (stored on the campaign for tracked demo links).
+        The demo site's one-time `token` from create demo site must be supplied here,
+        must match the selected demo's token hash, and must not be expired (it is stored
+        on the campaign for tracked token-gated demo links).
 
-        **Prerequisites:** published demo site for this restaurant.
+        **Prerequisites:** demo site belonging to this restaurant; it may still be a draft.
+        The OCR lead-preparation job normally creates or refreshes the draft demo and
+        campaign together after verification. Publication is a later audited human gate.
       requestBody:
         required: true
         content:
@@ -529,6 +730,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/CampaignConflict'
 
   /api/v1/campaigns/{id}:
     parameters:
@@ -566,7 +769,21 @@ paths:
       description: |
         Requires role `internal_admin`.
         Sets `status` to `approved`, records `approved_at` and `approved_by`.
-        Required before `send-step`.
+        Only a `draft` campaign can be newly approved. A current, already audited approval
+        can be returned when its current version is submitted. An `approved` row whose
+        approving user was deleted can be re-stamped by an internal administrator.
+        `sending`, `sent`, `stopped`, and `send_unknown`
+        campaigns cannot be re-approved. The request must include the campaign `updated_at`
+        returned by the detail endpoint; a changed draft is rejected with `409 stale_review`.
+        Approval is required before bulk outreach.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignApprovalRequest'
+            example:
+              expected_updated_at: '2026-07-14T10:03:00Z'
       responses:
         '200':
           description: Approved campaign
@@ -574,6 +791,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Campaign'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -583,52 +802,32 @@ paths:
         '409':
           $ref: '#/components/responses/CampaignConflict'
 
-  /api/v1/campaigns/{id}/send-step:
+  /api/v1/campaigns/{id}/regenerate:
     parameters:
       - $ref: '#/components/parameters/campaignId'
     post:
       tags: [Email Campaigns]
-      summary: Enqueue email send job
-      operationId: sendCampaignStep
+      summary: Regenerate a campaign draft and opaque demo token
+      operationId: regenerateCampaignDraft
       security:
         - bearerAuth: []
       description: |
-        Requires role `internal_admin`. Enqueues an `email.send` job in PostgreSQL (`job_runs`).
-
-        **Worker required:** run `make worker` in a separate terminal.
-
-        **Eligibility checks (409 if fail):**
-        - Restaurant has contact email
-        - Not on suppression list
-        - Demo site `status=published`
-        - Campaign `status=approved` (or already `sending`)
-        - `restaurant_profiles.review_status=approved`
-
-        On success, worker sends via Resend HTTP API (`EMAIL_PROVIDER=resend`, `EMAIL_API_KEY`).
-        Local dev: set `EMAIL_REDIRECT_TO` to receive all mail at your test inbox.
-
-        Idempotency key: `email.send:{campaign_id}:step:{step}` — same step is not duplicated.
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SendCampaignStepRequest'
-            example:
-              step: 0
+        Requires role `internal_admin`. The linked demo must first be set to `draft`,
+        and the campaign must be `draft` or `approved`. Rotates the demo token/hash and
+        expiry, renders the current email template and configured links, clears campaign
+        approval, and records a `draft_regenerated` event with the administrator identity.
+        The existing profile approval remains in force; the regenerated demo must be
+        published and the regenerated campaign must be reviewed and approved again before
+        quota-managed outreach can select it.
       responses:
         '200':
-          description: Job enqueued; campaign status becomes `sending`
+          description: Regenerated campaign draft
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Campaign'
         '400':
-          description: Missing restaurant email
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -636,7 +835,152 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          $ref: '#/components/responses/CampaignNotEligible'
+          $ref: '#/components/responses/CampaignConflict'
+
+  /api/v1/scrape-jobs:
+    post:
+      tags: [Scrape Jobs]
+      summary: Trigger or retrieve an active city scrape job
+      operationId: triggerCityScrapeJob
+      security:
+        - bearerAuth: []
+      description: |
+        Requires role `internal_admin`. Creates one durable active job per normalized
+        city/niche pair, or returns the existing `queued`, `running`, or `waiting` job.
+        Supported cities are Adelaide, Brisbane, Melbourne, Perth, and Sydney; supported
+        niches are `restaurant`, `dentist`, and `plumber` (`restaurant` by default).
+
+        The scrape worker partitions the city into durable grid cells, subdivides saturated
+        cells, deduplicates candidates by Google Place ID, and uses Google Places before
+        targeted Apollo enrichment for missing owner/work-email details. The combined provider
+        request window is capped at 500. A capped job becomes `waiting` with `resume_at` set
+        24 hours later, then resumes from persisted cell/page/candidate state. A completed
+        coverage pass is revisited in later cycles so newly added Place IDs can be discovered.
+        A leaf that remains provider-capped at the configured maximum grid depth stays
+        incomplete with `waiting_reason=coverage_incomplete`; it is not reported as a
+        completed city coverage pass.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateScrapeJobRequest'
+            example:
+              city: Melbourne
+              niche: restaurant
+      responses:
+        '202':
+          description: New scrape job created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScrapeJobTriggerResult'
+        '200':
+          description: Existing active city/niche job returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScrapeJobTriggerResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          description: Unsupported city or niche
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    get:
+      tags: [Scrape Jobs]
+      summary: List recent city scrape jobs
+      operationId: listCityScrapeJobs
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 25
+          description: Values above 100 are capped at 100.
+      responses:
+        '200':
+          description: Recent scrape jobs ordered by creation time descending
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScrapeJobList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/scrape-jobs/{id}:
+    parameters:
+      - $ref: '#/components/parameters/scrapeJobId'
+    get:
+      tags: [Scrape Jobs]
+      summary: Get city scrape job progress
+      operationId: getCityScrapeJob
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Durable request-window, resume, grid, and candidate progress
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScrapeJob'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/scrape-jobs/{id}/retry:
+    parameters:
+      - $ref: '#/components/parameters/scrapeJobId'
+    post:
+      tags: [Scrape Jobs]
+      summary: Retry a failed city scrape job from its durable progress
+      operationId: retryCityScrapeJob
+      security:
+        - bearerAuth: []
+      description: |
+        Requires role `internal_admin`. Requeues only a `failed` job, resets failed
+        cells/candidates for another attempt, and preserves imported candidates and
+        durable city progress. A request window older than 24 hours is reset; a newer
+        window keeps its consumed request count.
+      responses:
+        '202':
+          description: Failed job requeued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScrapeJob'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Scrape job is not failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /api/v1/outreach/bulk-send:
     post:
@@ -651,18 +995,40 @@ paths:
         **Worker required:** run `make worker` in a separate terminal.
 
         Selects up to `OUTREACH_BULK_MAX` (default 150) leads where:
-        - `restaurant_profiles.ocr_verified=true`
-        - `restaurants.email_sent=false`
+        - `restaurant_profiles.ocr_status=verified`
+        - profile review is `approved` with non-null `reviewed_at` and `reviewed_by`
+        - demo is unexpired and `published` with non-null `published_at` and `published_by`
+        - outreach campaign is `approved` with non-null `approved_at` and `approved_by`
+        - `restaurants.email_sent=false` and `email_send_count=0`
         - contact email present and not suppressed
-        - published demo site exists
 
-        Sends the sales outreach email (services + live demo preview with three website styles),
-        rotating Zoho accounts
-        (`OUTREACH_ZOHO_ACCOUNTS_JSON`) with `OUTREACH_EMAILS_PER_ACCOUNT` (default 50) sends each.
+        The bulk job does not create or approve campaigns. It sends the already-approved
+        sales outreach email (services + tracked live demo preview), rotating configured
+        Zoho HTTP API accounts (`OUTREACH_ZOHO_ACCOUNTS_JSON`). PostgreSQL atomically enforces
+        `OUTREACH_EMAILS_PER_ACCOUNT` (default 40) delivery claims per account, assigns a
+        global `send_sequence` plus per-account cycle/slot, and sets `available_at` for the
+        `OUTREACH_EMAIL_COOLDOWN` (default 24 hours) when the account reaches its limit.
+        Duplicate normalized Zoho `(region, account_id)` identities are rejected even when
+        configured with different aliases, preventing quota multiplication for one credential.
 
-        On successful send: `restaurants.email_sent=true`, `is_contacted=true`, `status=emailed`.
+        If every account is cooling down, the same job is moved back to `queued` with its
+        durable `available_at` set to the earliest account availability. The worker resumes
+        it automatically; an admin does not need to retrigger it.
 
-        Returns `409` if another bulk job is already queued or running.
+        On confirmed send: `restaurants.email_sent=true`, `email_send_count` increments,
+        `last_email_send_sequence` is recorded, `is_contacted=true`, and `status=emailed`.
+        An ambiguous provider outcome becomes campaign status `send_unknown` and is not
+        automatically retried, preventing duplicate real-world delivery.
+        Redirected sends are recorded as `skipped` and do not mark the restaurant emailed.
+        When sending is disabled, the trigger returns `503` before creating delivery attempts.
+
+        Providers use HTTP(S) APIs only (`zoho` for the account pool; `resend` for the generic
+        adapter). SMTP configuration is rejected. Production link validation requires:
+        `https://api.tuvisolutions.com`, `https://demo.tuvisolutions.com`,
+        `https://tuvisolutions.com`, and `https://tuvisolutions.com/services/restaurants`.
+
+        Returns `409` if another bulk job is already queued or running, and `503` when sending
+        is disabled or the account pool is not configured.
       responses:
         '202':
           description: Bulk job queued
@@ -681,7 +1047,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '503':
-          description: Outreach Zoho accounts not configured
+          description: Email sending disabled or HTTP API outreach accounts not configured
           content:
             application/json:
               schema:
@@ -696,7 +1062,8 @@ paths:
         - bearerAuth: []
       description: |
         Requires role `internal_admin`.
-        Returns pending eligible lead count and active/last bulk job summary.
+        Returns pending eligible lead count, the next durable account availability time,
+        and active/last bulk job summary.
       responses:
         '200':
           description: Bulk outreach status
@@ -763,7 +1130,7 @@ paths:
             Location:
               schema:
                 type: string
-                example: http://localhost:3000/demo/test-cafe-demo?token=...
+                example: https://demo.tuvisolutions.com/?slug=test-cafe-demo&token=...&template=1
         '404':
           $ref: '#/components/responses/NotFound'
 
@@ -797,8 +1164,13 @@ paths:
       operationId: trackEmailUnsubscribe
       security: []
       description: |
-        Public endpoint (no auth). Adds restaurant email to `email_suppressions`,
-        records `unsubscribed` event, and returns a simple HTML confirmation page.
+        Public endpoint (no auth). Adds the normalized immutable recipient stored on
+        this tracking token to `email_suppressions`, records an `unsubscribed` event,
+        and returns a simple HTML confirmation page. New tokens never read the
+        restaurant's mutable current email address. For legacy tokens created before
+        migration `000021`, where immutable history is unavailable, it preserves the
+        previously supported opt-out by suppressing the restaurant's current normalized
+        address and records `recipient_snapshot=false` in the audit event.
       responses:
         '200':
           description: HTML confirmation page
@@ -809,6 +1181,84 @@ paths:
                 example: '<!DOCTYPE html><html><body><h1>Unsubscribed</h1>...</body></html>'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          description: The immutable recipient could not be proven, or suppression persistence failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/public/v1/restaurants/{id}/table-availability:
+    parameters:
+      - $ref: '#/components/parameters/restaurantId'
+    get:
+      tags: [Reservations]
+      summary: Get available reservation-request slots
+      operationId: getPublicTableAvailability
+      security: []
+      parameters:
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: party_size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+            default: 2
+      responses:
+        '200':
+          description: Available RFC3339 slots for the requested date and party size
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservationAvailability'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/public/v1/restaurants/{id}/reservations:
+    parameters:
+      - $ref: '#/components/parameters/restaurantId'
+    put:
+      tags: [Reservations]
+      summary: Submit a pending reservation request
+      operationId: putPublicReservationRequest
+      security: []
+      description: |
+        Creates a reservation request in `pending` status; it does not confirm a table.
+        `client_request_id` makes an identical retried browser submission idempotent for
+        the same restaurant. Reusing it with different guest, party, slot, source, or notes
+        returns `409 client_request_conflict` rather than returning another request.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PutReservationRequest'
+      responses:
+        '200':
+          description: Reservation request recorded (normally pending confirmation)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PutReservationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Selected slot is unavailable, or the idempotency key was reused for a different request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /api/public/v1/demo/{slug}:
     parameters:
@@ -823,15 +1273,17 @@ paths:
         required: true
         schema:
           type: string
-        description: Signed demo token from create demo site response
+        description: Opaque demo bearer token from the create-demo response
     get:
       tags: [Public Demo]
       summary: Resolve public demo payload
       operationId: getPublicDemo
       security: []
       description: |
-        No authentication. Validates slug + token. Returns allowlisted public fields only
-        (internal fields like `lead_notes` are stripped).
+        No authentication. Validates slug + token and requires the demo to remain published
+        and unexpired. Returns allowlisted public fields only (internal fields like
+        `lead_notes` are stripped). Token-gated preview clients use `cache: no-store` so an
+        unpublish or expiry revokes subsequent loads.
       responses:
         '200':
           description: Public-safe demo payload
@@ -947,6 +1399,22 @@ components:
         type: string
         format: uuid
       description: Email campaign UUID
+    demoSiteId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Demo site UUID
+    scrapeJobId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Durable city scrape job UUID
     trackingToken:
       name: token
       in: path
@@ -1202,6 +1670,22 @@ components:
           type: boolean
         shown_interest:
           type: boolean
+        email_sent:
+          type: boolean
+          description: True only after a confirmed provider-accepted outreach send.
+        email_send_count:
+          type: integer
+          minimum: 0
+          description: Number of confirmed sends recorded for this restaurant.
+        last_email_sent_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_email_send_sequence:
+          type: integer
+          format: int64
+          nullable: true
+          description: Global delivery-attempt sequence associated with the latest confirmed send.
         created_at:
           type: string
           format: date-time
@@ -1293,8 +1777,9 @@ components:
           type: string
         status:
           type: string
-          enum: [draft, published]
-          default: published
+          enum: [draft]
+          default: draft
+          description: Generic creation is draft-only; use the audited demo status endpoint to publish.
         public_payload:
           type: object
           additionalProperties: true
@@ -1313,11 +1798,324 @@ components:
           description: Returned once; required for public demo URL
         status:
           type: string
+          enum: [draft]
+
+    OCRStatus:
+      type: string
+      enum: [pending, running, verified, no_images, failed]
+      description: |
+        `verified` means at least one usable image was processed successfully and is the
+        only OCR state eligible for profile approval. `no_images` is not equivalent to verified.
+
+    ProfileReviewStatus:
+      type: string
+      enum: [draft, approved, rejected]
+
+    ProfileReviewRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          $ref: '#/components/schemas/ProfileReviewStatus'
+        expected_restaurant_updated_at:
+          type: string
+          format: date-time
+          description: Required for `approved` or `rejected`; copy from the protected profile preview.
+        expected_profile_updated_at:
+          type: string
+          format: date-time
+          description: Required for `approved` or `rejected`; copy from the protected profile preview.
+
+    ProfileReviewPreview:
+      type: object
+      required:
+        - restaurant_id
+        - restaurant_name
+        - contact_email
+        - ocr_status
+        - ocr_input_fingerprint
+        - review_status
+        - restaurant_updated_at
+        - profile_updated_at
+        - profile
+      properties:
+        restaurant_id:
+          type: string
+          format: uuid
+        restaurant_name:
+          type: string
+        contact_email:
+          type: string
+        ocr_status:
+          $ref: '#/components/schemas/OCRStatus'
+        ocr_input_fingerprint:
+          type: string
+        ocr_completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        review_status:
+          $ref: '#/components/schemas/ProfileReviewStatus'
+        reviewed_at:
+          type: string
+          format: date-time
+          nullable: true
+        reviewed_by:
+          type: string
+          format: uuid
+          nullable: true
+        restaurant_updated_at:
+          type: string
+          format: date-time
+        profile_updated_at:
+          type: string
+          format: date-time
+        profile:
+          type: object
+          additionalProperties: true
+
+    ProfileReview:
+      type: object
+      required: [restaurant_id, status, ocr_status, updated_at]
+      properties:
+        restaurant_id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/ProfileReviewStatus'
+        ocr_status:
+          $ref: '#/components/schemas/OCRStatus'
+        reviewed_at:
+          type: string
+          format: date-time
+          nullable: true
+        reviewed_by:
+          type: string
+          format: uuid
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+
+    DemoStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
           enum: [draft, published]
+        expected_updated_at:
+          type: string
+          format: date-time
+          description: Required for `published`; copy from the protected demo review preview.
+
+    DemoReview:
+      type: object
+      required: [demo_site_id, restaurant_id, status, updated_at]
+      properties:
+        demo_site_id:
+          type: string
+          format: uuid
+        restaurant_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [draft, published]
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+        published_by:
+          type: string
+          format: uuid
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+
+    DemoReviewPreview:
+      type: object
+      required:
+        - demo_site_id
+        - restaurant_id
+        - slug
+        - status
+        - public_payload
+        - created_at
+        - updated_at
+      properties:
+        demo_site_id:
+          type: string
+          format: uuid
+        restaurant_id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        status:
+          type: string
+          enum: [draft, published]
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        public_payload:
+          $ref: '#/components/schemas/PublicDemoPayload'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateScrapeJobRequest:
+      type: object
+      required: [city]
+      properties:
+        city:
+          type: string
+          enum: [Adelaide, Brisbane, Melbourne, Perth, Sydney]
+        niche:
+          type: string
+          enum: [restaurant, dentist, plumber]
+          default: restaurant
+
+    ScrapeJobStatus:
+      type: string
+      enum: [queued, running, waiting, completed, failed, cancelled]
+
+    ScrapeJobProgress:
+      type: object
+      required:
+        - cells_total
+        - cells_pending
+        - cells_completed
+        - cells_subdivided
+        - cells_failed
+        - cells_saturated
+        - candidates_total
+        - candidates_pending
+        - candidates_imported
+        - candidates_duplicate
+        - candidates_failed
+      properties:
+        cells_total:
+          type: integer
+        cells_pending:
+          type: integer
+        cells_completed:
+          type: integer
+        cells_subdivided:
+          type: integer
+        cells_failed:
+          type: integer
+        cells_saturated:
+          type: integer
+          description: Provider-capped leaves at the configured maximum subdivision depth; they keep the current city pass incomplete and retry after the 24-hour coverage cooldown.
+        candidates_total:
+          type: integer
+        candidates_pending:
+          type: integer
+        candidates_imported:
+          type: integer
+        candidates_duplicate:
+          type: integer
+        candidates_failed:
+          type: integer
+
+    ScrapeJob:
+      type: object
+      required:
+        - id
+        - city
+        - city_key
+        - niche
+        - status
+        - cycle_number
+        - max_requests_per_window
+        - requests_used_window
+        - requests_used_total
+        - created_at
+        - updated_at
+        - progress
+      properties:
+        id:
+          type: string
+          format: uuid
+        city:
+          type: string
+        city_key:
+          type: string
+        niche:
+          type: string
+        status:
+          $ref: '#/components/schemas/ScrapeJobStatus'
+        cycle_number:
+          type: integer
+          minimum: 1
+        max_requests_per_window:
+          type: integer
+          example: 500
+        requests_used_window:
+          type: integer
+        requests_used_total:
+          type: integer
+          format: int64
+        window_started_at:
+          type: string
+          format: date-time
+          nullable: true
+        resume_at:
+          type: string
+          format: date-time
+          nullable: true
+        waiting_reason:
+          type: string
+          enum: [request_limit, provider_error, coverage_incomplete, revisit]
+        last_cycle_completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        current_cell_id:
+          type: string
+          format: uuid
+          nullable: true
+        last_error:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        progress:
+          $ref: '#/components/schemas/ScrapeJobProgress'
+
+    ScrapeJobTriggerResult:
+      type: object
+      required: [created, job]
+      properties:
+        created:
+          type: boolean
+        job:
+          $ref: '#/components/schemas/ScrapeJob'
+
+    ScrapeJobList:
+      type: object
+      required: [jobs]
+      properties:
+        jobs:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScrapeJob'
 
     CampaignStatus:
       type: string
-      enum: [draft, approved, sending, sent, stopped]
+      enum: [draft, approved, sending, sent, stopped, send_unknown]
+      description: |
+        `send_unknown` is a fail-closed terminal state for an ambiguous provider result.
+        It requires manual reconciliation and cannot be re-approved or retried automatically.
 
     CampaignType:
       type: string
@@ -1326,7 +2124,7 @@ components:
 
     EmailEventType:
       type: string
-      enum: [sent, opened, clicked, failed, unsubscribed]
+      enum: [sent, skipped, opened, clicked, failed, unsubscribed, draft_regenerated]
 
     CreateCampaignRequest:
       type: object
@@ -1335,21 +2133,21 @@ components:
         demo_site_id:
           type: string
           format: uuid
-          description: Published demo site for this restaurant
+          description: Draft or published demo site belonging to this restaurant
         demo_token:
           type: string
           description: One-time token from `POST .../demo-sites` response
         campaign_type:
           $ref: '#/components/schemas/CampaignType'
 
-    SendCampaignStepRequest:
+    CampaignApprovalRequest:
       type: object
+      required: [expected_updated_at]
       properties:
-        step:
-          type: integer
-          minimum: 0
-          default: 0
-          description: Outreach step index (0 = first email)
+        expected_updated_at:
+          type: string
+          format: date-time
+          description: Campaign `updated_at` returned by `GET /api/v1/campaigns/{id}` after human review.
 
     BulkOutreachTriggerResponse:
       type: object
@@ -1372,6 +2170,11 @@ components:
           type: integer
         max_sends:
           type: integer
+        next_available_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Earliest durable email-account availability when all configured accounts are cooling down.
         active_job:
           type: object
           nullable: true
@@ -1395,12 +2198,18 @@ components:
                   type: integer
                 sent:
                   type: integer
+                skipped:
+                  type: integer
                 failed:
                   type: integer
                 max_sends:
                   type: integer
                 stopped_reason:
                   type: string
+                next_available_at:
+                  type: string
+                  format: date-time
+                  nullable: true
 
     StopCampaignRequest:
       type: object
@@ -1431,7 +2240,7 @@ components:
           type: string
         body_html:
           type: string
-          description: Draft HTML with `{{CLICK_URL}}` and `{{UNSUBSCRIBE_URL}}` placeholders (replaced at send time)
+          description: Draft HTML whose `{{CLICK_URL}}`, optional `{{TEMPLATE_1_URL}}`–`{{TEMPLATE_3_URL}}`, and `{{UNSUBSCRIBE_URL}}` placeholders are replaced at send time.
         body_text:
           type: string
         approved_at:
@@ -1475,7 +2284,8 @@ components:
           type: object
           additionalProperties: true
           description: |
-            For `sent`: step, redirected_to, original_recipient, provider_message.
+            For quota-managed `sent`/`failed`: account_key, account_cycle,
+            account_sequence, global send_sequence, and delivery_attempt_id.
             For `clicked`/`opened`/`unsubscribed`: token and optional target_url.
         event_time:
           type: string
@@ -1494,9 +2304,78 @@ components:
           items:
             $ref: '#/components/schemas/EmailEvent'
 
+    ReservationAvailability:
+      type: object
+      required: [available_slots, timezone, date, party_size]
+      properties:
+        available_slots:
+          type: array
+          items:
+            type: string
+            format: date-time
+        timezone:
+          type: string
+          example: Australia/Sydney
+        date:
+          type: string
+          format: date
+        party_size:
+          type: integer
+          minimum: 1
+          maximum: 20
+
+    PutReservationRequest:
+      type: object
+      required: [guest_name, guest_phone, party_size, slot]
+      properties:
+        guest_name:
+          type: string
+        guest_phone:
+          type: string
+        guest_email:
+          type: string
+          format: email
+        party_size:
+          type: integer
+          minimum: 1
+          maximum: 20
+        slot:
+          type: string
+          format: date-time
+          description: Exact RFC3339 value returned by table availability.
+        source:
+          type: string
+          enum: [voice_agent, web_form]
+          default: voice_agent
+        notes:
+          type: string
+        client_request_id:
+          type: string
+          description: Stable caller-generated idempotency key reused only with the identical request body.
+
+    PutReservationResponse:
+      type: object
+      required: [status, reservation_id, message]
+      properties:
+        status:
+          type: string
+          enum: [pending, confirmed, cancelled]
+          description: A newly created web request is pending; later idempotent reads reflect its current status.
+        reservation_id:
+          type: string
+          format: uuid
+        message:
+          type: string
+          example: Reservation request received. Status is pending confirmation.
+
     PublicDemoPayload:
       type: object
+      required: [restaurant_id, restaurant_name]
       properties:
+        restaurant_id:
+          type: string
+          format: uuid
+          description: Server-derived restaurant identity for the resolved token-gated demo.
         restaurant_name:
           type: string
         cuisine:

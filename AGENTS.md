@@ -793,15 +793,15 @@ Rules:
 
 ## Current Repo Shape
 
-_Last updated: 2026-07-07_
+_Last updated: 2026-07-14_
 
 ```text
 Root Go module with backend under backend/.
-Domain packages: internal/restaurants, internal/demos, internal/auth (JWT + user repo + auth service).
-Placeholder packages: menus, reservations, campaigns, analytics, ai/*, providers/*, platform/telemetry.
+Domain packages include internal/restaurants, demos, auth, campaigns, outreach, scrapejobs, leadprep, and leadreview.
+Automation includes a durable PostgreSQL-backed Python city scrape worker and claimed OCR worker.
 HTTP layer: internal/http with handlers and middleware.
 Platform: internal/platform/{config,db,logger,errors,metadata,migrations,telemetry}.
-SQL migrations: backend/migrations. Integration test slot: backend/tests.
+SQL migrations: backend/migrations, including durable scrape/OCR/outreach workflow migrations 000015-000023. Integration test slot: backend/tests.
 Frontend apps: apps/web placeholder and apps/restaurant-services-catalog Vite Tuvi restaurant growth website with FAL-generated feature videos.
 Phase 1 docs: docs/phase1/PHASE1_IMPLEMENTATION_GUIDE.md and PHASE1_TECHNICAL_BACKLOG.md.
 Phase 2 docs: docs/phase2/ (placeholders). ADRs: docs/adr/.
@@ -810,19 +810,21 @@ Session docs: docs/SESSION_DELIVERED.md and docs/SESSION_SUMMARY.md.
 
 ## Current Implementation State
 
-_Last updated: 2026-06-22_
+_Last updated: 2026-07-14_
 
 ```text
 P1-E01 foundation, P1-008 auth, P1-009 restaurant access, and P1-010 restaurant CRUD are implemented.
 Repository layout now matches docs/phase1/PHASE1_IMPLEMENTATION_GUIDE.md section 5 (domain packages).
-Immediate next build priority: P1-011 restaurant profiles and P1-012 demo payload builder polish.
+The local worktree implements durable Places-first/Apollo city jobs, OCR state/claims, automatic review-only lead drafts, token-gated demo delivery, audited human gates, and PostgreSQL 40/account HTTP outreach quotas with 24-hour continuation.
+Deployment, migrations, Melbourne triggering, OCR execution, and real outreach remain pending explicit production approval.
 ```
 
 ## Recent Agent Updates
 
-_Last updated: 2026-07-07_
+_Last updated: 2026-07-14_
 
 ```text
+2026-07-14 — Backend/Security/DevOps/Documentation — Implemented the local durable city scrape → OCR → reviewed token-gated demo/campaign → quota-managed HTTP outreach workflow and operating runbook; no production actions were taken.
 2026-07-07 — Frontend Agent — Pulled phase1_03/backend with restaurant-services-catalog videos; applied local catalog README/env and root Makefile shortcuts while preserving video assets.
 2026-06-22 — Backend Agent — Restructured backend from layered repositories/services into domain packages (restaurants, demos, auth) per Phase 1 implementation guide; moved phase1 docs to docs/phase1/; all backend tests passing.
 2026-06-22 — Backend Agent — Completed P1-010 restaurant CRUD, lifecycle status, and list query filters.
@@ -832,7 +834,7 @@ _Last updated: 2026-07-07_
 
 ## Active Decisions
 
-_Last updated: 2026-06-17_
+_Last updated: 2026-07-14_
 
 ```text
 - Go is primary backend language.
@@ -840,7 +842,10 @@ _Last updated: 2026-06-17_
 - Next.js/TypeScript is default frontend.
 - Phase 1 starts as modular monolith.
 - P1 foundation uses standard net/http routing, slog logging, pgxpool for PostgreSQL, SQL files plus internal migration runner, and an in-memory worker queue. See docs/adr/2026-06-17-p1-foundation-stack.md.
-- Demo links use signed slug/token with server-side payload.
+- Implemented demo links use per-demo random opaque tokens, bcrypt hashes, expiry, and server-side payloads; see ADR `2026-07-14-token-gated-demo-access.md` (core shorthand above remains unchanged).
+- City acquisition is Google Places first with Apollo used only for missing owner/work-email enrichment; one persisted 500-call window resumes after 24 hours.
+- OCR `verified` creates drafts only; profile approval, demo publication, campaign approval, and bulk-start remain separate administrator gates.
+- Bulk outreach uses Zoho's HTTP API with PostgreSQL-backed 40/account cycles, 24-hour cooldowns, leases, and at-most-once ambiguity handling; SMTP is rejected.
 - AI receptionist is inbound-only for MVP and must disclose AI identity.
 - Phase 2 agents start approval-gated and auditable.
 - Local development prefers subscription-login coding tools, not API-key billing.
@@ -855,9 +860,8 @@ _Last updated: 2026-06-17_
 ```text
 - Whether to keep standard net/http after domain routes grow or move to chi/gin/fiber.
 - Whether restaurant CRUD should use handwritten pgx repositories first or introduce sqlc.
-- Durable queue choice before outreach/content jobs: Postgres job table, Redis/asynq, NATS, or Temporal later.
+- Whether Phase 2 orchestration should continue with PostgreSQL jobs or introduce a dedicated workflow engine.
 - Deployment target: VPS/Docker, managed app platform, or Kubernetes?
-- Email provider?
 - Voice provider?
 - Auth/session provider?
 ```
@@ -889,15 +893,6 @@ _Last updated: 2026-06-17_
 - Add seed data for Thai, Indian, cafe/bakery restaurant demos.
 ```
 
-## Recent Agent Updates
-
-_Last updated: 2026-06-22_
-
-```text
-2026-06-22 — Backend Agent — Restructured backend into domain packages per Phase 1 implementation guide; moved docs to docs/phase1/.
-2026-06-17 — Documentation Agent — Added session delivery documentation rules requiring docs/SESSION_DELIVERED.md and docs/SESSION_SUMMARY.md updates before final responses.
-2026-06-17 — Backend Agent — Implemented P1-E01 foundation scaffold with Go API/worker/migrate commands, config, logging, pgxpool DB wiring, health/readiness middleware, migrations, in-memory jobs, tests, README, Makefile, .env.example, and foundation ADR.
-2026-06-17 — Documentation Agent — Improved AGENTS.md with local development rules, Context7/Headroom usage, context-budget rules, git safety rules, and clearer living-memory update rules.
-```
-
 @RTK.md
+
+## Imported Claude Cowork project instructions

@@ -3,6 +3,7 @@ package jobs
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 
 	"github.com/google/uuid"
@@ -21,6 +22,9 @@ func (enqueuer *OutreachBulkEnqueuer) EnqueueBulkSend(ctx context.Context, trigg
 	}
 	queued, err := enqueuer.Queue.Enqueue(ctx, job)
 	if err != nil {
+		if errors.Is(err, ErrActiveBulkJob) {
+			return "", outreach.ErrBulkJobActive
+		}
 		return "", err
 	}
 	return queued.ID, nil
@@ -37,9 +41,16 @@ func OutreachBulkSendHandler(deps OutreachBulkSendDeps, log *slog.Logger) Handle
 			return err
 		}
 
-		summary, err := deps.Outreach.RunBulkSend(ctx, payload.TriggeredBy)
-		if updateErr := deps.Outreach.UpdateJobSummary(ctx, job.ID, payload.TriggeredBy, summary); updateErr != nil {
-			log.WarnContext(ctx, "bulk_outreach_summary_update_failed", "error", updateErr)
+		summary, err := deps.Outreach.RunBulkSend(ctx, payload.TriggeredBy, job.ID)
+		if err == nil && summary.NextAvailableAt != nil {
+			if deferErr := deps.Outreach.DeferBulkJob(ctx, job.ID, job.LockedBy, payload.TriggeredBy, summary); deferErr != nil {
+				return deferErr
+			}
+			return ErrJobDeferred
+		}
+		if updateErr := deps.Outreach.UpdateJobSummary(ctx, job.ID, job.LockedBy, payload.TriggeredBy, summary); updateErr != nil {
+			log.ErrorContext(ctx, "bulk_outreach_summary_update_failed", "error", updateErr)
+			return updateErr
 		}
 		return err
 	}

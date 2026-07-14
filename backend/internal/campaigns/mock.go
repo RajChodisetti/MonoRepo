@@ -3,6 +3,7 @@ package campaigns
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -13,14 +14,14 @@ import (
 )
 
 type Mock struct {
-	mu        sync.Mutex
-	Campaigns map[uuid.UUID]Campaign
-	Events    []Event
-	Tokens    map[string]TrackingToken
-	Suppressed map[string]struct{}
-	SendContexts map[uuid.UUID]SendContext
+	mu                 sync.Mutex
+	Campaigns          map[uuid.UUID]Campaign
+	Events             []Event
+	Tokens             map[string]TrackingToken
+	Suppressed         map[string]struct{}
+	SendContexts       map[uuid.UUID]SendContext
 	RestaurantContexts map[uuid.UUID]SendContext
-	SiteIndices map[uuid.UUID]int
+	SiteIndices        map[uuid.UUID]int
 }
 
 func (mock *Mock) Create(ctx context.Context, input CreateInput, draft DraftContent) (Campaign, error) {
@@ -69,7 +70,7 @@ func (mock *Mock) ListByRestaurant(ctx context.Context, restaurantID uuid.UUID) 
 	return records, nil
 }
 
-func (mock *Mock) Approve(ctx context.Context, id uuid.UUID, approvedBy uuid.UUID) (Campaign, error) {
+func (mock *Mock) Approve(ctx context.Context, id uuid.UUID, approvedBy uuid.UUID, expectedUpdatedAt time.Time) (Campaign, error) {
 	mock.mu.Lock()
 	defer mock.mu.Unlock()
 	record, ok := mock.Campaigns[id]
@@ -77,11 +78,56 @@ func (mock *Mock) Approve(ctx context.Context, id uuid.UUID, approvedBy uuid.UUI
 		return Campaign{}, repository.ErrNotFound
 	}
 	now := time.Now().UTC()
+	if record.Status != StatusDraft && record.Status != StatusApproved {
+		return Campaign{}, repository.ErrNotFound
+	}
+	if !record.UpdatedAt.Equal(expectedUpdatedAt) {
+		return Campaign{}, ErrStaleReview
+	}
 	record.Status = StatusApproved
 	record.ApprovedAt = &now
 	record.ApprovedBy = &approvedBy
 	record.UpdatedAt = now
 	mock.Campaigns[id] = record
+	return record, nil
+}
+
+func (mock *Mock) RegenerateDraft(
+	ctx context.Context,
+	id uuid.UUID,
+	draft DraftContent,
+	demoToken string,
+	demoTokenHash string,
+	demoExpiresAt *time.Time,
+	regeneratedBy uuid.UUID,
+) (Campaign, error) {
+	mock.mu.Lock()
+	defer mock.mu.Unlock()
+	record, ok := mock.Campaigns[id]
+	if !ok {
+		return Campaign{}, repository.ErrNotFound
+	}
+	if record.Status != StatusDraft && record.Status != StatusApproved {
+		return Campaign{}, ErrNotEligible
+	}
+	record.Status = StatusDraft
+	record.Subject = draft.Subject
+	record.BodyHTML = draft.BodyHTML
+	record.BodyText = draft.BodyText
+	record.DemoToken = demoToken
+	record.ApprovedAt = nil
+	record.ApprovedBy = nil
+	record.UpdatedAt = time.Now().UTC()
+	mock.Campaigns[id] = record
+	metadata, _ := json.Marshal(map[string]string{"regenerated_by": regeneratedBy.String()})
+	mock.Events = append(mock.Events, Event{
+		ID:           uuid.New(),
+		CampaignID:   record.ID,
+		RestaurantID: record.RestaurantID,
+		EventType:    EventDraftRegenerated,
+		Metadata:     metadata,
+		EventTime:    record.UpdatedAt,
+	})
 	return record, nil
 }
 
@@ -111,6 +157,25 @@ func (mock *Mock) MarkSent(ctx context.Context, id uuid.UUID, step int) (Campaig
 	record.CurrentStep = step
 	record.LastSentAt = &now
 	record.UpdatedAt = now
+	mock.Campaigns[id] = record
+	return record, nil
+}
+
+func (mock *Mock) MarkSendSkipped(ctx context.Context, id uuid.UUID, step int) (Campaign, error) {
+	mock.mu.Lock()
+	defer mock.mu.Unlock()
+	record, ok := mock.Campaigns[id]
+	if !ok {
+		return Campaign{}, repository.ErrNotFound
+	}
+	if record.Status != StatusSending && record.Status != StatusStopped && record.Status != StatusApproved {
+		return Campaign{}, repository.ErrNotFound
+	}
+	if record.Status != StatusStopped {
+		record.Status = StatusApproved
+	}
+	record.CurrentStep = step
+	record.UpdatedAt = time.Now().UTC()
 	mock.Campaigns[id] = record
 	return record, nil
 }

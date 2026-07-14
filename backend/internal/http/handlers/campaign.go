@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -41,6 +42,10 @@ type createCampaignRequest struct {
 
 type stopCampaignRequest struct {
 	Reason string `json:"reason"`
+}
+
+type approveCampaignRequest struct {
+	ExpectedUpdatedAt *time.Time `json:"expected_updated_at"`
 }
 
 type sendStepRequest struct {
@@ -173,7 +178,39 @@ func (handler *CampaignHandler) Approve(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	record, err := handler.service.Approve(r.Context(), principal, campaignID)
+	body, err := io.ReadAll(io.LimitReader(r.Body, 16<<10))
+	if err != nil {
+		handler.writeError(w, http.StatusBadRequest, "invalid_request", "Could not read request body.")
+		return
+	}
+	var request approveCampaignRequest
+	if len(body) == 0 || json.Unmarshal(body, &request) != nil || request.ExpectedUpdatedAt == nil {
+		handler.writeError(w, http.StatusBadRequest, "expected_updated_at_required", "expected_updated_at from the reviewed campaign detail is required.")
+		return
+	}
+
+	record, err := handler.service.Approve(r.Context(), principal, campaignID, *request.ExpectedUpdatedAt)
+	if err != nil {
+		handler.mapCampaignError(w, err)
+		return
+	}
+	handler.writeJSON(w, http.StatusOK, campaignResponse(record))
+}
+
+func (handler *CampaignHandler) Regenerate(w http.ResponseWriter, r *http.Request) {
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		handler.writeError(w, http.StatusUnauthorized, "unauthorized", "Authentication required.")
+		return
+	}
+
+	campaignID, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		handler.writeError(w, http.StatusBadRequest, "invalid_request", "Campaign id must be a valid UUID.")
+		return
+	}
+
+	record, err := handler.service.RegenerateDraft(r.Context(), principal, campaignID)
 	if err != nil {
 		handler.mapCampaignError(w, err)
 		return
@@ -283,6 +320,8 @@ func (handler *CampaignHandler) mapCampaignError(w http.ResponseWriter, err erro
 		handler.writeError(w, http.StatusNotFound, "not_found", "Campaign was not found.")
 	case errors.Is(err, campaigns.ErrAlreadyStopped):
 		handler.writeError(w, http.StatusConflict, "campaign_stopped", err.Error())
+	case errors.Is(err, campaigns.ErrStaleReview):
+		handler.writeError(w, http.StatusConflict, "stale_review", "The campaign changed after review; inspect it again before approving.")
 	default:
 		var eligibility campaigns.ErrEligibility
 		if errors.As(err, &eligibility) {

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# VM / production: build and start postgres + migrate + api + worker in Docker.
+# VM / production: build and start PostgreSQL, Redis, migrations, API, worker,
+# and the durable scrape worker in Docker.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -12,7 +13,7 @@ if [[ -f "$ROOT/backend/.env" ]]; then
   echo "Using backend/.env as Docker stack env"
 elif [[ ! -f "$STACK_ENV" ]]; then
   cp stack.env.example "$STACK_ENV"
-  echo "Created $STACK_ENV from stack.env.example — set SMTP/secrets before sending email"
+  echo "Created $STACK_ENV from stack.env.example — set HTTP email-provider credentials and secrets before enabling email"
 fi
 
 docker compose --profile stack up -d --build --wait

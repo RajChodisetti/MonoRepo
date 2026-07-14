@@ -116,7 +116,7 @@ func (provider *resendProvider) Send(ctx context.Context, req SendRequest) (Send
 		if msg == "" {
 			msg = resp.Status
 		}
-		return SendResult{}, fmt.Errorf("resend api error (%d): %s", resp.StatusCode, msg)
+		return SendResult{}, fmt.Errorf("resend api error (%d): %s", resp.StatusCode, redactEmailAddresses(msg))
 	}
 
 	var parsed resendSendResponse
@@ -126,7 +126,7 @@ func (provider *resendProvider) Send(ctx context.Context, req SendRequest) (Send
 
 	messageID := strings.TrimSpace(parsed.ID)
 	if messageID == "" {
-		messageID = "resend:" + originalTo
+		messageID = "resend:unavailable"
 	}
 
 	result := SendResult{ProviderMessageID: messageID}

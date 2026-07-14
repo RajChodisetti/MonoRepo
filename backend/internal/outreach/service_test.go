@@ -8,6 +8,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/auth"
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/campaigns"
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/demos"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/outreach"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/config"
 	emailprovider "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/email"
@@ -15,10 +17,14 @@ import (
 
 type mockRepo struct {
 	count int
+	leads []outreach.EligibleLead
 }
 
 func (repo *mockRepo) ListEligibleLeads(ctx context.Context, limit int) ([]outreach.EligibleLead, error) {
-	return nil, nil
+	if limit >= len(repo.leads) {
+		return repo.leads, nil
+	}
+	return repo.leads[:limit], nil
 }
 
 func (repo *mockRepo) CountEligibleLeads(ctx context.Context) (int, error) {
@@ -60,7 +66,7 @@ func TestTriggerBulkSendRequiresConfiguredAccounts(t *testing.T) {
 		nil,
 		outreach.DemoTokenResolver{},
 		nil,
-		config.EmailConfig{},
+		config.EmailConfig{Provider: "zoho"},
 		config.OutreachConfig{BulkMax: 150},
 		&mockEnqueuer{jobID: "job-1"},
 		nil,
@@ -83,7 +89,7 @@ func TestTriggerBulkSendEnqueuesJob(t *testing.T) {
 		nil,
 		outreach.DemoTokenResolver{},
 		testAccountPool(t),
-		config.EmailConfig{},
+		config.EmailConfig{Provider: "zoho"},
 		config.OutreachConfig{
 			BulkMax:      150,
 			ZohoAccounts: []config.ZohoMailConfig{{AccountID: "1", ClientID: "a", ClientSecret: "b", RefreshToken: "c"}},
@@ -104,5 +110,97 @@ func TestTriggerBulkSendEnqueuesJob(t *testing.T) {
 	}
 	if result.PendingEligibleCount != 7 {
 		t.Fatalf("PendingEligibleCount = %d, want 7", result.PendingEligibleCount)
+	}
+}
+
+func TestTriggerBulkSendRejectsDisabledSending(t *testing.T) {
+	service := outreach.NewService(
+		&mockRepo{count: 7},
+		nil,
+		nil,
+		nil,
+		outreach.DemoTokenResolver{},
+		testAccountPool(t),
+		config.EmailConfig{Provider: "zoho", DisableSending: true},
+		config.OutreachConfig{
+			BulkMax:      150,
+			ZohoAccounts: []config.ZohoMailConfig{{AccountID: "1", ClientID: "a", ClientSecret: "b", RefreshToken: "c"}},
+		},
+		&mockEnqueuer{jobID: "job-123"},
+		nil,
+	)
+
+	_, err := service.TriggerBulkSend(context.Background(), auth.Principal{
+		Role:   auth.RoleInternalAdmin,
+		UserID: uuid.New(),
+	})
+	if !errors.Is(err, outreach.ErrSendingDisabled) {
+		t.Fatalf("TriggerBulkSend() error = %v, want ErrSendingDisabled", err)
+	}
+}
+
+func TestRunBulkSendUsesExistingApprovedCampaign(t *testing.T) {
+	restaurantID := uuid.New()
+	demoSiteID := uuid.New()
+	campaignID := uuid.New()
+	campaignRepo := &campaigns.Mock{
+		Campaigns: map[uuid.UUID]campaigns.Campaign{
+			campaignID: {
+				ID:           campaignID,
+				RestaurantID: restaurantID,
+				DemoSiteID:   demoSiteID,
+				CampaignType: campaigns.TypeOutreach,
+				Status:       campaigns.StatusApproved,
+				Subject:      "Approved subject",
+				BodyHTML:     "<p>Approved body</p>",
+				BodyText:     "Approved body",
+				DemoToken:    "approved-demo-token",
+			},
+		},
+		SendContexts: map[uuid.UUID]campaigns.SendContext{
+			campaignID: {
+				RestaurantEmail: "owner@example.com",
+				ReviewStatus:    "approved",
+				DemoStatus:      demos.StatusPublished,
+			},
+		},
+		SiteIndices: map[uuid.UUID]int{restaurantID: 0},
+	}
+	campaignService := campaigns.NewService(campaignRepo, nil, nil, nil, config.AppURLsConfig{
+		PublicBaseURL: "https://api.example.com",
+		PublicWebURL:  "https://example.com",
+	})
+	service := outreach.NewService(
+		&mockRepo{leads: []outreach.EligibleLead{{
+			CampaignID:   campaignID,
+			RestaurantID: restaurantID,
+			DemoSiteID:   demoSiteID,
+		}}},
+		nil,
+		campaignRepo,
+		campaignService,
+		outreach.DemoTokenResolver{},
+		testAccountPool(t),
+		config.EmailConfig{Provider: "zoho"},
+		config.OutreachConfig{
+			BulkMax:      150,
+			ZohoAccounts: []config.ZohoMailConfig{{AccountID: "1"}},
+		},
+		nil,
+		nil,
+	)
+
+	summary, err := service.RunBulkSend(context.Background(), uuid.New())
+	if err != nil {
+		t.Fatalf("RunBulkSend() error = %v", err)
+	}
+	if summary.Sent != 1 || summary.Attempted != 1 {
+		t.Fatalf("summary = %#v, want one sent attempt", summary)
+	}
+	if len(campaignRepo.Campaigns) != 1 {
+		t.Fatalf("campaign count = %d, want existing campaign only", len(campaignRepo.Campaigns))
+	}
+	if got := campaignRepo.Campaigns[campaignID].Status; got != campaigns.StatusSent {
+		t.Fatalf("campaign status = %q, want %q", got, campaigns.StatusSent)
 	}
 }

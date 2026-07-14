@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""
-Daily lead ingestion — fetch (Apollo) → scrape (Places) → import (Postgres).
-
-Respects combined API request budget, niche type, and dedup against DB/files.
-"""
+"""Daily Places discovery followed by targeted Apollo contact enrichment."""
 
 from __future__ import annotations
 
@@ -11,40 +7,65 @@ import argparse
 import logging
 import os
 import sys
-
-from dotenv import load_dotenv
-
-load_dotenv()
+import time
 
 from env_loader import load_project_env
 
 load_project_env()
 
-from import_to_db import run_import  # noqa: E402
-from ingestion_merge import merge_leads_file, merge_scrape_file  # noqa: E402
-from ingestion_state import (  # noqa: E402
-    get_apollo_page,
-    load_state,
-    record_run_summary,
-    save_state,
-    set_apollo_page,
+from apollo_enrichment import (  # noqa: E402
+    enrich_missing_contact_with_apollo,
+    get_apollo_api_key,
+    needs_apollo_enrichment,
 )
+from google_places_scraper import (  # noqa: E402
+    discover_places_for_city,
+    get_places_api_key,
+    place_to_lead_dict,
+    scrape_single_restaurant_places,
+)
+from import_to_db import run_import  # noqa: E402
+from ingestion_merge import merge_scrape_file  # noqa: E402
+from ingestion_state import load_state, record_run_summary, save_state  # noqa: E402
 from known_leads import KnownLeadsRegistry  # noqa: E402
-from lead_fetch import fetch_leads_for_city  # noqa: E402
 from niche_config import get_niche, list_niche_types  # noqa: E402
 from request_budget import RequestBudget  # noqa: E402
-from scrape_restaurant_places import run_places_scrape_pipeline  # noqa: E402
 from tuvi_outreach_agent import (  # noqa: E402
-    Config,
     AUSTRALIAN_RESTAURANT_CITIES,
-    default_leads_output_path,
+    Config,
     default_scrape_output_path,
-    lead_to_dict,
-    normalize_city_name,
     resolve_cities,
 )
 
 log = logging.getLogger("daily_ingestion")
+
+
+def _refuse_when_durable_city_pipeline_is_installed() -> None:
+    """Prevent the retired in-memory budget from bypassing scrape_jobs."""
+    database_url = os.getenv("DATABASE_URL", "").strip()
+    if not database_url:
+        raise RuntimeError(
+            "The legacy daily ingestion entrypoint requires DATABASE_URL for its safety check; "
+            "use POST /api/v1/scrape-jobs and city_scrape_worker.py instead."
+        )
+    try:
+        import psycopg2
+
+        conn = psycopg2.connect(database_url, connect_timeout=10)
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT to_regclass('public.scrape_jobs') IS NOT NULL")
+                durable_installed = bool(cur.fetchone()[0])
+        finally:
+            conn.close()
+    except Exception as exc:
+        raise RuntimeError(
+            "Could not prove that the durable city pipeline is absent; refusing legacy provider calls."
+        ) from exc
+    if durable_installed:
+        raise RuntimeError(
+            "daily_ingestion.py is retired after migration 000015; trigger the durable city-scrape API instead."
+        )
 
 
 def _resolve_cities_from_env(args) -> list[str]:
@@ -54,7 +75,7 @@ def _resolve_cities_from_env(args) -> list[str]:
         return resolve_cities(cities=args.cities)
     raw = os.getenv("INGESTION_CITIES", "").strip()
     if raw:
-        return resolve_cities(cities=[c.strip() for c in raw.split(",") if c.strip()])
+        return resolve_cities(cities=[city.strip() for city in raw.split(",") if city.strip()])
     return list(AUSTRALIAN_RESTAURANT_CITIES)
 
 
@@ -63,30 +84,50 @@ def run_daily_ingestion(
     niche_type: str = "restaurant",
     cities: list[str] | None = None,
     max_requests: int = 500,
-    per_page: int = 100,
+    target_per_city: int = 100,
     import_to_db: bool = True,
     cfg: Config | None = None,
 ) -> dict:
+    _refuse_when_durable_city_pipeline_is_installed()
     cfg = cfg or Config()
-    if not cfg.APOLLO_API_KEY:
-        raise ValueError("APOLLO_API_KEY is missing from .env")
+    get_places_api_key(cfg)
+    apollo_enabled = bool(getattr(cfg, "APOLLO_ENRICHMENT_ENABLED", True))
+    if apollo_enabled:
+        get_apollo_api_key(cfg)
+    if import_to_db and not os.getenv("DATABASE_URL", "").strip():
+        raise ValueError(
+            "DATABASE_URL is required when database import is enabled; "
+            "set it in the process environment or INGESTION_ENV_FILE"
+        )
+    if target_per_city < 1:
+        raise ValueError("target_per_city must be at least 1")
 
     niche = get_niche(niche_type)
     cities = cities or list(AUSTRALIAN_RESTAURANT_CITIES)
     budget = RequestBudget(max_requests)
-    known = KnownLeadsRegistry.load_combined(niche.slug)
+    known = KnownLeadsRegistry.load_combined(
+        niche.slug,
+        require_database=import_to_db,
+    )
     state = load_state()
 
     summary = {
+        "source": "google_places_api_new+apollo_contact_enrichment",
         "niche": niche.slug,
-        "cities": [c.split(",")[0] for c in cities],
+        "cities": [city.split(",")[0] for city in cities],
         "max_requests": max_requests,
         "requests_used": 0,
-        "leads_fetched": 0,
-        "leads_merged": 0,
+        "places_discovered": 0,
         "scraped": 0,
+        "scrape_success": 0,
         "scrape_merged": 0,
         "skipped_duplicate": 0,
+        "apollo_candidates": 0,
+        "apollo_enriched": 0,
+        "apollo_owner_filled": 0,
+        "apollo_email_filled": 0,
+        "apollo_skipped": 0,
+        "apollo_requests": 0,
         "imported": 0,
         "import_skipped": 0,
     }
@@ -96,106 +137,130 @@ def run_daily_ingestion(
             break
 
         city_label = city.split(",")[0].strip()
-        log.info("═══ City: %s | niche: %s ═══", city_label, niche.slug)
-
-        leads_path = default_leads_output_path([city], cfg, niche=niche.slug)
         scrape_path = default_scrape_output_path(city, cfg, niche=niche.slug)
+        log.info("═══ City: %s | niche: %s | source: Google Places ═══", city_label, niche.slug)
 
-        page = get_apollo_page(state, niche.slug, city)
-        pending: list[dict] = []
-        city_new_leads = []
-        city_scraped: list[dict] = []
+        discovered = discover_places_for_city(
+            city=city,
+            niche=niche.slug,
+            limit=target_per_city,
+            cfg=cfg,
+            budget=budget,
+            known=known,
+        )
+        summary["places_discovered"] += len(discovered)
 
-        while not budget.exhausted:
-            if not pending:
-                if not budget.can_consume(1):
-                    break
-                new_leads, next_page, fetch_stats = fetch_leads_for_city(
-                    cfg.APOLLO_API_KEY,
-                    city,
-                    niche,
-                    per_page=per_page,
-                    max_pages=1,
-                    target_leads=per_page,
-                    start_page=page,
-                    budget=budget,
-                    known=known,
-                    cfg=cfg,
-                )
-                set_apollo_page(state, niche.slug, city, next_page)
-                page = next_page
+        city_scraped = 0
+        city_success = 0
+        city_merged = 0
+        city_skipped = 0
+        city_apollo_candidates = 0
+        city_apollo_enriched = 0
+        city_apollo_requests = 0
 
-                if not new_leads:
-                    log.info("  No new leads on Apollo page — moving on")
-                    break
-
-                for lead in new_leads:
-                    lead_dict = lead_to_dict(lead)
-                    known.register_lead_dict(lead_dict)
-                    pending.append(lead_dict)
-                    city_new_leads.append(lead)
-
-                summary["leads_fetched"] += len(new_leads)
-                continue
-
-            if not budget.can_consume(2):
-                log.info("  Budget too low for Places scrape (need 2 requests)")
+        for place in discovered:
+            if not budget.can_consume(1):
+                log.info("  Places detail budget exhausted")
                 break
 
-            lead_dict = pending.pop(0)
+            lead_dict = place_to_lead_dict(place, city, niche.slug)
             skip, reason = known.should_skip_scrape(lead_dict)
             if skip:
+                city_skipped += 1
                 summary["skipped_duplicate"] += 1
-                log.info("  Skip scrape: %s (%s)", (lead_dict.get("company") or {}).get("name"), reason)
+                log.info("  Skip %s (%s)", (lead_dict.get("company") or {}).get("name"), reason)
                 continue
 
-            records, _ = run_places_scrape_pipeline(
-                cfg=cfg,
-                city=city,
-                niche=niche.slug,
+            record = scrape_single_restaurant_places(
+                lead_dict,
+                cfg,
+                max_reviews=5,
+                query_suffix=niche.places_query_suffix,
                 budget=budget,
-                known=known,
-                leads_data=[lead_dict],
-                output_path=scrape_path,
             )
-            city_scraped.extend(records)
-            summary["scraped"] += len(records)
+            city_scraped += 1
+            summary["scraped"] += 1
+            if record.get("scrape_status") == "success":
+                city_success += 1
+                summary["scrape_success"] += 1
 
-        if city_new_leads:
-            merged = merge_leads_file(
-                leads_path,
-                city_new_leads,
-                cities=[city],
-                niche_type=niche.slug,
-                per_page=per_page,
-                max_pages=1,
-                target_per_city=None,
-            )
-            summary["leads_merged"] += merged
+            if (
+                apollo_enabled
+                and record.get("scrape_status") == "success"
+                and needs_apollo_enrichment(record)
+            ):
+                city_apollo_candidates += 1
+                summary["apollo_candidates"] += 1
+                before_apollo = budget.total_used
+                record, apollo_stats = enrich_missing_contact_with_apollo(
+                    record,
+                    cfg,
+                    niche,
+                    budget=budget,
+                )
+                apollo_requests = budget.total_used - before_apollo
+                city_apollo_requests += apollo_requests
+                summary["apollo_requests"] += apollo_requests
+                record["apollo_enrichment"] = apollo_stats
+                if apollo_stats.get("status") == "enriched":
+                    city_apollo_enriched += 1
+                    summary["apollo_enriched"] += 1
+                else:
+                    summary["apollo_skipped"] += 1
+                if apollo_stats.get("owner_added"):
+                    summary["apollo_owner_filled"] += 1
+                if apollo_stats.get("email_added"):
+                    summary["apollo_email_filled"] += 1
+                if apollo_stats.get("status") == "error":
+                    raise RuntimeError(
+                        "Apollo contact enrichment failed: "
+                        f"{apollo_stats.get('error') or 'unknown provider error'}"
+                    )
+                if apollo_stats.get("status") == "budget_exhausted":
+                    log.info(
+                        "  Apollo budget exhausted before enriching %s",
+                        record.get("name") or "business",
+                    )
+                    break
 
-        if city_scraped:
-            added = merge_scrape_file(scrape_path, city_scraped)
+            known.register_scrape_record(record)
+            added = merge_scrape_file(scrape_path, [record])
+            city_merged += added
             summary["scrape_merged"] += added
+            time.sleep(cfg.SCRAPE_DELAY)
 
-        record_run_summary(state, niche.slug, city, {
-            "requests_used": budget.total_used,
-            "leads_fetched": len(city_new_leads),
-            "scraped": len(city_scraped),
-        })
+        record_run_summary(
+            state,
+            niche.slug,
+            city,
+            {
+                "source": "google_places_api_new+apollo_contact_enrichment",
+                "requests_used": budget.total_used,
+                "places_discovered": len(discovered),
+                "scraped": city_scraped,
+                "scrape_success": city_success,
+                "scrape_merged": city_merged,
+                "skipped_duplicate": city_skipped,
+                "apollo_candidates": city_apollo_candidates,
+                "apollo_enriched": city_apollo_enriched,
+                "apollo_requests": city_apollo_requests,
+            },
+        )
 
     summary["requests_used"] = budget.total_used
     save_state(state)
 
     if import_to_db:
-        data_file = default_scrape_output_path(cities[0] if len(cities) == 1 else None, cfg, niche=niche.slug)
-        data_files = []
-        for city in cities:
-            path = default_scrape_output_path(city, cfg, niche=niche.slug)
-            if path.is_file():
-                data_files.append(path)
-        if not data_files and data_file.is_file():
-            data_files = [data_file]
-        imported, skipped = run_import(restaurants_only=True, data_files=data_files, do_import_leads=False)
+        data_files = [
+            path
+            for city in cities
+            if (path := default_scrape_output_path(city, cfg, niche=niche.slug)).is_file()
+        ]
+        imported, skipped = run_import(
+            restaurants_only=True,
+            data_files=data_files,
+            do_import_leads=False,
+        )
         summary["imported"] = imported
         summary["import_skipped"] = skipped
 
@@ -203,7 +268,12 @@ def run_daily_ingestion(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Daily lead ingestion with budget and dedup")
+    parser = argparse.ArgumentParser(
+        description=(
+            "Daily Google Places discovery plus Apollo contact enrichment "
+            "and database import"
+        ),
+    )
     city_group = parser.add_mutually_exclusive_group()
     city_group.add_argument("--city", metavar="CITY")
     city_group.add_argument("--cities", nargs="+", metavar="CITY")
@@ -217,10 +287,17 @@ def main() -> int:
         "--max-requests",
         type=int,
         default=int(os.getenv("LEAD_INGESTION_MAX_REQUESTS", "500")),
-        help="Combined Apollo + Places request cap (default: 500)",
+        help="Combined Google Places + Apollo request cap (default: 500)",
     )
-    parser.add_argument("--per-page", type=int, default=100)
-    parser.add_argument("--no-import", action="store_true", help="Skip import_to_db step")
+    parser.add_argument(
+        "--target-per-city",
+        "--per-page",
+        dest="target_per_city",
+        type=int,
+        default=100,
+        help="Maximum new businesses to enrich per city (default: 100)",
+    )
+    parser.add_argument("--no-import", action="store_true", help="Skip PostgreSQL import")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
 
@@ -236,10 +313,10 @@ def main() -> int:
             niche_type=args.type,
             cities=cities,
             max_requests=args.max_requests,
-            per_page=args.per_page,
+            target_per_city=args.target_per_city,
             import_to_db=not args.no_import,
         )
-    except ValueError as exc:
+    except (ValueError, RuntimeError) as exc:
         log.error("%s", exc)
         return 1
 

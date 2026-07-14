@@ -1,11 +1,6 @@
 # Session Summary
 
-**Latest (2026-07-08):** Tuvi VM stack is deployed on `root@170.64.154.143` from `/opt/tuvi/MonoRepo`; Caddy routes for Tuvi domains are installed and validated.
-
-**Deployment state:** Catalog (`15173`), API (`18080`), voice (`18000`), template (`13000`), Postgres, Redis, worker, and migrations are running under Compose project `tuvi`.
-
-**Public cutover:** DNS still points `tuvisolutions.com`/`www` at Vercel and Tuvi subdomains are missing; update DNS to `170.64.154.143` for public HTTPS.
-
-**Voice state:** Voice service is running, but `/readyz/browser` reports missing Deepgram/OpenAI/Cartesia keys in `/opt/tuvi/env/voice.env`.
-
-**Git state:** Local branch has deployment commits ahead of origin; GitHub HTTPS push failed with RPC 400 and SSH push is not authorized, so VM deploy used rsync.
+**Latest (2026-07-14):** The local workflow now has durable 500-call city jobs with adaptive grid subdivision, visible incomplete coverage, 24-hour resume/revisit cycles, Places-first discovery, and targeted Apollo enrichment.
+**Lead preparation:** OCR refreshes Places photos just in time, uses explicit claimed/retry states, and creates provenance-bound review-only demo/campaign drafts; all three human gates remain mandatory.
+**Outreach:** PostgreSQL enforces 40 attempts per HTTP-provider account, 24-hour cooldown/rotation, immutable recipient/sequence audit, automatic continuation, and fail-closed ambiguous delivery handling.
+**Verification / production:** Formatting and static diff/YAML reviews are clean; tests and builds were intentionally skipped. Nothing was deployed, migrated, emailed, or triggered for Melbourne.

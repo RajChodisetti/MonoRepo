@@ -140,8 +140,11 @@ class Config:
 
     # ── APIs ──────────────────────────────────────────────
     APOLLO_API_KEY: str           = os.getenv("APOLLO_API_KEY", "")
+    APOLLO_API_BASE_URL: str      = os.getenv("APOLLO_API_BASE_URL", "https://api.apollo.io/api/v1")
+    APOLLO_ENRICHMENT_ENABLED: bool = os.getenv("APOLLO_ENRICHMENT_ENABLED", "true").lower() in ("1", "true", "yes")
     SERPAPI_KEY: str              = os.getenv("SERPAPI_KEY", "")
     PLACES_API_KEY: str           = os.getenv("PLACES_API", "") or os.getenv("GOOGLE_PLACES_API_KEY", "")
+    PLACES_API_BASE_URL: str      = os.getenv("PLACES_API_BASE_URL", "https://places.googleapis.com/v1")
 
     # ── Menu image OCR (Hugging Face vision primary) ─────
     MENU_OCR_ENABLED: bool        = os.getenv("MENU_OCR_ENABLED", "true").lower() in ("1", "true", "yes")

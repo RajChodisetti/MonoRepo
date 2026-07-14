@@ -1,17 +1,71 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { RestaurantContent } from "@/data/types/restaurant";
 
-function parseTimeTo24(time: string): { hours: number; minutes: number } | null {
-  const m = time.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-  if (!m) return null;
-  let hours = parseInt(m[1], 10);
-  const minutes = parseInt(m[2], 10);
-  const ampm = m[3].toUpperCase();
-  if (ampm === "PM" && hours !== 12) hours += 12;
-  if (ampm === "AM" && hours === 12) hours = 0;
-  return { hours, minutes };
+const DEFAULT_RESERVATION_TIMEZONE = "Australia/Sydney";
+
+type AvailabilityResponse = {
+  available_slots?: unknown;
+  timezone?: string;
+  date?: string;
+  party_size?: number;
+  error?: { message?: string };
+};
+
+type RequestIdentity = {
+  fingerprint: string;
+  clientRequestId: string;
+};
+
+type ReservationStatus = "pending" | "confirmed" | "cancelled";
+
+function apiBase(): string {
+  return process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") || "";
+}
+
+function dateInTimeZone(timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-AU", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function formatSlot(slot: string, timeZone: string): string {
+  const value = new Date(slot);
+  if (Number.isNaN(value.getTime())) return slot;
+  return new Intl.DateTimeFormat("en-AU", {
+    timeZone,
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(value);
+}
+
+function newClientRequestId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `web-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function isReservationStatus(value: string | undefined): value is ReservationStatus {
+  return value === "pending" || value === "confirmed" || value === "cancelled";
+}
+
+function reservationHeading(status: ReservationStatus | undefined): string {
+  if (status === "confirmed") return "Reservation Confirmed";
+  if (status === "cancelled") return "Reservation Request Updated";
+  return "Reservation Request Received";
+}
+
+function reservationFallbackMessage(status: ReservationStatus): string {
+  if (status === "confirmed") return "The restaurant has confirmed your reservation.";
+  if (status === "cancelled") return "This reservation request has been cancelled.";
+  return "Your reservation request is pending confirmation by the restaurant.";
 }
 
 export default function ElysianReservation({
@@ -21,10 +75,84 @@ export default function ElysianReservation({
 }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<{ code: string } | null>(null);
+  const [success, setSuccess] = useState<{
+    status: ReservationStatus;
+    reservationId: string;
+    message: string;
+  } | null>(null);
   const [showForm, setShowForm] = useState(true);
+  const [selectedDate, setSelectedDate] = useState("");
+  const [partySize, setPartySize] = useState(2);
+  const [selectedSlot, setSelectedSlot] = useState("");
+  const [availableSlots, setAvailableSlots] = useState<string[]>([]);
+  const [availabilityTimeZone, setAvailabilityTimeZone] = useState(
+    DEFAULT_RESERVATION_TIMEZONE,
+  );
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+  const [availabilityError, setAvailabilityError] = useState<string | null>(null);
+  const requestIdentityRef = useRef<RequestIdentity | null>(null);
 
-  const minDate = new Date().toISOString().split("T")[0];
+  const minDate = dateInTimeZone(DEFAULT_RESERVATION_TIMEZONE);
+  const baseURL = apiBase();
+
+  useEffect(() => {
+    setSelectedSlot("");
+    setAvailableSlots([]);
+    setAvailabilityError(null);
+
+    if (!selectedDate) {
+      setAvailabilityLoading(false);
+      return;
+    }
+    if (!baseURL) {
+      setAvailabilityLoading(false);
+      setAvailabilityError("API URL is not configured.");
+      return;
+    }
+
+    const controller = new AbortController();
+    const query = new URLSearchParams({
+      date: selectedDate,
+      party_size: String(partySize),
+    });
+    setAvailabilityLoading(true);
+
+    void fetch(
+      `${baseURL}/api/public/v1/restaurants/${restaurant.restaurantId}/table-availability?${query.toString()}`,
+      { cache: "no-store", signal: controller.signal },
+    )
+      .then(async (response) => {
+        const payload = (await response.json().catch(() => ({}))) as AvailabilityResponse;
+        if (!response.ok) {
+          throw new Error(payload.error?.message || "Could not load available times.");
+        }
+        if (!Array.isArray(payload.available_slots)) {
+          throw new Error("Availability response did not include any slots.");
+        }
+        return {
+          slots: payload.available_slots.filter(
+            (slot): slot is string => typeof slot === "string" && slot.trim() !== "",
+          ),
+          timeZone: payload.timezone?.trim() || DEFAULT_RESERVATION_TIMEZONE,
+        };
+      })
+      .then(({ slots, timeZone }) => {
+        if (controller.signal.aborted) return;
+        setAvailableSlots(slots);
+        setAvailabilityTimeZone(timeZone);
+      })
+      .catch((reason: unknown) => {
+        if (controller.signal.aborted) return;
+        setAvailabilityError(
+          reason instanceof Error ? reason.message : "Could not load available times.",
+        );
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setAvailabilityLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [baseURL, partySize, restaurant.restaurantId, selectedDate]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -33,54 +161,81 @@ export default function ElysianReservation({
 
     const fd = new FormData(e.currentTarget);
     const name = String(fd.get("name") || "").trim();
+    const email = String(fd.get("email") || "").trim();
     const phone = String(fd.get("phone") || "").trim();
-    const date = String(fd.get("date") || "");
-    const time = String(fd.get("time") || "");
-    const guests = parseInt(String(fd.get("guests") || "2"), 10);
+    const note = String(fd.get("note") || "").trim();
 
-    const parsed = parseTimeTo24(time);
-    if (!parsed) {
-      setError("Please select a valid time.");
+    if (!selectedSlot || !availableSlots.includes(selectedSlot)) {
+      setError("Please select one of the currently available times.");
       setLoading(false);
       return;
     }
 
-    const slot = new Date(`${date}T00:00:00`);
-    slot.setHours(parsed.hours, parsed.minutes, 0, 0);
-
-    const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
-    if (!apiBase) {
+    if (!baseURL) {
       setError("API URL is not configured.");
       setLoading(false);
       return;
     }
 
     try {
+      const requestBody: {
+        guest_name: string;
+        guest_phone: string;
+        guest_email?: string;
+        party_size: number;
+        slot: string;
+        source: "web_form";
+        notes?: string;
+        client_request_id?: string;
+      } = {
+        guest_name: name,
+        guest_phone: phone,
+        party_size: partySize,
+        slot: selectedSlot,
+        source: "web_form",
+      };
+      if (email) requestBody.guest_email = email;
+      if (note) requestBody.notes = note;
+
+      const fingerprint = JSON.stringify(requestBody);
+      if (!requestIdentityRef.current || requestIdentityRef.current.fingerprint !== fingerprint) {
+        requestIdentityRef.current = {
+          fingerprint,
+          clientRequestId: newClientRequestId(),
+        };
+      }
+      requestBody.client_request_id = requestIdentityRef.current.clientRequestId;
+
       const res = await fetch(
-        `${apiBase}/api/public/v1/restaurants/${restaurant.restaurantId}/reservations`,
+        `${baseURL}/api/public/v1/restaurants/${restaurant.restaurantId}/reservations`,
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            guest_name: name,
-            guest_phone: phone,
-            party_size: guests,
-            slot: slot.toISOString(),
-            source: "web_form",
-          }),
+          body: JSON.stringify(requestBody),
         },
       );
       const data = (await res.json().catch(() => ({}))) as {
-        confirmation_code?: string;
+        status?: string;
+        reservation_id?: string;
         message?: string;
+        error?: { message?: string };
       };
       if (!res.ok) {
-        throw new Error(data.message || "Could not complete reservation.");
+        throw new Error(
+          data.error?.message || data.message || "Could not submit the reservation request.",
+        );
       }
-      setSuccess({ code: data.confirmation_code || "—" });
+      if (!isReservationStatus(data.status) || !data.reservation_id) {
+        throw new Error("The reservation request response was incomplete.");
+      }
+      setSuccess({
+        status: data.status,
+        reservationId: data.reservation_id,
+        message: data.message || reservationFallbackMessage(data.status),
+      });
       setShowForm(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Reservation failed.");
+      setError(err instanceof Error ? err.message : "Reservation request failed.");
     } finally {
       setLoading(false);
     }
@@ -91,16 +246,17 @@ export default function ElysianReservation({
       <div className="reservation-bg" />
       <div className="container reservation-grid">
         <div className="reservation-copy reveal fade-up">
-          <p className="eyebrow">Reserve Your Evening</p>
+          <p className="eyebrow">Request Your Evening</p>
           <h2 className="section-title">
-            Secure Your Seat at <span className="gold-text">Our Table</span>
+            Request a Table at <span className="gold-text">Our Restaurant</span>
           </h2>
           <p className="section-sub">
-            Book your table at {restaurant.name}. We look forward to welcoming you.
+            Send a reservation request to {restaurant.name}. The restaurant will confirm
+            availability with you directly.
           </p>
           <ul className="reservation-info">
             {restaurant.phone ? <li>Call {restaurant.phone} for same-day requests</li> : null}
-            <li>Please arrive within 15 minutes of your reservation time</li>
+            <li>Your table is not confirmed until the restaurant contacts you</li>
             {restaurant.email ? <li>Email {restaurant.email} for private dining inquiries</li> : null}
           </ul>
         </div>
@@ -129,32 +285,72 @@ export default function ElysianReservation({
             <div className="form-row">
               <div className="form-field">
                 <label htmlFor="resDate">Date</label>
-                <input type="date" id="resDate" name="date" required min={minDate} />
+                <input
+                  type="date"
+                  id="resDate"
+                  name="date"
+                  required
+                  min={minDate}
+                  value={selectedDate}
+                  onChange={(event) => {
+                    setSelectedSlot("");
+                    setAvailableSlots([]);
+                    setSelectedDate(event.target.value);
+                  }}
+                />
               </div>
               <div className="form-field">
                 <label htmlFor="resTime">Time</label>
-                <select id="resTime" name="time" required defaultValue="">
-                  <option value="">Select time</option>
-                  <option>6:00 PM</option>
-                  <option>6:30 PM</option>
-                  <option>7:00 PM</option>
-                  <option>7:30 PM</option>
-                  <option>8:00 PM</option>
-                  <option>8:30 PM</option>
-                  <option>9:00 PM</option>
+                <select
+                  id="resTime"
+                  name="time"
+                  required
+                  value={selectedSlot}
+                  disabled={!selectedDate || availabilityLoading || availableSlots.length === 0}
+                  onChange={(event) => setSelectedSlot(event.target.value)}
+                >
+                  <option value="">
+                    {!selectedDate
+                      ? "Select a date first"
+                      : availabilityLoading
+                        ? "Loading times..."
+                        : availableSlots.length === 0
+                          ? "No times available"
+                          : "Select time"}
+                  </option>
+                  {availableSlots.map((slot) => (
+                    <option key={slot} value={slot}>
+                      {formatSlot(slot, availabilityTimeZone)}
+                    </option>
+                  ))}
                 </select>
+                {availabilityError ? (
+                  <p className="menu-empty" style={{ padding: "8px 0 0", textAlign: "left" }}>
+                    {availabilityError}
+                  </p>
+                ) : null}
               </div>
             </div>
             <div className="form-row">
               <div className="form-field">
                 <label htmlFor="resGuests">Guests</label>
-                <select id="resGuests" name="guests" required defaultValue="2">
+                <select
+                  id="resGuests"
+                  name="guests"
+                  required
+                  value={partySize}
+                  onChange={(event) => {
+                    setSelectedSlot("");
+                    setAvailableSlots([]);
+                    setPartySize(Number(event.target.value));
+                  }}
+                >
                   <option value="1">1 Guest</option>
                   <option value="2">2 Guests</option>
                   <option value="3">3 Guests</option>
                   <option value="4">4 Guests</option>
                   <option value="5">5 Guests</option>
-                  <option value="6">6+ Guests</option>
+                  <option value="6">6 Guests</option>
                 </select>
               </div>
               <div className="form-field">
@@ -169,9 +365,11 @@ export default function ElysianReservation({
             <button
               type="submit"
               className={`btn btn-gold btn-lg ripple form-submit${loading ? " loading" : ""}`}
-              disabled={loading}
+              disabled={loading || availabilityLoading || !selectedSlot}
             >
-              <span className="btn-text">{loading ? "Confirming..." : "Confirm Reservation"}</span>
+              <span className="btn-text">
+                {loading ? "Sending Request..." : "Request Reservation"}
+              </span>
             </button>
           </form>
         ) : null}
@@ -183,22 +381,30 @@ export default function ElysianReservation({
               <path d="M14 27l7 7 17-17" />
             </svg>
           </div>
-          <h3>Reservation Confirmed</h3>
+          <h3>{reservationHeading(success?.status)}</h3>
+          <p>{success?.message}</p>
           <p>
-            Thank you — your confirmation code is{" "}
-            <strong style={{ color: "var(--gold)" }}>{success?.code}</strong>.
+            Status: <strong style={{ color: "var(--gold)" }}>{success?.status}</strong>
+            <br />
+            Request ID: {success?.reservationId}
           </p>
           <button
             type="button"
             className="btn btn-ghost"
             id="resNewBtn"
             onClick={() => {
+              requestIdentityRef.current = null;
               setSuccess(null);
               setShowForm(true);
               setError(null);
+              setSelectedDate("");
+              setPartySize(2);
+              setSelectedSlot("");
+              setAvailableSlots([]);
+              setAvailabilityError(null);
             }}
           >
-            Make Another Reservation
+            Submit Another Request
           </button>
         </div>
       </div>

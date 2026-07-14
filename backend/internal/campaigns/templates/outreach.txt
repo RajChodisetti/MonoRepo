@@ -1,6 +1,6 @@
-Hi there — most restaurants lose bookings to missed calls and outdated websites.
+Hi there — missed calls and outdated websites can make it harder for guests to request a table.
 
-Tuvi Solutions builds restaurant apps that fix that — and we've already created a live website preview for {{.RestaurantName}} with AI receptionist, online reservations, and more. No extra headcount needed.
+Tuvi Solutions builds restaurant tools to help with that — and we've already created a live website preview for {{.RestaurantName}}, plus a reservation-request form and details on our AI receptionist.
 
 Preview: __CLICK_URL__
 
