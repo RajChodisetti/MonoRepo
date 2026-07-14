@@ -3,7 +3,6 @@ package campaigns
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 	"sync"
 	"time"
