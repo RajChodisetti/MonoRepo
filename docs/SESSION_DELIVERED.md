@@ -12,6 +12,55 @@ Each entry should explain:
 - how the work fits with the rest of the Phase 1 or Phase 2 plan;
 - risks, gaps, or follow-ups.
 
+## 2026-07-15 — Customer-First Homepage Refinement and Deployment
+
+**Role:** Frontend, Security, Reviewer, DevOps, and Documentation Agent
+
+**Delivered:** Refocused the Tuvi homepage on its customer proposition: practical
+AI systems, custom software, websites, apps, automation, and integrations. The
+hero now uses short intentional headlines and a restrained desktop-only solution
+panel instead of the oversized, cropped logo artwork. Mobile, tablet, and small
+laptop widths are copy-led with natural height; the broader Services menu and
+What We Build section now reinforce the AI/software offer rather than implying
+that Tuvi serves only restaurants.
+
+Replaced the large homepage OAuth block with a compact, light disclosure after
+the primary contact journey. It still names the exact `tuvi` application,
+identifies Tuvi Solutions as operator, explains reviewed Gmail API delivery and
+the `gmail.send` boundary, states that inbox content cannot be read, and links
+the app details, Privacy, and Terms pages. The full explanation remains on
+`/google-workspace`, while customer-facing homepage metadata now describes AI,
+websites, and apps.
+
+Published functional commit `7651213` on
+`agent/tuvi-oauth-homepage-verification`. Archived the exact remote-matched
+commit, verified the SHA-256 checksum locally and on the VM, built only
+`tuvi-website`, and recreated it with `--no-deps`. The prior `35800dd` release
+and image are retained as the immediate rollback; `4eaf7fa` remains a second
+fallback. No migration or API, worker, scrape, OCR, email, database, Redis,
+voice, template, catalog, Caddy, DNS, or environment action ran.
+
+**Checks Run:** `git diff --check`, TypeScript validation, and the local Node 22
+production build passed with all 13 routes generated. Rendered homepage checks
+confirmed the customer-first title/copy and compact OAuth disclosure, and
+confirmed the removed fact-card language is absent. Independent source reviews
+found no hierarchy or responsive blockers at 375, 768, 1024, or 1440 pixels and
+no OAuth-content blocker. The VM build passed; loopback and public HTTPS checks
+returned 200 for all main, app, legal, booking, and restaurant routes. The live
+image matches commit `7651213`, has zero restarts, and every non-website
+container retained its prior ID and start time.
+
+**Business Value / Plan Fit:** Visitors now understand Tuvi as an AI and custom
+software partner immediately, without internal Workspace tooling competing with
+the sales journey. The smaller disclosure preserves the public information
+needed for OAuth review while keeping the homepage conversion-focused.
+
+**Risks / Follow-ups:** The in-app visual browser was unavailable, so visual
+confidence comes from the supplied screenshot, responsive source review,
+production builds, and rendered/live HTML checks. Google verification remains
+an external decision and is not guaranteed. Keep the consent-screen name exactly
+`tuvi` and its Privacy/Terms URLs matched to the live links.
+
 ## 2026-07-15 — OAuth Homepage Identity, Responsive Polish, and Deployment
 
 **Role:** Frontend, Security, Reviewer, DevOps, and Documentation Agent
