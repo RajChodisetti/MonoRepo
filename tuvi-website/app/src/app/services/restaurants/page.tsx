@@ -95,9 +95,9 @@ function FeatureVideo({
   const reversed = index % 2 === 1;
 
   return (
-    <article className="grid items-center gap-8 lg:grid-cols-[1.15fr_0.85fr] lg:gap-14">
+    <article className="grid items-center gap-8 lg:grid-cols-[1.22fr_0.78fr] lg:gap-16">
       <div className={`relative ${reversed ? "lg:order-2" : ""}`}>
-        <div className="relative overflow-hidden rounded-[2rem] border border-border bg-ink shadow-[0_34px_76px_-34px_rgba(15,39,31,0.45)]">
+        <div className="relative w-full overflow-hidden rounded-[2.25rem] border border-border bg-ink shadow-[0_34px_76px_-34px_rgba(15,39,31,0.45)]">
           <RestaurantFeatureVideo title={feature.title} poster={feature.poster} src={feature.video} />
           <span className="absolute left-4 top-4 rounded-full border border-white/20 bg-ink/90 px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-[#fffef8] backdrop-blur">
             {feature.badge}
@@ -170,7 +170,7 @@ export default function RestaurantServicesPage() {
         </section>
 
         <section id="features" className="scroll-mt-28 border-b border-border bg-bg-elevated px-5 py-20 md:px-8 md:py-28">
-          <div className="mx-auto max-w-6xl">
+          <div className="mx-auto max-w-7xl">
             <div className="max-w-3xl">
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">See the guest flows</p>
               <h2 className="mt-4 font-display text-4xl font-semibold leading-[1.02] tracking-[-0.03em] text-ink md:text-6xl">
