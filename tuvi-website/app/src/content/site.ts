@@ -30,27 +30,27 @@ export const siteContent = {
     label: "Services",
     items: [
       {
+        href: "/#services",
+        label: "AI & software",
+        description: "AI systems, websites, apps & connected integrations.",
+      },
+      {
         href: "/services/restaurants",
         label: "Restaurants",
         description: "QR ordering, rewards & guest growth — watch the live demos.",
-      },
-      {
-        href: "/google-workspace",
-        label: "tuvi app",
-        description: "Purpose, Gmail permission, data use & support.",
       },
     ],
   },
 
   hero: {
-    eyebrow: "Independent software studio · Australia",
-    headline: ["Websites, apps & AI", "built to carry your growth."],
+    eyebrow: "AI & custom software for every stage",
+    headline: ["Practical AI.", "Custom software."],
     subcopy:
-      "Tuvi brings strategy, design, and engineering into one focused team. Tell us the business outcome — we shape the product, build it well, and stay close after launch.",
+      "Tuvi Solutions designs and builds websites, customer and team apps, AI assistants, and connected automation — from first idea through launch and growth.",
     primaryCta: "Start your project",
     secondaryCta: "See a live demo",
     secondaryHref: "/services/restaurants",
-    trust: "Strategy, design & engineering in one team",
+    trust: "One team from strategy to launch",
     note: "Free consultation · clear next steps",
   },
 

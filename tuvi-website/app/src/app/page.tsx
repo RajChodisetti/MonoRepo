@@ -14,12 +14,12 @@ import VoiceAssistantWidget from "@/components/VoiceAssistantWidget";
 import { siteContent } from "@/content/site";
 
 export const metadata: Metadata = {
-  title: "Tuvi Solutions | Software Studio & tuvi Google Workspace App",
-  description: `${siteContent.hero.subcopy} ${siteContent.oauthApp.metadataDescription}`,
+  title: "Tuvi Solutions | AI Systems, Websites & Apps",
+  description: siteContent.hero.subcopy,
   alternates: { canonical: "/" },
   openGraph: {
-    title: "Tuvi Solutions | Software Studio & tuvi Google Workspace App",
-    description: siteContent.oauthApp.metadataDescription,
+    title: "Tuvi Solutions | AI Systems, Websites & Apps",
+    description: siteContent.hero.subcopy,
     type: "website",
     url: "/",
   },
@@ -31,7 +31,6 @@ export default function HomePage() {
       <Nav />
       <main id="main-content" tabIndex={-1}>
         <Hero />
-        <GoogleWorkspaceApp />
         <WhatWeBuild />
         <HowWeWork />
         <StatsStrip />
@@ -39,6 +38,7 @@ export default function HomePage() {
         <TestimonialsMarquee />
         <GuaranteeSection />
         <ContactCTA />
+        <GoogleWorkspaceApp />
       </main>
       <Footer />
       <VoiceAssistantWidget />
