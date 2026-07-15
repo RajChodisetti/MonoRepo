@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Nav from "@/components/layout/Nav";
 import Footer from "@/components/layout/Footer";
 import Hero from "@/components/sections/Hero";
-import GoogleWorkspaceApp from "@/components/sections/GoogleWorkspaceApp";
 import WhatWeBuild from "@/components/sections/WhatWeBuild";
 import HowWeWork from "@/components/sections/HowWeWork";
 import StatsStrip from "@/components/sections/StatsStrip";
@@ -38,7 +37,6 @@ export default function HomePage() {
         <TestimonialsMarquee />
         <GuaranteeSection />
         <ContactCTA />
-        <GoogleWorkspaceApp />
       </main>
       <Footer />
       <VoiceAssistantWidget />
