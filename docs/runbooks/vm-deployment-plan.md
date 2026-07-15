@@ -153,7 +153,9 @@ EMAIL_DISABLE_SENDING=true
 OUTREACH_BULK_MAX=150
 OUTREACH_EMAILS_PER_ACCOUNT=40
 OUTREACH_EMAIL_COOLDOWN=24h
-OUTREACH_SEND_INTERVAL=2s
+OUTREACH_SEND_WINDOW=8h
+OUTREACH_SEND_JITTER_MIN=2m
+OUTREACH_SEND_JITTER_MAX=5m
 OUTREACH_ZOHO_ACCOUNTS_JSON=[]
 OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON=[]
 ```
@@ -245,11 +247,22 @@ The singleton `ZOHO_*` values configure the generic Zoho email adapter; the
 JSON array configures the independently rotated, quota-managed outreach pool.
 The stable non-secret account `key` identifies the PostgreSQL quota row across
 credential rotations. PostgreSQL conservatively reserves 40 delivery attempts
-per account cycle, then sets that account's next availability 24 hours later.
-If all accounts are cooling down, the same bulk job is deferred and continues
-automatically at the earliest availability. Confirmed deliveries increment `email_send_count` and
-record the global `last_email_send_sequence`; ambiguous provider outcomes use
-campaign status `send_unknown` and are not retried automatically.
+per account cycle. It spreads those reservations across 40 persisted slots in
+an 8-hour window (about 12 minutes per slot) and adds a random persisted 2-5
+minute offset. On-time cycles normally produce effective gaps of about 9-15
+minutes. A global 2-5 minute minimum-delay guard also spans account changes and
+prevents restart catch-up bursts. Each durable job activation makes at most one
+provider attempt, releases the worker, and resumes at the database
+`available_at`; it does not sleep in a worker process. After slot 40, that
+account enters its 24-hour cooldown and the workflow rotates or waits
+automatically.
+
+Forty is an upper bound on reserved attempts, not a guarantee of 40 accepted or
+delivered emails. A shortage of fully approved eligible leads, provider
+rejections, or ambiguous outcomes can produce fewer confirmed sends. Confirmed
+deliveries increment `email_send_count` and record the global
+`last_email_send_sequence`; ambiguous provider outcomes use campaign status
+`send_unknown`, consume their reserved slot, and are not retried automatically.
 
 Only HTTP(S) provider APIs are supported. `EMAIL_PROVIDER=smtp` is rejected at
 configuration validation. Keep sending disabled until the sender identities,
@@ -480,7 +493,9 @@ curl -fsS "$TUVI_API/api/v1/outreach/bulk-send/status" \
 ```
 
 The obsolete `/campaigns/{id}/send-step` route is not registered, so outreach
-can only use the durable 40/account quota and 24-hour continuation path.
+can only use the durable, paced 40-attempt/account quota and 24-hour continuation
+path. Keep `EMAIL_DISABLE_SENDING=true` until the sender identities, content,
+links, and human approval workflow have been reviewed.
 
 If a campaign contains stale links or its token-gated demo has expired, first set
 the demo back to `draft`, then call

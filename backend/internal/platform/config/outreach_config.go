@@ -32,7 +32,9 @@ func loadOutreachConfig(parser *envParser) OutreachConfig {
 	cfg := OutreachConfig{
 		BulkMax:                     parser.int("OUTREACH_BULK_MAX", 150),
 		EmailsPerAccount:            parser.int("OUTREACH_EMAILS_PER_ACCOUNT", 40),
-		SendInterval:                parser.duration("OUTREACH_SEND_INTERVAL", 2*time.Second),
+		SendWindow:                  parser.duration("OUTREACH_SEND_WINDOW", 8*time.Hour),
+		SendJitterMin:               parser.duration("OUTREACH_SEND_JITTER_MIN", 2*time.Minute),
+		SendJitterMax:               parser.duration("OUTREACH_SEND_JITTER_MAX", 5*time.Minute),
 		AccountCooldown:             parser.duration("OUTREACH_EMAIL_COOLDOWN", 24*time.Hour),
 		ZohoAccountsJSON:            parser.string("OUTREACH_ZOHO_ACCOUNTS_JSON", ""),
 		GoogleWorkspaceAccountsJSON: parser.string("OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON", ""),

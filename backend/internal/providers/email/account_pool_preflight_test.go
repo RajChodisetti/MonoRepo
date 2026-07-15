@@ -7,13 +7,17 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/config"
 )
 
 type preflightQuotaStore struct {
-	claims int
+	claims        int
+	registrations []QuotaAccountConfig
 }
 
-func (store *preflightQuotaStore) SyncEmailAccounts(context.Context, []QuotaAccountConfig, time.Duration) error {
+func (store *preflightQuotaStore) SyncEmailAccounts(_ context.Context, accounts []QuotaAccountConfig, _ time.Duration) error {
+	store.registrations = append([]QuotaAccountConfig(nil), accounts...)
 	return nil
 }
 
@@ -85,5 +89,44 @@ func TestDurableAccountPoolValidatesBeforeClaim(t *testing.T) {
 	}
 	if provider.sends != 0 {
 		t.Fatalf("provider sends = %d, want 0", provider.sends)
+	}
+}
+
+func TestPersistentAccountPoolRegistersDurablePacingPolicy(t *testing.T) {
+	t.Parallel()
+
+	quota := &preflightQuotaStore{}
+	pool, err := buildAccountPool(
+		context.Background(),
+		config.EmailConfig{},
+		config.OutreachConfig{
+			BulkMax:          40,
+			EmailsPerAccount: 40,
+			SendWindow:       8 * time.Hour,
+			SendJitterMin:    2 * time.Minute,
+			SendJitterMax:    5 * time.Minute,
+			AccountCooldown:  24 * time.Hour,
+			GoogleWorkspaceAccounts: []config.GmailMailConfig{{
+				AccountKey:   "workspace-sales-1",
+				MailboxEmail: "sales1@example.com",
+				ClientID:     "client-id",
+				ClientSecret: "client-secret",
+				RefreshToken: "refresh-token",
+			}},
+		},
+		quota,
+	)
+	if err != nil {
+		t.Fatalf("buildAccountPool() error = %v", err)
+	}
+	if pool == nil || !pool.Durable() {
+		t.Fatal("buildAccountPool() did not return a durable pool")
+	}
+	if len(quota.registrations) != 1 {
+		t.Fatalf("registrations = %d, want 1", len(quota.registrations))
+	}
+	registration := quota.registrations[0]
+	if registration.SendLimit != 40 || registration.SendWindow != 8*time.Hour || registration.SendJitterMin != 2*time.Minute || registration.SendJitterMax != 5*time.Minute {
+		t.Fatalf("registration pacing = %#v", registration)
 	}
 }

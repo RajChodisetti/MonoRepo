@@ -16,8 +16,14 @@ link defaults that must never reach real recipients.
 - Each configured HTTP email account has a stable non-secret key and a row in
   `outreach_email_accounts`.
 - A transaction locks the next available account, reserves one of at most 40
-  cycle slots, advances to the next account, and sets a 24-hour `available_at`
-  after the final slot.
+  cycle slots, advances to the next account after slot 40, and sets a 24-hour
+  `available_at` after that final slot.
+- Each account's 40 slots are spread over a persisted 8-hour window: an
+  approximately 12-minute base slot plus a cryptographically sampled 2-5 minute
+  offset. On-time adjacent slots therefore normally land about 9-15 minutes
+  apart. A separate persisted global 2-5 minute minimum-delay gate spans account
+  transitions and prevents delayed or restarted workers from sending catch-up
+  bursts.
 - Every reservation creates an `email_delivery_attempts` record with a global
   `send_sequence`, account cycle, account sequence, and normalized immutable
   recipient. Ambiguous provider outcomes become `unknown` and are never retried
@@ -34,10 +40,11 @@ link defaults that must never reach real recipients.
   compatibility flag.
 - Outreach campaigns cannot bypass the quota through the generic manual
   individual `send-step` endpoint; only the bulk workflow is registered.
-- The 150-item bulk setting remains a worker-execution slice. One
-  human-triggered durable job continues across slices and account cooldowns
-  until no currently eligible leads remain or an operator-reconcilable delivery
-  error stops it.
+- A durable job activation crosses the provider boundary at most once. It then
+  releases its lease and requeues for the next PostgreSQL `available_at`; no
+  worker sleeps through the pacing interval. One human-triggered job continues
+  across account slots and cooldowns until no currently eligible leads remain or
+  an operator-reconcilable delivery error stops it.
 - Production/staging sends require absolute HTTPS links from the approved Tuvi
   hosts and fail before the provider call if any placeholder or local link
   remains.
@@ -62,6 +69,8 @@ link defaults that must never reach real recipients.
   ambiguous and could cause a duplicate external send.
 - Automatically retry provider timeouts: rejected because at-most-once outreach
   is safer than duplicate contact.
+- Sleep for minutes inside the worker: rejected because a restart loses pacing
+  state and a sleeping job needlessly holds worker capacity.
 
 ## Consequences
 
@@ -69,6 +78,12 @@ link defaults that must never reach real recipients.
   keyed independently of array position.
 - Redirected, skipped, failed-ambiguous, and sent attempts conservatively consume
   a reserved slot.
+- Forty is an upper bound on reserved attempts, not a guarantee of 40
+  provider-accepted or delivered emails. Insufficient eligible leads and
+  provider outcomes can yield fewer confirmed sends.
+- The schedule and global guard survive restarts and concurrent workers. A late
+  worker resumes from the current time guard instead of replaying expired slots
+  rapidly.
 - A provider/delivery error stops the current bulk job instead of draining the
   remaining account allowance through a broken credential or endpoint.
 - `send_unknown` requires operator/provider reconciliation before a campaign can

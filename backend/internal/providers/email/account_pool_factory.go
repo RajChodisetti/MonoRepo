@@ -97,6 +97,9 @@ func buildAccountPool(
 			FromEmail:        fromEmail,
 			Position:         len(registrations),
 			SendLimit:        outreachCfg.EmailsPerAccount,
+			SendWindow:       outreachCfg.SendWindow,
+			SendJitterMin:    outreachCfg.SendJitterMin,
+			SendJitterMax:    outreachCfg.SendJitterMax,
 		})
 	}
 	for index, account := range outreachCfg.GoogleWorkspaceAccounts {
@@ -143,6 +146,9 @@ func buildAccountPool(
 			FromEmail:        fromEmail,
 			Position:         len(registrations),
 			SendLimit:        outreachCfg.EmailsPerAccount,
+			SendWindow:       outreachCfg.SendWindow,
+			SendJitterMin:    outreachCfg.SendJitterMin,
+			SendJitterMax:    outreachCfg.SendJitterMax,
 		})
 	}
 

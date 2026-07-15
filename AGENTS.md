@@ -801,8 +801,8 @@ Domain packages include internal/restaurants, demos, auth, campaigns, outreach, 
 Automation includes a durable PostgreSQL-backed Python city scrape worker and claimed OCR worker.
 HTTP layer: internal/http with handlers and middleware.
 Platform: internal/platform/{config,db,logger,errors,metadata,migrations,telemetry}.
-SQL migrations: backend/migrations, including durable scrape/OCR/outreach workflow migrations 000015-000023. Integration test slot: backend/tests.
-Frontend apps: apps/web placeholder and apps/restaurant-services-catalog Vite Tuvi restaurant growth website with FAL-generated feature videos.
+SQL migrations: backend/migrations, including durable scrape/OCR/outreach workflow migrations 000015-000024; migration 000024 is not yet deployed. Integration test slot: backend/tests.
+Frontend apps: tuvi-website/app canonical Next.js corporate site, apps/web placeholder, and apps/restaurant-services-catalog Vite restaurant-services catalog.
 Phase 1 docs: docs/phase1/PHASE1_IMPLEMENTATION_GUIDE.md and PHASE1_TECHNICAL_BACKLOG.md.
 Phase 2 docs: docs/phase2/ (placeholders). ADRs: docs/adr/.
 Session docs: docs/SESSION_DELIVERED.md and docs/SESSION_SUMMARY.md.
@@ -815,8 +815,8 @@ _Last updated: 2026-07-14_
 ```text
 P1-E01 foundation, P1-008 auth, P1-009 restaurant access, and P1-010 restaurant CRUD are implemented.
 Repository layout now matches docs/phase1/PHASE1_IMPLEMENTATION_GUIDE.md section 5 (domain packages).
-The local worktree implements durable Places-first/Apollo city jobs, OCR state/claims, automatic review-only lead drafts, token-gated demo delivery, audited human gates, and PostgreSQL 40/account HTTP outreach quotas with 24-hour continuation.
-Deployment, migrations, Melbourne triggering, OCR execution, and real outreach remain pending explicit production approval.
+Workflow migrations 000001-000023 and the supporting services are deployed. The local worktree adds PostgreSQL-backed 40/account HTTP outreach pacing across eight hours with 24-hour continuation; migration 000024 and that pacing code remain undeployed.
+Melbourne triggering, OCR execution, pacing deployment, migration 000024, and real outreach remain pending explicit production approval.
 ```
 
 ## Recent Agent Updates
@@ -824,6 +824,8 @@ Deployment, migrations, Melbourne triggering, OCR execution, and real outreach r
 _Last updated: 2026-07-14_
 
 ```text
+2026-07-14 — Frontend/Security/DevOps — Deployed the logo-led Tuvi corporate and restaurant-services redesign plus public Privacy, Terms, and Google Workspace pages as website-only release 4eaf7fa.
+2026-07-14 — Backend/Security/Documentation — Added local durable outreach pacing: 40 account slots over eight hours, persisted 2–5 minute jitter/global gate, one provider attempt per job activation, and migration 24; production remains approval-gated.
 2026-07-14 — Backend/Security/DevOps/Documentation — Implemented the local durable city scrape → OCR → reviewed token-gated demo/campaign → quota-managed HTTP outreach workflow and operating runbook; no production actions were taken.
 2026-07-07 — Frontend Agent — Pulled phase1_03/backend with restaurant-services-catalog videos; applied local catalog README/env and root Makefile shortcuts while preserving video assets.
 2026-06-22 — Backend Agent — Restructured backend from layered repositories/services into domain packages (restaurants, demos, auth) per Phase 1 implementation guide; moved phase1 docs to docs/phase1/; all backend tests passing.
@@ -845,7 +847,7 @@ _Last updated: 2026-07-14_
 - Implemented demo links use per-demo random opaque tokens, bcrypt hashes, expiry, and server-side payloads; see ADR `2026-07-14-token-gated-demo-access.md` (core shorthand above remains unchanged).
 - City acquisition is Google Places first with Apollo used only for missing owner/work-email enrichment; one persisted 500-call window resumes after 24 hours.
 - OCR `verified` creates drafts only; profile approval, demo publication, campaign approval, and bulk-start remain separate administrator gates.
-- Bulk outreach uses Zoho's HTTP API with PostgreSQL-backed 40/account cycles, 24-hour cooldowns, leases, and at-most-once ambiguity handling; SMTP is rejected.
+- Bulk outreach supports Google Workspace Gmail and Zoho HTTP APIs with PostgreSQL-backed 40/account cycles, durable eight-hour pacing, 24-hour cooldowns, leases, and at-most-once ambiguity handling; SMTP is rejected. Migration 000024 is still required before this pacing code is deployed.
 - AI receptionist is inbound-only for MVP and must disclose AI identity.
 - Phase 2 agents start approval-gated and auditable.
 - Local development prefers subscription-login coding tools, not API-key billing.

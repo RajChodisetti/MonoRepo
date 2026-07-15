@@ -157,7 +157,6 @@ func (service *Service) RunBulkSend(ctx context.Context, triggeredBy uuid.UUID, 
 		}
 	}
 	startedAttempted := summary.Attempted
-	startedSent := summary.Sent
 
 	if !service.emailSendingEnabled() {
 		return summary, ErrSendingDisabled
@@ -168,7 +167,13 @@ func (service *Service) RunBulkSend(ctx context.Context, triggeredBy uuid.UUID, 
 	if err := validateBulkMax(service.outreachCfg.BulkMax); err != nil {
 		return summary, err
 	}
-	leads, err := service.repo.ListEligibleLeads(ctx, service.outreachCfg.BulkMax)
+	leadLimit := service.outreachCfg.BulkMax
+	if service.emailPool.Durable() {
+		// A durable execution crosses the provider boundary at most once. The
+		// same job is then released until PostgreSQL says the next slot is due.
+		leadLimit = 1
+	}
+	leads, err := service.repo.ListEligibleLeads(ctx, leadLimit)
 	if err != nil {
 		return summary, err
 	}
@@ -178,7 +183,7 @@ func (service *Service) RunBulkSend(ctx context.Context, triggeredBy uuid.UUID, 
 		return summary, nil
 	}
 
-	for index, lead := range leads {
+	for _, lead := range leads {
 		if !service.emailPool.Durable() && service.emailPool.Exhausted() {
 			summary.StoppedReason = "account_limit_reached"
 			break
@@ -187,7 +192,7 @@ func (service *Service) RunBulkSend(ctx context.Context, triggeredBy uuid.UUID, 
 		sent, err := service.sendLead(ctx, lead, bulkJobID)
 		if err != nil {
 			if errors.Is(err, emailprovider.ErrAccountsExhausted) {
-				summary.StoppedReason = "account_cooldown"
+				summary.StoppedReason = "paced"
 				nextAvailableAt, availabilityErr := service.emailPool.NextAvailableAt(ctx)
 				if availabilityErr != nil {
 					return summary, availabilityErr
@@ -225,20 +230,9 @@ func (service *Service) RunBulkSend(ctx context.Context, triggeredBy uuid.UUID, 
 			summary.Attempted++
 			summary.Skipped++
 		}
-
-		if index < len(leads)-1 && service.outreachCfg.SendInterval > 0 {
-			timer := time.NewTimer(service.outreachCfg.SendInterval)
-			select {
-			case <-ctx.Done():
-				timer.Stop()
-				return summary, ctx.Err()
-			case <-timer.C:
-			}
-		}
 	}
 
 	batchAttempted := summary.Attempted - startedAttempted
-	batchSent := summary.Sent - startedSent
 	if summary.StoppedReason == "" {
 		if batchAttempted >= len(leads) {
 			summary.StoppedReason = "batch_complete"
@@ -247,11 +241,10 @@ func (service *Service) RunBulkSend(ctx context.Context, triggeredBy uuid.UUID, 
 		}
 	}
 
-	// OUTREACH_BULK_MAX remains a per-execution safety boundary. The same
-	// human-triggered durable job continues in another slice while there are
-	// still approved, eligible leads, and waits on the persisted account
-	// cooldown when every configured account has reached 40 sends.
-	if summary.NextAvailableAt == nil && batchSent > 0 {
+	// The same human-triggered durable job continues one provider reservation at
+	// a time while approved leads remain. PostgreSQL's account and global gates
+	// supply the restart-safe next timestamp; no worker sleeps between sends.
+	if summary.NextAvailableAt == nil && batchAttempted > 0 {
 		remaining, countErr := service.repo.CountEligibleLeads(ctx)
 		if countErr != nil {
 			return summary, countErr
@@ -262,15 +255,14 @@ func (service *Service) RunBulkSend(ctx context.Context, triggeredBy uuid.UUID, 
 				return summary, availabilityErr
 			}
 			if nextAvailableAt == nil {
-				delay := service.outreachCfg.SendInterval
-				if delay < time.Second {
-					delay = time.Second
-				}
-				resumeAt := time.Now().UTC().Add(delay)
+				// The persisted gates can already be due after an eligibility
+				// rejection or a slow provider call. Yield briefly; the next claim
+				// still rechecks both database gates atomically.
+				resumeAt := time.Now().UTC().Add(time.Second)
 				nextAvailableAt = &resumeAt
 				summary.StoppedReason = "more_eligible_leads"
 			} else {
-				summary.StoppedReason = "account_cooldown"
+				summary.StoppedReason = "paced"
 			}
 			summary.NextAvailableAt = nextAvailableAt
 		}

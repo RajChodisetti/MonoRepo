@@ -14,6 +14,9 @@ type QuotaAccountConfig struct {
 	FromEmail        string
 	Position         int
 	SendLimit        int
+	SendWindow       time.Duration
+	SendJitterMin    time.Duration
+	SendJitterMax    time.Duration
 }
 
 type DeliveryContext struct {

@@ -24,6 +24,9 @@ func NewOutreachBulkSendJob(triggeredBy uuid.UUID) (Job, error) {
 		Type:           OutreachBulkSendJobType,
 		Payload:        payload,
 		IdempotencyKey: fmt.Sprintf("outreach.bulk_send:manual:%s", uuid.New()),
-		MaxAttempts:    1,
+		// Provider and delivery failures are terminal for this workflow. Automatic
+		// retries could drain paced slots through a broken credential; normal
+		// pacing continuation uses explicit durable deferral instead.
+		MaxAttempts: 1,
 	}, nil
 }

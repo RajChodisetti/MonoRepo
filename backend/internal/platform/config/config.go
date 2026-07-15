@@ -116,7 +116,9 @@ type GmailMailConfig struct {
 type OutreachConfig struct {
 	BulkMax                     int
 	EmailsPerAccount            int
-	SendInterval                time.Duration
+	SendWindow                  time.Duration
+	SendJitterMin               time.Duration
+	SendJitterMax               time.Duration
 	AccountCooldown             time.Duration
 	ZohoAccounts                []ZohoMailConfig
 	ZohoAccountsJSON            string
@@ -343,8 +345,17 @@ func (c Config) Validate() error {
 	if c.Outreach.EmailsPerAccount < 1 || c.Outreach.EmailsPerAccount > 40 {
 		errs = append(errs, fmt.Errorf("OUTREACH_EMAILS_PER_ACCOUNT must be between 1 and 40"))
 	}
-	if c.Outreach.SendInterval < time.Second {
-		errs = append(errs, fmt.Errorf("OUTREACH_SEND_INTERVAL must be at least 1s"))
+	if c.Outreach.SendWindow < 8*time.Hour {
+		errs = append(errs, fmt.Errorf("OUTREACH_SEND_WINDOW must be at least 8h"))
+	}
+	if c.Outreach.SendJitterMin < 2*time.Minute {
+		errs = append(errs, fmt.Errorf("OUTREACH_SEND_JITTER_MIN must be at least 2m"))
+	}
+	if c.Outreach.SendJitterMax < c.Outreach.SendJitterMin {
+		errs = append(errs, fmt.Errorf("OUTREACH_SEND_JITTER_MAX must be greater than or equal to OUTREACH_SEND_JITTER_MIN"))
+	}
+	if c.Outreach.EmailsPerAccount > 0 && c.Outreach.SendWindow/time.Duration(c.Outreach.EmailsPerAccount) <= c.Outreach.SendJitterMax {
+		errs = append(errs, fmt.Errorf("OUTREACH_SEND_WINDOW divided by OUTREACH_EMAILS_PER_ACCOUNT must be greater than OUTREACH_SEND_JITTER_MAX"))
 	}
 	if c.Outreach.AccountCooldown < 24*time.Hour {
 		errs = append(errs, fmt.Errorf("OUTREACH_EMAIL_COOLDOWN must be at least 24h"))

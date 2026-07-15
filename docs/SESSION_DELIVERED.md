@@ -12,6 +12,136 @@ Each entry should explain:
 - how the work fits with the rest of the Phase 1 or Phase 2 plan;
 - risks, gaps, or follow-ups.
 
+## 2026-07-14 — Tuvi Brand Redesign and Legal-Site Deployment
+
+**Role:** Frontend, Security, Reviewer, and DevOps Agent
+
+**Delivered:** Redesigned the canonical Tuvi Solutions Next.js website around
+the supplied logo and its exact ivory/forest palette. The corporate homepage
+and restaurant-services experience now share an editorial brand system,
+responsive navigation, accessible line icons, calmer motion, clearer service
+language, optimized restaurant video controls, and accurate reservation,
+campaign, callback, and introductory-offer wording. Added the supplied logo as
+a production asset plus a tightly framed browser icon. Published the public
+Google Workspace app page, Privacy Policy, and Terms of Service with working
+navigation and canonical metadata.
+
+Published website-only commit `4eaf7fa` to `origin/phase1_03/backend`, built it
+from a checksum-verified Git archive on the VM, preserved the prior image as
+`tuvi-tuvi-website:rollback-07ebe32`, and recreated only the `tuvi-website`
+Compose service. No migration ran and no API, worker, voice, database, Redis,
+Caddy, DNS, catalog, or outreach service was changed. The website-specific
+release marker is now `4eaf7fa`; the global application marker remains
+`8d392da`.
+
+**Checks Run:** Independent release reviews reported no remaining production
+blockers. `git diff --check`, TypeScript validation, and the Node 22 production
+Next.js build passed with all 13 pages generated. Local production smoke checks
+and VM loopback/public checks returned HTTP 200 for `/`,
+`/services/restaurants`, `/privacy`, `/terms`, `/google-workspace`, `/book`, and
+both brand assets. Website, API, worker, voice, PostgreSQL, and Redis containers
+are running with zero restarts; voice and demo public checks returned HTTP 200.
+
+**Business Value / Plan Fit:** Presents one credible Tuvi identity across the
+corporate and restaurant sales journeys, makes the restaurant offering easier
+to evaluate, and supplies the public legal URLs required for the Google OAuth
+consent-screen configuration while preserving Phase 1's human-review boundary.
+
+**Risks / Follow-ups:** The container build reports two moderate npm dependency
+advisories; review and upgrade them separately rather than applying a breaking
+automatic fix during this release. The public legal pages do not by themselves
+make unsolicited scraped-lead outreach compliant with Google's Gmail policy;
+that verification blocker remains. Browser-based visual automation was
+unavailable in this session, so release confidence came from production builds,
+independent static review, media checks, and local/public HTTP smoke checks.
+
+## 2026-07-14 — Google OAuth Public Information Pages
+
+**Role:** Frontend, Security, and Documentation Agent
+
+**Delivered:** Added public, statically rendered Tuvi pages for the Google OAuth
+application homepage (`/google-workspace`), Privacy Policy (`/privacy`), and
+Terms of Service (`/terms`). The app page identifies the integration as **Tuvi
+Outreach**, describes the single `gmail.send` permission, links to support and
+both legal documents, and explicitly states that the app does not read inboxes,
+contacts, attachments, history, or Drive files. The privacy page documents
+consultation, voice, outreach, OAuth-token, delivery-metadata, sharing,
+retention, revocation, and Limited Use practices. The terms prohibit spam,
+unsolicited bulk commercial email, and Gmail-limit circumvention. Footer links
+now resolve to the legal routes, and canonical metadata uses
+`https://tuvisolutions.com`.
+
+**Checks Run:** `npx tsc --noEmit --pretty false` — passed. Production-equivalent
+Node 22 `next build` — passed, including lint/type validation and static
+generation of all three routes. A local production server returned HTTP 200 for
+`/google-workspace`, `/privacy`, and `/terms`; the privacy HTML contained its
+canonical URL, `gmail.send` disclosure, and Google API User Data Policy link.
+The host's unsupported Node 23 build failed in Webpack; retrying with the
+production Node 22 runtime passed. A Docker build could not be completed because
+Docker Desktop's storage was full; no Docker pruning was performed.
+
+**Business Value / Plan Fit:** Supplies accurate, same-domain public pages for
+the OAuth consent-screen fields and makes Tuvi's narrow Gmail access visible to
+mailbox owners. This supports provider verification while preserving Phase 1's
+human-approved outreach boundary.
+
+**Risks / Follow-ups:** The deployment status in this historical entry is
+superseded by the website release documented above; these pages are now live.
+External Gmail verification is not ready: the repo has no Tuvi OAuth
+start/callback or pre-consent disclosure flow, refresh tokens are configured via
+server environment rather than a verified encrypted-at-rest secret store, and
+the current scraped-lead workflow has suppression but no prior-consent evidence.
+Google's Workspace API policy prohibits unsolicited commercial email and using
+multiple Gmail accounts to bypass limits. Prefer an organization-owned Internal
+Workspace app for Tuvi-owned mailboxes, and do not submit a cold-outreach use
+case as compliant. The owner should also confirm the legal entity name,
+jurisdiction, and address with counsel before publication.
+
+## 2026-07-14 — Durable Eight-Hour Outreach Pacing
+
+**Role:** Backend, Security, Test, and Documentation Agent
+
+**Delivered:** Replaced the fixed two-second in-process email loop with
+PostgreSQL-backed pacing for the verified-lead outreach workflow. Each account's
+40-attempt allowance is now divided into durable slots across a rolling
+eight-hour window, with a persisted cryptographically sampled 2–5 minute jitter.
+A singleton database gate enforces the same minimum velocity guard across
+account transitions and concurrent callers. Delayed workers re-anchor remaining
+slots instead of sending catch-up bursts. Slot 40 retains the existing 24-hour
+per-account cooldown.
+
+Each durable job activation now crosses the Gmail/Zoho HTTPS provider boundary
+at most once, releases its worker lease, and requeues for the database
+`available_at`. Provider/delivery errors remain terminal so a bad credential
+cannot drain future slots; existing delivery leases still fail ambiguous
+provider outcomes closed. The transactional
+OCR `verified`, human profile review, published demo, approved campaign,
+provenance, recipient, suppression, and prior-send checks were preserved. Local
+and template config now use `OUTREACH_SEND_WINDOW=8h`,
+`OUTREACH_SEND_JITTER_MIN=2m`, and `OUTREACH_SEND_JITTER_MAX=5m` with
+`OUTREACH_EMAILS_PER_ACCOUNT=40`. Sending remains disabled.
+
+**Checks Run:** `go test ./backend/...` — 145 passed across 42 packages;
+`go vet ./backend/...` — passed; race checks for outreach, email providers, and
+jobs — 35 passed; focused pacing/config/provider/job tests — passed; OpenAPI YAML
+parse and `git diff --check` — passed. Migration 24 applied, rolled back, and
+reapplied on isolated PostgreSQL 16; its partial-account selection and
+account-rotation SQL were also exercised. No provider call or real email send
+was made.
+
+**Business Value / Plan Fit:** This makes Phase 1 approved outreach restart-safe
+and deliberately low velocity without tying up the only worker. It preserves
+the existing human approval boundary and auditable per-account send sequence.
+
+**Risks / Follow-ups:** Forty is a maximum of reserved attempts, not a guarantee
+of 40 Gmail-accepted or delivered messages when eligible leads are exhausted or
+provider outcomes are skipped/unknown. Forty literal 2–5 minute gaps cannot span
+eight hours, so the implemented policy uses ~12-minute slots with 2–5 minute
+jitter (normally ~9–15 minute on-time gaps). This is a deliverability control,
+not a promise of inbox placement. Migration 24 and the code are local only;
+production deployment/migration requires explicit approval and sending must stay
+disabled through rollout.
+
 ## 2026-07-14 — Google Workspace Outreach and Provider Environment Deployment
 
 **Role:** Backend, DevOps, Security, Test, and Documentation Agent

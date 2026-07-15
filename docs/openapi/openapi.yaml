@@ -34,12 +34,14 @@ info:
 
     ## Bulk outreach (one-click)
     For fully reviewed leads at scale, `POST /api/v1/outreach/bulk-send` enqueues
-    `outreach.bulk_send` (max 150 per batch). PostgreSQL conservatively reserves at most
-    40 delivery attempts per configured account and enforces a 24-hour cooldown. When every
-    account is cooling down, the same job is deferred until the next durable availability
-    time and continues automatically.
+    one durable `outreach.bulk_send` workflow. Each job activation reserves at most one
+    provider attempt, then requeues for its PostgreSQL `available_at`. PostgreSQL
+    conservatively allocates at most 40 attempts per configured account across an 8-hour
+    window and enforces a 24-hour cooldown after slot 40. Forty is an attempt ceiling, not
+    a guarantee of accepted or delivered messages.
 
-    Email transport is HTTP(S)-only (`zoho` or `resend`); SMTP is rejected. In production,
+    Email transport is HTTP(S)-only (Gmail or Zoho for the quota pool; Zoho or Resend for
+    generic sends); SMTP is rejected. In production,
     rendered links must use the configured HTTPS hosts before a provider send is attempted,
     and `EMAIL_REDIRECT_TO` must be empty.
 
@@ -994,7 +996,7 @@ paths:
 
         **Worker required:** run `make worker` in a separate terminal.
 
-        Selects up to `OUTREACH_BULK_MAX` (default 150) leads where:
+        Selects leads where:
         - `restaurant_profiles.ocr_status=verified`
         - profile review is `approved` with non-null `reviewed_at` and `reviewed_by`
         - demo is unexpired and `published` with non-null `published_at` and `published_by`
@@ -1007,10 +1009,20 @@ paths:
         Google Workspace Gmail API accounts (`OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON`) or
         Zoho HTTP API accounts (`OUTREACH_ZOHO_ACCOUNTS_JSON`). PostgreSQL atomically enforces
         `OUTREACH_EMAILS_PER_ACCOUNT` (default 40) delivery claims per account, assigns a
-        global `send_sequence` plus per-account cycle/slot, and sets `available_at` for the
-        `OUTREACH_EMAIL_COOLDOWN` (default 24 hours) when the account reaches its limit.
+        global `send_sequence` plus per-account cycle/slot, and spreads the 40 slots across
+        `OUTREACH_SEND_WINDOW` (default 8 hours). A persisted random offset between
+        `OUTREACH_SEND_JITTER_MIN` and `OUTREACH_SEND_JITTER_MAX` (defaults 2-5 minutes)
+        produces normal on-time gaps of roughly 9-15 minutes around the ~12-minute base
+        slot. A global minimum-delay guard covers account transitions and delayed-worker
+        catch-up. Each durable job activation makes at most one provider attempt and then
+        releases the worker until the persisted `available_at`; it never sleeps between
+        sends. After slot 40, `OUTREACH_EMAIL_COOLDOWN` (default 24 hours) applies.
         Duplicate provider identities are rejected even when configured with different aliases,
         preventing quota multiplication for one mailbox or credential.
+
+        The per-account 40-attempt limit is a conservative ceiling, not a promise
+        of 40 accepted or delivered emails. Fewer eligible approved leads, provider failures,
+        or ambiguous outcomes can reduce confirmed sends; ambiguous outcomes consume a slot.
 
         If every account is cooling down, the same job is moved back to `queued` with its
         durable `available_at` set to the earliest account availability. The worker resumes

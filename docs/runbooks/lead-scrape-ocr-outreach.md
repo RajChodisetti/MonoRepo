@@ -22,8 +22,9 @@ POST city scrape job
             -> human publishes demo
             -> human approves campaign
             -> human starts bulk outreach
-                 -> 40 reserved delivery attempts per email account
-                 -> rotate accounts
+                 -> one provider attempt per durable job activation
+                 -> 40 persisted slots per account across an 8-hour window
+                 -> rotate accounts after slot 40
                  -> 24-hour PostgreSQL cooldown and automatic continuation
                  -> confirmed send updates the delivery ledger and restaurant counter
 ```
@@ -107,7 +108,9 @@ ZOHO_REFRESH_TOKEN=<secret>
 OUTREACH_BULK_MAX=150
 OUTREACH_EMAILS_PER_ACCOUNT=40
 OUTREACH_EMAIL_COOLDOWN=24h
-OUTREACH_SEND_INTERVAL=2s
+OUTREACH_SEND_WINDOW=8h
+OUTREACH_SEND_JITTER_MIN=2m
+OUTREACH_SEND_JITTER_MAX=5m
 OUTREACH_ZOHO_ACCOUNTS_JSON=[]
 OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON=[{"key":"workspace-sales-1","mailbox_email":"sales1@example.com","from_email":"sales1@example.com","client_id":"<oauth client id>","client_secret":"<secret>","refresh_token":"<offline refresh token>"}]
 ```
@@ -129,11 +132,22 @@ are fixed in code to Google's HTTPS hosts so credentials cannot be redirected.
 
 The account `key` is a stable, non-secret identity. Do not change it when a
 refresh token is rotated or when array order changes. Each account has at most
-40 reserved attempts per cycle and becomes available 24 hours after its 40th
-reservation. Gmail and Zoho both use OAuth and HTTPS APIs; SMTP is rejected.
+40 reserved attempts per cycle. The allowance is divided into 40 durable slots
+over eight hours (about 12 minutes per slot), with a persisted random 2-5 minute
+offset. During an on-time cycle, adjacent offsets normally yield effective gaps
+of about 9-15 minutes. A separate global 2-5 minute minimum-delay guard spans
+account transitions and prevents delayed/restarted workers from catching up in
+a burst. After slot 40, the account becomes available again only after its
+24-hour cooldown. Gmail and Zoho both use OAuth and HTTPS APIs; SMTP is rejected.
 Configuration rejects duplicate provider identities even when aliases use
 different keys, and PostgreSQL retains the usage/cooldown row across credential
 rotation.
+
+The limit is conservative: it is at most 40 reserved provider attempts, not a
+promise of 40 accepted or delivered emails. Fewer eligible approved leads,
+skipped claims, provider rejection, or ambiguous outcomes can all reduce the
+confirmed-send count. Ambiguous attempts still consume their reserved slot and
+are never retried automatically.
 
 Token-gated demos do not use a global signing secret. Each demo receives a
 cryptographically random opaque token; `demo_sites` stores its bcrypt hash and
@@ -494,11 +508,14 @@ approved campaign, non-empty unsuppressed email, and no prior confirmed send
 are selected. The obsolete individual `send-step` route is not registered;
 outreach can only enter the quota-managed bulk path.
 
-`OUTREACH_BULK_MAX` is the per-worker-execution slice (150 by default), not a
-manual-retrigger boundary. The same approved bulk job requeues itself while
-eligible leads remain. It uses any still-available account slots first, then
-sets its next run to the earliest PostgreSQL `available_at` after every account
-is cooling down.
+For the durable account pool, each job activation crosses the provider boundary
+at most once. The same approved bulk job then releases its lease and requeues
+itself for the persisted PostgreSQL `available_at`; the worker never sleeps for
+minutes between sends. `OUTREACH_BULK_MAX` remains a safety bound for
+non-durable processing and does not turn one durable activation into a blast.
+The job continues while eligible leads remain, follows the 8-hour account
+schedule, and resumes automatically after the 24-hour cooldown following slot
+40. No manual retrigger is required.
 
 After each provider-accepted send:
 

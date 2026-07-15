@@ -3,6 +3,7 @@ package config
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestLoadUsesSafeLocalDefaults(t *testing.T) {
@@ -24,6 +25,17 @@ func TestLoadUsesSafeLocalDefaults(t *testing.T) {
 	}
 	if cfg.Email.Provider != providerDisabled {
 		t.Fatalf("Email.Provider = %q, want disabled", cfg.Email.Provider)
+	}
+	if cfg.Outreach.EmailsPerAccount != 40 {
+		t.Fatalf("Outreach.EmailsPerAccount = %d, want 40", cfg.Outreach.EmailsPerAccount)
+	}
+	if cfg.Outreach.SendWindow != 8*time.Hour || cfg.Outreach.SendJitterMin != 2*time.Minute || cfg.Outreach.SendJitterMax != 5*time.Minute {
+		t.Fatalf(
+			"outreach pacing = (%s, %s, %s), want (8h, 2m, 5m)",
+			cfg.Outreach.SendWindow,
+			cfg.Outreach.SendJitterMin,
+			cfg.Outreach.SendJitterMax,
+		)
 	}
 }
 
@@ -124,16 +136,34 @@ func TestLoadRejectsUnsafeOutreachLimits(t *testing.T) {
 	clearEnv(t)
 	t.Setenv("OUTREACH_BULK_MAX", "151")
 	t.Setenv("OUTREACH_EMAILS_PER_ACCOUNT", "51")
-	t.Setenv("OUTREACH_SEND_INTERVAL", "500ms")
+	t.Setenv("OUTREACH_SEND_WINDOW", "7h")
+	t.Setenv("OUTREACH_SEND_JITTER_MIN", "90s")
+	t.Setenv("OUTREACH_SEND_JITTER_MAX", "60s")
 
 	_, err := Load()
 	if err == nil {
 		t.Fatal("Load() error = nil, want outreach validation errors")
 	}
-	for _, want := range []string{"OUTREACH_BULK_MAX", "OUTREACH_EMAILS_PER_ACCOUNT", "OUTREACH_SEND_INTERVAL"} {
+	for _, want := range []string{"OUTREACH_BULK_MAX", "OUTREACH_EMAILS_PER_ACCOUNT", "OUTREACH_SEND_WINDOW", "OUTREACH_SEND_JITTER_MIN", "OUTREACH_SEND_JITTER_MAX"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("Load() error = %q, want %s validation error", err.Error(), want)
 		}
+	}
+}
+
+func TestLoadRejectsOutreachJitterWiderThanAccountSlot(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("OUTREACH_EMAILS_PER_ACCOUNT", "40")
+	t.Setenv("OUTREACH_SEND_WINDOW", "8h")
+	t.Setenv("OUTREACH_SEND_JITTER_MIN", "2m")
+	t.Setenv("OUTREACH_SEND_JITTER_MAX", "12m")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() error = nil, want slot-width validation error")
+	}
+	if !strings.Contains(err.Error(), "OUTREACH_SEND_WINDOW divided by OUTREACH_EMAILS_PER_ACCOUNT") {
+		t.Fatalf("Load() error = %q, want outreach slot-width validation error", err.Error())
 	}
 }
 
@@ -297,7 +327,9 @@ func clearEnv(t *testing.T) {
 		"EMAIL_REDIRECT_TO",
 		"OUTREACH_BULK_MAX",
 		"OUTREACH_EMAILS_PER_ACCOUNT",
-		"OUTREACH_SEND_INTERVAL",
+		"OUTREACH_SEND_WINDOW",
+		"OUTREACH_SEND_JITTER_MIN",
+		"OUTREACH_SEND_JITTER_MAX",
 		"OUTREACH_ZOHO_ACCOUNTS_JSON",
 		"OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON",
 		"LLM_PROVIDER",
