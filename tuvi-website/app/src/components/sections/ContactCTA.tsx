@@ -12,7 +12,7 @@ export default function ContactCTA() {
   return (
     <SectionShell id={contact.id}>
       <Reveal>
-        <div className="ink-panel relative overflow-hidden rounded-[2.5rem] p-8 text-center md:p-16">
+        <div className="ink-panel relative overflow-hidden rounded-[2rem] p-5 text-center sm:rounded-[2.5rem] sm:p-8 md:p-16">
           <span className="relative inline-flex items-center gap-2.5 rounded-full border border-white/20 bg-white/10 px-3.5 py-1.5 text-xs font-semibold text-white">
             <span className="h-2 w-2 rounded-full bg-primary" aria-hidden />
             {contact.eyebrow}
@@ -27,27 +27,27 @@ export default function ContactCTA() {
           <div className="relative mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
             <a
               href={getBookCallUrl()}
-              className="inline-flex items-center justify-center gap-2 rounded-full bg-[#fffef8] px-6 py-3 text-sm font-semibold text-ink shadow-lg transition-colors duration-200 hover:bg-sage"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#fffef8] px-6 py-3 text-sm font-semibold text-ink shadow-lg transition-colors duration-200 hover:bg-sage sm:w-auto"
             >
               {contact.primaryCta} <span aria-hidden>→</span>
             </a>
             {callInHref && callInDisplay ? (
               <a
                 href={callInHref}
-                className="rounded-full border border-white/25 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+                className="w-full rounded-full border border-white/25 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10 sm:w-auto"
               >
                 Call our AI · {callInDisplay}
               </a>
             ) : null}
             <a
               href={`mailto:${getContactEmail()}`}
-              className="text-sm text-white/70 transition-colors hover:text-white"
+              className="max-w-full break-all text-sm text-white/70 transition-colors hover:text-white sm:break-normal"
             >
               {getContactEmail()}
             </a>
           </div>
 
-          <div className="relative mx-auto mt-9 max-w-md rounded-3xl bg-[#fffef8] p-6 text-left shadow-2xl">
+          <div className="relative mx-auto mt-9 max-w-md rounded-3xl bg-[#fffef8] p-5 text-left shadow-2xl sm:p-6">
             <RequestCallbackForm />
             <p className="mt-4 text-center text-[11px] leading-5 text-muted">
               By submitting a callback request, you agree that Tuvi may contact you about this request. See our{" "}

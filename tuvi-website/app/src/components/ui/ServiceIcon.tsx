@@ -9,7 +9,8 @@ export type ServiceIconName =
   | "rewards"
   | "voice"
   | "calendar"
-  | "campaign";
+  | "campaign"
+  | "mail";
 
 export default function ServiceIcon({
   name,
@@ -93,6 +94,12 @@ export default function ServiceIcon({
       {name === "campaign" ? (
         <>
           <path d="m4 13 12-5v8L4 13ZM16 10l3-2v8l-3-2M6 14l1 5h4l-2-6" />
+        </>
+      ) : null}
+      {name === "mail" ? (
+        <>
+          <rect x="3" y="5" width="18" height="14" rx="2" />
+          <path d="m4 7 8 6 8-6" />
         </>
       ) : null}
     </svg>

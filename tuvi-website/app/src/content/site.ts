@@ -5,6 +5,20 @@ export const siteContent = {
     email: "contact@tuvisolutions.com",
   },
 
+  oauthApp: {
+    name: "tuvi",
+    eyebrow: "Google Workspace application",
+    title: "Reviewed email delivery with one narrow permission.",
+    description:
+      "tuvi is a private, company-operated application from Tuvi Solutions. Authorized Tuvi team members use it to send individually reviewed business email from their Google Workspace mailboxes through the Gmail API over HTTPS.",
+    dataUse:
+      "tuvi requests only the gmail.send permission. It cannot read inbox messages, contacts, attachments, message history, or Google Drive files.",
+    access:
+      "Mailbox access is limited to authorized Tuvi Solutions owners and administrators. There is no public signup.",
+    metadataDescription:
+      "tuvi uses Google OAuth and the Gmail API to send individually reviewed email from authorized Tuvi Solutions Google Workspace mailboxes.",
+  },
+
   nav: [
     { href: "/#about", label: "Why Tuvi" },
     { href: "/#approach", label: "Our standard" },
@@ -19,6 +33,11 @@ export const siteContent = {
         href: "/services/restaurants",
         label: "Restaurants",
         description: "QR ordering, rewards & guest growth — watch the live demos.",
+      },
+      {
+        href: "/google-workspace",
+        label: "tuvi app",
+        description: "Purpose, Gmail permission, data use & support.",
       },
     ],
   },
@@ -111,6 +130,7 @@ export const siteContent = {
 
   footer: {
     legal: [
+      { label: "tuvi Google Workspace app", href: "/google-workspace" },
       { label: "Privacy Policy", href: "/privacy" },
       { label: "Terms of Service", href: "/terms" },
       { label: "Contact", href: "/#contact" },

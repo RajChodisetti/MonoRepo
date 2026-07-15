@@ -56,7 +56,7 @@ export default function RequestCallbackForm({
     "w-full rounded-xl border border-border bg-bg-elevated px-3 py-2.5 text-sm text-text placeholder:text-muted/70 outline-none transition focus:border-primary/60";
 
   return (
-    <div className={compact ? "space-y-3" : "mx-auto mt-8 max-w-md space-y-3 text-left"}>
+    <div className={compact ? "space-y-3" : "mx-auto max-w-md space-y-3 text-left"}>
       {!compact && (
         <div>
           <p className="text-sm font-semibold text-text">Get a callback</p>

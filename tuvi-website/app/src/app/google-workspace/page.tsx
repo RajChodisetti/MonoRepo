@@ -3,16 +3,15 @@ import Link from "next/link";
 import Nav from "@/components/layout/Nav";
 import Footer from "@/components/layout/Footer";
 import { getContactEmail } from "@/lib/env";
+import { siteContent } from "@/content/site";
 
 export const metadata: Metadata = {
-  title: "Tuvi Outreach | Google Workspace Integration",
-  description:
-    "How Tuvi Outreach uses the Gmail API to send operator-approved email from authorized Tuvi Solutions Workspace mailboxes.",
+  title: "tuvi | Google Workspace App by Tuvi Solutions",
+  description: siteContent.oauthApp.metadataDescription,
   alternates: { canonical: "/google-workspace" },
   openGraph: {
-    title: "Tuvi Outreach | Google Workspace Integration",
-    description:
-      "How Tuvi Outreach uses the Gmail API to send operator-approved email from authorized Tuvi Solutions Workspace mailboxes.",
+    title: "tuvi | Google Workspace App by Tuvi Solutions",
+    description: siteContent.oauthApp.metadataDescription,
     type: "website",
     url: "/google-workspace",
   },
@@ -22,7 +21,7 @@ export const metadata: Metadata = {
 const cards = [
   {
     title: "One narrow permission",
-    body: "The integration requests only gmail.send so it can submit an approved outbound message to Gmail over HTTPS.",
+    body: "tuvi requests only gmail.send so it can submit an individually reviewed outbound message to Gmail over HTTPS.",
   },
   {
     title: "No mailbox reading",
@@ -30,12 +29,13 @@ const cards = [
   },
   {
     title: "Controlled access",
-    body: "Mailbox connections are provisioned only for authorized Tuvi Workspace owners or administrators. There is no public signup.",
+    body: "Mailbox connections are provisioned only for authorized Tuvi Solutions Workspace owners or administrators. There is no public signup.",
   },
 ] as const;
 
 export default function GoogleWorkspacePage() {
   const contactEmail = getContactEmail();
+  const app = siteContent.oauthApp;
 
   return (
     <>
@@ -51,12 +51,13 @@ export default function GoogleWorkspacePage() {
               Google Workspace integration
             </p>
             <h1 className="mt-3 font-display text-4xl font-bold tracking-tight text-ink md:text-6xl">
-              Tuvi Outreach
+              {app.name}
             </h1>
             <p className="mt-6 text-lg leading-8 text-muted">
-              Tuvi Outreach is a Tuvi Solutions-operated tool for sending
-              operator-approved email from authorized Tuvi Google Workspace mailboxes
-              through the Gmail API.
+              {app.description}
+            </p>
+            <p className="mt-4 max-w-2xl text-sm leading-6 text-muted">
+              {app.dataUse} {app.access}
             </p>
           </header>
 
@@ -77,12 +78,12 @@ export default function GoogleWorkspacePage() {
             <ol className="mt-5 grid gap-5 text-sm leading-7 text-muted md:grid-cols-3">
               <li>
                 <span className="block font-display text-2xl font-bold text-primary">01</span>
-                An authorized mailbox owner or administrator grants the Gmail send
-                permission through Google OAuth.
+                An authorized mailbox owner or administrator connects their mailbox to
+                tuvi and grants the Gmail send permission through Google OAuth.
               </li>
               <li>
                 <span className="block font-display text-2xl font-bold text-primary">02</span>
-                Tuvi exchanges the authorization for a short-lived access token and
+                tuvi exchanges the authorization for a short-lived access token and
                 sends only the message prepared for delivery.
               </li>
               <li>
@@ -96,7 +97,7 @@ export default function GoogleWorkspacePage() {
           <section className="mt-8 rounded-3xl border border-primary/20 bg-primary/5 p-7 md:p-10">
             <h2 className="font-display text-2xl font-bold text-ink">Responsible use</h2>
             <p className="mt-3 max-w-3xl leading-7 text-muted">
-              The integration is intended only for communications that Tuvi and the
+              tuvi is intended only for communications that Tuvi Solutions and the
               authorized sender are permitted to send. It must not be used for spam,
               unsolicited bulk commercial email, or to evade Google sending limits,
               filters, or abuse protections.

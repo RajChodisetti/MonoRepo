@@ -18,7 +18,7 @@ export default function Hero() {
       <div className="pointer-events-none absolute inset-0 grid-bg opacity-35 [mask-image:radial-gradient(52rem_36rem_at_50%_30%,black,transparent)]" />
 
       <div className="relative mx-auto w-full max-w-6xl px-5 py-14 md:px-8 md:py-20 lg:py-24">
-        <div className="grid items-center gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:gap-16">
+        <div className="grid items-center gap-12 xl:grid-cols-[1.18fr_0.82fr] xl:gap-14">
           <div className="max-w-2xl">
             <motion.p
               initial={rise}
@@ -30,7 +30,7 @@ export default function Hero() {
               {hero.eyebrow}
             </motion.p>
 
-            <h1 className="mt-7 font-display text-[2.9rem] font-semibold leading-[0.98] tracking-[-0.04em] text-ink sm:text-6xl md:text-7xl lg:text-[5.25rem]">
+            <h1 className="mt-7 font-display text-[2.9rem] font-semibold leading-[0.98] tracking-[-0.04em] text-ink sm:text-6xl md:text-7xl lg:text-[4.5rem] xl:text-[4.65rem]">
               {hero.headline.map((line, index) => (
                 <motion.span
                   key={line}
@@ -83,7 +83,7 @@ export default function Hero() {
             initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 26, rotate: 1.5 }}
             animate={{ opacity: 1, y: 0, rotate: 0 }}
             transition={{ duration: 0.72, delay: reduceMotion ? 0 : 0.24, ease: [0.22, 1, 0.36, 1] }}
-            className="mx-auto w-full max-w-[520px]"
+            className="mx-auto w-full max-w-[520px] xl:max-w-[460px]"
           >
             <div className="logo-orbit relative aspect-square overflow-hidden rounded-[2.5rem] border border-border bg-bg-elevated shadow-[0_34px_90px_-40px_rgba(15,39,31,0.42)]">
               <div className="absolute inset-[8%]">
