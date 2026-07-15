@@ -12,6 +12,60 @@ Each entry should explain:
 - how the work fits with the rest of the Phase 1 or Phase 2 plan;
 - risks, gaps, or follow-ups.
 
+## 2026-07-15 — OAuth Homepage Identity, Responsive Polish, and Deployment
+
+**Role:** Frontend, Security, Reviewer, DevOps, and Documentation Agent
+
+**Delivered:** Made the public homepage explicitly identify the OAuth
+application as **`tuvi`**, separate from its operator, Tuvi Solutions. Added a
+prominent Google Workspace application section that explains the app's purpose,
+authorized-user boundary, HTTPS Gmail sending flow, exact `gmail.send` scope,
+and the Google data it cannot read. Replaced the conflicting "Tuvi Outreach"
+name across the application page, metadata, Privacy Policy, Terms, navigation,
+and footer. Centralized this identity and copy in the site-content model.
+
+Polished the responsive layout by keeping the hero stacked through tablet and
+small-laptop widths, balancing its desktop type and logo, removing excess form
+spacing, tightening nested contact-card padding, and making mobile actions and
+long email/link content wrap safely. Independent source reviews found no
+release blockers at 375, 768, 1024, or 1440 pixels.
+
+Published functional commit `35800dd` on the new
+`agent/tuvi-oauth-homepage-verification` branch. Created a Git archive from that
+exact remote-matched commit, verified its SHA-256 checksum locally and on the
+VM, and built it from `/opt/tuvi/releases/35800dd...`. Retained the prior
+`4eaf7fa` website source and image under immutable and rollback tags, then
+recreated only `tuvi-website` with `--no-deps`. No migration or API, worker,
+scrape, OCR, email, database, Redis, voice, catalog, Caddy, or DNS action ran.
+
+**Checks Run:** `git diff --check` — passed;
+`npx tsc --noEmit --incremental false --pretty false` — passed; production
+Node 22 `next build` — passed with all 13 routes generated. A local production
+server returned HTTP 200 for `/`, `/google-workspace`, `/privacy`, and `/terms`;
+rendered HTML contained the exact `tuvi` identity, app-purpose heading,
+`gmail.send only` disclosure, and all three public links. The in-app browser
+surface was unavailable, so responsive verification combined static review,
+production compilation, and rendered-HTML smoke checks. The VM build also
+passed with all 13 routes generated. Loopback checks returned HTTP 200 for `/`,
+`/google-workspace`, `/privacy`, `/terms`, `/book`, and
+`/services/restaurants`; public HTTPS checks returned 200 on the root, `www`,
+Workspace, Privacy, and Terms URLs. The live homepage contains the required app
+name, purpose, permission, and legal-link text. The running image matches the
+commit tag, its restart count is zero, and all non-website services remain up.
+
+**Business Value / Plan Fit:** Directly addresses Google's prior branding
+findings by making the app name and purpose public and consistent while
+improving the homepage's usability and credibility without weakening Phase 1's
+human-review boundary.
+
+**Risks / Follow-ups:** The website change is live. Keep the Google Cloud app
+name exactly `tuvi`, submit the final non-redirecting homepage/privacy/terms
+URLs, verify domain ownership, use the matching logo, and request
+re-verification. Approval is not guaranteed, and the separate Gmail
+outreach-policy concern is unchanged. The Compose build still warns that
+Buildx is unavailable and uses a floating `node:22-alpine` base; neither
+affected this successful release.
+
 ## 2026-07-14 — Tuvi Brand Redesign and Legal-Site Deployment
 
 **Role:** Frontend, Security, Reviewer, and DevOps Agent
