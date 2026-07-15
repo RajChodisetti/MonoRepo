@@ -13,9 +13,11 @@ import VoiceAssistantWidget from "@/components/VoiceAssistantWidget";
 import { siteContent } from "@/content/site";
 
 export const metadata: Metadata = {
+  title: "Tuvi Solutions | AI Systems, Websites & Apps",
+  description: siteContent.hero.subcopy,
   alternates: { canonical: "/" },
   openGraph: {
-    title: siteContent.brand.name,
+    title: "Tuvi Solutions | AI Systems, Websites & Apps",
     description: siteContent.hero.subcopy,
     type: "website",
     url: "/",

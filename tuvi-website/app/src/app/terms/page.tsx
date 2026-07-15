@@ -72,13 +72,13 @@ export default function TermsPage() {
         </LegalList>
       </LegalSection>
 
-      <LegalSection title="4. Google-connected functionality">
+      <LegalSection title="4. tuvi Google Workspace functionality">
         <p>
-          Google Workspace mailbox connections may be used only by an authorized
-          mailbox owner or administrator. A connected mailbox authorizes Tuvi to use
-          the Gmail API to send approved messages; it does not give Tuvi permission to
-          read the mailbox, contacts, or Google Drive files. The owner may revoke access
-          through their Google Account at any time.
+          The <strong className="text-ink">tuvi</strong> Google Workspace application may
+          be connected only by an authorized mailbox owner or administrator. A connected
+          mailbox authorizes tuvi to use the Gmail API to send approved messages; it does
+          not give tuvi permission to read the mailbox, contacts, or Google Drive files.
+          The owner may revoke access through their Google Account at any time.
         </p>
         <p>
           Use of Google-connected functionality is also subject to applicable Google

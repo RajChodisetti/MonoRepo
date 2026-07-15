@@ -5,6 +5,20 @@ export const siteContent = {
     email: "contact@tuvisolutions.com",
   },
 
+  oauthApp: {
+    name: "tuvi",
+    eyebrow: "Google Workspace application",
+    title: "Reviewed email delivery with one narrow permission.",
+    description:
+      "tuvi is a private, company-operated application from Tuvi Solutions. Authorized Tuvi team members use it to send individually reviewed business email from their Google Workspace mailboxes through the Gmail API over HTTPS.",
+    dataUse:
+      "tuvi requests only the gmail.send permission. It cannot read inbox messages, contacts, attachments, message history, or Google Drive files.",
+    access:
+      "Mailbox access is limited to authorized Tuvi Solutions owners and administrators. There is no public signup.",
+    metadataDescription:
+      "tuvi uses Google OAuth and the Gmail API to send individually reviewed email from authorized Tuvi Solutions Google Workspace mailboxes.",
+  },
+
   nav: [
     { href: "/#about", label: "Why Tuvi" },
     { href: "/#approach", label: "Our standard" },
@@ -16,6 +30,11 @@ export const siteContent = {
     label: "Services",
     items: [
       {
+        href: "/#services",
+        label: "AI & software",
+        description: "AI systems, websites, apps & connected integrations.",
+      },
+      {
         href: "/services/restaurants",
         label: "Restaurants",
         description: "QR ordering, rewards & guest growth — watch the live demos.",
@@ -24,14 +43,14 @@ export const siteContent = {
   },
 
   hero: {
-    eyebrow: "Independent software studio · Australia",
-    headline: ["Websites, apps & AI", "built to carry your growth."],
+    eyebrow: "AI & custom software for every stage",
+    headline: ["Practical AI.", "Custom software."],
     subcopy:
-      "Tuvi brings strategy, design, and engineering into one focused team. Tell us the business outcome — we shape the product, build it well, and stay close after launch.",
+      "Tuvi Solutions designs and builds websites, customer and team apps, AI assistants, and connected automation — from first idea through launch and growth.",
     primaryCta: "Start your project",
     secondaryCta: "See a live demo",
     secondaryHref: "/services/restaurants",
-    trust: "Strategy, design & engineering in one team",
+    trust: "One team from strategy to launch",
     note: "Free consultation · clear next steps",
   },
 
@@ -111,6 +130,7 @@ export const siteContent = {
 
   footer: {
     legal: [
+      { label: "tuvi Google Workspace app", href: "/google-workspace" },
       { label: "Privacy Policy", href: "/privacy" },
       { label: "Terms of Service", href: "/terms" },
       { label: "Contact", href: "/#contact" },

@@ -75,9 +75,9 @@ export default function PrivacyPage() {
 
       <LegalSection title="3. Google API data and Gmail access">
         <p>
-          Our outreach system uses the Google Gmail API only after an authorized Google
-          Workspace mailbox owner or administrator grants access. The application
-          requests the narrow Gmail send permission (
+          Our Google Workspace email application, <strong className="text-ink">tuvi</strong>,
+          uses the Google Gmail API only after an authorized Google Workspace mailbox
+          owner or administrator grants access. tuvi requests the narrow Gmail send permission (
           <code className="rounded bg-surface px-1.5 py-0.5 text-sm text-ink">
             gmail.send
           </code>
@@ -90,7 +90,7 @@ export default function PrivacyPage() {
             needed to perform the send.
           </li>
           <li>
-            The application does not request permission to read or download inbox
+            tuvi does not request permission to read or download inbox
             messages, contacts, Google Drive files, or other Google account content.
           </li>
           <li>

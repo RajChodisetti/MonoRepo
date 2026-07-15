@@ -15,6 +15,11 @@ const offerings: Array<{
   featured?: boolean;
 }> = [
   {
+    icon: "ai",
+    title: "Useful AI systems",
+    description: "Voice, chat, and workflow assistants with human review where decisions or communication matter.",
+  },
+  {
     icon: "website",
     title: "Websites that earn attention",
     description: "Fast, distinctive websites shaped around your brand and the action you want customers to take.",
@@ -23,11 +28,6 @@ const offerings: Array<{
     icon: "app",
     title: "Mobile & web applications",
     description: "Purpose-built products for customers and teams, designed to feel clear on every screen.",
-  },
-  {
-    icon: "ai",
-    title: "Useful AI systems",
-    description: "Voice, chat, and workflow assistants with human review where decisions or communication matter.",
   },
   {
     icon: "restaurant",
@@ -50,8 +50,8 @@ export default function WhatWeBuild() {
     <SectionShell id="services" className="bg-surface/70">
       <SectionHeading
         eyebrow="What we build"
-        title="One considered system, not a pile of tools."
-        description="From a focused launch to a connected product suite, every part is designed to work together."
+        title="Practical AI and software, built for real use."
+        description="From an AI assistant or customer-facing website to a connected operations platform, we design every part around a clear outcome."
         align="center"
       />
 

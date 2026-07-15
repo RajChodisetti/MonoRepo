@@ -12,6 +12,214 @@ Each entry should explain:
 - how the work fits with the rest of the Phase 1 or Phase 2 plan;
 - risks, gaps, or follow-ups.
 
+## 2026-07-15 — Equal Restaurant Demo Sizing and Deployment
+
+**Role:** Frontend, DevOps, and Documentation Agent
+
+**Delivered:** Corrected the alternating restaurant-feature grid so both demo
+videos receive the same desktop width. The first row now assigns its left video
+the larger `1.22fr` column, while the reversed row assigns that same `1.22fr`
+width to its right video. Both retain the identical 16:9 frame, border, radius,
+shadow, autoplay, looping, muted playback, and control-free presentation.
+
+Published functional commit `4596e32` on
+`agent/tuvi-oauth-homepage-verification`. Archived the exact remote-matched
+commit, verified its checksum locally and on the VM, built only
+`tuvi-website`, and recreated it with `--no-deps`. The prior `bc7f106` website
+release and image are retained as the immediate rollback. No migration or API,
+worker, scrape, OCR, email, database, Redis, voice, template, catalog, Caddy,
+DNS, or environment action ran.
+
+**Checks Run:** `git diff --check`, TypeScript validation, and local and VM Node
+22 production builds passed with all 13 routes generated. Local and live HTML
+contain both complementary grid templates, exactly two videos, matching
+16:9 frames, autoplay and loop attributes, and no play/pause controls. The
+public restaurant route returns HTTP 200. The running image matches `4596e32`,
+has zero restarts, and all other services remain up.
+
+**Business Value / Plan Fit:** Removes a visible inconsistency between the two
+restaurant demos so the alternating product story feels deliberate and
+balanced rather than making one capability appear less important.
+
+**Risks / Follow-ups:** This corrects the deterministic desktop grid sizing;
+both videos were already full-width and equal below the desktop breakpoint.
+Rollback to `bc7f106` restores the previous asymmetric alternating grid.
+
+## 2026-07-15 — Restaurant Demo Video Autoplay and Deployment
+
+**Role:** Frontend, DevOps, and Documentation Agent
+
+**Delivered:** Updated both `/services/restaurants` product demos to use the
+same fixed 16:9 frame, widened the feature container, and increased the desktop
+video column so the demonstrations render equally and slightly larger. Removed
+the play/pause overlay and client-side playback state. Both videos now request
+muted autoplay, loop continuously, play inline, preload their media, disable
+picture-in-picture, and expose no native controls.
+
+Published functional commit `bc7f106` on
+`agent/tuvi-oauth-homepage-verification`. Archived the exact remote-matched
+commit, verified its checksum locally and on the VM, built only
+`tuvi-website`, and recreated it with `--no-deps`. The prior `371c062` website
+release and image are retained as the immediate rollback. No migration or API,
+worker, scrape, OCR, email, database, Redis, voice, template, catalog, Caddy,
+DNS, or environment action ran.
+
+**Checks Run:** `git diff --check`, TypeScript validation, and local and VM Node
+22 production builds passed with all 13 routes generated. Local and live HTML
+contain exactly two videos and two sets of autoplay, loop, muted, inline,
+controls-list, and picture-in-picture attributes, with no play/pause button
+language. The public restaurant route returns HTTP 200 and both CDN media URLs
+return HTTP 200 with `video/mp4`. The running image matches `bc7f106`, has zero
+restarts, and all other services remain up.
+
+**Business Value / Plan Fit:** The restaurant demonstrations now behave like
+consistent ambient product previews, with larger matching frames and no
+interaction chrome competing with the service story.
+
+**Risks / Follow-ups:** Muted autoplay is supported by current major browsers,
+but individual browser, battery, or data-saving policies may still prevent it.
+Removing the pause control creates a continuous-motion accessibility tradeoff;
+rollback to `371c062` restores the prior user-controlled playback behavior.
+
+## 2026-07-15 — Homepage Workspace Disclosure Removal and Deployment
+
+**Role:** Frontend, Security, DevOps, and Documentation Agent
+
+**Delivered:** Removed the compact Google Workspace disclosure from the public
+homepage and deleted its now-unused component. The customer-facing AI and custom
+software journey now flows directly from the contact section into the footer.
+The dedicated `/google-workspace`, `/privacy`, and `/terms` pages remain live,
+and the footer retains a small link to the Workspace app page.
+
+Published functional commit `371c062` on
+`agent/tuvi-oauth-homepage-verification`. Archived the exact remote-matched
+commit, verified its checksum locally and on the VM, built only
+`tuvi-website`, and recreated it with `--no-deps`. The prior `7651213` website
+release and image are retained as the immediate rollback. No migration or API,
+worker, scrape, OCR, email, database, Redis, voice, template, catalog, Caddy,
+DNS, or environment action ran.
+
+**Checks Run:** `git diff --check`, TypeScript validation, and the local and VM
+Node 22 production builds passed with all 13 routes generated. Local and live
+rendered HTML checks confirmed that the quoted Workspace disclosure text is
+absent while the AI/custom-software hero remains. Loopback and public HTTPS
+checks returned HTTP 200 for the homepage, Workspace, Privacy, Terms, booking,
+and restaurant routes. The running image matches commit `371c062`, has zero
+restarts, and all other services remain up.
+
+**Business Value / Plan Fit:** Removes an internal application explanation from
+the primary marketing experience and keeps the homepage focused on prospective
+software and AI customers.
+
+**Risks / Follow-ups:** This deliberately removes the homepage purpose statement
+that Google cited in the previous branding-verification rejection. The dedicated
+application and legal pages remain public, but Google may reject branding
+re-verification again because the homepage itself no longer explains `tuvi`.
+Rollback to `7651213` restores the compact disclosure if required.
+
+## 2026-07-15 — Customer-First Homepage Refinement and Deployment
+
+**Role:** Frontend, Security, Reviewer, DevOps, and Documentation Agent
+
+**Delivered:** Refocused the Tuvi homepage on its customer proposition: practical
+AI systems, custom software, websites, apps, automation, and integrations. The
+hero now uses short intentional headlines and a restrained desktop-only solution
+panel instead of the oversized, cropped logo artwork. Mobile, tablet, and small
+laptop widths are copy-led with natural height; the broader Services menu and
+What We Build section now reinforce the AI/software offer rather than implying
+that Tuvi serves only restaurants.
+
+Replaced the large homepage OAuth block with a compact, light disclosure after
+the primary contact journey. It still names the exact `tuvi` application,
+identifies Tuvi Solutions as operator, explains reviewed Gmail API delivery and
+the `gmail.send` boundary, states that inbox content cannot be read, and links
+the app details, Privacy, and Terms pages. The full explanation remains on
+`/google-workspace`, while customer-facing homepage metadata now describes AI,
+websites, and apps.
+
+Published functional commit `7651213` on
+`agent/tuvi-oauth-homepage-verification`. Archived the exact remote-matched
+commit, verified the SHA-256 checksum locally and on the VM, built only
+`tuvi-website`, and recreated it with `--no-deps`. The prior `35800dd` release
+and image are retained as the immediate rollback; `4eaf7fa` remains a second
+fallback. No migration or API, worker, scrape, OCR, email, database, Redis,
+voice, template, catalog, Caddy, DNS, or environment action ran.
+
+**Checks Run:** `git diff --check`, TypeScript validation, and the local Node 22
+production build passed with all 13 routes generated. Rendered homepage checks
+confirmed the customer-first title/copy and compact OAuth disclosure, and
+confirmed the removed fact-card language is absent. Independent source reviews
+found no hierarchy or responsive blockers at 375, 768, 1024, or 1440 pixels and
+no OAuth-content blocker. The VM build passed; loopback and public HTTPS checks
+returned 200 for all main, app, legal, booking, and restaurant routes. The live
+image matches commit `7651213`, has zero restarts, and every non-website
+container retained its prior ID and start time.
+
+**Business Value / Plan Fit:** Visitors now understand Tuvi as an AI and custom
+software partner immediately, without internal Workspace tooling competing with
+the sales journey. The smaller disclosure preserves the public information
+needed for OAuth review while keeping the homepage conversion-focused.
+
+**Risks / Follow-ups:** The in-app visual browser was unavailable, so visual
+confidence comes from the supplied screenshot, responsive source review,
+production builds, and rendered/live HTML checks. Google verification remains
+an external decision and is not guaranteed. Keep the consent-screen name exactly
+`tuvi` and its Privacy/Terms URLs matched to the live links.
+
+## 2026-07-15 — OAuth Homepage Identity, Responsive Polish, and Deployment
+
+**Role:** Frontend, Security, Reviewer, DevOps, and Documentation Agent
+
+**Delivered:** Made the public homepage explicitly identify the OAuth
+application as **`tuvi`**, separate from its operator, Tuvi Solutions. Added a
+prominent Google Workspace application section that explains the app's purpose,
+authorized-user boundary, HTTPS Gmail sending flow, exact `gmail.send` scope,
+and the Google data it cannot read. Replaced the conflicting "Tuvi Outreach"
+name across the application page, metadata, Privacy Policy, Terms, navigation,
+and footer. Centralized this identity and copy in the site-content model.
+
+Polished the responsive layout by keeping the hero stacked through tablet and
+small-laptop widths, balancing its desktop type and logo, removing excess form
+spacing, tightening nested contact-card padding, and making mobile actions and
+long email/link content wrap safely. Independent source reviews found no
+release blockers at 375, 768, 1024, or 1440 pixels.
+
+Published functional commit `35800dd` on the new
+`agent/tuvi-oauth-homepage-verification` branch. Created a Git archive from that
+exact remote-matched commit, verified its SHA-256 checksum locally and on the
+VM, and built it from `/opt/tuvi/releases/35800dd...`. Retained the prior
+`4eaf7fa` website source and image under immutable and rollback tags, then
+recreated only `tuvi-website` with `--no-deps`. No migration or API, worker,
+scrape, OCR, email, database, Redis, voice, catalog, Caddy, or DNS action ran.
+
+**Checks Run:** `git diff --check` — passed;
+`npx tsc --noEmit --incremental false --pretty false` — passed; production
+Node 22 `next build` — passed with all 13 routes generated. A local production
+server returned HTTP 200 for `/`, `/google-workspace`, `/privacy`, and `/terms`;
+rendered HTML contained the exact `tuvi` identity, app-purpose heading,
+`gmail.send only` disclosure, and all three public links. The in-app browser
+surface was unavailable, so responsive verification combined static review,
+production compilation, and rendered-HTML smoke checks. The VM build also
+passed with all 13 routes generated. Loopback checks returned HTTP 200 for `/`,
+`/google-workspace`, `/privacy`, `/terms`, `/book`, and
+`/services/restaurants`; public HTTPS checks returned 200 on the root, `www`,
+Workspace, Privacy, and Terms URLs. The live homepage contains the required app
+name, purpose, permission, and legal-link text. The running image matches the
+commit tag, its restart count is zero, and all non-website services remain up.
+
+**Business Value / Plan Fit:** Directly addresses Google's prior branding
+findings by making the app name and purpose public and consistent while
+improving the homepage's usability and credibility without weakening Phase 1's
+human-review boundary.
+
+**Risks / Follow-ups:** The website change is live. Keep the Google Cloud app
+name exactly `tuvi`, submit the final non-redirecting homepage/privacy/terms
+URLs, verify domain ownership, use the matching logo, and request
+re-verification. Approval is not guaranteed, and the separate Gmail
+outreach-policy concern is unchanged. The Compose build still warns that
+Buildx is unavailable and uses a floating `node:22-alpine` base; neither
+affected this successful release.
+
 ## 2026-07-14 — Tuvi Brand Redesign and Legal-Site Deployment
 
 **Role:** Frontend, Security, Reviewer, and DevOps Agent
