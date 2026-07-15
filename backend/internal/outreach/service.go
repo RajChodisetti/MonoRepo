@@ -66,7 +66,7 @@ func (service *Service) TriggerBulkSend(ctx context.Context, principal auth.Prin
 	if !service.emailSendingEnabled() {
 		return TriggerResult{}, ErrSendingDisabled
 	}
-	if service.emailPool == nil || len(service.outreachCfg.ZohoAccounts) == 0 {
+	if service.emailPool == nil {
 		return TriggerResult{}, ErrNotConfigured
 	}
 	if err := validateBulkMax(service.outreachCfg.BulkMax); err != nil {
@@ -162,7 +162,7 @@ func (service *Service) RunBulkSend(ctx context.Context, triggeredBy uuid.UUID, 
 	if !service.emailSendingEnabled() {
 		return summary, ErrSendingDisabled
 	}
-	if service.emailPool == nil || len(service.outreachCfg.ZohoAccounts) == 0 {
+	if service.emailPool == nil {
 		return summary, ErrNotConfigured
 	}
 	if err := validateBulkMax(service.outreachCfg.BulkMax); err != nil {

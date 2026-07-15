@@ -3,6 +3,7 @@ package email_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/config"
@@ -31,6 +32,83 @@ func TestNewAccountPoolFromConfigRejectsDisabledSending(t *testing.T) {
 	)
 	if !errors.Is(err, email.ErrSendingDisabled) {
 		t.Fatalf("NewAccountPoolFromConfig() error = %v, want ErrSendingDisabled", err)
+	}
+}
+
+func TestNewAccountPoolFromConfigAcceptsGoogleWorkspaceAccount(t *testing.T) {
+	t.Parallel()
+
+	pool, err := email.NewAccountPoolFromConfig(
+		config.EmailConfig{},
+		config.OutreachConfig{
+			BulkMax:          40,
+			EmailsPerAccount: 40,
+			GoogleWorkspaceAccounts: []config.GmailMailConfig{{
+				AccountKey:   "workspace-sales-1",
+				MailboxEmail: "sales1@example.com",
+				ClientID:     "client-id",
+				ClientSecret: "client-secret",
+				RefreshToken: "refresh-token",
+			}},
+		},
+	)
+	if err != nil {
+		t.Fatalf("NewAccountPoolFromConfig() error = %v", err)
+	}
+	if pool == nil {
+		t.Fatal("NewAccountPoolFromConfig() pool = nil")
+	}
+}
+
+func TestNewAccountPoolFromConfigRejectsEquivalentGoogleWorkspaceMailboxes(t *testing.T) {
+	t.Parallel()
+
+	_, err := email.NewAccountPoolFromConfig(
+		config.EmailConfig{},
+		config.OutreachConfig{
+			BulkMax:          80,
+			EmailsPerAccount: 40,
+			GoogleWorkspaceAccounts: []config.GmailMailConfig{
+				{
+					AccountKey:   "workspace-sales-1",
+					MailboxEmail: "sales1@example.com",
+					ClientID:     "client-id",
+					ClientSecret: "client-secret",
+					RefreshToken: "refresh-token-1",
+				},
+				{
+					AccountKey:   "workspace-sales-alias",
+					MailboxEmail: "<sales1@example.com>",
+					ClientID:     "client-id",
+					ClientSecret: "client-secret",
+					RefreshToken: "refresh-token-2",
+				},
+			},
+		},
+	)
+	if err == nil || !strings.Contains(err.Error(), "duplicates mailbox") {
+		t.Fatalf("NewAccountPoolFromConfig() error = %v, want duplicate mailbox rejection", err)
+	}
+}
+
+func TestNewAccountPoolFromConfigRejectsInvalidRedirectBeforeUse(t *testing.T) {
+	t.Parallel()
+
+	_, err := email.NewAccountPoolFromConfig(
+		config.EmailConfig{RedirectTo: "not-an-email"},
+		config.OutreachConfig{
+			BulkMax:          40,
+			EmailsPerAccount: 40,
+			GoogleWorkspaceAccounts: []config.GmailMailConfig{{
+				MailboxEmail: "sales1@example.com",
+				ClientID:     "client-id",
+				ClientSecret: "client-secret",
+				RefreshToken: "refresh-token",
+			}},
+		},
+	)
+	if err == nil || !strings.Contains(err.Error(), "redirect recipient") {
+		t.Fatalf("NewAccountPoolFromConfig() error = %v, want redirect validation error", err)
 	}
 }
 

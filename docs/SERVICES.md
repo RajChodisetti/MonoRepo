@@ -73,7 +73,7 @@ main API :8080
 worker
   -> PostgreSQL job_runs
   -> draft demo/campaign preparation after verified OCR
-  -> Resend or Zoho email provider adapter (disabled by default)
+  -> Gmail API or Zoho quota-managed outreach adapter (disabled by default)
 
 scrape-worker
   -> PostgreSQL scrape_jobs/cells/candidates
@@ -100,7 +100,7 @@ tuvi corporate website :3001
 main API company consultations
   -> PostgreSQL restaurant_platform.company_consultations
   -> optional Google Calendar
-  -> configured Resend or Zoho HTTP API provider
+  -> configured Resend or Zoho generic HTTP API provider
   <- voice-sales-agent corporate flow via MONOREPO_API_URL=http://localhost:8080
 ```
 

@@ -25,10 +25,14 @@ func TestCheckEligibilityRequiresApprovedProfile(t *testing.T) {
 
 func TestCheckEligibilityPassesWhenReady(t *testing.T) {
 	err := campaigns.CheckEligibility(campaigns.EligibilityInput{
-		RestaurantEmail: "owner@example.com",
-		ReviewStatus:    "approved",
-		DemoStatus:      demos.StatusPublished,
-		CampaignStatus:  campaigns.StatusApproved,
+		RestaurantEmail:         "owner@example.com",
+		OCRStatus:               "verified",
+		ReviewStatus:            "approved",
+		ProfileReviewAudited:    true,
+		DemoStatus:              demos.StatusPublished,
+		DemoPublishAudited:      true,
+		CampaignStatus:          campaigns.StatusApproved,
+		CampaignApprovalAudited: true,
 	})
 	if err != nil {
 		t.Fatalf("CheckEligibility() error = %v, want nil", err)

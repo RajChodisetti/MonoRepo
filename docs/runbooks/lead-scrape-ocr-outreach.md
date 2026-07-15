@@ -89,8 +89,8 @@ PUBLIC_WEB_URL=https://demo.tuvisolutions.com
 PUBLIC_MARKETING_URL=https://tuvisolutions.com
 PRESENTATION_SITE_URL=https://tuvisolutions.com/services/restaurants
 
-EMAIL_PROVIDER=zoho
-EMAIL_FROM_ADDRESS=<verified fallback sender>
+EMAIL_PROVIDER=disabled
+EMAIL_FROM_ADDRESS=
 EMAIL_FROM_NAME=Tuvi Solutions
 EMAIL_DISABLE_SENDING=true
 EMAIL_REDIRECT_TO=
@@ -108,22 +108,32 @@ OUTREACH_BULK_MAX=150
 OUTREACH_EMAILS_PER_ACCOUNT=40
 OUTREACH_EMAIL_COOLDOWN=24h
 OUTREACH_SEND_INTERVAL=2s
-OUTREACH_ZOHO_ACCOUNTS_JSON=[{"key":"sales-au-1","account_id":"<id>","from_email":"<verified sender>","client_id":"<secret>","client_secret":"<secret>","refresh_token":"<secret>","region":"com.au"}]
+OUTREACH_ZOHO_ACCOUNTS_JSON=[]
+OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON=[{"key":"workspace-sales-1","mailbox_email":"sales1@example.com","from_email":"sales1@example.com","client_id":"<oauth client id>","client_secret":"<secret>","refresh_token":"<offline refresh token>"}]
 ```
 
 The singleton `ZOHO_*` values configure the generic Zoho adapter used by other
 email flows; `OUTREACH_ZOHO_ACCOUNTS_JSON` configures the independently rotated
-bulk-outreach pool. If the generic adapter is intentionally unused,
-`EMAIL_PROVIDER=disabled` is valid while the rotating outreach pool is enabled
-through `EMAIL_DISABLE_SENDING=false`. The account `key` is a stable,
-non-secret identity. Do not change it when a refresh token is rotated or when
-array order changes. Each account has at most 40 reserved attempts per cycle
-and becomes available 24 hours after its 40th reservation. Zoho sends through
-OAuth and its HTTPS Mail API; SMTP is rejected. Configuration rejects duplicate
-normalized `(region, account_id)` identities even when aliases use different
-keys, and PostgreSQL uniquely persists that provider identity. If a key is
-renamed, the same quota row and usage/cooldown are retained rather than reset,
-so one Zoho credential cannot receive multiple independent quotas.
+bulk-outreach pool. `OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON` provides the same
+pool behavior through Gmail's HTTPS API. If the generic adapter is intentionally
+unused, `EMAIL_PROVIDER=disabled` is valid while the rotating outreach pool is
+enabled through `EMAIL_DISABLE_SENDING=false`.
+
+For Google Workspace, create one OAuth web application, request only
+`https://www.googleapis.com/auth/gmail.send`, obtain offline consent separately
+for each mailbox, and store that mailbox's refresh token in its entry.
+`mailbox_email` is the primary mailbox authorized by the refresh token and is
+the durable quota identity. `from_email` defaults to it; use a different value
+only when that send-as alias is configured in Gmail. Token and Gmail endpoints
+are fixed in code to Google's HTTPS hosts so credentials cannot be redirected.
+
+The account `key` is a stable, non-secret identity. Do not change it when a
+refresh token is rotated or when array order changes. Each account has at most
+40 reserved attempts per cycle and becomes available 24 hours after its 40th
+reservation. Gmail and Zoho both use OAuth and HTTPS APIs; SMTP is rejected.
+Configuration rejects duplicate provider identities even when aliases use
+different keys, and PostgreSQL retains the usage/cooldown row across credential
+rotation.
 
 Token-gated demos do not use a global signing secret. Each demo receives a
 cryptographically random opaque token; `demo_sites` stores its bcrypt hash and

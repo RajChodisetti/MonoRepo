@@ -150,6 +150,25 @@ func TestLoadRejectsMalformedBoolean(t *testing.T) {
 	}
 }
 
+func TestValidateRejectsUnsafeEmailHeaders(t *testing.T) {
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	cfg.Email.FromName = "Tuvi\r\nBcc: attacker@example.com"
+	cfg.Email.RedirectTo = "not-an-email"
+
+	err = cfg.Validate()
+	if err == nil {
+		t.Fatal("Validate() error = nil, want email header validation errors")
+	}
+	for _, want := range []string{"EMAIL_FROM_NAME", "EMAIL_REDIRECT_TO"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("Validate() error = %q, want %s validation error", err.Error(), want)
+		}
+	}
+}
+
 func TestLoadRejectsMalformedHTTPPort(t *testing.T) {
 	clearEnv(t)
 	t.Setenv("HTTP_ADDR", "")
@@ -273,12 +292,14 @@ func clearEnv(t *testing.T) {
 		"EMAIL_PROVIDER",
 		"EMAIL_API_KEY",
 		"EMAIL_FROM_ADDRESS",
+		"EMAIL_FROM_NAME",
 		"EMAIL_DISABLE_SENDING",
 		"EMAIL_REDIRECT_TO",
 		"OUTREACH_BULK_MAX",
 		"OUTREACH_EMAILS_PER_ACCOUNT",
 		"OUTREACH_SEND_INTERVAL",
 		"OUTREACH_ZOHO_ACCOUNTS_JSON",
+		"OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON",
 		"LLM_PROVIDER",
 		"LLM_API_KEY",
 		"LLM_MODEL",

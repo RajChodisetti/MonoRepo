@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -89,10 +90,16 @@ func TestTriggerBulkSendEnqueuesJob(t *testing.T) {
 		nil,
 		outreach.DemoTokenResolver{},
 		testAccountPool(t),
-		config.EmailConfig{Provider: "zoho"},
+		config.EmailConfig{},
 		config.OutreachConfig{
-			BulkMax:      150,
-			ZohoAccounts: []config.ZohoMailConfig{{AccountID: "1", ClientID: "a", ClientSecret: "b", RefreshToken: "c"}},
+			BulkMax: 150,
+			GoogleWorkspaceAccounts: []config.GmailMailConfig{{
+				AccountKey:   "workspace-sales-1",
+				MailboxEmail: "sales1@example.com",
+				ClientID:     "a",
+				ClientSecret: "b",
+				RefreshToken: "c",
+			}},
 		},
 		&mockEnqueuer{jobID: "job-123"},
 		nil,
@@ -143,6 +150,22 @@ func TestRunBulkSendUsesExistingApprovedCampaign(t *testing.T) {
 	restaurantID := uuid.New()
 	demoSiteID := uuid.New()
 	campaignID := uuid.New()
+	approvedAt := time.Now().UTC()
+	approvedBy := uuid.New()
+	demoToken := "approved-demo-token"
+	demoTokenHash, err := demos.HashDemoToken(demoToken)
+	if err != nil {
+		t.Fatalf("HashDemoToken() error = %v", err)
+	}
+	demoRepo := &demos.Mock{Sites: map[string]demos.Site{
+		"approved-demo": {
+			ID:           demoSiteID,
+			RestaurantID: restaurantID,
+			Slug:         "approved-demo",
+			TokenHash:    demoTokenHash,
+			Status:       demos.StatusPublished,
+		},
+	}}
 	campaignRepo := &campaigns.Mock{
 		Campaigns: map[uuid.UUID]campaigns.Campaign{
 			campaignID: {
@@ -154,19 +177,24 @@ func TestRunBulkSendUsesExistingApprovedCampaign(t *testing.T) {
 				Subject:      "Approved subject",
 				BodyHTML:     "<p>Approved body</p>",
 				BodyText:     "Approved body",
-				DemoToken:    "approved-demo-token",
+				DemoToken:    demoToken,
+				ApprovedAt:   &approvedAt,
+				ApprovedBy:   &approvedBy,
 			},
 		},
 		SendContexts: map[uuid.UUID]campaigns.SendContext{
 			campaignID: {
-				RestaurantEmail: "owner@example.com",
-				ReviewStatus:    "approved",
-				DemoStatus:      demos.StatusPublished,
+				RestaurantEmail:      "owner@example.com",
+				OCRStatus:            "verified",
+				ReviewStatus:         "approved",
+				ProfileReviewAudited: true,
+				DemoStatus:           demos.StatusPublished,
+				DemoPublishAudited:   true,
 			},
 		},
 		SiteIndices: map[uuid.UUID]int{restaurantID: 0},
 	}
-	campaignService := campaigns.NewService(campaignRepo, nil, nil, nil, config.AppURLsConfig{
+	campaignService := campaigns.NewService(campaignRepo, demoRepo, nil, nil, config.AppURLsConfig{
 		PublicBaseURL: "https://api.example.com",
 		PublicWebURL:  "https://example.com",
 	})

@@ -2,6 +2,7 @@ package jobs
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/google/uuid"
@@ -12,7 +13,7 @@ import (
 	emailprovider "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/email"
 )
 
-func TestEmailSendHandlerLeavesSkippedCampaignApproved(t *testing.T) {
+func TestEmailSendHandlerRejectsLegacyOutreachJob(t *testing.T) {
 	restaurantID := uuid.New()
 	demoSiteID := uuid.New()
 	campaignID := uuid.New()
@@ -22,6 +23,7 @@ func TestEmailSendHandlerLeavesSkippedCampaignApproved(t *testing.T) {
 				ID:           campaignID,
 				RestaurantID: restaurantID,
 				DemoSiteID:   demoSiteID,
+				CampaignType: campaigns.TypeOutreach,
 				Status:       campaigns.StatusSending,
 				Subject:      "Test",
 				BodyHTML:     "<p>Test</p>",
@@ -53,17 +55,17 @@ func TestEmailSendHandlerLeavesSkippedCampaignApproved(t *testing.T) {
 		t.Fatalf("NewEmailSendJob() error = %v", err)
 	}
 
-	if err := handler(context.Background(), job); err != nil {
-		t.Fatalf("EmailSendHandler() error = %v", err)
+	if err := handler(context.Background(), job); !errors.Is(err, campaigns.ErrOutreachRequiresBulk) {
+		t.Fatalf("EmailSendHandler() error = %v, want ErrOutreachRequiresBulk", err)
 	}
-	if got := repo.Campaigns[campaignID].Status; got != campaigns.StatusApproved {
-		t.Fatalf("campaign status = %q, want %q", got, campaigns.StatusApproved)
+	if got := repo.Campaigns[campaignID].Status; got != campaigns.StatusSending {
+		t.Fatalf("campaign status = %q, want unchanged %q", got, campaigns.StatusSending)
 	}
 	if repo.Campaigns[campaignID].LastSentAt != nil {
 		t.Fatal("campaign LastSentAt was set for a skipped send")
 	}
-	if len(repo.Events) != 1 || repo.Events[0].EventType != campaigns.EventSkipped {
-		t.Fatalf("events = %#v, want one skipped event", repo.Events)
+	if len(repo.Events) != 0 {
+		t.Fatalf("events = %#v, want no mutation events", repo.Events)
 	}
 }
 

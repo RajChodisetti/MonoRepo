@@ -155,6 +155,7 @@ OUTREACH_EMAILS_PER_ACCOUNT=40
 OUTREACH_EMAIL_COOLDOWN=24h
 OUTREACH_SEND_INTERVAL=2s
 OUTREACH_ZOHO_ACCOUNTS_JSON=[]
+OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON=[]
 ```
 
 Keep scrape/OCR credentials in a separate host-readable file
@@ -207,7 +208,25 @@ EMAIL_FROM_ADDRESS=<verified sender>
 EMAIL_DISABLE_SENDING=false
 ```
 
-For quota-managed bulk outreach, configure Zoho OAuth accounts instead:
+For quota-managed bulk outreach with Google Workspace, first enable the Gmail
+API in the Google Cloud project. Configure an OAuth consent screen/application,
+request only `https://www.googleapis.com/auth/gmail.send`, obtain offline consent
+and a refresh token separately for each mailbox, then configure:
+
+```text
+EMAIL_PROVIDER=disabled
+EMAIL_FROM_ADDRESS=
+EMAIL_FROM_NAME=Tuvi Solutions
+OUTREACH_ZOHO_ACCOUNTS_JSON=[]
+OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON=[{"key":"workspace-sales-1","mailbox_email":"sales1@example.com","from_email":"sales1@example.com","client_id":"<oauth client id>","client_secret":"<secret>","refresh_token":"<offline refresh token>"}]
+EMAIL_DISABLE_SENDING=false
+```
+
+`mailbox_email` must be the primary mailbox that authorized the refresh token.
+Use a different `from_email` only for a send-as alias already configured in
+Gmail. Gmail delivery uses the HTTPS `users.messages.send` API; SMTP is not used.
+
+Zoho remains an optional quota-managed provider when explicitly configured:
 
 ```text
 EMAIL_PROVIDER=zoho
@@ -545,5 +564,5 @@ Add later:
 3. Configure the OCR provider and install the locked one-shot schedule.
 4. Confirm legacy ingestion cron entries are removed, then trigger the first
    city job through `POST /api/v1/scrape-jobs`.
-5. Enable email and Google Calendar only after provider credentials, canonical
+5. Enable email and Google Calendar only after the Gmail API/OAuth mailbox credentials, canonical
    HTTPS links, and the audited human approval flow are reviewed and configured.

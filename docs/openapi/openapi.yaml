@@ -1004,12 +1004,13 @@ paths:
 
         The bulk job does not create or approve campaigns. It sends the already-approved
         sales outreach email (services + tracked live demo preview), rotating configured
+        Google Workspace Gmail API accounts (`OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON`) or
         Zoho HTTP API accounts (`OUTREACH_ZOHO_ACCOUNTS_JSON`). PostgreSQL atomically enforces
         `OUTREACH_EMAILS_PER_ACCOUNT` (default 40) delivery claims per account, assigns a
         global `send_sequence` plus per-account cycle/slot, and sets `available_at` for the
         `OUTREACH_EMAIL_COOLDOWN` (default 24 hours) when the account reaches its limit.
-        Duplicate normalized Zoho `(region, account_id)` identities are rejected even when
-        configured with different aliases, preventing quota multiplication for one credential.
+        Duplicate provider identities are rejected even when configured with different aliases,
+        preventing quota multiplication for one mailbox or credential.
 
         If every account is cooling down, the same job is moved back to `queued` with its
         durable `available_at` set to the earliest account availability. The worker resumes
@@ -1022,8 +1023,8 @@ paths:
         Redirected sends are recorded as `skipped` and do not mark the restaurant emailed.
         When sending is disabled, the trigger returns `503` before creating delivery attempts.
 
-        Providers use HTTP(S) APIs only (`zoho` for the account pool; `resend` for the generic
-        adapter). SMTP configuration is rejected. Production link validation requires:
+        Providers use HTTP(S) APIs only (`gmail` or `zoho` for the account pool; `resend` or
+        `zoho` for the generic adapter). SMTP configuration is rejected. Production link validation requires:
         `https://api.tuvisolutions.com`, `https://demo.tuvisolutions.com`,
         `https://tuvisolutions.com`, and `https://tuvisolutions.com/services/restaurants`.
 

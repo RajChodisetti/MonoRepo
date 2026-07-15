@@ -104,13 +104,24 @@ type ZohoMailConfig struct {
 	RefreshToken string
 }
 
+type GmailMailConfig struct {
+	AccountKey   string
+	MailboxEmail string
+	FromEmail    string
+	ClientID     string
+	ClientSecret string
+	RefreshToken string
+}
+
 type OutreachConfig struct {
-	BulkMax          int
-	EmailsPerAccount int
-	SendInterval     time.Duration
-	AccountCooldown  time.Duration
-	ZohoAccounts     []ZohoMailConfig
-	ZohoAccountsJSON string
+	BulkMax                     int
+	EmailsPerAccount            int
+	SendInterval                time.Duration
+	AccountCooldown             time.Duration
+	ZohoAccounts                []ZohoMailConfig
+	ZohoAccountsJSON            string
+	GoogleWorkspaceAccounts     []GmailMailConfig
+	GoogleWorkspaceAccountsJSON string
 }
 
 type LLMConfig struct {
@@ -340,6 +351,14 @@ func (c Config) Validate() error {
 	}
 	if c.App.Env == EnvProduction && strings.TrimSpace(c.Email.RedirectTo) != "" {
 		errs = append(errs, fmt.Errorf("EMAIL_REDIRECT_TO must be empty in production"))
+	}
+	if strings.ContainsAny(c.Email.FromName, "\r\n") {
+		errs = append(errs, fmt.Errorf("EMAIL_FROM_NAME must not contain newlines"))
+	}
+	if redirect := strings.TrimSpace(c.Email.RedirectTo); redirect != "" {
+		if _, err := canonicalOutreachMailbox(redirect); err != nil {
+			errs = append(errs, fmt.Errorf("EMAIL_REDIRECT_TO must be a single valid email address"))
+		}
 	}
 	if strings.TrimSpace(c.Consultations.APIToken) == "" {
 		errs = append(errs, fmt.Errorf("TUVI_API_TOKEN is required"))

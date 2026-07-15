@@ -41,11 +41,15 @@ link defaults that must never reach real recipients.
 - Production/staging sends require absolute HTTPS links from the approved Tuvi
   hosts and fail before the provider call if any placeholder or local link
   remains.
-- Providers remain HTTP based: Zoho Mail OAuth/API or Resend HTTPS. SMTP is
-  explicitly rejected.
+- Providers remain HTTP based: Google Workspace Gmail OAuth/API or Zoho Mail
+  OAuth/API for the quota-managed account pool, and Zoho or Resend HTTPS for
+  generic sends. SMTP is explicitly rejected.
 - Normalized Zoho `(region, account_id)` is the provider identity; duplicate
   aliases are rejected so one credential cannot receive multiple 40-send
   quotas.
+- A Google Workspace mailbox uses `gmail|<primary mailbox email>` as its provider
+  identity. Per-mailbox OAuth refresh tokens use the least-privilege
+  `gmail.send` scope; optional send-as aliases do not create a second quota.
 - Tracking tokens store the immutable normalized recipient used for the send.
   Unsubscribe tokens do not expire with the demo and suppress that stored
   address, never the restaurant row's later mutable email.

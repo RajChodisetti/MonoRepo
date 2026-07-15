@@ -186,6 +186,10 @@ func (pool *AccountPool) sendDurable(ctx context.Context, req SendRequest) (Send
 	if req.Delivery == nil {
 		return managedResult, fmt.Errorf("quota-managed outreach send requires delivery context")
 	}
+	recipient, err := validateQuotaManagedSendRequest(req)
+	if err != nil {
+		return managedResult, err
+	}
 
 	keys := make([]string, 0, len(pool.accounts))
 	providers := make(map[string]Provider, len(pool.accounts))
@@ -197,7 +201,7 @@ func (pool *AccountPool) sendDurable(ctx context.Context, req SendRequest) (Send
 	delivery := *req.Delivery
 	// Bind the database claim to the actual recipient passed to the provider;
 	// callers cannot accidentally validate one address and send to another.
-	delivery.Recipient = strings.ToLower(strings.TrimSpace(req.To))
+	delivery.Recipient = recipient
 	claim, err := pool.quota.ClaimEmailDelivery(ctx, keys, delivery, pool.cooldown)
 	if err != nil {
 		return managedResult, err
@@ -258,6 +262,25 @@ func (pool *AccountPool) sendDurable(ctx context.Context, req SendRequest) (Send
 	}
 	result.Finalized = true
 	return result, nil
+}
+
+func validateQuotaManagedSendRequest(req SendRequest) (string, error) {
+	recipient, err := canonicalMailbox(req.To)
+	if err != nil {
+		return "", fmt.Errorf("quota-managed email recipient: %w", err)
+	}
+	if _, err := cleanHeaderValue(req.Subject, "subject"); err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(req.ReplyTo) != "" {
+		if _, err := canonicalMailbox(req.ReplyTo); err != nil {
+			return "", fmt.Errorf("quota-managed email reply-to: %w", err)
+		}
+	}
+	if strings.TrimSpace(req.HTMLBody) == "" && strings.TrimSpace(req.TextBody) == "" {
+		return "", fmt.Errorf("quota-managed email requires an HTML or text body")
+	}
+	return recipient, nil
 }
 
 func (pool *AccountPool) markUnknown(ctx context.Context, claim DeliveryClaim, code string) error {
