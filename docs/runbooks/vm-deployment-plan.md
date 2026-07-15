@@ -146,6 +146,7 @@ TUVI_API_TOKEN=<32+ chars>
 CALL_API_SECRET=<same server-side value used by voice/template services>
 CONSULTATION_NOTIFY_EMAIL=<team email>
 CONSULTATION_TIMEZONE=Australia/Sydney
+# PostgreSQL is the active slot ledger; keep Calendar disabled for this release.
 CONSULTATION_GOOGLE_CALENDAR_DISABLED=true
 EMAIL_PROVIDER=disabled
 EMAIL_DISABLE_SENDING=true

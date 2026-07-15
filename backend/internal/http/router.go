@@ -17,7 +17,6 @@ import (
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/outreach"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/config"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/db"
-	calendarprovider "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/calendar"
 	emailprovider "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/email"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/reservations"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/restaurants"
@@ -43,13 +42,12 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 		jobEnqueuer = &jobs.CampaignEnqueuer{Queue: jobs.NewInMemoryQueue(cfg.Jobs.BufferSize)}
 	}
 	campaignService := campaigns.NewService(dataStore.Campaigns, dataStore.Demos, accessService, jobEnqueuer, cfg.AppURLs, cfg.Demo.TokenTTL)
-	calendarProvider := calendarprovider.NewFromConfig(context.Background(), cfg.Consultations, log)
 	emailProvider, err := emailprovider.NewFromConfig(cfg.Email, cfg.ZohoMail)
 	if err != nil {
 		log.ErrorContext(context.Background(), "consultation_email_provider_unavailable", "error", err)
 		emailProvider = emailprovider.NewDisabled()
 	}
-	consultationService := consultations.NewService(cfg.Consultations, dataStore.Consultations, calendarProvider, emailProvider, log)
+	consultationService := consultations.NewService(cfg.Consultations, dataStore.Consultations, emailProvider, log)
 
 	authHandler := handlers.NewAuthHandler(authService, cfg.App.Env, writeJSON, writeError)
 	adminHandler := handlers.NewAdminHandler(dataStore.Users, writeJSON, writeError)

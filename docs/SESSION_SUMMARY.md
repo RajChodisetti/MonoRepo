@@ -1,6 +1,6 @@
 # Session Summary
 
-**Latest (2026-07-15):** Deployed functional commit `4596e32`; both restaurant product demos now receive the same larger desktop grid width.
-**UI:** Complementary `1.22fr/0.78fr` templates preserve the alternating layout while keeping both 16:9 video frames exactly equal.
-**Verification:** TypeScript, local and VM builds, rendered grid/frame checks, and public route checks passed; autoplay and looping remain active with no controls.
-**Operations:** Only `tuvi-website` changed, `bc7f106` is the immediate rollback, and the website container has zero restarts.
+**Latest (2026-07-15):** PostgreSQL is now the sole authority for consultation availability and confirmed bookings; calendar API reads/writes are deferred.
+**Booking safety:** Confirmed slots are excluded from later availability and protected by a confirmed-only unique index, while cancelled slots can be reused.
+**UI/voice:** Browser bookings use the required name/email/phone form, confirm only after API success, and the Services dropdown closes on selection.
+**Verification:** All 146 backend tests pass; production deployment and smoke results are recorded in the delivery log.

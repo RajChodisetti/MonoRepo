@@ -53,34 +53,33 @@ Do NOT call place_callback_call without a confirmed number.
 Do NOT invent a number. Do NOT use place_callback_call for calendar bookings.
 """
         email_booking_steps = """
-EMAIL (browser — mandatory):
-Never ask the visitor to speak their email aloud.
-After you have name and phone, say you are opening a form for their email, then call request_typed_email.
-Use the email returned by that tool (status success) in book_consultation.
-If request_typed_email fails or times out, apologise and ask them to try typing it again via the tool.
+BOOKING DETAILS FORM (browser — mandatory):
+Never ask the visitor to speak their name, email, or phone number for a consultation booking.
+After they confirm an available slot, say you are opening a short booking form, then immediately call request_booking_details.
+Use the prospect_name, prospect_email, and prospect_phone returned by that tool in book_consultation.
+If request_booking_details fails or times out, apologise and call it again so they can resubmit the form.
 """
-        booking_collect = """5. After they confirm the slot, ask for their name, then their phone number (spoken is fine).
-6. Tell them a small form is open for their email, then call request_typed_email.
-7. Call book_consultation with date, time, prospect_name, prospect_email (from the tool), and prospect_phone.
-8. On success: say "Your consultation is booked" and read the confirmation_code.
-   Tell them a confirmation email was sent to their email address."""
+        booking_collect = """5. After they confirm the slot, tell them you are opening a short form for their booking details.
+6. Immediately call request_booking_details and wait while they enter their name, email, and phone number.
+7. Call book_consultation with date, time, and all three values returned by the form.
+8. Only after book_consultation returns success, say "Thanks, [name]. Your booking has been confirmed."
+   Read the confirmation_code and tell them the confirmed details are shown on screen."""
         booking_rules = """Do NOT call check_consultation_slots unless they ask what times are open in general.
-Do NOT call book_consultation without prospect_email from request_typed_email.
-Do NOT call book_consultation without prospect_phone.
+Do NOT call book_consultation without all details from request_booking_details.
 Do NOT call book_consultation before the visitor confirms the slot.
 Do NOT invent an email address."""
         tool_rules = """TOOL RULES:
-- check_consultation_slot: right after you have date + time (before name/email).
+- check_consultation_slot: right after you have date + time (before contact details).
 - check_consultation_slots: only when visitor asks broadly what's available.
-- request_typed_email: opens on-screen email box — use for EVERY consultation email (browser).
-- book_consultation: after slot confirmed + name + phone + typed email.
+- request_booking_details: opens the required name, email, and phone form after slot confirmation.
+- book_consultation: only after the form returns all three contact fields.
 - place_callback_call: only after confirmed phone number for an immediate callback (browser).
 - end_call: after a polite goodbye."""
     else:
         booking_collect = """5. After they confirm the slot, ask for their name, email, and phone number (spoken is fine on phone).
 6. Call book_consultation with date, time, prospect_name, prospect_email, and prospect_phone.
 7. On success: say "Your consultation is booked" and read the confirmation_code.
-   Tell them a confirmation email was sent to their email address."""
+   Do not claim an email was sent because delivery may be disabled."""
         booking_rules = """Do NOT call check_consultation_slots unless they ask what times are open in general.
 Do NOT call book_consultation without prospect_email.
 Do NOT call book_consultation without prospect_phone.
@@ -129,7 +128,7 @@ CONSULTATION BOOKING FLOW (follow this order exactly):
 
 {tool_rules}
 
-Bookings sync to Google Calendar and send a confirmation email with an "Open in Google Calendar" link.
+Bookings sync to Google Calendar. Confirmation email delivery depends on the server configuration.
 
 {opening}
 """.strip()

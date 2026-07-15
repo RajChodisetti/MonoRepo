@@ -190,20 +190,32 @@ export default function VoiceAssistantWidget() {
     consultation,
     bookingProgress,
     emailPrompt,
+    bookingDetailsPrompt,
     connect,
     disconnect,
     reset,
     dismissConsultation,
     submitEmail,
+    submitBookingDetails,
     prefetchStatus,
     preloadWorklet,
   } = useVoiceAgentSession();
 
   const [emailInput, setEmailInput] = useState("");
+  const [bookingName, setBookingName] = useState("");
+  const [bookingEmail, setBookingEmail] = useState("");
+  const [bookingPhone, setBookingPhone] = useState("");
 
   useEffect(() => {
     if (emailPrompt) setEmailInput("");
   }, [emailPrompt]);
+
+  useEffect(() => {
+    if (!bookingDetailsPrompt) return;
+    setBookingName("");
+    setBookingEmail("");
+    setBookingPhone("");
+  }, [bookingDetailsPrompt]);
 
   useEffect(() => {
     if (!open) {
@@ -217,7 +229,7 @@ export default function VoiceAssistantWidget() {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        if (emailPrompt) return;
+        if (emailPrompt || bookingDetailsPrompt) return;
         if (showCallback) {
           setShowCallback(false);
           return;
@@ -228,7 +240,7 @@ export default function VoiceAssistantWidget() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, active, disconnect, emailPrompt, showCallback]);
+  }, [open, active, disconnect, emailPrompt, bookingDetailsPrompt, showCallback]);
 
   const handlePrimaryAction = async () => {
     if (!open) {
@@ -337,6 +349,11 @@ export default function VoiceAssistantWidget() {
           <div
             ref={panelRef}
             className="pointer-events-auto relative mb-3 w-[min(440px,calc(100vw-2.5rem))] overflow-hidden rounded-2xl border border-slate-300 bg-bg-elevated/95 p-5 text-text shadow-2xl backdrop-blur-xl"
+            style={
+              bookingDetailsPrompt
+                ? { height: "min(590px, calc(100vh - 7rem))" }
+                : undefined
+            }
             role="dialog"
             aria-label="Tuvi AI assistant"
           >
@@ -349,7 +366,7 @@ export default function VoiceAssistantWidget() {
 
             {emailPrompt && (
               <div
-                className="absolute inset-0 z-30 flex items-center justify-center rounded-2xl bg-bg/80 p-4 backdrop-blur-md"
+                className="absolute inset-0 z-30 flex items-start justify-center overflow-y-auto rounded-2xl bg-bg/80 p-4 backdrop-blur-md sm:items-center"
                 role="dialog"
                 aria-label="Enter email"
               >
@@ -382,6 +399,77 @@ export default function VoiceAssistantWidget() {
                   </button>
                   <p className="text-center text-[11px] text-muted">
                     Press Enter to confirm — meeting books to this address
+                  </p>
+                </form>
+              </div>
+            )}
+
+            {bookingDetailsPrompt && (
+              <div
+                className="absolute inset-0 z-30 flex items-center justify-center rounded-2xl bg-bg/80 p-4 backdrop-blur-md"
+                role="dialog"
+                aria-label="Enter booking details"
+              >
+                <form
+                  className="w-full space-y-3 rounded-xl border border-cyan/30 bg-bg-elevated p-4 shadow-xl"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    submitBookingDetails({
+                      prospectName: bookingName,
+                      prospectEmail: bookingEmail,
+                      prospectPhone: bookingPhone,
+                    });
+                  }}
+                >
+                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-cyan">
+                    Confirm your booking
+                  </p>
+                  <p className="text-sm text-text">{bookingDetailsPrompt}</p>
+                  <label className="block text-xs font-semibold text-muted">
+                    Name
+                    <input
+                      type="text"
+                      required
+                      autoFocus
+                      autoComplete="name"
+                      placeholder="Your full name"
+                      value={bookingName}
+                      onChange={(event) => setBookingName(event.target.value)}
+                      className="mt-1.5 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm font-normal text-text outline-none placeholder:text-muted/70 focus:border-cyan/50"
+                    />
+                  </label>
+                  <label className="block text-xs font-semibold text-muted">
+                    Email
+                    <input
+                      type="email"
+                      required
+                      autoComplete="email"
+                      placeholder="you@company.com"
+                      value={bookingEmail}
+                      onChange={(event) => setBookingEmail(event.target.value)}
+                      className="mt-1.5 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm font-normal text-text outline-none placeholder:text-muted/70 focus:border-cyan/50"
+                    />
+                  </label>
+                  <label className="block text-xs font-semibold text-muted">
+                    Phone
+                    <input
+                      type="tel"
+                      required
+                      autoComplete="tel"
+                      placeholder="+61 4XX XXX XXX"
+                      value={bookingPhone}
+                      onChange={(event) => setBookingPhone(event.target.value)}
+                      className="mt-1.5 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm font-normal text-text outline-none placeholder:text-muted/70 focus:border-cyan/50"
+                    />
+                  </label>
+                  <button
+                    type="submit"
+                    className="w-full cursor-pointer rounded-xl bg-ink px-4 py-2.5 text-sm font-semibold text-[#fffef8] transition-colors hover:bg-primary"
+                  >
+                    Confirm booking
+                  </button>
+                  <p className="text-center text-[11px] text-muted">
+                    Tuvi AI will confirm the appointment after submission.
                   </p>
                 </form>
               </div>

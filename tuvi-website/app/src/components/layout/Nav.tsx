@@ -80,7 +80,7 @@ export default function Nav() {
               className={`absolute left-1/2 top-full min-w-80 -translate-x-1/2 pt-4 transition duration-200 ${
                 servicesOpen
                   ? "visible opacity-100"
-                  : "invisible opacity-0 group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100"
+                  : "invisible opacity-0"
               }`}
             >
               <div className="rounded-2xl border border-border bg-bg-elevated p-2 shadow-[0_24px_60px_rgba(15,39,31,0.14)]">

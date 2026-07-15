@@ -1527,3 +1527,55 @@ API (New) key, and an Apollo API key before a Melbourne run can start. Apollo
 People Match can consume credits and its match accuracy/yield needs measurement.
 Places does not provide menu items. Google photo rendering requires a future
 server-side photo proxy if those images are exposed publicly.
+
+## 2026-07-15 — Voice Booking Form and Services Menu Fix
+
+**Role:** Frontend and AI Workflow Agent
+
+**Delivered:** Replaced the browser voice assistant's model-dependent email-only
+prompt with a required name, email, and phone booking form. The voice server now
+opens the form after slot confirmation, receives its values over the existing
+WebSocket, and falls back to opening it if the model tries to book without first
+requesting the form. The agent thanks the visitor and says the booking is
+confirmed only after the consultation API returns success. It no longer claims
+that an email was sent when delivery may be disabled. The desktop Services menu
+is now controlled only by component state, so selecting its first link closes it
+instead of the hover/focus CSS reopening it.
+
+**Production Inspection:** The VM contains zero rows in both
+`company_consultations` and `reservations`, and the API logs contain no matching
+confirmation-email delivery event. Production has `EMAIL_PROVIDER=disabled` and
+`EMAIL_DISABLE_SENDING=true`, so no booking confirmation email was sent.
+
+**Checks Run:** `npx tsc --noEmit --incremental false` — pass; Python
+`py_compile` — pass; browser/phone prompt and tool contract assertions — pass;
+`git diff --check` — pass. A local Next build remains blocked by the pre-existing
+dependency/cache `Unexpected end of JSON input` failure. A clean Docker build
+could not start because Docker Desktop's storage is full; no prune was run.
+
+**Plan Fit / Follow-up:** Restores the Phase 1 consultation conversion path while
+keeping confirmation tied to a successful database booking. No production
+deployment or email-provider change was performed; both require explicit
+approval.
+
+## 2026-07-15 — PostgreSQL-Only Consultation Slot Locking
+
+**Role:** Backend and DevOps Agent
+
+**Delivered:** Made PostgreSQL the sole source of truth for Tuvi consultation
+availability and confirmed bookings. The API no longer initializes or calls the
+Google Calendar provider, checks only confirmed `company_consultations` rows,
+and stores successful bookings before reporting confirmation. Migration 25
+replaces the unconditional `slot_start` uniqueness rule with a partial unique
+index for `status = 'confirmed'`, preventing concurrent double booking while
+allowing cancelled slots to be reused. Added a focused availability regression
+test and an accepted ADR for the deferred calendar integration.
+
+**Checks Run:** `go test ./backend/internal/consultations ./backend/internal/http/...`
+— 45 pass; `go test ./backend/...` — 146 pass. Cross-component and production
+deployment verification are recorded with the release outcome below.
+
+**Business Value / Plan Fit:** A confirmed booking immediately disappears from
+future availability without relying on external calendar state. This provides
+the deterministic Phase 1 booking boundary needed before Google Calendar
+synchronization is designed and approved.

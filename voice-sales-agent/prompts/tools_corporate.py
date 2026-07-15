@@ -54,8 +54,9 @@ CORPORATE_TOOLS = [
         "function": {
             "name": "book_consultation",
             "description": (
-                "Book the consultation after slot is confirmed and you have name + email. "
-                "Sends confirmation email to the visitor."
+                "Book the consultation after the slot is confirmed and the booking form has "
+                "returned name, email, and phone. "
+                "May send a confirmation email when delivery is enabled."
             ),
             "parameters": {
                 "type": "object",
@@ -82,6 +83,27 @@ CORPORATE_TOOLS = [
                     },
                 },
                 "required": ["date", "time", "prospect_name", "prospect_email", "prospect_phone"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "request_booking_details",
+            "description": (
+                "Open the required on-screen booking form for the visitor to type their name, "
+                "email, and phone number. Browser sessions only. Call this after the visitor "
+                "confirms an available consultation slot, then wait for the returned details."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "prompt": {
+                        "type": "string",
+                        "description": "Short message shown above the booking form.",
+                    },
+                },
+                "required": [],
             },
         },
     },
@@ -143,7 +165,7 @@ CORPORATE_TOOLS = [
 ]
 
 # Phone sessions: no browser UI tools / no further outbound dials.
-_PHONE_EXCLUDED = {"place_callback_call", "request_typed_email"}
+_PHONE_EXCLUDED = {"place_callback_call", "request_typed_email", "request_booking_details"}
 CORPORATE_PHONE_TOOLS = [
     t
     for t in CORPORATE_TOOLS
