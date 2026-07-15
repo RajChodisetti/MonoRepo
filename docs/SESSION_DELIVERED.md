@@ -12,6 +12,39 @@ Each entry should explain:
 - how the work fits with the rest of the Phase 1 or Phase 2 plan;
 - risks, gaps, or follow-ups.
 
+## 2026-07-15 — Equal Restaurant Demo Sizing and Deployment
+
+**Role:** Frontend, DevOps, and Documentation Agent
+
+**Delivered:** Corrected the alternating restaurant-feature grid so both demo
+videos receive the same desktop width. The first row now assigns its left video
+the larger `1.22fr` column, while the reversed row assigns that same `1.22fr`
+width to its right video. Both retain the identical 16:9 frame, border, radius,
+shadow, autoplay, looping, muted playback, and control-free presentation.
+
+Published functional commit `4596e32` on
+`agent/tuvi-oauth-homepage-verification`. Archived the exact remote-matched
+commit, verified its checksum locally and on the VM, built only
+`tuvi-website`, and recreated it with `--no-deps`. The prior `bc7f106` website
+release and image are retained as the immediate rollback. No migration or API,
+worker, scrape, OCR, email, database, Redis, voice, template, catalog, Caddy,
+DNS, or environment action ran.
+
+**Checks Run:** `git diff --check`, TypeScript validation, and local and VM Node
+22 production builds passed with all 13 routes generated. Local and live HTML
+contain both complementary grid templates, exactly two videos, matching
+16:9 frames, autoplay and loop attributes, and no play/pause controls. The
+public restaurant route returns HTTP 200. The running image matches `4596e32`,
+has zero restarts, and all other services remain up.
+
+**Business Value / Plan Fit:** Removes a visible inconsistency between the two
+restaurant demos so the alternating product story feels deliberate and
+balanced rather than making one capability appear less important.
+
+**Risks / Follow-ups:** This corrects the deterministic desktop grid sizing;
+both videos were already full-width and equal below the desktop breakpoint.
+Rollback to `bc7f106` restores the previous asymmetric alternating grid.
+
 ## 2026-07-15 — Restaurant Demo Video Autoplay and Deployment
 
 **Role:** Frontend, DevOps, and Documentation Agent
