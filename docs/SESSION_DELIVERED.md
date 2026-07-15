@@ -12,6 +12,42 @@ Each entry should explain:
 - how the work fits with the rest of the Phase 1 or Phase 2 plan;
 - risks, gaps, or follow-ups.
 
+## 2026-07-15 — Restaurant Demo Video Autoplay and Deployment
+
+**Role:** Frontend, DevOps, and Documentation Agent
+
+**Delivered:** Updated both `/services/restaurants` product demos to use the
+same fixed 16:9 frame, widened the feature container, and increased the desktop
+video column so the demonstrations render equally and slightly larger. Removed
+the play/pause overlay and client-side playback state. Both videos now request
+muted autoplay, loop continuously, play inline, preload their media, disable
+picture-in-picture, and expose no native controls.
+
+Published functional commit `bc7f106` on
+`agent/tuvi-oauth-homepage-verification`. Archived the exact remote-matched
+commit, verified its checksum locally and on the VM, built only
+`tuvi-website`, and recreated it with `--no-deps`. The prior `371c062` website
+release and image are retained as the immediate rollback. No migration or API,
+worker, scrape, OCR, email, database, Redis, voice, template, catalog, Caddy,
+DNS, or environment action ran.
+
+**Checks Run:** `git diff --check`, TypeScript validation, and local and VM Node
+22 production builds passed with all 13 routes generated. Local and live HTML
+contain exactly two videos and two sets of autoplay, loop, muted, inline,
+controls-list, and picture-in-picture attributes, with no play/pause button
+language. The public restaurant route returns HTTP 200 and both CDN media URLs
+return HTTP 200 with `video/mp4`. The running image matches `bc7f106`, has zero
+restarts, and all other services remain up.
+
+**Business Value / Plan Fit:** The restaurant demonstrations now behave like
+consistent ambient product previews, with larger matching frames and no
+interaction chrome competing with the service story.
+
+**Risks / Follow-ups:** Muted autoplay is supported by current major browsers,
+but individual browser, battery, or data-saving policies may still prevent it.
+Removing the pause control creates a continuous-motion accessibility tradeoff;
+rollback to `371c062` restores the prior user-controlled playback behavior.
+
 ## 2026-07-15 — Homepage Workspace Disclosure Removal and Deployment
 
 **Role:** Frontend, Security, DevOps, and Documentation Agent
