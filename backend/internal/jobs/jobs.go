@@ -11,7 +11,10 @@ import (
 	"time"
 )
 
-var ErrHandlerNotRegistered = errors.New("job handler is not registered")
+var (
+	ErrHandlerNotRegistered = errors.New("job handler is not registered")
+	ErrJobDeferred          = errors.New("job was durably deferred")
+)
 
 type Job struct {
 	ID             string          `json:"id"`
@@ -21,6 +24,7 @@ type Job struct {
 	Attempts       int             `json:"attempts"`
 	MaxAttempts    int             `json:"max_attempts"`
 	EnqueuedAt     time.Time       `json:"enqueued_at"`
+	LockedBy       string          `json:"-"`
 }
 
 type Handler func(context.Context, Job) error
@@ -28,6 +32,18 @@ type Handler func(context.Context, Job) error
 type Queue interface {
 	Enqueue(ctx context.Context, job Job) (Job, error)
 	Jobs() <-chan Job
+}
+
+type FinishingQueue interface {
+	Queue
+	Complete(ctx context.Context, job Job) error
+	Fail(ctx context.Context, job Job, jobErr error, retryDelay time.Duration) error
+}
+
+type LeasingQueue interface {
+	FinishingQueue
+	RenewLease(ctx context.Context, job Job) error
+	LeaseHeartbeatInterval() time.Duration
 }
 
 type InMemoryQueue struct {
@@ -115,10 +131,78 @@ func (w *Worker) process(ctx context.Context, job Job) {
 	handler, ok := w.handlers[job.Type]
 	if !ok {
 		w.log.ErrorContext(ctx, "job_handler_missing", "job_id", job.ID, "job_type", job.Type)
+		if finisher, finishOK := w.queue.(FinishingQueue); finishOK {
+			if err := finisher.Fail(ctx, job, ErrHandlerNotRegistered, w.retryDelay); err != nil {
+				w.log.ErrorContext(ctx, "job_fail_update_failed", "job_id", job.ID, "error", err)
+			}
+		}
 		return
 	}
 
-	if err := handler(ctx, job); err != nil {
+	handlerCtx, cancelHandler := context.WithCancel(ctx)
+	heartbeatDone := make(chan struct{})
+	if leaser, leaseOK := w.queue.(LeasingQueue); leaseOK {
+		go func() {
+			defer close(heartbeatDone)
+			interval := leaser.LeaseHeartbeatInterval()
+			if interval <= 0 {
+				interval = time.Minute
+			}
+			ticker := time.NewTicker(interval)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-handlerCtx.Done():
+					return
+				case <-ticker.C:
+					renewCtx, cancel := context.WithTimeout(context.WithoutCancel(handlerCtx), 10*time.Second)
+					err := leaser.RenewLease(renewCtx, job)
+					cancel()
+					if err != nil {
+						w.log.ErrorContext(ctx, "job_lease_lost", "job_id", job.ID, "error", err)
+						cancelHandler()
+						return
+					}
+				}
+			}
+		}()
+	} else {
+		close(heartbeatDone)
+	}
+
+	err := handler(handlerCtx, job)
+	cancelHandler()
+	<-heartbeatDone
+
+	if err != nil {
+		if errors.Is(err, ErrJobDeferred) {
+			w.log.InfoContext(ctx, "job_deferred", "job_id", job.ID, "job_type", job.Type)
+			return
+		}
+		if finisher, ok := w.queue.(FinishingQueue); ok {
+			if failErr := finisher.Fail(ctx, job, err, w.retryDelay); failErr != nil {
+				w.log.ErrorContext(ctx, "job_fail_update_failed", "job_id", job.ID, "error", failErr)
+			}
+			if job.Attempts < job.MaxAttempts {
+				w.log.WarnContext(ctx, "job_retry_scheduled",
+					"job_id", job.ID,
+					"job_type", job.Type,
+					"attempts", job.Attempts,
+					"max_attempts", job.MaxAttempts,
+					"error", err,
+				)
+			} else {
+				w.log.ErrorContext(ctx, "job_failed",
+					"job_id", job.ID,
+					"job_type", job.Type,
+					"attempts", job.Attempts,
+					"max_attempts", job.MaxAttempts,
+					"error", err,
+				)
+			}
+			return
+		}
+
 		job.Attempts++
 		if job.Attempts < job.MaxAttempts {
 			w.log.WarnContext(ctx, "job_retry_scheduled",
@@ -148,6 +232,11 @@ func (w *Worker) process(ctx context.Context, job Job) {
 	}
 
 	w.log.InfoContext(ctx, "job_completed", "job_id", job.ID, "job_type", job.Type)
+	if finisher, ok := w.queue.(FinishingQueue); ok {
+		if err := finisher.Complete(ctx, job); err != nil {
+			w.log.ErrorContext(ctx, "job_complete_update_failed", "job_id", job.ID, "error", err)
+		}
+	}
 }
 
 const SampleJobType = "sample.log"

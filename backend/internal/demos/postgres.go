@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -87,6 +88,57 @@ func (repo *Postgres) Create(ctx context.Context, input CreateInput) (Site, erro
 	}
 
 	return record, nil
+}
+
+func (repo *Postgres) GetByID(ctx context.Context, id uuid.UUID) (Site, error) {
+	if repo.pool == nil {
+		return Site{}, fmt.Errorf("database pool is not configured")
+	}
+
+	const query = `
+		SELECT id, restaurant_id, slug, token_hash, status, public_payload, expires_at, created_at, updated_at
+		FROM demo_sites
+		WHERE id = $1`
+
+	var record Site
+	err := repo.pool.QueryRow(ctx, query, id).Scan(
+		&record.ID,
+		&record.RestaurantID,
+		&record.Slug,
+		&record.TokenHash,
+		&record.Status,
+		&record.PublicPayload,
+		&record.ExpiresAt,
+		&record.CreatedAt,
+		&record.UpdatedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Site{}, repository.ErrNotFound
+	}
+	if err != nil {
+		return Site{}, fmt.Errorf("get demo site: %w", err)
+	}
+	return record, nil
+}
+
+func (repo *Postgres) UpdateTokenHash(ctx context.Context, id uuid.UUID, tokenHash string) error {
+	if repo.pool == nil {
+		return fmt.Errorf("database pool is not configured")
+	}
+
+	const query = `
+		UPDATE demo_sites
+		SET token_hash = $2, updated_at = now()
+		WHERE id = $1 AND status = 'draft'`
+
+	tag, err := repo.pool.Exec(ctx, query, id, tokenHash)
+	if err != nil {
+		return fmt.Errorf("update demo token hash: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return repository.ErrNotFound
+	}
+	return nil
 }
 
 var _ Repository = (*Postgres)(nil)

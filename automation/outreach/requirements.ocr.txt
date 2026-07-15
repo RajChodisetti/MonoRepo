@@ -1,0 +1,6 @@
+requests>=2.31.0,<3
+beautifulsoup4>=4.12.0,<5
+python-dotenv>=1.0.0,<2
+psycopg2-binary>=2.9.0,<3
+openai>=1.0.0,<3
+google-genai>=1.0.0,<2

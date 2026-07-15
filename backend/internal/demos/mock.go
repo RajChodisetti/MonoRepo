@@ -22,6 +22,18 @@ func (mock *Mock) GetBySlug(ctx context.Context, slug string) (Site, error) {
 	return record, nil
 }
 
+func (mock *Mock) GetByID(ctx context.Context, id uuid.UUID) (Site, error) {
+	if mock.Sites == nil {
+		return Site{}, repository.ErrNotFound
+	}
+	for _, record := range mock.Sites {
+		if record.ID == id {
+			return record, nil
+		}
+	}
+	return Site{}, repository.ErrNotFound
+}
+
 func (mock *Mock) Create(ctx context.Context, input CreateInput) (Site, error) {
 	now := time.Now()
 	record := Site{
@@ -40,6 +52,24 @@ func (mock *Mock) Create(ctx context.Context, input CreateInput) (Site, error) {
 	}
 	mock.Sites[input.Slug] = record
 	return record, nil
+}
+
+func (mock *Mock) UpdateTokenHash(ctx context.Context, id uuid.UUID, tokenHash string) error {
+	if mock.Sites == nil {
+		return repository.ErrNotFound
+	}
+	for slug, record := range mock.Sites {
+		if record.ID == id {
+			if record.Status != StatusDraft {
+				return repository.ErrNotFound
+			}
+			record.TokenHash = tokenHash
+			record.UpdatedAt = time.Now().UTC()
+			mock.Sites[slug] = record
+			return nil
+		}
+	}
+	return repository.ErrNotFound
 }
 
 var _ Repository = (*Mock)(nil)

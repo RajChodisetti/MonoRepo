@@ -3,6 +3,8 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -16,29 +18,41 @@ const (
 	EnvStaging    = "staging"
 	EnvProduction = "production"
 
-	providerDisabled = "disabled"
-	localDevToken    = "local-dev-token-secret-change-me-32chars"
+	providerDisabled  = "disabled"
+	localDevToken     = "local-dev-token-secret-change-me-32chars"
+	localDevTuviToken = "local-dev-tuvi-api-token-change-me"
 )
 
 type Config struct {
-	App      AppConfig
-	HTTP     HTTPConfig
-	Logging  LoggingConfig
-	Database DatabaseConfig
-	Redis    RedisConfig
-	Email    EmailConfig
-	LLM      LLMConfig
-	Voice    VoiceConfig
-	Storage  StorageConfig
-	Token    TokenConfig
-	Demo     DemoConfig
-	Jobs     JobsConfig
+	App           AppConfig
+	HTTP          HTTPConfig
+	Logging       LoggingConfig
+	Database      DatabaseConfig
+	Redis         RedisConfig
+	Email         EmailConfig
+	ZohoMail      ZohoMailConfig
+	Outreach      OutreachConfig
+	AppURLs       AppURLsConfig
+	LLM           LLMConfig
+	Voice         VoiceConfig
+	Storage       StorageConfig
+	Token         TokenConfig
+	Demo          DemoConfig
+	Jobs          JobsConfig
+	Consultations ConsultationConfig
 }
 
 type AppConfig struct {
 	Name    string
 	Env     string
 	Version string
+}
+
+type AppURLsConfig struct {
+	PublicBaseURL       string
+	PublicWebURL        string
+	PublicMarketingURL  string
+	PresentationSiteURL string
 }
 
 type HTTPConfig struct {
@@ -67,11 +81,49 @@ type RedisConfig struct {
 }
 
 type EmailConfig struct {
-	Provider       string
-	APIKey         string
-	FromAddress    string
-	DisableSending bool
-	RedirectTo     string
+	Provider            string
+	APIKey              string
+	APIBaseURL          string
+	FromAddress         string
+	FromName            string
+	DisableSending      bool
+	RedirectTo          string
+	OpenTrackingEnabled bool
+	RequireHTTPSLinks   bool
+	AllowedLinkHosts    []string
+}
+
+type ZohoMailConfig struct {
+	AccountKey   string
+	AccountID    string
+	FromEmail    string
+	Region       string
+	APIBaseURL   string
+	ClientID     string
+	ClientSecret string
+	RefreshToken string
+}
+
+type GmailMailConfig struct {
+	AccountKey   string
+	MailboxEmail string
+	FromEmail    string
+	ClientID     string
+	ClientSecret string
+	RefreshToken string
+}
+
+type OutreachConfig struct {
+	BulkMax                     int
+	EmailsPerAccount            int
+	SendWindow                  time.Duration
+	SendJitterMin               time.Duration
+	SendJitterMax               time.Duration
+	AccountCooldown             time.Duration
+	ZohoAccounts                []ZohoMailConfig
+	ZohoAccountsJSON            string
+	GoogleWorkspaceAccounts     []GmailMailConfig
+	GoogleWorkspaceAccountsJSON string
 }
 
 type LLMConfig struct {
@@ -100,13 +152,29 @@ type TokenConfig struct {
 }
 
 type DemoConfig struct {
-	TokenSecret string
-	TokenTTL    time.Duration
+	TokenTTL time.Duration
 }
 
 type JobsConfig struct {
 	BufferSize int
 	RetryDelay time.Duration
+}
+
+type ConsultationConfig struct {
+	APIToken string
+
+	NotifyEmail string
+
+	Timezone            *time.Location
+	BusinessHourStart   int
+	BusinessHourEnd     int
+	SlotDurationMinutes int
+	DefaultAvailDays    int
+	AvailabilityHorizon int
+
+	GoogleCalendarID         string
+	GoogleServiceAccountJSON string
+	GoogleCalendarDisabled   bool
 }
 
 func Load() (Config, error) {
@@ -119,9 +187,15 @@ func Load() (Config, error) {
 			Env:     parser.string("APP_ENV", EnvLocal),
 			Version: parser.string("APP_VERSION", "dev"),
 		},
+		AppURLs: AppURLsConfig{
+			PublicBaseURL:       parser.string("PUBLIC_BASE_URL", "http://localhost:8080"),
+			PublicWebURL:        parser.string("PUBLIC_WEB_URL", "http://localhost:3000"),
+			PublicMarketingURL:  parser.string("PUBLIC_MARKETING_URL", "http://localhost:3001"),
+			PresentationSiteURL: parser.string("PRESENTATION_SITE_URL", "http://localhost:5500"),
+		},
 		HTTP: HTTPConfig{
 			Addr:               parser.listenAddr(),
-			CORSAllowedOrigins: parser.csv("CORS_ALLOWED_ORIGINS", []string{"http://localhost:3000", "http://127.0.0.1:3000"}),
+			CORSAllowedOrigins: parser.csv("CORS_ALLOWED_ORIGINS", []string{"http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001", "http://127.0.0.1:3001"}),
 		},
 		Logging: LoggingConfig{
 			Level:  parser.string("LOG_LEVEL", "info"),
@@ -141,12 +215,25 @@ func Load() (Config, error) {
 			RequireInProduction: true,
 		},
 		Email: EmailConfig{
-			Provider:       parser.string("EMAIL_PROVIDER", providerDisabled),
-			APIKey:         parser.string("EMAIL_API_KEY", ""),
-			FromAddress:    parser.string("EMAIL_FROM_ADDRESS", ""),
-			DisableSending: parser.bool("EMAIL_DISABLE_SENDING", true),
-			RedirectTo:     parser.string("EMAIL_REDIRECT_TO", ""),
+			Provider:            parser.string("EMAIL_PROVIDER", providerDisabled),
+			APIKey:              parser.string("EMAIL_API_KEY", ""),
+			APIBaseURL:          parser.string("EMAIL_API_BASE_URL", "https://api.resend.com"),
+			FromAddress:         parser.string("EMAIL_FROM_ADDRESS", ""),
+			FromName:            parser.string("EMAIL_FROM_NAME", "Tuvi Solutions"),
+			DisableSending:      parser.bool("EMAIL_DISABLE_SENDING", true),
+			RedirectTo:          parser.string("EMAIL_REDIRECT_TO", ""),
+			OpenTrackingEnabled: parser.bool("EMAIL_OPEN_TRACKING_ENABLED", true),
 		},
+		ZohoMail: ZohoMailConfig{
+			AccountID:    parser.string("ZOHO_ACCOUNT_ID", ""),
+			FromEmail:    parser.string("ZOHO_FROM_EMAIL", ""),
+			Region:       parser.string("ZOHO_REGION", "com"),
+			APIBaseURL:   parser.string("ZOHO_API_BASE_URL", "https://mail.zoho.com/api/accounts"),
+			ClientID:     parser.string("ZOHO_CLIENT_ID", ""),
+			ClientSecret: parser.string("ZOHO_CLIENT_SECRET", ""),
+			RefreshToken: parser.string("ZOHO_REFRESH_TOKEN", ""),
+		},
+		Outreach: loadOutreachConfig(parser),
 		LLM: LLMConfig{
 			Provider: parser.string("LLM_PROVIDER", providerDisabled),
 			APIKey:   parser.string("LLM_API_KEY", ""),
@@ -169,13 +256,33 @@ func Load() (Config, error) {
 			AccessTokenTTL: parser.duration("JWT_ACCESS_TOKEN_TTL", 24*time.Hour),
 		},
 		Demo: DemoConfig{
-			TokenSecret: parser.string("DEMO_TOKEN_SECRET", localDevToken),
-			TokenTTL:    parser.duration("DEMO_TOKEN_TTL", 30*24*time.Hour),
+			TokenTTL: parser.duration("DEMO_TOKEN_TTL", 30*24*time.Hour),
 		},
 		Jobs: JobsConfig{
 			BufferSize: parser.int("JOB_BUFFER_SIZE", 32),
 			RetryDelay: parser.duration("JOB_RETRY_DELAY", 2*time.Second),
 		},
+		Consultations: ConsultationConfig{
+			APIToken:                 parser.string("TUVI_API_TOKEN", localDevTuviToken),
+			NotifyEmail:              parser.string("CONSULTATION_NOTIFY_EMAIL", "contact@tuvisolutions.com"),
+			Timezone:                 parser.location("CONSULTATION_TIMEZONE", "Australia/Sydney"),
+			BusinessHourStart:        parser.int("CONSULTATION_BUSINESS_HOUR_START", 9),
+			BusinessHourEnd:          parser.int("CONSULTATION_BUSINESS_HOUR_END", 17),
+			SlotDurationMinutes:      parser.int("CONSULTATION_SLOT_DURATION_MINUTES", 30),
+			DefaultAvailDays:         parser.int("CONSULTATION_DEFAULT_AVAILABILITY_DAYS", 5),
+			AvailabilityHorizon:      parser.int("CONSULTATION_AVAILABILITY_HORIZON_DAYS", 14),
+			GoogleCalendarID:         parser.string("CONSULTATION_GOOGLE_CALENDAR_ID", ""),
+			GoogleServiceAccountJSON: parser.string("CONSULTATION_GOOGLE_SERVICE_ACCOUNT_JSON", ""),
+			GoogleCalendarDisabled:   parser.bool("CONSULTATION_GOOGLE_CALENDAR_DISABLED", true),
+		},
+	}
+	cfg.Email.RequireHTTPSLinks = cfg.requiresExplicitSecrets()
+	if cfg.App.Env == EnvProduction {
+		cfg.Email.AllowedLinkHosts = []string{
+			"api.tuvisolutions.com",
+			"demo.tuvisolutions.com",
+			"tuvisolutions.com",
+		}
 	}
 
 	if err := parser.join(); err != nil {
@@ -223,9 +330,6 @@ func (c Config) Validate() error {
 	if len(c.Token.Secret) < 32 {
 		errs = append(errs, fmt.Errorf("TOKEN_SECRET must be at least 32 characters"))
 	}
-	if len(c.Demo.TokenSecret) < 32 {
-		errs = append(errs, fmt.Errorf("DEMO_TOKEN_SECRET must be at least 32 characters"))
-	}
 	if c.Demo.TokenTTL <= 0 {
 		errs = append(errs, fmt.Errorf("DEMO_TOKEN_TTL must be positive"))
 	}
@@ -235,6 +339,73 @@ func (c Config) Validate() error {
 	if c.Jobs.RetryDelay <= 0 {
 		errs = append(errs, fmt.Errorf("JOB_RETRY_DELAY must be positive"))
 	}
+	if c.Outreach.BulkMax < 1 || c.Outreach.BulkMax > 150 {
+		errs = append(errs, fmt.Errorf("OUTREACH_BULK_MAX must be between 1 and 150"))
+	}
+	if c.Outreach.EmailsPerAccount < 1 || c.Outreach.EmailsPerAccount > 40 {
+		errs = append(errs, fmt.Errorf("OUTREACH_EMAILS_PER_ACCOUNT must be between 1 and 40"))
+	}
+	if c.Outreach.SendWindow < 8*time.Hour {
+		errs = append(errs, fmt.Errorf("OUTREACH_SEND_WINDOW must be at least 8h"))
+	}
+	if c.Outreach.SendJitterMin < 2*time.Minute {
+		errs = append(errs, fmt.Errorf("OUTREACH_SEND_JITTER_MIN must be at least 2m"))
+	}
+	if c.Outreach.SendJitterMax < c.Outreach.SendJitterMin {
+		errs = append(errs, fmt.Errorf("OUTREACH_SEND_JITTER_MAX must be greater than or equal to OUTREACH_SEND_JITTER_MIN"))
+	}
+	if c.Outreach.EmailsPerAccount > 0 && c.Outreach.SendWindow/time.Duration(c.Outreach.EmailsPerAccount) <= c.Outreach.SendJitterMax {
+		errs = append(errs, fmt.Errorf("OUTREACH_SEND_WINDOW divided by OUTREACH_EMAILS_PER_ACCOUNT must be greater than OUTREACH_SEND_JITTER_MAX"))
+	}
+	if c.Outreach.AccountCooldown < 24*time.Hour {
+		errs = append(errs, fmt.Errorf("OUTREACH_EMAIL_COOLDOWN must be at least 24h"))
+	}
+	if c.App.Env == EnvProduction && strings.TrimSpace(c.Email.RedirectTo) != "" {
+		errs = append(errs, fmt.Errorf("EMAIL_REDIRECT_TO must be empty in production"))
+	}
+	if strings.ContainsAny(c.Email.FromName, "\r\n") {
+		errs = append(errs, fmt.Errorf("EMAIL_FROM_NAME must not contain newlines"))
+	}
+	if redirect := strings.TrimSpace(c.Email.RedirectTo); redirect != "" {
+		if _, err := canonicalOutreachMailbox(redirect); err != nil {
+			errs = append(errs, fmt.Errorf("EMAIL_REDIRECT_TO must be a single valid email address"))
+		}
+	}
+	if strings.TrimSpace(c.Consultations.APIToken) == "" {
+		errs = append(errs, fmt.Errorf("TUVI_API_TOKEN is required"))
+	}
+	if strings.TrimSpace(c.Consultations.NotifyEmail) == "" {
+		errs = append(errs, fmt.Errorf("CONSULTATION_NOTIFY_EMAIL is required"))
+	}
+	if c.Consultations.Timezone == nil {
+		errs = append(errs, fmt.Errorf("CONSULTATION_TIMEZONE is required"))
+	}
+	if c.Consultations.BusinessHourStart < 0 || c.Consultations.BusinessHourStart > 23 {
+		errs = append(errs, fmt.Errorf("CONSULTATION_BUSINESS_HOUR_START must be between 0 and 23"))
+	}
+	if c.Consultations.BusinessHourEnd < 1 || c.Consultations.BusinessHourEnd > 24 {
+		errs = append(errs, fmt.Errorf("CONSULTATION_BUSINESS_HOUR_END must be between 1 and 24"))
+	}
+	if c.Consultations.BusinessHourStart >= c.Consultations.BusinessHourEnd {
+		errs = append(errs, fmt.Errorf("CONSULTATION_BUSINESS_HOUR_START must be before CONSULTATION_BUSINESS_HOUR_END"))
+	}
+	if c.Consultations.SlotDurationMinutes < 1 || c.Consultations.SlotDurationMinutes > 240 {
+		errs = append(errs, fmt.Errorf("CONSULTATION_SLOT_DURATION_MINUTES must be between 1 and 240"))
+	}
+	if c.Consultations.DefaultAvailDays < 1 {
+		errs = append(errs, fmt.Errorf("CONSULTATION_DEFAULT_AVAILABILITY_DAYS must be at least 1"))
+	}
+	if c.Consultations.AvailabilityHorizon < c.Consultations.DefaultAvailDays {
+		errs = append(errs, fmt.Errorf("CONSULTATION_AVAILABILITY_HORIZON_DAYS must be greater than or equal to CONSULTATION_DEFAULT_AVAILABILITY_DAYS"))
+	}
+	if !c.Consultations.GoogleCalendarDisabled {
+		if strings.TrimSpace(c.Consultations.GoogleCalendarID) == "" {
+			errs = append(errs, fmt.Errorf("CONSULTATION_GOOGLE_CALENDAR_ID is required when consultation Google Calendar is enabled"))
+		}
+		if strings.TrimSpace(c.Consultations.GoogleServiceAccountJSON) == "" {
+			errs = append(errs, fmt.Errorf("CONSULTATION_GOOGLE_SERVICE_ACCOUNT_JSON is required when consultation Google Calendar is enabled"))
+		}
+	}
 	if !oneOf(c.Logging.Level, "debug", "info", "warn", "error") {
 		errs = append(errs, fmt.Errorf("LOG_LEVEL must be one of debug, info, warn, error"))
 	}
@@ -243,20 +414,132 @@ func (c Config) Validate() error {
 	}
 
 	errs = append(errs, c.validateProviders()...)
+	errs = append(errs, c.validateEmailURLs()...)
 	errs = append(errs, c.validateDeployedSecrets()...)
 
 	return errors.Join(errs...)
+}
+
+func (c Config) validateEmailURLs() []error {
+	if c.Email.DisableSending {
+		return nil
+	}
+
+	values := []struct {
+		name  string
+		value string
+	}{
+		{name: "PUBLIC_BASE_URL", value: c.AppURLs.PublicBaseURL},
+		{name: "PUBLIC_WEB_URL", value: c.AppURLs.PublicWebURL},
+		{name: "PUBLIC_MARKETING_URL", value: c.AppURLs.PublicMarketingURL},
+		{name: "PRESENTATION_SITE_URL", value: c.AppURLs.PresentationSiteURL},
+	}
+
+	var errs []error
+	for _, item := range values {
+		parsed, err := url.Parse(strings.TrimSpace(item.value))
+		if err != nil || parsed.Scheme == "" || parsed.Hostname() == "" || parsed.User != nil {
+			errs = append(errs, fmt.Errorf("%s must be an absolute public URL", item.name))
+			continue
+		}
+		if !c.Email.RequireHTTPSLinks {
+			continue
+		}
+		if !strings.EqualFold(parsed.Scheme, "https") {
+			errs = append(errs, fmt.Errorf("%s must use https in %s", item.name, c.App.Env))
+			continue
+		}
+		if isLocalHostname(parsed.Hostname()) {
+			errs = append(errs, fmt.Errorf("%s must not use a loopback or local hostname in %s", item.name, c.App.Env))
+		}
+	}
+	if c.App.Env == EnvProduction {
+		expectedHosts := []struct {
+			name string
+			url  string
+			host string
+		}{
+			{name: "PUBLIC_BASE_URL", url: c.AppURLs.PublicBaseURL, host: "api.tuvisolutions.com"},
+			{name: "PUBLIC_WEB_URL", url: c.AppURLs.PublicWebURL, host: "demo.tuvisolutions.com"},
+			{name: "PUBLIC_MARKETING_URL", url: c.AppURLs.PublicMarketingURL, host: "tuvisolutions.com"},
+			{name: "PRESENTATION_SITE_URL", url: c.AppURLs.PresentationSiteURL, host: "tuvisolutions.com"},
+		}
+		for _, expected := range expectedHosts {
+			parsed, err := url.Parse(strings.TrimSpace(expected.url))
+			if err != nil {
+				continue
+			}
+			if !strings.EqualFold(parsed.Hostname(), expected.host) {
+				errs = append(errs, fmt.Errorf("%s must use %s in production", expected.name, expected.host))
+			}
+			if parsed.Port() != "" {
+				errs = append(errs, fmt.Errorf("%s must not use a custom port in production", expected.name))
+			}
+		}
+		productionPaths := []struct {
+			name string
+			url  string
+			path string
+		}{
+			{name: "PUBLIC_BASE_URL", url: c.AppURLs.PublicBaseURL, path: ""},
+			{name: "PUBLIC_WEB_URL", url: c.AppURLs.PublicWebURL, path: ""},
+			{name: "PUBLIC_MARKETING_URL", url: c.AppURLs.PublicMarketingURL, path: ""},
+			{name: "PRESENTATION_SITE_URL", url: c.AppURLs.PresentationSiteURL, path: "/services/restaurants"},
+		}
+		for _, expected := range productionPaths {
+			parsed, err := url.Parse(strings.TrimSpace(expected.url))
+			if err != nil {
+				continue
+			}
+			path := strings.TrimSuffix(parsed.EscapedPath(), "/")
+			if path != expected.path || parsed.RawQuery != "" || parsed.Fragment != "" {
+				errs = append(errs, fmt.Errorf("%s must use the canonical production path %q without query or fragment", expected.name, expected.path))
+			}
+		}
+	}
+	return errs
+}
+
+func isLocalHostname(host string) bool {
+	host = strings.Trim(strings.ToLower(strings.TrimSpace(host)), "[]")
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") || strings.HasSuffix(host, ".local") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && (ip.IsLoopback() || ip.IsUnspecified())
 }
 
 func (c Config) validateProviders() []error {
 	var errs []error
 
 	if providerEnabled(c.Email.Provider) {
-		if strings.TrimSpace(c.Email.APIKey) == "" {
-			errs = append(errs, fmt.Errorf("EMAIL_API_KEY is required when EMAIL_PROVIDER is enabled"))
-		}
 		if strings.TrimSpace(c.Email.FromAddress) == "" {
 			errs = append(errs, fmt.Errorf("EMAIL_FROM_ADDRESS is required when EMAIL_PROVIDER is enabled"))
+		}
+		switch strings.ToLower(strings.TrimSpace(c.Email.Provider)) {
+		case "smtp":
+			errs = append(errs, fmt.Errorf("EMAIL_PROVIDER=smtp is no longer supported; use EMAIL_PROVIDER=resend with EMAIL_API_KEY"))
+		case "resend", "http", "https":
+			if strings.TrimSpace(c.Email.APIKey) == "" {
+				errs = append(errs, fmt.Errorf("EMAIL_API_KEY is required when EMAIL_PROVIDER is %s", c.Email.Provider))
+			}
+			if strings.TrimSpace(c.Email.APIBaseURL) == "" {
+				errs = append(errs, fmt.Errorf("EMAIL_API_BASE_URL is required when EMAIL_PROVIDER is enabled"))
+			}
+		case "zoho":
+			if strings.TrimSpace(c.ZohoMail.AccountID) == "" {
+				errs = append(errs, fmt.Errorf("ZOHO_ACCOUNT_ID is required when EMAIL_PROVIDER is zoho"))
+			}
+			if strings.TrimSpace(c.ZohoMail.ClientID) == "" || strings.TrimSpace(c.ZohoMail.ClientSecret) == "" || strings.TrimSpace(c.ZohoMail.RefreshToken) == "" {
+				errs = append(errs, fmt.Errorf("ZOHO_CLIENT_ID, ZOHO_CLIENT_SECRET, and ZOHO_REFRESH_TOKEN are required when EMAIL_PROVIDER is zoho"))
+			}
+			if strings.TrimSpace(c.ZohoMail.FromEmail) == "" && strings.TrimSpace(c.Email.FromAddress) == "" {
+				errs = append(errs, fmt.Errorf("ZOHO_FROM_EMAIL or EMAIL_FROM_ADDRESS is required when EMAIL_PROVIDER is zoho"))
+			}
+		default:
+			if strings.TrimSpace(c.Email.APIKey) == "" {
+				errs = append(errs, fmt.Errorf("EMAIL_API_KEY is required when EMAIL_PROVIDER is enabled"))
+			}
 		}
 	}
 
@@ -305,6 +588,9 @@ func (c Config) validateDeployedSecrets() []error {
 	}
 	if c.Token.Secret == localDevToken {
 		errs = append(errs, fmt.Errorf("TOKEN_SECRET must be explicit in %s", c.App.Env))
+	}
+	if c.Consultations.APIToken == localDevTuviToken {
+		errs = append(errs, fmt.Errorf("TUVI_API_TOKEN must be explicit in %s", c.App.Env))
 	}
 	if strings.TrimSpace(c.Redis.URL) == "" && c.Redis.RequireInProduction {
 		errs = append(errs, fmt.Errorf("REDIS_URL is required in %s", c.App.Env))

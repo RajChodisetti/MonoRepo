@@ -1,0 +1,18 @@
+Hi there — missed calls and outdated websites can make it harder for guests to request a table.
+
+Tuvi Solutions builds restaurant tools to help with that — and we've already created a live website preview for {{.RestaurantName}}, plus a reservation-request form and details on our AI receptionist.
+
+Preview: __CLICK_URL__
+
+Explore what we offer:
+{{range .Services}}
+- {{.Title}}: {{.Description}}
+  {{.URL}}
+{{end}}
+Open {{.RestaurantName}} demo: __CLICK_URL__
+
+Reply anytime — happy to walk you through it in 10 minutes.
+
+Prefer not to get these emails? Unsubscribe: {{.UnsubscribeURL}}
+
+— Tuvi Solutions

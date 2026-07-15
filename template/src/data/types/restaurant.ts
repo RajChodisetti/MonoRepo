@@ -28,6 +28,7 @@ export interface ExperienceCard {
 
 export interface RestaurantContent {
   index: number;
+  restaurantId: string;
   name: string;
   tagline: string;
   subheadline: string;
@@ -53,6 +54,7 @@ export interface RestaurantContent {
   storySteps: StoryStep[];
   signatureDishes: import("./menu").MenuItem[];
   menuCategories: import("./menu").MenuCategory[];
+  menuListImages: import("./menuImages").MenuListImage[];
   galleryImages: import("./gallery").GalleryImage[];
   reviews: import("./reviews").Review[];
   experienceCards: ExperienceCard[];

@@ -1,0 +1,12 @@
+.git
+.run
+logs
+
+**/node_modules
+**/.next
+**/dist
+**/.turbo
+**/.cache
+
+template/.next.predeploy-cache-*
+apps/restaurant-services-catalog/.wrangler

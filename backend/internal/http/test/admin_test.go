@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/auth"
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/campaigns"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/demos"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/restaurants"
 )
@@ -64,7 +65,7 @@ func TestAdminMeReturnsProfileForInternalAdminToken(t *testing.T) {
 			},
 		},
 	}
-	router := testRouterWithStores(t, fakeReadiness{}, repo, &restaurants.Mock{}, &restaurants.MembershipMock{}, &demos.Mock{})
+	router := testRouterWithStores(t, fakeReadiness{}, repo, &restaurants.Mock{}, &restaurants.MembershipMock{}, &demos.Mock{}, &campaigns.Mock{})
 	token, _, err := auth.NewTokenManager(testTokenSecret, time.Hour).IssueToken(userID, "admin@example.com", auth.RoleInternalAdmin)
 	if err != nil {
 		t.Fatalf("IssueToken() error = %v", err)
@@ -84,7 +85,7 @@ func TestAdminMeReturnsProfileForInternalAdminToken(t *testing.T) {
 }
 
 func TestSignupRejectsInternalAdminRole(t *testing.T) {
-	router := testRouterWithStores(t, fakeReadiness{}, &auth.Mock{}, &restaurants.Mock{}, &restaurants.MembershipMock{}, &demos.Mock{})
+	router := testRouterWithStores(t, fakeReadiness{}, &auth.Mock{}, &restaurants.Mock{}, &restaurants.MembershipMock{}, &demos.Mock{}, &campaigns.Mock{})
 
 	body := `{"email":"admin@example.com","password":"password123","full_name":"Admin","role":"internal_admin"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/signup", strings.NewReader(body))

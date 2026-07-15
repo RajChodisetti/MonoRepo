@@ -17,7 +17,7 @@ const FOOD_CUISINE_KEYWORDS = [
   "vegan", "vegetarian", "gluten", "halal", "kosher",
 ];
 
-type ScrapedImage = { url?: string; thumbnail?: string; popular?: boolean };
+type ScrapedImage = { url?: string; thumbnail?: string; popular?: boolean; image_type?: string; confidence?: number; title?: string };
 type ScrapedMenuItem = {
   name: string;
   category?: string;
@@ -43,8 +43,10 @@ type ScrapedRestaurant = {
   reviews?: { reviewer?: string; review?: string; stars?: number; date?: string }[];
   images?: {
     thumbnail?: string;
-    gallery?: { url?: string; thumbnail?: string }[];
+    gallery?: ScrapedImage[];
+    menu_photos?: ScrapedImage[];
   };
+  google?: { place_id?: string };
   hours?: Record<string, string>;
 };
 
@@ -56,11 +58,71 @@ function classifyImage(url: string): ImageClassificationType {
   return "other";
 }
 
+function pickImageRecord(img: ScrapedImage | string | undefined): ScrapedImage | null {
+  if (!img) return null;
+  if (typeof img === "string") return { url: img };
+  return img;
+}
+
+function pickImageUrl(img: ScrapedImage | string | undefined): string {
+  const record = pickImageRecord(img);
+  if (!record) return "";
+  return record.url || record.thumbnail || "";
+}
+
 function pickImage(images?: ScrapedImage[]): string {
   if (!images?.length) return "";
-  const first = images[0];
-  if (typeof first === "string") return first;
-  return first.url || first.thumbnail || "";
+  return pickImageUrl(images[0]);
+}
+
+function galleryTypeFromRecord(img: ScrapedImage): GalleryImage["type"] {
+  const t = (img.image_type || img.title || "").toLowerCase();
+  if (t === "food_photo" || t === "food") return "food";
+  if (t === "interior" || t === "ambience") return "ambience";
+  return "other";
+}
+
+function buildMenuListImages(r: ScrapedRestaurant): import("@/data/types/menuImages").MenuListImage[] {
+  return (r.images?.menu_photos || [])
+    .map((img, i) => {
+      const url = pickImageUrl(img);
+      if (!url) return null;
+      return {
+        url,
+        thumbnail: img.thumbnail || url,
+        alt: `${r.name} menu ${i + 1}`,
+        confidence: img.confidence,
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+}
+
+function buildGallery(r: ScrapedRestaurant): GalleryImage[] {
+  const menuPhotoUrls = new Set(
+    (r.images?.menu_photos || []).map((img) => pickImageUrl(img)).filter(Boolean),
+  );
+
+  const galleryItems = (r.images?.gallery || [])
+    .map((img, i) => {
+      const url = pickImageUrl(img);
+      if (!url || menuPhotoUrls.has(url)) return null;
+      return {
+        url,
+        alt: img.title ? `${r.name} — ${img.title}` : `${r.name} gallery ${i + 1}`,
+        type: galleryTypeFromRecord(img),
+      };
+    })
+    .filter((item): item is GalleryImage => Boolean(item));
+
+  if (galleryItems.length) return galleryItems.slice(0, 24);
+
+  // Fallback before OCR: food/ambience from static classifications only
+  const urls = collectImageUrls(r).filter((url) => !menuPhotoUrls.has(url));
+  return urls.slice(0, 12).map((url, i) => ({
+    url,
+    alt: `${r.name} gallery ${i + 1}`,
+    type: classifyImage(url) === "food" ? "food" : "ambience",
+  }));
 }
 
 function foodCuisines(list?: string[]): string[] {
@@ -189,15 +251,6 @@ function buildSignatureDishes(r: ScrapedRestaurant): MenuItem[] {
   return withImages.slice(0, 6);
 }
 
-function buildGallery(r: ScrapedRestaurant): GalleryImage[] {
-  const urls = collectImageUrls(r);
-  return urls.slice(0, 12).map((url, i) => ({
-    url,
-    alt: `${r.name} gallery ${i + 1}`,
-    type: classifyImage(url) === "food" ? "food" : "ambience",
-  }));
-}
-
 function buildExperienceCards(r: ScrapedRestaurant, poster: string): ExperienceCard[] {
   const phone = r.contact?.phone?.replace(/\s/g, "") || "";
   const cards: ExperienceCard[] = [
@@ -261,6 +314,7 @@ export function adaptRestaurant(index: number): RestaurantContent {
 
   return {
     index,
+    restaurantId: r.google?.place_id || `json-${index}`,
     name: r.name,
     tagline: "Fire, flavor, and a table waiting for you.",
     subheadline: `A ${cuisine.toLowerCase()} experience built around seasonal ingredients and warm hospitality in ${city || "your city"}.`,
@@ -293,6 +347,7 @@ export function adaptRestaurant(index: number): RestaurantContent {
     storySteps: buildStorySteps(r, storyImages),
     signatureDishes: buildSignatureDishes(r),
     menuCategories: buildMenuCategories(r),
+    menuListImages: buildMenuListImages(r),
     galleryImages: buildGallery(r),
     reviews: (r.reviews || []).slice(0, 6).map((rev) => ({
       reviewer: rev.reviewer || "Guest",
@@ -306,6 +361,28 @@ export function adaptRestaurant(index: number): RestaurantContent {
 
 export function loadRestaurant(index: number): RestaurantContent {
   return adaptRestaurant(index);
+}
+
+export function getPlaceID(index: number): string {
+  const restaurants = restaurantsData.restaurants as ScrapedRestaurant[];
+  if (index < 0 || index >= restaurants.length) return "";
+  return (restaurants[index].google?.place_id || "").trim();
+}
+
+export async function loadRestaurantAsync(index: number): Promise<RestaurantContent> {
+  const base = adaptRestaurant(index);
+  const placeID = getPlaceID(index);
+  if (!placeID) return base;
+
+  const { fetchSiteImagesByPlaceID } = await import("./restaurantImagesApi");
+  const images = await fetchSiteImagesByPlaceID(placeID, base.name);
+  if (!images) return base;
+
+  return {
+    ...base,
+    menuListImages: images.menuListImages.length ? images.menuListImages : base.menuListImages,
+    galleryImages: images.galleryImages.length ? images.galleryImages : base.galleryImages,
+  };
 }
 
 export function parseRestaurantIndex(raw?: string | string[] | null): number {

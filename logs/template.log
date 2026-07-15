@@ -1,0 +1,109 @@
+npm warn Unknown env config "devdir". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+> tuvi-restaurant-template@1.0.0 dev:elysian
+> TEMPLATE=3 next dev
+
+   ▲ Next.js 15.5.19
+   - Local:        http://localhost:3000
+   - Network:      http://192.168.1.4:3000
+   - Environments: .env.local, .env
+
+ ✓ Starting...
+ ✓ Ready in 1089ms
+ ○ Compiling / ...
+ ✓ Compiled / in 2.3s (1696 modules)
+ GET /?template=3 200 in 2478ms
+npm warn Unknown env config "devdir". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+> tuvi-restaurant-template@1.0.0 dev:elysian
+> TEMPLATE=3 next dev
+
+   ▲ Next.js 15.5.19
+   - Local:        http://localhost:3000
+   - Network:      http://192.168.1.4:3000
+   - Environments: .env.local, .env
+
+ ✓ Starting...
+ ✓ Ready in 1141ms
+ ○ Compiling / ...
+ ✓ Compiled / in 575ms (1606 modules)
+ GET /?template=3 200 in 784ms
+ GET /?template=3 200 in 788ms
+ GET /?template=3 200 in 63ms
+ GET /?template=3 200 in 67ms
+ GET /?template=3 200 in 56ms
+ GET /?template=3 200 in 57ms
+ GET /?template=3 200 in 55ms
+ GET /?template=3 200 in 56ms
+ GET /?template=3 200 in 42ms
+ GET /?template=3 200 in 43ms
+ GET /?template=3 200 in 43ms
+ GET /?template=3 200 in 44ms
+ GET /?template=3 200 in 27ms
+ GET /?template=3 200 in 43ms
+ GET /?template=3 200 in 27ms
+ GET /?template=3 200 in 25ms
+ GET /?template=3 200 in 27ms
+ GET /?template=3 200 in 28ms
+ GET /?template=3 200 in 30ms
+ GET /?template=3 200 in 39ms
+ GET /?template=3 200 in 29ms
+ GET /?template=3 200 in 26ms
+ GET /?template=3 200 in 29ms
+ GET /?template=3 200 in 25ms
+ GET /?template=3 200 in 27ms
+ GET /?template=3 200 in 27ms
+ GET /?template=3 200 in 25ms
+ GET /?template=3 200 in 25ms
+ GET /?template=3 200 in 23ms
+ GET /?template=3 200 in 21ms
+ GET /?template=3 200 in 24ms
+ GET /?template=3 200 in 24ms
+ GET /?template=3 200 in 26ms
+ GET /?template=3 200 in 27ms
+ GET /?template=3 200 in 21ms
+ GET /?template=3 200 in 27ms
+ GET /?template=3 200 in 24ms
+ GET /?template=3 200 in 25ms
+ GET /?template=3 200 in 26ms
+ GET /?template=3 200 in 26ms
+ GET /?template=3 200 in 27ms
+ GET /?template=3 200 in 25ms
+ GET /?template=3 200 in 26ms
+ GET /?template=3 200 in 29ms
+ GET /?template=3 200 in 24ms
+ GET /?template=3 200 in 20ms
+ GET /?template=3 200 in 73ms
+ GET /?template=3 200 in 50ms
+ GET /?template=3 200 in 65ms
+ GET /?template=3 200 in 67ms
+ GET /?template=3 200 in 230ms
+ GET /?template=3 200 in 233ms
+ GET /?template=3 200 in 199ms
+ GET /?template=3 200 in 258ms
+ GET /?template=3 200 in 52ms
+ GET /?template=3 200 in 164ms
+ GET /?template=3 200 in 38ms
+ GET /?template=3 200 in 35ms
+ GET /?template=3 200 in 28ms
+ GET /?template=3 200 in 25ms
+ GET /?template=3 200 in 23ms
+ GET /?template=3 200 in 34ms
+ GET /?template=3 200 in 66ms
+ GET /?template=3 200 in 29ms
+ GET /?template=3 200 in 35ms
+npm warn Unknown env config "devdir". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+> tuvi-restaurant-template@1.0.0 dev:elysian
+> TEMPLATE=3 next dev
+
+   ▲ Next.js 15.5.19
+   - Local:        http://localhost:3000
+   - Network:      http://192.168.1.4:3000
+   - Environments: .env.local, .env
+
+ ✓ Starting...
+ ✓ Ready in 1161ms
+ ○ Compiling / ...
+ ✓ Compiled / in 607ms (1606 modules)
+ GET /?template=3 200 in 875ms

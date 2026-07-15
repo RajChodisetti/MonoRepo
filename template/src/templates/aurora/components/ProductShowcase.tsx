@@ -14,8 +14,11 @@ export default function ProductShowcase({ dishes }: { dishes: MenuItem[] }) {
         <BlurReveal>
           <p className="text-xs uppercase tracking-[0.2em] text-cyan-400">Signature Plates</p>
           <h2 className="aurora-heading mt-3 text-4xl font-bold text-white md:text-5xl">
-            Animated Product Showcase
+            Flavours worth savouring
           </h2>
+          <p className="mt-4 max-w-xl text-white/50">
+            Signature dishes crafted with care — the plates our guests come back for again and again.
+          </p>
         </BlurReveal>
 
         <div className="mt-16 grid gap-8 md:grid-cols-2 lg:grid-cols-3">

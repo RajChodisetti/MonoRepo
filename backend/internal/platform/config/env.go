@@ -17,6 +17,12 @@ func (p *envParser) join() error {
 	return joinErrors(p.errs)
 }
 
+func (p *envParser) addError(err error) {
+	if err != nil {
+		p.errs = append(p.errs, err)
+	}
+}
+
 func (p *envParser) string(key, fallback string) string {
 	raw, ok := os.LookupEnv(key)
 	if !ok {
@@ -90,6 +96,20 @@ func (p *envParser) duration(key string, fallback time.Duration) time.Duration {
 		return fallback
 	}
 	return value
+}
+
+func (p *envParser) location(key, fallback string) *time.Location {
+	name := p.string(key, fallback)
+	loc, err := time.LoadLocation(name)
+	if err != nil {
+		p.errs = append(p.errs, fmt.Errorf("%s must be a valid IANA timezone", key))
+		fallbackLoc, fallbackErr := time.LoadLocation(fallback)
+		if fallbackErr != nil {
+			return time.UTC
+		}
+		return fallbackLoc
+	}
+	return loc
 }
 
 func (p *envParser) listenAddr() string {

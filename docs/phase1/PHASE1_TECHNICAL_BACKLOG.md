@@ -237,15 +237,15 @@ Every ticket must satisfy these unless explicitly not applicable:
 - Payload is stored as JSON snapshot in `demo_sites.payload`.
 - Unit tests cover missing menu/hours/images. 
 
-### P1-016 — Implement slug and signed token generation
+### P1-016 — Implement slug and opaque demo-token generation
 
 **Story:** As a system owner, I need safe demo links that do not leak full payloads in URLs.
 
 **Acceptance criteria:**
 
 - Demo slug is unique and human-readable when possible.
-- Signed token validates demo site access.
-- Token secret comes from environment config.
+- A cryptographically random opaque bearer token validates demo-site access.
+- Each demo stores a bcrypt token hash; no global demo signing secret is used.
 - Token rotation endpoint exists.
 - Expired/invalid token returns safe public error.    
 
@@ -373,6 +373,7 @@ Every ticket must satisfy these unless explicitly not applicable:
 - At least one provider implementation or mock provider exists.
 - Provider errors are wrapped with safe error messages.
 - Emails can be disabled or redirected in local/staging.
+- Disabled or redirected attempts are recorded as skipped and do not mark a lead contacted.
 
 ### P1-027 — Generate personalized email draft
 
@@ -397,6 +398,7 @@ Every ticket must satisfy these unless explicitly not applicable:
 - Sent event is recorded.
 - Campaign status updates.
 - Sending failure is visible in admin dashboard/logs.
+- Bulk sending consumes only campaigns that a human already approved; it never creates or approves drafts.
 
 ### P1-029 — Implement tracking links
 
@@ -751,4 +753,3 @@ When a coding agent implements this backlog:
 8. Keep AI features bounded and auditable.
 9. Mark unclear assumptions in code comments or a `docs/assumptions.md` file.
 10. Stop before destructive production actions unless explicitly instructed by a human.
-

@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import re
 import sys
 import time
@@ -30,9 +31,11 @@ from pathlib import Path
 from typing import Any
 
 import requests
-from dotenv import load_dotenv
 
-load_dotenv()
+from env_loader import load_project_env
+from hf_llm import hf_api_key, hf_enabled
+
+load_project_env()
 
 from tuvi_outreach_agent import (  # noqa: E402
     Config,
@@ -44,6 +47,12 @@ from tuvi_outreach_agent import (  # noqa: E402
     resolve_cities,
     with_retry,
 )
+
+try:
+    from menu_image_ocr import MenuOCRConfig, enrich_restaurant_with_menu_ocr
+except ImportError:
+    enrich_restaurant_with_menu_ocr = None  # type: ignore
+    MenuOCRConfig = None  # type: ignore
 
 
 def filter_leads_by_city(leads_data: list[dict], city: str) -> list[dict]:
@@ -325,14 +334,7 @@ def _build_menu_items(place: dict) -> list[dict]:
             }],
         })
 
-    # Attach shared menu photos to items missing images (round-robin)
-    if menu_images:
-        idx = 0
-        for item in items:
-            if not item["images"] and menu_images:
-                img = menu_images[idx % len(menu_images)]
-                item["images"].append(img)
-                idx += 1
+    # Do NOT attach menu board photos to dish cards — menu_photos stay in images.menu_photos only.
 
     return items
 
@@ -381,7 +383,7 @@ def _extract_owners(lead_contact: dict, place: dict) -> list[str]:
     return list(dict.fromkeys(owners))
 
 
-def scrape_single_restaurant(lead_dict: dict, cfg: Config, max_reviews: int) -> dict:
+def scrape_single_restaurant(lead_dict: dict, cfg: Config, max_reviews: int, menu_ocr: bool = True) -> dict:
     """Scrape full restaurant profile for one lead entry."""
     lead = _lead_from_dict(lead_dict)
     company = lead_dict.get("company") or {}
@@ -505,6 +507,22 @@ def scrape_single_restaurant(lead_dict: dict, cfg: Config, max_reviews: int) -> 
 
         result["scrape_status"] = "success"
 
+        if menu_ocr and cfg.MENU_OCR_ENABLED and enrich_restaurant_with_menu_ocr and (
+            hf_enabled() or os.getenv("OPENAI_API_KEY") or os.getenv("GEMINI_API_KEY")
+        ):
+            try:
+                ocr_cfg = MenuOCRConfig(
+                    huggingface_api_key=hf_api_key(),
+                    hf_vision_model=cfg.MENU_OCR_MODEL,
+                    openai_api_key=os.getenv("OPENAI_API_KEY", ""),
+                    openai_model=os.getenv("MENU_OCR_MODEL", "gpt-4o-mini"),
+                    max_images=cfg.MENU_OCR_MAX_IMAGES,
+                )
+                enrich_restaurant_with_menu_ocr(result, ocr_cfg)
+            except Exception as exc:
+                result.setdefault("errors", []).append(f"menu_ocr: {exc}")
+                log.warning(f"  Menu OCR failed: {exc}")
+
     except Exception as exc:
         result["scrape_status"] = "error"
         result["errors"].append(str(exc))
@@ -548,6 +566,7 @@ def run_restaurant_scrape_pipeline(
     max_size_mb: float = 50.0,
     max_reviews: int = 40,
     limit: int | None = None,
+    menu_ocr: bool = True,
 ) -> tuple[list[dict], Path]:
     """
     Scrape restaurant data for all leads in lead.json.
@@ -619,7 +638,7 @@ def run_restaurant_scrape_pipeline(
         name = (lead_dict.get("company") or {}).get("name", "Unknown")
         log.info(f"[{idx}/{len(leads_data)}] Scraping: {name}")
 
-        record = scrape_single_restaurant(lead_dict, cfg, max_reviews)
+        record = scrape_single_restaurant(lead_dict, cfg, max_reviews, menu_ocr=menu_ocr)
         restaurants.append(record)
 
         doc = _build_document(restaurants, {**meta_extra, "total_scraped": len(restaurants)})
@@ -699,6 +718,8 @@ def main() -> int:
                         help="Scrape first N leads (default: 100 when --city is set)")
     parser.add_argument("--limit", type=int, default=None,
                         help="Alias for --total (scrape first N leads only)")
+    parser.add_argument("--no-menu-ocr", action="store_true",
+                        help="Skip menu image classification + OCR (Hugging Face / OpenAI / Gemini)")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
 
@@ -720,6 +741,7 @@ def main() -> int:
             max_size_mb=args.max_size_mb,
             max_reviews=args.max_reviews,
             limit=total,
+            menu_ocr=not args.no_menu_ocr,
         )
     except ValueError as e:
         log.error(str(e))

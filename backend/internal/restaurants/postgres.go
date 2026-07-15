@@ -9,11 +9,14 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	platformdb "github.com/rajchodisetti/restaurant-platform/backend/internal/platform/db"
 	repository "github.com/rajchodisetti/restaurant-platform/backend/internal/platform/errors"
 )
 
 const restaurantSelectColumns = `
-	id, name, email, status, is_contacted, shown_interest, created_at, updated_at`
+	id, name, email, status, is_contacted, shown_interest,
+	email_sent, email_send_count, last_email_sent_at, last_email_send_sequence,
+	created_at, updated_at`
 
 type Postgres struct {
 	pool *pgxpool.Pool
@@ -34,6 +37,10 @@ func scanRestaurant(scanner interface {
 		&record.Status,
 		&record.IsContacted,
 		&record.ShownInterest,
+		&record.EmailSent,
+		&record.EmailSendCount,
+		&record.LastEmailSentAt,
+		&record.LastEmailSendSequence,
 		&record.CreatedAt,
 		&record.UpdatedAt,
 	)
@@ -160,12 +167,26 @@ func (repo *Postgres) Update(ctx context.Context, id uuid.UUID, input UpdateInpu
 		return Restaurant{}, fmt.Errorf("database pool is not configured")
 	}
 
-	current, err := repo.GetByID(ctx, id)
+	tx, err := repo.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
+		return Restaurant{}, fmt.Errorf("begin restaurant update: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := platformdb.LockRestaurantWorkflow(ctx, tx, id); err != nil {
 		return Restaurant{}, err
 	}
 
+	currentQuery := `SELECT` + restaurantSelectColumns + ` FROM restaurants WHERE id = $1 FOR UPDATE`
+	current, err := scanRestaurant(tx.QueryRow(ctx, currentQuery, id))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Restaurant{}, repository.ErrNotFound
+	}
+	if err != nil {
+		return Restaurant{}, fmt.Errorf("lock restaurant for update: %w", err)
+	}
+
 	updated := ApplyUpdateInput(current, input)
+	identityChanged := current.Name != updated.Name || current.Email != updated.Email
 
 	const query = `
 		UPDATE restaurants
@@ -178,7 +199,7 @@ func (repo *Postgres) Update(ctx context.Context, id uuid.UUID, input UpdateInpu
 		WHERE id = $1
 		RETURNING` + restaurantSelectColumns
 
-	record, err := scanRestaurant(repo.pool.QueryRow(
+	record, err := scanRestaurant(tx.QueryRow(
 		ctx,
 		query,
 		id,
@@ -193,6 +214,63 @@ func (repo *Postgres) Update(ctx context.Context, id uuid.UUID, input UpdateInpu
 	}
 	if err != nil {
 		return Restaurant{}, fmt.Errorf("update restaurant: %w", err)
+	}
+
+	if identityChanged {
+		if _, err := tx.Exec(ctx, `
+			UPDATE restaurant_profiles
+			SET review_status = 'draft',
+			    reviewed_at = NULL,
+			    reviewed_by = NULL,
+			    updated_at = now()
+			WHERE restaurant_id = $1`, id); err != nil {
+			return Restaurant{}, fmt.Errorf("invalidate profile review after identity update: %w", err)
+		}
+		if _, err := tx.Exec(ctx, `
+			UPDATE demo_sites
+			SET status = 'draft',
+			    published_at = NULL,
+			    published_by = NULL,
+			    updated_at = now()
+			WHERE restaurant_id = $1 AND status = 'published'`, id); err != nil {
+			return Restaurant{}, fmt.Errorf("invalidate demo publication after identity update: %w", err)
+		}
+		if _, err := tx.Exec(ctx, `
+			UPDATE email_campaigns
+			SET status = 'draft',
+			    approved_at = NULL,
+			    approved_by = NULL,
+			    updated_at = now()
+			WHERE restaurant_id = $1 AND status = 'approved'`, id); err != nil {
+			return Restaurant{}, fmt.Errorf("invalidate campaign approval after identity update: %w", err)
+		}
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO job_runs (job_type, status, payload, idempotency_key, max_attempts)
+			SELECT 'lead.prepare',
+			       'queued',
+			       jsonb_build_object('restaurant_id', rp.restaurant_id::text),
+			       'lead.prepare:' || rp.restaurant_id::text || ':' ||
+			         rp.ocr_input_fingerprint || ':' ||
+			         lead_artifact_current_profile_fingerprint(rp.restaurant_id),
+			       3
+			FROM restaurant_profiles rp
+			WHERE rp.restaurant_id = $1
+			  AND rp.ocr_status = 'verified'
+			  AND lead_artifact_current_profile_fingerprint(rp.restaurant_id) IS NOT NULL
+			ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL
+			DO UPDATE SET
+			    status = 'queued', payload = EXCLUDED.payload, attempts = 0,
+			    max_attempts = EXCLUDED.max_attempts, last_error = NULL,
+			    available_at = now(), locked_at = NULL, locked_by = NULL,
+			    lease_expires_at = NULL, updated_at = now()
+			WHERE job_runs.job_type = 'lead.prepare'
+			  AND job_runs.status IN ('completed', 'failed')`, id); err != nil {
+			return Restaurant{}, fmt.Errorf("enqueue lead preparation after identity update: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return Restaurant{}, fmt.Errorf("commit restaurant update: %w", err)
 	}
 
 	return record, nil

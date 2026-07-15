@@ -50,6 +50,11 @@ def main() -> int:
                         help="Max pages per city as safety cap (default: 20)")
     parser.add_argument("--total", type=int, default=None, metavar="N",
                         help="Target leads per city (default: 100 when using --city)")
+    parser.add_argument(
+        "--type",
+        default="restaurant",
+        help="Business niche: restaurant (default), dentist, plumber",
+    )
     parser.add_argument("--output", metavar="FILE",
                         help="Output JSON path (auto: leads/lead_sydney.json for --city Sydney)")
     parser.add_argument("-v", "--verbose", action="store_true", help="Debug logging")
@@ -69,10 +74,11 @@ def main() -> int:
         print(f"ERROR: {e}", file=sys.stderr)
         return 1
 
-    output = args.output or str(default_leads_output_path(cities, cfg))
+    output = args.output or str(default_leads_output_path(cities, cfg, niche=args.type))
     target = args.total if args.total is not None else (100 if len(cities) == 1 else None)
 
     print("Cities:", ", ".join(c.split(",")[0] for c in cities))
+    print(f"Type:   {args.type}")
     print(f"Output: {output}")
     print(f"Target: {target or 'all available'} leads per city")
     print(f"Settings: {args.per_page} per page, up to {args.max_pages} pages per city\n")
@@ -85,6 +91,7 @@ def main() -> int:
             max_pages=args.max_pages,
             target_per_city=target,
             output_path=output,
+            niche_type=args.type,
         )
     except ValueError as e:
         print(f"ERROR: {e}", file=sys.stderr)

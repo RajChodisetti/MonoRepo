@@ -1,10 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Image from "next/image";
 import type { RestaurantContent } from "@/data/types/restaurant";
 import MenuCategoryTabs from "./MenuCategoryTabs";
-import { isFoodMenuImage } from "../lib/menuImages";
 
 export default function MenuPreview({
   restaurant,
@@ -15,24 +13,15 @@ export default function MenuPreview({
   const [active, setActive] = useState("all");
 
   const items = useMemo(() => {
-    const raw =
-      active === "all"
-        ? categories.flatMap((c) => c.items)
-        : categories.find((c) => c.name === active)?.items || [];
-
-    return raw
-      .slice(0, 48)
-      .map((item) => ({
-        ...item,
-        image: item.image && isFoodMenuImage(item.image) ? item.image : undefined,
-      }));
+    if (active === "all") return categories.flatMap((c) => c.items).slice(0, 48);
+    return categories.find((c) => c.name === active)?.items.slice(0, 48) || [];
   }, [active, categories]);
 
   const totalCount = categories.reduce((n, c) => n + c.items.length, 0);
 
   return (
     <section id="menu" className="bg-[#141210] py-24">
-      <div className="mx-auto max-w-6xl px-6">
+      <div className="mx-auto max-w-4xl px-6">
         <p className="text-xs uppercase tracking-[0.2em] text-brass">Culinary</p>
         <h2 className="font-display mt-3 text-4xl text-cream md:text-5xl">Our Menu</h2>
         <p className="mt-3 text-cream/60">
@@ -47,25 +36,13 @@ export default function MenuPreview({
           />
         )}
 
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-10 divide-y divide-cream/10 rounded-2xl border border-cream/10 bg-charcoal/50">
           {items.map((item) => (
             <article
               key={item.name + item.category}
-              className="group overflow-hidden rounded-xl border border-cream/10 bg-charcoal transition hover:-translate-y-1 hover:border-brass/30 hover:shadow-2xl"
+              className="flex flex-col gap-2 px-6 py-5 transition hover:bg-cream/[0.03] sm:flex-row sm:items-start sm:justify-between"
             >
-              {item.image && (
-                <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden bg-[#1a1614] p-3">
-                  <Image
-                    src={item.image}
-                    alt={item.name}
-                    fill
-                    loading="lazy"
-                    className="object-contain p-1 transition duration-500 group-hover:scale-[1.02]"
-                    sizes="(max-width: 768px) 100vw, 33vw"
-                  />
-                </div>
-              )}
-              <div className="p-5">
+              <div className="min-w-0 flex-1">
                 <p className="text-[10px] uppercase tracking-wider text-brass">{item.category}</p>
                 <h3 className="font-display mt-1 text-xl text-cream">
                   {item.name}
@@ -76,17 +53,26 @@ export default function MenuPreview({
                   )}
                 </h3>
                 {item.description && (
-                  <p className="mt-2 line-clamp-2 text-sm text-cream/60">{item.description}</p>
+                  <p className="mt-1.5 text-sm leading-relaxed text-cream/60">{item.description}</p>
                 )}
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  {item.price && <span className="text-sm font-semibold text-brass">{item.price}</span>}
-                  {item.tags?.map((tag) => (
-                    <span key={tag} className="text-[10px] uppercase tracking-wider text-cream/40">
-                      {tag}
-                    </span>
-                  ))}
-                </div>
+                {item.tags && item.tags.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {item.tags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="rounded-full border border-cream/10 px-2 py-0.5 text-[10px] uppercase tracking-wider text-cream/40"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
+              {item.price && (
+                <p className="shrink-0 text-base font-semibold text-brass sm:pl-6 sm:text-right">
+                  {item.price}
+                </p>
+              )}
             </article>
           ))}
         </div>

@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Image from "next/image";
 import GlassCard from "./ui/GlassCard";
 import BlurReveal from "./ui/BlurReveal";
 import type { RestaurantContent } from "@/data/types/restaurant";
@@ -57,11 +56,6 @@ export default function AuroraMenu({ restaurant }: { restaurant: RestaurantConte
           {items.map((item, i) => (
             <BlurReveal key={item.name + item.category} delay={(i % 6) * 0.05}>
               <GlassCard hover={false} className="p-5">
-                {item.image && (
-                  <div className="relative mb-4 aspect-video overflow-hidden rounded-lg">
-                    <Image src={item.image} alt={item.name} fill className="object-cover" sizes="33vw" />
-                  </div>
-                )}
                 <p className="text-[10px] uppercase tracking-wider text-purple-400">{item.category}</p>
                 <h3 className="aurora-heading mt-1 font-semibold text-white">{item.name}</h3>
                 {item.price && <p className="mt-2 text-sm text-cyan-400">{item.price}</p>}

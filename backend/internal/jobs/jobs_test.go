@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 func TestInMemoryQueueAppliesDefaults(t *testing.T) {
@@ -25,6 +27,18 @@ func TestInMemoryQueueAppliesDefaults(t *testing.T) {
 	}
 	if job.EnqueuedAt.IsZero() {
 		t.Fatal("EnqueuedAt is zero")
+	}
+}
+
+func TestOutreachBulkSendJobFailsClosedOnDeliveryError(t *testing.T) {
+	t.Parallel()
+
+	job, err := NewOutreachBulkSendJob(uuid.New())
+	if err != nil {
+		t.Fatalf("NewOutreachBulkSendJob() error = %v", err)
+	}
+	if job.MaxAttempts != 1 {
+		t.Fatalf("MaxAttempts = %d, want 1", job.MaxAttempts)
 	}
 }
 

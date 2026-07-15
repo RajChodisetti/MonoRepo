@@ -381,14 +381,18 @@ func parseListFilter(r *http.Request) (restaurants.ListFilter, error) {
 
 func restaurantResponse(record restaurants.Restaurant) map[string]any {
 	return map[string]any{
-		"id":             record.ID,
-		"name":           record.Name,
-		"email":          record.Email,
-		"status":         record.Status,
-		"is_contacted":   record.IsContacted,
-		"shown_interest": record.ShownInterest,
-		"created_at":     record.CreatedAt,
-		"updated_at":     record.UpdatedAt,
+		"id":                       record.ID,
+		"name":                     record.Name,
+		"email":                    record.Email,
+		"status":                   record.Status,
+		"is_contacted":             record.IsContacted,
+		"shown_interest":           record.ShownInterest,
+		"email_sent":               record.EmailSent,
+		"email_send_count":         record.EmailSendCount,
+		"last_email_sent_at":       record.LastEmailSentAt,
+		"last_email_send_sequence": record.LastEmailSendSequence,
+		"created_at":               record.CreatedAt,
+		"updated_at":               record.UpdatedAt,
 	}
 }
 

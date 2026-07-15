@@ -26,6 +26,8 @@ func NewDemoPublicHandler(
 }
 
 func (handler *DemoPublicHandler) Get(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store, max-age=0")
+	w.Header().Set("Pragma", "no-cache")
 	slug := r.PathValue("slug")
 	token := r.URL.Query().Get("token")
 

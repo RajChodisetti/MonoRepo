@@ -46,7 +46,7 @@ These decisions should be treated as defaults unless the human team overrides th
 | Database | PostgreSQL as source of truth. Use JSONB for flexible restaurant/profile/template/config fields. |
 | Async jobs | Use Redis-backed workers or a Postgres job table for MVP. Keep a clean job interface so it can migrate to Temporal later. |
 | Frontend | Use Next.js/React for admin dashboard, restaurant dashboard, and public demo pages. Static template rendering is acceptable where faster. |
-| Demo links | Use slug + signed token or server-side demo ID. Do **not** place the full restaurant payload in the URL. |
+| Demo links | Use slug + random opaque bearer token or server-side demo ID. Do **not** place the full restaurant payload in the URL. |
 | Outreach | Human review before sending early campaigns. Include opt-out language. Track clicks and views. |
 | AI receptionist | Inbound-only for Phase 1. It must disclose that it is an AI assistant. Use bounded knowledge and fallback behavior. |
 | Reservations | Start with “reservation request,” not real-time table availability. Restaurant confirms/rejects manually. |
@@ -250,7 +250,7 @@ Important fields:
 
 - Restaurant ID.
 - Slug.
-- Signed access token hash or public token metadata.
+- Opaque access-token hash or public token metadata.
 - Template ID.
 - Payload JSON.
 - Status.
@@ -260,13 +260,7 @@ Important fields:
 Do not put the full restaurant payload into query parameters. Query links should look like:
 
 ```text
-https://demo.yourdomain.com/r/thairama?token=<signed-token>
-```
-
-or:
-
-```text
-https://demo.yourdomain.com/d/<slug>/<signed-token>
+https://demo.yourdomain.com/?slug=thairama&token=<opaque-token>&template=1
 ```
 
 ### 6.5 Reservations
@@ -498,6 +492,10 @@ content_jobs (
 
 Prefix all APIs with `/api/v1`.
 
+This section is the Phase 1 target inventory. The current implemented contract
+is `docs/openapi/openapi.yaml` together with `backend/internal/http/router.go`;
+routes listed here but absent there remain planned rather than operational.
+
 ### Auth
 
 ```http
@@ -520,9 +518,16 @@ PATCH  /api/v1/restaurants/{restaurant_id}/status
 ### Profiles
 
 ```http
-GET   /api/v1/restaurants/{restaurant_id}/profile
-PUT   /api/v1/restaurants/{restaurant_id}/profile
-POST  /api/v1/restaurants/{restaurant_id}/profile/review
+GET   /api/v1/restaurants/{restaurant_id}/profile/review-preview
+PATCH /api/v1/restaurants/{restaurant_id}/profile/review
+```
+
+### Scrape Jobs
+
+```http
+POST /api/v1/scrape-jobs
+GET  /api/v1/scrape-jobs
+GET  /api/v1/scrape-jobs/{scrape_job_id}
 ```
 
 ### Menus
@@ -539,26 +544,22 @@ DELETE /api/v1/menu-items/{item_id}
 
 ```http
 POST /api/v1/restaurants/{restaurant_id}/demo-sites
-GET  /api/v1/restaurants/{restaurant_id}/demo-sites
-GET  /api/v1/demo-sites/{demo_site_id}
-POST /api/v1/demo-sites/{demo_site_id}/publish
-POST /api/v1/demo-sites/{demo_site_id}/regenerate-payload
-POST /api/v1/demo-sites/{demo_site_id}/rotate-token
+GET /api/v1/demo-sites/{demo_site_id}/review-preview
+PATCH /api/v1/demo-sites/{demo_site_id}/status
+POST /api/v1/campaigns/{campaign_id}/regenerate
 ```
 
 Public route:
 
 ```http
-GET /d/{slug}?token={signed_token}
+GET /api/public/v1/demo/{slug}?token={opaque_token}
 ```
 
 ### Reservations
 
 ```http
-POST  /api/v1/restaurants/{restaurant_id}/reservations
-GET   /api/v1/restaurants/{restaurant_id}/reservations
-GET   /api/v1/reservations/{reservation_id}
-PATCH /api/v1/reservations/{reservation_id}/status
+GET /api/public/v1/restaurants/{restaurant_id}/table-availability
+PUT /api/public/v1/restaurants/{restaurant_id}/reservations
 ```
 
 ### Email Campaigns
@@ -567,17 +568,22 @@ PATCH /api/v1/reservations/{reservation_id}/status
 POST /api/v1/restaurants/{restaurant_id}/campaigns
 GET  /api/v1/restaurants/{restaurant_id}/campaigns
 POST /api/v1/campaigns/{campaign_id}/approve
-POST /api/v1/campaigns/{campaign_id}/send-step
+POST /api/v1/campaigns/{campaign_id}/regenerate
 POST /api/v1/campaigns/{campaign_id}/stop
-GET  /api/v1/campaigns/{campaign_id}/events
+GET  /api/v1/campaigns/{campaign_id}
+POST /api/v1/outreach/bulk-send
+GET  /api/v1/outreach/bulk-send/status
 ```
+
+Outreach delivery is available only through the quota-managed bulk workflow.
+The former per-campaign `send-step` route is intentionally not registered.
 
 Tracking routes:
 
 ```http
 GET /t/click/{tracking_token}
-GET /t/open/{tracking_token}.png
-POST /api/v1/public/demo-events
+GET /t/open/{tracking_token}
+GET /t/unsubscribe/{tracking_token}
 ```
 
 ### Voice / AI Receptionist
@@ -837,7 +843,7 @@ This guide is not legal advice, but the implementation must support safer operat
 
 - Use only approved/public/manual data.
 - Do not expose internal notes on public demo pages.
-- Use signed demo links.
+- Use token-gated demo links with per-demo random opaque tokens.
 - Allow token rotation/expiry.
 
 ### AI receptionist
@@ -870,7 +876,7 @@ API_PORT=8080
 DATABASE_URL=postgres://...
 REDIS_URL=redis://...
 JWT_SECRET=...
-DEMO_TOKEN_SECRET=...
+DEMO_TOKEN_TTL=720h
 EMAIL_PROVIDER=...
 EMAIL_API_KEY=...
 EMAIL_FROM=...
@@ -943,7 +949,7 @@ Build in this order to maximize sales value:
 
 1. Go backend foundation, migrations, config, auth shell.
 2. Restaurant/profile/menu CRUD.
-3. Demo payload builder and signed demo route.
+3. Demo payload builder and token-gated demo route.
 4. First polished restaurant demo template.
 5. Reservation API and form.
 6. Admin dashboard lead/demo management.
@@ -987,4 +993,3 @@ The coding agent should proceed with defaults unless these are answered differen
 5. Which hosting target is preferred: VPS/Docker, managed app platform, or Kubernetes?
 6. Should restaurant owners get login accounts in Phase 1, or should admin-only views be enough for first demos?
 7. Should demo sites be public indefinitely or expire after a fixed number of days?
-

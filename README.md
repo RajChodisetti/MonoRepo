@@ -31,7 +31,39 @@ DATABASE_URL=postgres://postgres:postgres@localhost:5432/restaurant_platform?ssl
 
 ### 2. Quick start (recommended)
 
-Start database, run migrations, and launch the API in one go:
+**One command — everything (Postgres + migrations + API + worker):**
+
+```bash
+make start
+```
+
+Press `Ctrl+C` to stop API and worker. Postgres keeps running until `make stop-all`.
+
+**VM / Docker deployment (all services in containers):**
+
+```bash
+make up      # build + start postgres, redis, migrate, api, worker, scrape-worker
+make logs    # follow logs
+make down    # stop stack
+```
+
+Copy `backend/.env` (Resend `EMAIL_API_KEY` and related settings) before `make up` on a VM. Set `PUBLIC_BASE_URL` to your server URL.
+
+**Voice sales agent (Docker profile `voice`):**
+
+```bash
+# Requires voice-sales-agent/.env (API keys — copy from .env.example)
+make voice-up     # build + start agent + Redis on :8000
+make voice-logs   # follow agent logs
+make voice-down   # stop agent + Redis
+```
+
+UI: http://localhost:8000/?agent=corporate
+
+Agent reaches host APIs via `host.docker.internal` (`MONOREPO_API_URL` :8080).
+Set `TUVI_API_TOKEN` to the same token used by the main API consultation endpoints.
+
+**Legacy — API only (no email worker):**
 
 ```bash
 make dev
@@ -42,12 +74,7 @@ Or step by step:
 ```bash
 make setup   # db-up + migrate-up
 make api     # start API (requires database + migrations)
-```
-
-### 3. Worker (optional, second terminal)
-
-```bash
-make worker
+make worker  # second terminal — required for email sends
 ```
 
 ## Commands
@@ -92,10 +119,27 @@ Current migrations:
 
 - `000001_foundation` — `app_metadata`, `job_runs`
 - `000002_auth_users` — `users` table
+- `000003_drop_users_role_check` — prepares the user-role model migration
 - `000004_role_model_restaurants` — `restaurants`, `restaurant_members`, role renames
 - `000005_demo_sites` — public demo sites with token-gated access
 - `000006_restaurant_lead_fields` — `email`, `is_contacted`, `shown_interest` on restaurants
 - `000007_restaurant_status` — lead lifecycle `status` column
+- `000008_restaurant_profiles_menus` — restaurant profiles, menus, and menu items
+- `000009_email_campaigns` — outreach campaigns, events, tracking tokens, and suppressions
+- `000010_restaurant_image_tables` — restaurant and menu-item image records
+- `000011_reservations` — pending restaurant reservation requests
+- `000012_company_consultations` — Tuvi consultation requests
+- `000013_lead_ocr_verified` — legacy OCR verification projection
+- `000014_restaurant_email_sent` — `email_sent` flag on restaurants for bulk outreach tracking
+- `000015_city_scrape_jobs` — durable city jobs, grid cells, candidates, and request checkpoints
+- `000016_ocr_status_and_post_ocr` — claimed OCR states and post-OCR preparation state
+- `000017_outreach_email_quota` — durable account quotas, delivery attempts, and send counters
+- `000018_lead_review_audit` — attributable profile, demo, and campaign review gates
+- `000019_auto_lead_draft_provenance` — OCR fingerprint provenance for generated drafts
+- `000020_job_and_delivery_leases` — fenced job and provider-delivery leases
+- `000021_immutable_outreach_recipient` — immutable recipient attribution on delivery and tracking rows
+- `000022_auto_artifact_profile_provenance` — identity/public-payload provenance for automatic drafts
+- `000023_scrape_coverage_incomplete_state` — visible retry state for provider-capped grid leaves
 
 **Rollback notes:**
 
@@ -106,8 +150,8 @@ Current migrations:
 ### App
 
 ```bash
-make api      # run the Go API (Fiber) on HTTP_ADDR
-make worker   # run the Go worker with the in-memory job queue
+make api      # run the Go net/http API on HTTP_ADDR
+make worker   # run the Go worker with the PostgreSQL-backed job queue
 make test     # run all backend tests
 make fmt      # format backend Go files
 make openapi  # validate docs/openapi/openapi.yaml
@@ -213,8 +257,28 @@ curl http://localhost:8080/readyz \
 | `DELETE /api/v1/restaurants/{id}` | Bearer + `internal_admin` | Soft archive (`status = archived`) |
 | `GET /api/v1/restaurants/{id}/members` | Bearer + `internal_admin` | List restaurant members |
 | `POST /api/v1/restaurants/{id}/members` | Bearer + `internal_admin` | Assign owner to restaurant |
-| `POST /api/v1/restaurants/{id}/demo-sites` | Bearer + `internal_admin` | Create demo site (returns one-time token) |
+| `POST /api/v1/restaurants/{id}/demo-sites` | Bearer + `internal_admin` | Create a draft demo site (returns one-time token) |
+| `GET /api/v1/restaurants/{id}/profile/review-preview` | Bearer + `internal_admin` | Inspect profile/contact and capture review versions without bearer secrets |
+| `PATCH /api/v1/restaurants/{id}/profile/review` | Bearer + `internal_admin` | Audit profile approval/rejection after verified OCR |
+| `GET /api/v1/demo-sites/{id}/review-preview` | Bearer + `internal_admin` | Inspect exact allowlisted demo payload without exposing its token |
+| `PATCH /api/v1/demo-sites/{id}/status` | Bearer + `internal_admin` | Audit demo publish/unpublish; publishing requires verified OCR + approved profile |
+| `POST /api/v1/restaurants/{id}/campaigns` | Bearer + `internal_admin` | Create a review-only outreach campaign draft |
+| `GET /api/v1/restaurants/{id}/campaigns` | Bearer + `internal_admin` | List a restaurant's campaign drafts and states |
+| `GET /api/v1/campaigns/{id}` | Bearer + `internal_admin` | Inspect exact campaign content, version, and event history |
+| `POST /api/v1/campaigns/{id}/approve` | Bearer + `internal_admin` | Approve the inspected campaign version |
+| `POST /api/v1/campaigns/{id}/regenerate` | Bearer + `internal_admin` | Rotate an expired/stale demo token and rebuild the campaign draft |
+| `POST /api/v1/campaigns/{id}/stop` | Bearer + `internal_admin` | Stop a campaign from further outreach |
+| `POST /api/v1/scrape-jobs` | Bearer + `internal_admin` | Create/return a durable Places-first city scrape job |
+| `GET /api/v1/scrape-jobs` | Bearer + `internal_admin` | List recent durable city scrape jobs |
+| `GET /api/v1/scrape-jobs/{id}` | Bearer + `internal_admin` | Monitor request window, resume time, grid, and candidate progress |
+| `POST /api/v1/outreach/bulk-send` | Bearer + `internal_admin` | Start one approved outreach workflow (150-item worker slices; 40/account and 24-hour automatic continuation) |
+| `GET /api/v1/outreach/bulk-send/status` | Bearer + `internal_admin` | Pending eligible count + active/last bulk job summary |
 | `GET /api/public/v1/demo/{slug}?token=...` | Public | Public demo payload only (no internal fields) |
+| `GET /api/public/v1/restaurants/{id}/table-availability` | Public | Return available RFC3339 reservation-request slots |
+| `PUT /api/public/v1/restaurants/{id}/reservations` | Public | Submit an idempotent reservation request in `pending` status |
+| `GET /t/click/{token}` | Public | Record a click and redirect to the reviewed token-gated demo |
+| `GET /t/open/{token}` | Public | Record an approximate email open and return a tracking pixel |
+| `GET /t/unsubscribe/{token}` | Public | Suppress the immutable recipient address associated with the sent email |
 | `GET /healthz` | Bearer + `developer` role | Process is running |
 | `GET /readyz` | Bearer + `developer` role | PostgreSQL is connected and ready |
 
@@ -255,7 +319,7 @@ Default fixture credentials:
 The API starts only after:
 
 1. Database connection succeeds (with retry)
-2. Foundation and users migrations are verified (`VerifyStartup`)
+2. Foundation, users, and lead-workflow migrations through `000023` are verified (`VerifyStartup`)
 
 On startup you should see logs like `database_connected_successfully`.
 
@@ -264,6 +328,8 @@ On startup you should see logs like `database_connected_successfully`.
 Local defaults are safe for development. Production and staging require explicit
 `DATABASE_URL`, `REDIS_URL`, and `TOKEN_SECRET` settings. Provider credentials
 are optional while providers are set to `disabled`.
+
+Bulk outreach never creates or approves campaigns. An internal admin must approve each campaign first; the bulk job only sends eligible approved records. `EMAIL_DISABLE_SENDING=true` blocks the trigger and worker, and redirected/dry-run deliveries remain `approved` with a `skipped` event instead of being marked emailed.
 
 Key environment variables:
 
@@ -275,13 +341,28 @@ Key environment variables:
 | `DATABASE_URL`         | PostgreSQL connection string                 |
 | `TOKEN_SECRET`         | JWT signing secret (min 32 chars in prod/staging) |
 | `JWT_ACCESS_TOKEN_TTL` | Access token lifetime (default `24h`)        |
-| `DEMO_TOKEN_SECRET`    | Demo link token secret (min 32 chars)        |
-| `DEMO_TOKEN_TTL`       | Demo link expiry (default `720h`)            |
+| `DEMO_TOKEN_TTL`       | Opaque demo-link token expiry (default `720h`) |
+| `TUVI_API_TOKEN`        | Bearer token for Tuvi company consultation endpoints |
 
 See `.env.example` for the full list.
 
+## Tuvi corporate website
+
+Standalone marketing site (not the restaurant demo template):
+
+```bash
+cd tuvi-website/app && npm install && npm run dev
+```
+
+Runs at **http://localhost:3001** so it can run alongside the restaurant template on **http://localhost:3000**. See [tuvi-website/README.md](tuvi-website/README.md).
+
+The corporate website's scheduler uses the main API on **http://localhost:8080**
+via `/api/v1/company/consultations/*`; the older `tuvi-website/backend` service is
+legacy reference code.
+
 ## Documentation
 
+- [Service inventory](docs/SERVICES.md) — ports, start commands, one-shot jobs, and service interlinks
 - [Today's work log (2026-06-22)](docs/work-log/2026-06-22-backend-foundation-session.md) — detailed session notes
 - [Phase 1 technical backlog](PHASE1_TECHNICAL_BACKLOG.md) — tickets and acceptance criteria
 - [AGENTS.md](AGENTS.md) — coding-agent operating contract

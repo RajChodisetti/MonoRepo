@@ -7,8 +7,11 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/google/uuid"
+
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/auth"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/demos"
+	repository "github.com/rajchodisetti/restaurant-platform/backend/internal/platform/errors"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/restaurants"
 )
 
@@ -34,6 +37,29 @@ type createDemoSiteRequest struct {
 	Slug          string          `json:"slug"`
 	Status        string          `json:"status"`
 	PublicPayload json.RawMessage `json:"public_payload"`
+}
+
+func (handler *DemoAdminHandler) ReviewPreview(w http.ResponseWriter, r *http.Request) {
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		handler.writeError(w, http.StatusUnauthorized, "unauthorized", "Authentication required.")
+		return
+	}
+
+	demoSiteID, err := uuid.Parse(strings.TrimSpace(r.PathValue("id")))
+	if err != nil {
+		handler.writeError(w, http.StatusBadRequest, "invalid_request", "Demo site id must be a valid UUID.")
+		return
+	}
+
+	result, err := handler.demoService.GetReviewPreview(r.Context(), principal, demoSiteID)
+	if err != nil {
+		handler.mapDemoError(w, err)
+		return
+	}
+
+	w.Header().Set("Cache-Control", "no-store")
+	handler.writeJSON(w, http.StatusOK, result)
 }
 
 func (handler *DemoAdminHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -65,7 +91,7 @@ func (handler *DemoAdminHandler) Create(w http.ResponseWriter, r *http.Request) 
 
 	status := strings.TrimSpace(request.Status)
 	if status == "" {
-		status = demos.StatusPublished
+		status = demos.StatusDraft
 	}
 
 	result, err := handler.demoService.CreateDemoSite(r.Context(), principal, restaurantID, demos.CreateDemoInput{
@@ -85,9 +111,13 @@ func (handler *DemoAdminHandler) mapDemoError(w http.ResponseWriter, err error) 
 	switch {
 	case errors.Is(err, restaurants.ErrForbidden):
 		handler.writeError(w, http.StatusForbidden, "forbidden", "You do not have access to this restaurants.")
+	case errors.Is(err, repository.ErrNotFound):
+		handler.writeError(w, http.StatusNotFound, "not_found", "Demo site was not found.")
 	default:
-		if strings.Contains(err.Error(), "slug is required") {
-			handler.writeError(w, http.StatusBadRequest, "invalid_request", "slug is required.")
+		if strings.Contains(err.Error(), "slug is required") ||
+			strings.Contains(err.Error(), "must be created as drafts") ||
+			strings.Contains(err.Error(), "unsupported demo status") {
+			handler.writeError(w, http.StatusBadRequest, "invalid_request", err.Error()+".")
 			return
 		}
 		handler.writeError(w, http.StatusInternalServerError, "internal_error", "An internal error occurred.")

@@ -6,8 +6,9 @@ export function getVoiceAgentBaseUrl(): string {
   );
 }
 
-export function getVoiceAgentWsUrl(): string {
+export function getVoiceAgentWsUrl(restaurantIndex?: number): string {
   const base = getVoiceAgentBaseUrl();
   const wsBase = base.replace(/^http/i, "ws");
-  return `${wsBase}/browser-stream`;
+  const idx = restaurantIndex ?? 0;
+  return `${wsBase}/browser-stream?restaurant_index=${idx}`;
 }

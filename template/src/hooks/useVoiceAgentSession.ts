@@ -13,10 +13,16 @@ export type VoiceSessionStatus =
   | "speaking"
   | "user-speaking";
 
-export type TranscriptTurn = {
-  id: string;
-  role: "user" | "assistant";
-  text: string;
+export type ReservationRequestReceipt = {
+  reservationId: string;
+  status: string;
+  guestName: string;
+  guestPhone: string;
+  partySize: number;
+  slot: string;
+  bookingDate: string;
+  bookingTime: string;
+  message: string;
 };
 
 type ReadinessResult =
@@ -24,7 +30,6 @@ type ReadinessResult =
   | { ok: false; message: string; missing?: string[] };
 
 const READY_TIMEOUT_MS = 12_000;
-const THINKING_TIMEOUT_MS = 15_000;
 
 export async function checkVoiceAgentReadiness(): Promise<ReadinessResult> {
   try {
@@ -105,11 +110,12 @@ function waitForWsOpen(ws: WebSocket, timeoutMs: number): Promise<void> {
   });
 }
 
-export function useVoiceAgentSession() {
+export function useVoiceAgentSession(restaurantIndex = 0) {
   const [status, setStatus] = useState<VoiceSessionStatus>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [transcript, setTranscript] = useState<TranscriptTurn[]>([]);
   const [active, setActive] = useState(false);
+  const [booking, setBooking] = useState<ReservationRequestReceipt | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -120,6 +126,8 @@ export function useVoiceAgentSession() {
   const preloadCtxRef = useRef<AudioContext | null>(null);
   const sessionActiveRef = useRef(false);
   const readyReceivedRef = useRef(false);
+  const connectInFlightRef = useRef(false);
+  const connectGenRef = useRef(0);
   const thinkingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fail = useCallback((message: string) => {
@@ -132,13 +140,6 @@ export function useVoiceAgentSession() {
       clearTimeout(thinkingTimerRef.current);
       thinkingTimerRef.current = null;
     }
-  }, []);
-
-  const addTurn = useCallback((role: "user" | "assistant", text: string) => {
-    setTranscript((prev) => [
-      ...prev,
-      { id: `${Date.now()}-${prev.length}`, role, text },
-    ]);
   }, []);
 
   const playPcm16 = useCallback((buffer: ArrayBuffer) => {
@@ -166,10 +167,13 @@ export function useVoiceAgentSession() {
   }, []);
 
   const cleanup = useCallback((sendStop = true) => {
+    connectGenRef.current += 1;
+    connectInFlightRef.current = false;
     clearThinkingTimer();
     sessionActiveRef.current = false;
     readyReceivedRef.current = false;
     setActive(false);
+    setSessionId(null);
 
     const ws = wsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -193,14 +197,9 @@ export function useVoiceAgentSession() {
   }, [clearThinkingTimer]);
 
   const armThinkingTimer = useCallback(() => {
+    // No hard timeout — table booking API calls can take 30s+.
     clearThinkingTimer();
-    thinkingTimerRef.current = setTimeout(() => {
-      fail(
-        "AI response timed out. Check API keys (OpenAI, Deepgram, Cartesia) in voice-sales-agent/.env",
-      );
-      cleanup(false);
-    }, THINKING_TIMEOUT_MS);
-  }, [cleanup, clearThinkingTimer, fail]);
+  }, [clearThinkingTimer]);
 
   const preloadWorklet = useCallback(async () => {
     if (workletReadyRef.current) return;
@@ -240,6 +239,16 @@ export function useVoiceAgentSession() {
           role?: "user" | "assistant";
           text?: string;
           message?: string;
+          session_id?: string;
+          call_db_id?: number;
+          status?: string;
+          reservation_id?: string;
+          guest_name?: string;
+          guest_phone?: string;
+          party_size?: number;
+          slot?: string;
+          booking_date?: string;
+          booking_time?: string;
         };
         try {
           msg = JSON.parse(data);
@@ -256,6 +265,7 @@ export function useVoiceAgentSession() {
         if (msg.event === "ready") {
           readyReceivedRef.current = true;
           clearThinkingTimer();
+          if (msg.session_id) setSessionId(msg.session_id);
           await startMic();
           sessionActiveRef.current = true;
           setActive(true);
@@ -279,9 +289,24 @@ export function useVoiceAgentSession() {
           }
         }
 
+        // Transcript is audio-only in the UI; voice-sales-agent persists every turn via log_turn.
         if (msg.event === "transcript" && msg.role && msg.text) {
           clearThinkingTimer();
-          addTurn(msg.role, msg.text);
+        }
+
+        if (msg.event === "booking" && msg.status === "pending" && msg.reservation_id) {
+          const receipt: ReservationRequestReceipt = {
+            reservationId: msg.reservation_id,
+            status: msg.status,
+            guestName: msg.guest_name ?? "",
+            guestPhone: msg.guest_phone ?? "",
+            partySize: msg.party_size ?? 2,
+            slot: msg.slot ?? "",
+            bookingDate: msg.booking_date ?? "",
+            bookingTime: msg.booking_time ?? "",
+            message: msg.message ?? "",
+          };
+          setBooking(receipt);
         }
         return;
       }
@@ -290,7 +315,6 @@ export function useVoiceAgentSession() {
       playPcm16(data);
     },
     [
-      addTurn,
       armThinkingTimer,
       cleanup,
       clearThinkingTimer,
@@ -314,11 +338,19 @@ export function useVoiceAgentSession() {
   }, [fail]);
 
   const connect = useCallback(async () => {
+    if (connectInFlightRef.current || sessionActiveRef.current) return;
+
+    connectInFlightRef.current = true;
+    const gen = ++connectGenRef.current;
+
     setError(null);
     setStatus("checking");
+    setSessionId(null);
 
     const readiness = await checkVoiceAgentReadiness();
+    if (gen !== connectGenRef.current) return;
     if (!readiness.ok) {
+      connectInFlightRef.current = false;
       fail(readiness.message);
       return;
     }
@@ -326,41 +358,7 @@ export function useVoiceAgentSession() {
     try {
       setStatus("connecting");
       await preloadWorklet();
-
-      const ws = new WebSocket(getVoiceAgentWsUrl());
-      ws.binaryType = "arraybuffer";
-      wsRef.current = ws;
-
-      const earlyMessages: (string | ArrayBuffer)[] = [];
-      let audioReady = false;
-      let readyTimer: ReturnType<typeof setTimeout> | null = null;
-
-      ws.onclose = () => {
-        if (readyTimer) clearTimeout(readyTimer);
-        if (sessionActiveRef.current) {
-          cleanup(false);
-        } else if (!readyReceivedRef.current) {
-          fail("Connection closed before session started. Check voice agent logs.");
-          cleanup(false);
-        }
-      };
-
-      ws.onmessage = async (evt) => {
-        if (!audioReady) {
-          earlyMessages.push(evt.data);
-          return;
-        }
-        await handleMessage(evt.data);
-      };
-
-      await waitForWsOpen(ws, 8000);
-
-      readyTimer = setTimeout(() => {
-        if (!readyReceivedRef.current) {
-          fail("Session start timed out. Check API keys in voice-sales-agent/.env");
-          cleanup(false);
-        }
-      }, READY_TIMEOUT_MS);
+      if (gen !== connectGenRef.current) return;
 
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -370,6 +368,10 @@ export function useVoiceAgentSession() {
           noiseSuppression: true,
         },
       });
+      if (gen !== connectGenRef.current) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
       streamRef.current = stream;
 
       let audioCtx: AudioContext;
@@ -384,24 +386,61 @@ export function useVoiceAgentSession() {
           workletReadyRef.current = true;
         }
       }
+      if (gen !== connectGenRef.current) {
+        void audioCtx.close();
+        return;
+      }
 
       if (audioCtx.state !== "running") await audioCtx.resume();
       audioCtxRef.current = audioCtx;
-      audioReady = true;
 
-      for (const msg of earlyMessages) {
-        await handleMessage(msg);
-      }
+      const ws = new WebSocket(getVoiceAgentWsUrl(restaurantIndex));
+      ws.binaryType = "arraybuffer";
+      wsRef.current = ws;
+
+      let readyTimer: ReturnType<typeof setTimeout> | null = null;
+
+      ws.onclose = () => {
+        if (gen !== connectGenRef.current) return;
+        if (readyTimer) clearTimeout(readyTimer);
+        if (sessionActiveRef.current) {
+          cleanup(false);
+        } else if (!readyReceivedRef.current) {
+          fail("Connection closed before session started. Check voice agent logs.");
+          cleanup(false);
+        }
+      };
 
       ws.onmessage = async (evt) => {
+        if (gen !== connectGenRef.current) return;
         await handleMessage(evt.data);
       };
+
+      await waitForWsOpen(ws, 8000);
+      if (gen !== connectGenRef.current) return;
+
+      readyTimer = setTimeout(() => {
+        if (gen !== connectGenRef.current) return;
+        if (!readyReceivedRef.current) {
+          fail("Session start timed out. Check API keys in voice-sales-agent/.env");
+          cleanup(false);
+        }
+      }, READY_TIMEOUT_MS);
     } catch (e) {
-      const message = e instanceof Error ? e.message : "Could not start voice session";
-      fail(message);
+      if (gen !== connectGenRef.current) return;
+      if (e instanceof DOMException && e.name === "NotAllowedError") {
+        fail("Microphone access is required. Allow mic permission and try again.");
+      } else {
+        const message = e instanceof Error ? e.message : "Could not start voice session";
+        fail(message);
+      }
       cleanup(false);
+    } finally {
+      if (gen === connectGenRef.current) {
+        connectInFlightRef.current = false;
+      }
     }
-  }, [cleanup, fail, handleMessage, preloadWorklet]);
+  }, [cleanup, fail, handleMessage, preloadWorklet, restaurantIndex]);
 
   const disconnect = useCallback(() => {
     cleanup(true);
@@ -411,7 +450,12 @@ export function useVoiceAgentSession() {
   const reset = useCallback(() => {
     setError(null);
     setStatus("idle");
-    setTranscript([]);
+    setBooking(null);
+    setSessionId(null);
+  }, []);
+
+  const dismissBooking = useCallback(() => {
+    setBooking(null);
   }, []);
 
   useEffect(() => () => cleanup(false), [cleanup]);
@@ -419,11 +463,13 @@ export function useVoiceAgentSession() {
   return {
     status,
     error,
-    transcript,
     active,
+    booking,
+    sessionId,
     connect,
     disconnect,
     reset,
+    dismissBooking,
     prefetchStatus,
     preloadWorklet,
   };

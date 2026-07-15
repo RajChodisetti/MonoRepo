@@ -157,7 +157,7 @@ func TestAdminCanCreateDemoSiteForRestaurant(t *testing.T) {
 		t.Fatalf("IssueToken() error = %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/restaurants/"+restaurantID.String()+"/demo-sites", strings.NewReader(`{"slug":"demo-cafe","status":"published"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/restaurants/"+restaurantID.String()+"/demo-sites", strings.NewReader(`{"slug":"demo-cafe","status":"draft"}`))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()

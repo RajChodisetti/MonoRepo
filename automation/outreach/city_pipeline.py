@@ -34,6 +34,7 @@ from tuvi_outreach_agent import (  # noqa: E402
     Config,
     default_leads_output_path,
     default_scrape_output_path,
+    normalize_city_name,
     resolve_cities,
     run_lead_fetch_pipeline,
 )
@@ -52,15 +53,39 @@ def run_city_pipeline(
     max_reviews: int = 40,
     max_size_mb: float = 50.0,
     engine: str = "places",
+    niche: str = "restaurant",
+    max_requests: int | None = None,
     cfg: Config | None = None,
 ) -> dict:
     """Run fetch + scrape for one city. Returns paths summary."""
+    if max_requests is not None:
+        from daily_ingestion import run_daily_ingestion
+
+        summary = run_daily_ingestion(
+            niche_type=niche,
+            cities=[normalize_city_name(city)],
+            max_requests=max_requests,
+            per_page=per_page,
+            import_to_db=False,
+            cfg=cfg,
+        )
+        cities = resolve_cities(city=city)
+        city_label = cities[0].split(",")[0]
+        return {
+            "city": city_label,
+            "total": total,
+            "niche": niche,
+            "leads_file": str(default_leads_output_path(cities, cfg, niche=niche)),
+            "scrape_file": str(default_scrape_output_path(city, cfg, niche=niche)),
+            "daily_summary": summary,
+        }
+
     cfg = cfg or Config()
     cities = resolve_cities(city=city)
     city_label = cities[0].split(",")[0]
 
-    leads_path = default_leads_output_path(cities, cfg)
-    scrape_path = default_scrape_output_path(city, cfg)
+    leads_path = default_leads_output_path(cities, cfg, niche=niche)
+    scrape_path = default_scrape_output_path(city, cfg, niche=niche)
     result = {
         "city": city_label,
         "total": total,
@@ -78,6 +103,7 @@ def run_city_pipeline(
             max_pages=max_pages,
             target_per_city=total,
             output_path=leads_path,
+            niche_type=niche,
         )
         result["leads_count"] = len(leads)
         result["leads_file"] = str(leads_path)
@@ -96,6 +122,7 @@ def run_city_pipeline(
         )
         if engine == "places":
             scrape_kwargs["max_reviews"] = min(max_reviews, 5)
+            scrape_kwargs["niche"] = niche
             restaurants, scrape_path = run_places_scrape_pipeline(**scrape_kwargs)
         else:
             scrape_kwargs["max_reviews"] = max_reviews
@@ -134,6 +161,18 @@ def main() -> int:
     parser.add_argument("--max-size-mb", type=float, default=50.0)
     parser.add_argument("--engine", choices=["places", "serpapi"], default="places",
                         help="Scrape engine: places (Google Maps API, default) or serpapi")
+    parser.add_argument(
+        "--type",
+        default="restaurant",
+        help="Business niche: restaurant (default), dentist, plumber",
+    )
+    parser.add_argument(
+        "--max-requests",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Combined Apollo+Places cap (enables budget-aware daily ingestion mode)",
+    )
     parser.add_argument("--fetch-only", action="store_true", help="Only Apollo fetch, skip scrape")
     parser.add_argument("--scrape-only", action="store_true", help="Only scrape, skip Apollo fetch")
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -184,6 +223,8 @@ def main() -> int:
                 max_reviews=args.max_reviews,
                 max_size_mb=args.max_size_mb,
                 engine=args.engine,
+                niche=args.type,
+                max_requests=args.max_requests,
                 cfg=cfg,
             )
             summaries.append(summary)
