@@ -9,10 +9,10 @@ const MOODS: Record<
   OrbMood,
   { hue: [number, number]; glow: string; energy: number; swirl: number; scale: number }
 > = {
-  idle: { hue: [168, 200], glow: "#4de8cf", energy: 0.12, swirl: 0.15, scale: 1 },
-  listening: { hue: [196, 235], glow: "#59b8ff", energy: 0.55, swirl: 0.25, scale: 1.08 },
-  thinking: { hue: [258, 288], glow: "#a58bff", energy: 0.28, swirl: 2.4, scale: 0.92 },
-  speaking: { hue: [14, 36], glow: "#ff9d6b", energy: 0.42, swirl: 0.35, scale: 1.06 },
+  idle: { hue: [138, 158], glow: "#7b927f", energy: 0.12, swirl: 0.15, scale: 1 },
+  listening: { hue: [148, 172], glow: "#4d8269", energy: 0.55, swirl: 0.25, scale: 1.08 },
+  thinking: { hue: [38, 54], glow: "#b18b5c", energy: 0.28, swirl: 2.4, scale: 0.92 },
+  speaking: { hue: [18, 34], glow: "#b86f4d", energy: 0.42, swirl: 0.35, scale: 1.06 },
 };
 
 function toMood(status: VoiceSessionStatus): OrbMood {

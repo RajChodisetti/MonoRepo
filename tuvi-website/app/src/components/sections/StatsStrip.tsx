@@ -1,19 +1,24 @@
 "use client";
 
-import { siteContent } from "@/content/site";
-import AnimatedCounter from "@/components/ui/AnimatedCounter";
 import Reveal from "@/components/ui/Reveal";
+
+const commitments = [
+  ["01", "Outcome before output"],
+  ["02", "Working progress, early"],
+  ["03", "Human-reviewed automation"],
+  ["04", "One accountable team"],
+] as const;
 
 export default function StatsStrip() {
   return (
-    <section className="border-y border-border bg-white px-5 py-14 md:px-8">
-      <div className="mx-auto grid max-w-6xl grid-cols-2 gap-x-6 gap-y-10 md:grid-cols-4">
-        {siteContent.stats.map((stat, i) => (
-          <Reveal key={stat.label} delay={i * 0.08} className="text-center">
-            <p className="font-display text-4xl font-bold tracking-tight text-ink md:text-5xl">
-              <AnimatedCounter value={stat.value} suffix={stat.suffix} />
-            </p>
-            <p className="mt-2 text-sm font-medium text-muted">{stat.label}</p>
+    <section aria-label="How Tuvi works" className="border-y border-border bg-bg-elevated px-5 py-10 md:px-8 md:py-12">
+      <div className="mx-auto grid max-w-6xl gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {commitments.map(([number, label], index) => (
+          <Reveal key={number} delay={index * 0.05}>
+            <div className="flex items-center gap-4 rounded-2xl border border-border bg-surface/60 px-4 py-4">
+              <span className="font-display text-2xl font-semibold text-primary">{number}</span>
+              <span className="text-sm font-semibold leading-5 text-ink">{label}</span>
+            </div>
           </Reveal>
         ))}
       </div>

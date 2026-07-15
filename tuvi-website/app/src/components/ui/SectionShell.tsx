@@ -8,7 +8,7 @@ export default function SectionShell({
   className?: string;
 }) {
   return (
-    <section id={id} className={`relative px-5 py-24 md:px-8 md:py-32 ${className}`}>
+    <section id={id} className={`relative scroll-mt-28 px-5 py-20 md:px-8 md:py-28 ${className}`}>
       <div className="mx-auto max-w-6xl">{children}</div>
     </section>
   );

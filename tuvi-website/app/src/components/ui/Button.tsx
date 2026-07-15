@@ -16,11 +16,11 @@ export default function Button({
   className = "",
 }: ButtonProps) {
   const base =
-    "inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-semibold transition duration-300";
+    "inline-flex cursor-pointer items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-semibold transition-colors duration-200";
   const styles =
     variant === "primary"
-      ? "bg-ink text-white hover:bg-primary hover:shadow-[0_12px_32px_-8px_rgba(124,58,237,0.5)]"
-      : "border border-zinc-300 bg-white text-ink hover:border-ink";
+      ? "bg-ink text-[#fffef8] shadow-[0_12px_32px_-14px_rgba(15,39,31,0.7)] hover:bg-primary"
+      : "border border-border bg-bg-elevated text-ink hover:border-primary hover:bg-surface";
 
   const classes = `${base} ${styles} ${className}`;
 

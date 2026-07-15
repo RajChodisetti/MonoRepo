@@ -53,7 +53,7 @@ export default function RequestCallbackForm({
   }
 
   const inputClass =
-    "w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-text placeholder:text-muted/70 outline-none transition focus:border-primary/60";
+    "w-full rounded-xl border border-border bg-bg-elevated px-3 py-2.5 text-sm text-text placeholder:text-muted/70 outline-none transition focus:border-primary/60";
 
   return (
     <div className={compact ? "space-y-3" : "mx-auto mt-8 max-w-md space-y-3 text-left"}>
@@ -61,39 +61,49 @@ export default function RequestCallbackForm({
         <div>
           <p className="text-sm font-semibold text-text">Get a callback</p>
           <p className="mt-1 text-xs text-muted">
-            Drop your number and our AI will call you now. Example: +61 412 345 678
+            Leave your number and we&apos;ll call when the service is available. Example: +61 412 345 678
           </p>
         </div>
       )}
 
       <form onSubmit={onSubmit} className="space-y-2">
-        {!compact && (
+        {!compact ? (
+          <label className="block">
+            <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.12em] text-muted">
+              Name <span className="normal-case tracking-normal">(optional)</span>
+            </span>
+            <input
+              type="text"
+              name="name"
+              autoComplete="name"
+              placeholder="Jane Smith"
+              value={nameVal}
+              onChange={(e) => setNameVal(e.target.value)}
+              className={inputClass}
+            />
+          </label>
+        ) : null}
+        <label className="block">
+          <span className={`${compact ? "sr-only" : "mb-1.5 block text-[11px] font-bold uppercase tracking-[0.12em] text-muted"}`}>
+            Phone number
+          </span>
           <input
-            type="text"
-            name="name"
-            autoComplete="name"
-            placeholder="Name (optional)"
-            value={nameVal}
-            onChange={(e) => setNameVal(e.target.value)}
+            type="tel"
+            name="phone"
+            required
+            autoComplete="tel"
+            placeholder="Phone (+61…)"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
             className={inputClass}
           />
-        )}
-        <input
-          type="tel"
-          name="phone"
-          required
-          autoComplete="tel"
-          placeholder="Phone (+61…)"
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-          className={inputClass}
-        />
+        </label>
         <button
           type="submit"
           disabled={status === "loading"}
-          className="w-full rounded-xl bg-gradient-to-r from-gold-dim to-gold px-4 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
+          className="w-full cursor-pointer rounded-xl bg-ink px-4 py-3 text-sm font-semibold text-[#fffef8] transition-colors hover:bg-primary disabled:opacity-60"
         >
-          {status === "loading" ? "Calling…" : "Call me now"}
+          {status === "loading" ? "Requesting…" : "Request a callback"}
         </button>
       </form>
 
@@ -115,7 +125,7 @@ export default function RequestCallbackForm({
       {callInDisplay && callInHref ? (
         <p className="text-xs text-muted">
           Prefer to dial us?{" "}
-          <a href={callInHref} className="font-medium text-cyan transition hover:text-gold">
+          <a href={callInHref} className="font-medium text-primary transition-colors hover:text-ink">
             {callInDisplay}
           </a>
         </p>

@@ -7,8 +7,8 @@ export const siteContent = {
 
   nav: [
     { href: "/#about", label: "Why Tuvi" },
-    { href: "/#testimonials", label: "Results" },
-    { href: "/#guarantee", label: "Guarantee" },
+    { href: "/#approach", label: "Our standard" },
+    { href: "/#guarantee", label: "First build" },
     { href: "/#contact", label: "Contact" },
   ],
 
@@ -24,23 +24,16 @@ export const siteContent = {
   },
 
   hero: {
-    eyebrow: "Websites · Apps · AI — built for you",
-    headline: ["We build websites, apps & AI", "that grow your business."],
+    eyebrow: "Independent software studio · Australia",
+    headline: ["Websites, apps & AI", "built to carry your growth."],
     subcopy:
-      "Tuvi is a software studio for ambitious businesses. Bring us the outcome you want — we design, build, and launch the product that gets you there. No jargon, no agency runaround.",
+      "Tuvi brings strategy, design, and engineering into one focused team. Tell us the business outcome — we shape the product, build it well, and stay close after launch.",
     primaryCta: "Start your project",
     secondaryCta: "See a live demo",
     secondaryHref: "/services/restaurants",
-    trust: "4.7/5 from 30+ clients",
-    note: "Free consultation. No commitment.",
+    trust: "Strategy, design & engineering in one team",
+    note: "Free consultation · clear next steps",
   },
-
-  stats: [
-    { value: 10, suffix: "+", label: "Years building software" },
-    { value: 50, suffix: "+", label: "Products shipped" },
-    { value: 3, suffix: "x", label: "Average client growth" },
-    { value: 100, suffix: "%", label: "Client satisfaction" },
-  ],
 
   about: {
     id: "about",
@@ -48,7 +41,7 @@ export const siteContent = {
     title: "Small team. Serious engineering.",
     paragraphs: [
       "Tuvi means strength — and that's the bar for everything we ship. Robust architecture, sharp design, and software that holds up when your business takes off.",
-      "From your first landing page to AI that answers your phones, we build it, launch it, and stay until it works.",
+      "From your first landing page to AI that answers your phones, we shape the scope, build it, launch it, and support the agreed next stage.",
     ],
     highlights: [
       "Custom websites & web apps",
@@ -59,55 +52,52 @@ export const siteContent = {
   },
 
   testimonials: {
-    id: "testimonials",
-    eyebrow: "Results",
-    title: "In our clients' words.",
+    id: "approach",
+    eyebrow: "Our standard",
+    title: "Small team. High bar. No hand-offs.",
     items: [
       {
-        quote:
-          "Tuvi completely overhauled our legacy systems. Their data-driven approach to our system integrations didn't just solve our immediate issues; it gave us the capability to scale our operations by 3x. True professionals.",
-        author: "Director of Operations",
-        company: "Tamara Agro",
-        initial: "T",
+        title: "Outcome before output",
+        description:
+          "We begin with the business result, then choose the smallest product that can move it.",
+        number: "01",
       },
       {
-        quote:
-          "The $1,000 risk-free guarantee showed us they meant business. The work they delivered in that initial phase was so robust and impressive, hiring them for the full build was the easiest decision we've made.",
-        author: "Founder",
-        company: "Nexus Logistics",
-        initial: "N",
+        title: "Working software, early",
+        description:
+          "You review real screens and real flows throughout the build—not a reveal at the end.",
+        number: "02",
       },
       {
-        quote:
-          "When you are dealing with complex machine learning models, you need architecture that won't break. Tuvi Solutions delivered an AI infrastructure that is both powerful and remarkably easy for our team to use.",
-        author: "VP of Engineering",
-        company: "Vertex Health",
-        initial: "V",
+        title: "Built beyond launch",
+        description:
+          "Clean foundations, measurable behaviour, and a team that stays accountable after release.",
+        number: "03",
       },
     ],
   },
 
   guarantee: {
     id: "guarantee",
-    eyebrow: "Zero risk",
-    title: "Your first $1,000 of work is free.",
+    eyebrow: "A confident start",
+    title: "Your first focused build can be on us.",
     description:
-      "We'd rather prove it than pitch it. We complete the first $1,000 of development at no cost — if you don't love the direction, walk away and pay nothing.",
+      "For qualifying new projects, we agree a focused first milestone valued up to $1,000 and complete it at no charge. Eligibility and scope are confirmed in writing before work begins.",
     pillars: [
       {
-        title: "Watch it take shape",
-        description: "See real, working progress before you spend a cent.",
+        title: "A defined milestone",
+        description: "We agree the outcome, scope, and review point before we begin.",
       },
       {
-        title: "Walk away anytime",
-        description: "Not feeling it? You owe us nothing. No fine print.",
+        title: "Working progress",
+        description: "You see something tangible—not a strategy deck or speculative promise.",
       },
       {
-        title: "Scale when ready",
-        description: "Payments only start once you're convinced.",
+        title: "Continue by choice",
+        description: "A larger engagement starts only after both sides agree on the next scope.",
       },
     ],
-    cta: "Claim your free build",
+    cta: "Discuss your first milestone",
   },
 
   contact: {
@@ -115,14 +105,14 @@ export const siteContent = {
     eyebrow: "Let's talk",
     title: "Tell us what you want to build.",
     description:
-      "Book a call, talk to our AI assistant, or get a callback in minutes. No sales pitch — just a clear plan you can keep.",
+      "Book a call, talk to our AI assistant, or request a callback. No agency theatre—just a useful conversation and a clear next step.",
     primaryCta: "Book a free consultation",
   },
 
   footer: {
     legal: [
-      { label: "Privacy Policy", href: "#" },
-      { label: "Terms of Service", href: "#" },
+      { label: "Privacy Policy", href: "/privacy" },
+      { label: "Terms of Service", href: "/terms" },
       { label: "Contact", href: "/#contact" },
     ],
   },

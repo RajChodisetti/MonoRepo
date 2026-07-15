@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Nav from "@/components/layout/Nav";
 import Footer from "@/components/layout/Footer";
 import Hero from "@/components/sections/Hero";
@@ -9,12 +10,23 @@ import TestimonialsMarquee from "@/components/sections/TestimonialsMarquee";
 import GuaranteeSection from "@/components/sections/GuaranteeSection";
 import ContactCTA from "@/components/sections/ContactCTA";
 import VoiceAssistantWidget from "@/components/VoiceAssistantWidget";
+import { siteContent } from "@/content/site";
+
+export const metadata: Metadata = {
+  alternates: { canonical: "/" },
+  openGraph: {
+    title: siteContent.brand.name,
+    description: siteContent.hero.subcopy,
+    type: "website",
+    url: "/",
+  },
+};
 
 export default function HomePage() {
   return (
     <>
       <Nav />
-      <main>
+      <main id="main-content" tabIndex={-1}>
         <Hero />
         <WhatWeBuild />
         <HowWeWork />

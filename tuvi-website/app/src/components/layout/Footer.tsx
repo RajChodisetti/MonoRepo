@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { siteContent } from "@/content/site";
+import BrandLogo from "@/components/layout/BrandLogo";
 import { getCallInDisplay, getCallInTelHref, getContactEmail, getLinkedInUrl } from "@/lib/env";
 
 export default function Footer() {
@@ -7,50 +9,42 @@ export default function Footer() {
   const callInHref = getCallInTelHref();
 
   return (
-    <footer className="border-t border-border bg-bg-elevated px-5 py-12 md:px-8">
-      <div className="mx-auto flex max-w-6xl flex-col gap-8 md:flex-row md:items-center md:justify-between">
+    <footer className="border-t border-border bg-surface px-5 py-12 md:px-8 md:py-16">
+      <div className="mx-auto grid max-w-6xl gap-10 md:grid-cols-[1.2fr_0.8fr] md:items-end">
         <div>
-          <p className="font-display text-xl font-bold text-text">
-            {siteContent.brand.name}
-            <span className="text-accent">.</span>
+          <BrandLogo size="footer" />
+          <p className="mt-5 max-w-md text-sm leading-6 text-muted">
+            Thoughtful websites, applications, and AI systems for businesses ready to grow with
+            stronger software.
           </p>
-          <p className="mt-1 text-sm text-muted">{siteContent.brand.tagline}</p>
-          <a
-            href={`mailto:${getContactEmail()}`}
-            className="mt-3 inline-block text-sm text-accent transition hover:text-primary"
-          >
-            {getContactEmail()}
-          </a>
-          {callInHref && callInDisplay ? (
-            <a
-              href={callInHref}
-              className="mt-2 block text-sm text-muted transition hover:text-accent"
-            >
-              Call our AI assistant · {callInDisplay}
+          <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-sm">
+            <a href={`mailto:${getContactEmail()}`} className="font-semibold text-primary transition-colors hover:text-ink">
+              {getContactEmail()}
             </a>
-          ) : null}
+            {callInHref && callInDisplay ? (
+              <a href={callInHref} className="text-muted transition-colors hover:text-ink">
+                AI assistant · {callInDisplay}
+              </a>
+            ) : null}
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-4 text-sm text-muted">
-          <a
-            href={getLinkedInUrl()}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="transition hover:text-accent"
-          >
-            LinkedIn
-          </a>
-          {siteContent.footer.legal.map((link) => (
-            <a key={link.label} href={link.href} className="transition hover:text-text">
-              {link.label}
+        <nav aria-label="Footer navigation" className="md:text-right">
+          <div className="flex flex-wrap gap-x-5 gap-y-3 text-sm text-muted md:justify-end">
+            <a href={getLinkedInUrl()} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-ink">
+              LinkedIn
             </a>
-          ))}
-        </div>
+            {siteContent.footer.legal.map((link) => (
+              <Link key={link.label} href={link.href} className="transition-colors hover:text-ink">
+                {link.label}
+              </Link>
+            ))}
+          </div>
+          <p className="mt-6 text-xs leading-5 text-muted/80">
+            © {year} {siteContent.brand.name}. All rights reserved.
+          </p>
+        </nav>
       </div>
-
-      <p className="mx-auto mt-10 max-w-6xl text-center text-xs text-muted/70 md:text-left">
-        © {year} {siteContent.brand.name}. All rights reserved.
-      </p>
     </footer>
   );
 }

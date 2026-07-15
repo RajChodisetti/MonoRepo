@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { siteContent } from "@/content/site";
 import SectionHeading from "@/components/ui/SectionHeading";
 import SectionShell from "@/components/ui/SectionShell";
@@ -8,6 +8,7 @@ import Reveal from "@/components/ui/Reveal";
 
 export default function AboutSection() {
   const { about } = siteContent;
+  const reduceMotion = useReducedMotion();
 
   return (
     <SectionShell id={about.id}>
@@ -25,24 +26,24 @@ export default function AboutSection() {
 
         <Reveal delay={0.15}>
           <div className="relative">
-            <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-primary/15 to-accent/10 blur-2xl" />
+            <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-sage to-parchment blur-2xl" />
             <motion.div
-              whileHover={{ scale: 1.02 }}
+              whileHover={reduceMotion ? undefined : { scale: 1.015 }}
               transition={{ type: "spring", stiffness: 300 }}
-              className="card-soft relative rounded-3xl p-8"
+              className="card-soft relative rounded-3xl bg-bg-elevated p-8"
             >
               <p className="text-xs font-bold uppercase tracking-widest text-accent">Core strengths</p>
               <ul className="mt-6 space-y-4">
                 {about.highlights.map((item, i) => (
                   <motion.li
                     key={item}
-                    initial={{ opacity: 0, x: 20 }}
+                    initial={reduceMotion ? { opacity: 1, x: 0 } : { opacity: 0, x: 20 }}
                     whileInView={{ opacity: 1, x: 0 }}
                     viewport={{ once: true }}
                     transition={{ delay: i * 0.1 }}
                     className="flex items-start gap-3 border-b border-border pb-4 last:border-0 last:pb-0"
                   >
-                    <span className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary/30 to-accent/30 text-xs font-bold text-accent">
+                    <span className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sage text-xs font-bold text-primary">
                       {i + 1}
                     </span>
                     <span className="text-text">{item}</span>

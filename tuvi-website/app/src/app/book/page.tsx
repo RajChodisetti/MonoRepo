@@ -12,10 +12,10 @@ export default function BookPage() {
   return (
     <>
       <Nav />
-      <main className="relative min-h-screen pt-[72px]">
+      <main id="main-content" tabIndex={-1} className="relative min-h-screen pt-24">
         <div className="pointer-events-none absolute inset-0 grid-bg opacity-40" />
-        <div className="pointer-events-none absolute left-0 top-32 h-72 w-72 -translate-x-1/3 rounded-full bg-gold/10 blur-[100px]" />
-        <div className="pointer-events-none absolute bottom-24 right-0 h-64 w-64 translate-x-1/4 rounded-full bg-cyan/10 blur-[90px]" />
+        <div className="pointer-events-none absolute left-0 top-32 h-72 w-72 -translate-x-1/3 rounded-full bg-sage/70 blur-[100px]" />
+        <div className="pointer-events-none absolute bottom-24 right-0 h-64 w-64 translate-x-1/4 rounded-full bg-parchment blur-[90px]" />
 
         <div className="relative mx-auto max-w-xl px-5 py-12 md:px-8 md:py-16">
           <BookConsultationForm />

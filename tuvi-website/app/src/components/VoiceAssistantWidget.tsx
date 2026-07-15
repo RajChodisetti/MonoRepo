@@ -315,7 +315,7 @@ export default function VoiceAssistantWidget() {
                   href={calendarUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="rounded-xl bg-gradient-to-r from-gold-dim to-gold px-4 py-3 text-sm font-semibold text-bg transition hover:opacity-90"
+                  className="rounded-xl bg-ink px-4 py-3 text-sm font-semibold text-[#fffef8] transition-colors hover:bg-primary"
                 >
                   Open in Google Calendar
                 </a>
@@ -376,7 +376,7 @@ export default function VoiceAssistantWidget() {
                   />
                   <button
                     type="submit"
-                    className="w-full rounded-xl bg-gradient-to-r from-gold-dim to-gold px-4 py-2.5 text-sm font-semibold text-bg transition hover:opacity-90"
+                    className="w-full cursor-pointer rounded-xl bg-ink px-4 py-2.5 text-sm font-semibold text-[#fffef8] transition-colors hover:bg-primary"
                   >
                     Enter
                   </button>
@@ -472,7 +472,7 @@ export default function VoiceAssistantWidget() {
                     type="button"
                     onMouseDown={() => void preloadWorklet()}
                     onClick={() => void handlePrimaryAction()}
-                    className="flex h-12 flex-1 items-center justify-center gap-2 rounded-full bg-gradient-to-r from-gold-dim to-gold px-4 text-sm font-semibold text-bg transition hover:opacity-90"
+                    className="flex h-12 flex-1 cursor-pointer items-center justify-center gap-2 rounded-full bg-ink px-4 text-sm font-semibold text-[#fffef8] transition-colors hover:bg-primary"
                   >
                     <MicIcon />
                     {active ? "End" : error ? "Check again" : "Start talking"}
@@ -497,7 +497,7 @@ export default function VoiceAssistantWidget() {
           type="button"
           onClick={() => (open ? closePanel() : handlePrimaryAction())}
           onMouseDown={() => void preloadWorklet()}
-          className="pointer-events-auto flex items-center gap-2.5 rounded-full bg-gradient-to-r from-gold-dim to-gold px-5 py-3.5 text-sm font-semibold text-bg shadow-[0_8px_32px_rgba(212,168,83,0.35)] transition hover:scale-[1.02] active:scale-[0.98]"
+          className="pointer-events-auto flex cursor-pointer items-center gap-2.5 rounded-full bg-ink px-5 py-3.5 text-sm font-semibold text-[#fffef8] shadow-[0_12px_34px_rgba(15,39,31,0.3)] transition-colors hover:bg-primary"
           aria-expanded={open}
           aria-haspopup="dialog"
         >

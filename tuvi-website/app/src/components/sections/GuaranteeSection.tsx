@@ -12,7 +12,7 @@ export default function GuaranteeSection() {
   const { guarantee } = siteContent;
 
   return (
-    <SectionShell id={guarantee.id} className="bg-white">
+    <SectionShell id={guarantee.id} className="bg-bg-elevated">
       <SectionHeading
         eyebrow={guarantee.eyebrow}
         title={guarantee.title}
@@ -23,7 +23,7 @@ export default function GuaranteeSection() {
       <div className="grid gap-4 md:grid-cols-3">
         {guarantee.pillars.map((pillar, i) => (
           <Reveal key={pillar.title} delay={i * 0.08}>
-            <motion.div className="card-soft card-lift h-full rounded-2xl p-7">
+            <motion.div className="card-soft card-lift h-full rounded-3xl p-7">
               <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 font-display text-sm font-bold text-primary">
                 {i + 1}
               </span>
