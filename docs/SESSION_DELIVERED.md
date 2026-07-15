@@ -12,6 +12,99 @@ Each entry should explain:
 - how the work fits with the rest of the Phase 1 or Phase 2 plan;
 - risks, gaps, or follow-ups.
 
+## 2026-07-14 — Google Workspace Outreach and Provider Environment Deployment
+
+**Role:** Backend, DevOps, Security, Test, and Documentation Agent
+
+**Delivered:** Added Google Workspace Gmail API delivery to the existing durable
+outreach account pool without removing Zoho. Each mailbox uses a stable key,
+primary mailbox identity, optional verified send-as address, OAuth client, and
+per-mailbox offline refresh token. Delivery uses Google's fixed HTTPS OAuth and
+`users.messages.send` endpoints with MIME/base64url messages, cached access
+tokens, redirect rejection, header/address validation before quota claims, and
+the existing PostgreSQL 40-attempt/24-hour rotation ledger. Invalid enabled
+mailbox, sender-header, or redirect configuration now fails during loading or
+provider construction instead of consuming quota or leaving outreach silently
+unavailable. Updated the environment templates, OpenAPI, ADR, service notes,
+deployment plan, detailed workflow runbook, and architecture brief/Word copy.
+
+Stored the supplied Places, Apollo, optional SerpAPI, and Hugging Face values in
+the ignored local `.env` and protected VM `/opt/tuvi/env/ingestion.env`; both the
+local env and VM env files remain mode `0600`. No secret value was printed or
+committed. Google Workspace account JSON remains empty because the required
+mailbox OAuth details were not supplied. Email stays disabled, OCR stays
+disabled, and no provider-validation call was made.
+
+Published commit `59d8cd4` to `origin/phase1_03/backend` and deployed that exact
+release to `/opt/tuvi/MonoRepo`. Took a custom-format PostgreSQL backup, ran the
+migration command (all 23 migrations already current), rebuilt and recreated
+the API, Go worker, and scrape worker, then recorded `59d8cd4` in
+`/opt/tuvi/current-release`. The first post-migration Compose invocation left
+those three services stopped; verification caught that before the release was
+accepted, and an explicit recreate restored all three successfully.
+
+**Checks Run:** `go test ./backend/...` — 138 passed across 42 packages;
+`go vet ./backend/...` — passed; email-provider race test — passed; Go command
+build, Python syntax checks, OpenAPI/Compose YAML parsing, Compose config, secret
+scan, and git diff checks — passed. The Word artifact passed OOXML ZIP,
+structure, heading, section, content, and accessibility checks with zero
+accessibility findings; visual rendering remains unavailable because
+LibreOffice/`soffice` is not installed. On the VM, API/worker/scrape-worker are
+running with zero restarts, logs contain no fatal patterns, and the API,
+website, demo, and voice readiness URLs return HTTP 200. PostgreSQL reports
+23/23 migrations, zero scrape jobs/request usage, zero running OCR claims, zero
+email attempts, and zero email-account quota rows.
+
+**Backups / Rollback:** Source backup:
+`/opt/tuvi/MonoRepo.prev-20260715T043742Z`. Database backup:
+`/opt/tuvi/backups/postgres/monorepo-pre-59d8cd4-20260715T043742Z.dump`.
+
+**Risks / Follow-ups:** Before enabling real outreach, enable the Gmail API in
+the Google Cloud project, configure the OAuth consent/admin trust, and provide
+the mailbox email, OAuth client ID/secret, and an offline `gmail.send` refresh
+token for every mailbox. Keep stable account keys across credential rotation.
+The supplied API keys were exposed in chat and should be rotated after this
+deployment, with the replacements installed in both protected env locations.
+
+## 2026-07-14 — Architecture Changes Word Brief
+
+**Role:** Documentation Agent
+
+**Delivered:** Created `docs/ARCHITECTURE_CHANGES.docx` from the concise
+architecture summary. The Word document uses a compact business-brief layout
+with a masthead, seven before/current architecture sections, a production safety
+callout, consistent Word heading styles, and restrained header/footer furniture.
+
+**Checks Run:** The canonical document renderer was attempted but could not run
+because LibreOffice/`soffice` is not installed. Following the document workflow's
+approved fallback, the OOXML package passed ZIP validation, a structural and
+content audit confirmed Letter geometry, margins, styles, headings, all required
+facts, and absence of secret-like values, and the packaged accessibility audit
+reported zero findings. No code tests were required.
+
+**Business Value / Plan Fit:** Provides a short, shareable Word handoff of the
+most consequential Phase 1 workflow and production architecture changes without
+requiring stakeholders to read the implementation log or operator runbook.
+
+## 2026-07-14 — Concise Architecture Change Summary
+
+**Role:** Documentation Agent
+
+**Delivered:** Added `docs/ARCHITECTURE_CHANGES.md`, a short before/missing/now
+summary of the seven most consequential changes: durable city scraping,
+Places-first Apollo enrichment, explicit OCR states, provenance-bound review
+gates, secure demo access, PostgreSQL-managed email quotas, and isolated
+production persistence.
+The note also states the current safety boundary so deployment is not mistaken
+for enabled scraping, OCR, or outreach.
+
+**Checks Run:** Documentation-only review and `git diff --check`; no code tests
+were required.
+
+**Business Value / Plan Fit:** Gives operators and stakeholders a fast,
+non-technical handoff for the Phase 1 lead-to-demo-to-outreach architecture
+without duplicating the full runbook.
+
 ## 2026-07-14 — Isolated Monorepo Database and VM Workflow Deployment
 
 **Role:** Backend, DevOps, Security, and Documentation Agent
