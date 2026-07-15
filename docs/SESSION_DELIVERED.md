@@ -12,6 +12,42 @@ Each entry should explain:
 - how the work fits with the rest of the Phase 1 or Phase 2 plan;
 - risks, gaps, or follow-ups.
 
+## 2026-07-15 — Homepage Workspace Disclosure Removal and Deployment
+
+**Role:** Frontend, Security, DevOps, and Documentation Agent
+
+**Delivered:** Removed the compact Google Workspace disclosure from the public
+homepage and deleted its now-unused component. The customer-facing AI and custom
+software journey now flows directly from the contact section into the footer.
+The dedicated `/google-workspace`, `/privacy`, and `/terms` pages remain live,
+and the footer retains a small link to the Workspace app page.
+
+Published functional commit `371c062` on
+`agent/tuvi-oauth-homepage-verification`. Archived the exact remote-matched
+commit, verified its checksum locally and on the VM, built only
+`tuvi-website`, and recreated it with `--no-deps`. The prior `7651213` website
+release and image are retained as the immediate rollback. No migration or API,
+worker, scrape, OCR, email, database, Redis, voice, template, catalog, Caddy,
+DNS, or environment action ran.
+
+**Checks Run:** `git diff --check`, TypeScript validation, and the local and VM
+Node 22 production builds passed with all 13 routes generated. Local and live
+rendered HTML checks confirmed that the quoted Workspace disclosure text is
+absent while the AI/custom-software hero remains. Loopback and public HTTPS
+checks returned HTTP 200 for the homepage, Workspace, Privacy, Terms, booking,
+and restaurant routes. The running image matches commit `371c062`, has zero
+restarts, and all other services remain up.
+
+**Business Value / Plan Fit:** Removes an internal application explanation from
+the primary marketing experience and keeps the homepage focused on prospective
+software and AI customers.
+
+**Risks / Follow-ups:** This deliberately removes the homepage purpose statement
+that Google cited in the previous branding-verification rejection. The dedicated
+application and legal pages remain public, but Google may reject branding
+re-verification again because the homepage itself no longer explains `tuvi`.
+Rollback to `7651213` restores the compact disclosure if required.
+
 ## 2026-07-15 — Customer-First Homepage Refinement and Deployment
 
 **Role:** Frontend, Security, Reviewer, DevOps, and Documentation Agent
