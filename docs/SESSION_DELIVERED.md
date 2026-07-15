@@ -1579,3 +1579,17 @@ deployment verification are recorded with the release outcome below.
 future availability without relying on external calendar state. This provides
 the deterministic Phase 1 booking boundary needed before Google Calendar
 synchronization is designed and approved.
+
+**Production Deployment:** Pushed functional commit `000cdd8` to
+`agent/tuvi-oauth-homepage-verification`, created protected pre-migration backup
+`/opt/tuvi/backups/monorepo-pre-000cdd8-20260715T192444Z.dump`, and staged the
+exact commit at `/opt/tuvi/releases/monorepo-000cdd8`. Migration 25 applied
+successfully. The API, voice agent, and Tuvi website were rebuilt and recreated;
+all run with zero restarts. PostgreSQL reports the partial index predicate
+`status = 'confirmed'`, the former unconditional constraint is absent, and the
+consultation table remains empty. No fake production booking was created.
+
+**Production Verification:** Protected and public availability both return
+`status=success` with 16 current slots; the voice status returns `ready`; the
+public website and voice host return HTTP 200; the rendered website contains the
+voice widget; and new API logs contain no calendar-provider initialization.
