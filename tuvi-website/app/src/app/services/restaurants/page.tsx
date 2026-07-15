@@ -95,7 +95,11 @@ function FeatureVideo({
   const reversed = index % 2 === 1;
 
   return (
-    <article className="grid items-center gap-8 lg:grid-cols-[1.22fr_0.78fr] lg:gap-16">
+    <article
+      className={`grid items-center gap-8 lg:gap-16 ${
+        reversed ? "lg:grid-cols-[0.78fr_1.22fr]" : "lg:grid-cols-[1.22fr_0.78fr]"
+      }`}
+    >
       <div className={`relative ${reversed ? "lg:order-2" : ""}`}>
         <div className="relative w-full overflow-hidden rounded-[2.25rem] border border-border bg-ink shadow-[0_34px_76px_-34px_rgba(15,39,31,0.45)]">
           <RestaurantFeatureVideo title={feature.title} poster={feature.poster} src={feature.video} />
