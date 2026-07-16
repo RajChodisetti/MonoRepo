@@ -1,0 +1,169 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "name": "Tuvi — City Scrape Jobs (api.tuvisolutions.com)",
+    "description": "Sequential flow to authenticate as internal_admin and trigger/monitor durable Google Places scrape jobs.\n\nSwagger: https://api.tuvisolutions.com/docs/\nOpenAPI: https://api.tuvisolutions.com/openapi.yaml\n\n**Bearer token shortcut:** Collection → Variables → paste JWT into `accessToken` → run step 2 directly (skip Login).\n\nCities: Adelaide, Brisbane, Melbourne, Perth, Sydney\nNiches: restaurant (default), dentist, plumber\n\nRequires scrape-worker running on the VM against the same Postgres.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "https://api.tuvisolutions.com" },
+    { "key": "adminEmail", "value": "" },
+    { "key": "adminPassword", "value": "" },
+    { "key": "accessToken", "value": "" },
+    { "key": "scrapeJobId", "value": "" },
+    { "key": "city", "value": "Melbourne" },
+    { "key": "niche", "value": "restaurant" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+  },
+  "item": [
+    {
+      "name": "1. Auth",
+      "item": [
+        {
+          "name": "Login (internal_admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Login succeeded', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.access_token).to.be.a('string');",
+                  "  pm.collectionVariables.set('accessToken', body.access_token);",
+                  "  console.log('role=', body.user && body.user.role);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/login",
+            "description": "Returns Bearer access_token. User must have role `internal_admin`."
+          }
+        },
+        {
+          "name": "Admin me (verify role)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/me",
+            "description": "Must return 200 for internal_admin. 403 means wrong role."
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Scrape jobs",
+      "item": [
+        {
+          "name": "Trigger city scrape job",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Job accepted or existing returned', function () {",
+                  "  pm.expect([200, 202]).to.include(pm.response.code);",
+                  "  const body = pm.response.json();",
+                  "  const job = body.job || body;",
+                  "  const id = job.id || body.id;",
+                  "  pm.expect(id).to.be.ok;",
+                  "  pm.collectionVariables.set('scrapeJobId', id);",
+                  "  console.log('created=', body.created, 'status=', job.status, 'id=', id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"city\": \"{{city}}\",\n  \"niche\": \"{{niche}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/scrape-jobs",
+            "description": "202 = new job created. 200 = existing active (queued/running/waiting) job returned. Idempotent per city+niche."
+          }
+        },
+        {
+          "name": "Get scrape job progress",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/scrape-jobs/{{scrapeJobId}}",
+            "description": "Poll until progress moves. Healthy states: running, waiting (request_limit / revisit / coverage_incomplete)."
+          }
+        },
+        {
+          "name": "List recent scrape jobs",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/scrape-jobs?limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "scrape-jobs"],
+              "query": [{ "key": "limit", "value": "20" }]
+            }
+          }
+        },
+        {
+          "name": "Retry failed scrape job",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/scrape-jobs/{{scrapeJobId}}/retry",
+            "description": "Only works when status=failed. Preserves imported candidates and durable progress."
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Quick checks (optional)",
+      "item": [
+        {
+          "name": "List restaurants (after imports)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/restaurants?limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "restaurants"],
+              "query": [{ "key": "limit", "value": "20" }]
+            },
+            "description": "Confirm candidates were imported into restaurant leads."
+          }
+        }
+      ]
+    }
+  ]
+}
