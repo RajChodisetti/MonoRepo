@@ -3,45 +3,32 @@ import type { NextRequest } from "next/server";
 
 const SESSION_COOKIE = "tuvi_admin_token";
 
-// Empirically, in this Next.js version request.nextUrl.pathname in
-// middleware includes the basePath prefix (it is NOT stripped), and
-// request.nextUrl.clone()/`.basePath` do not reliably reapply it to
-// NextResponse.redirect's Location header either. So every comparison and
-// redirect target here is made explicitly basePath-aware using the same
-// build-time env var next.config.ts uses, rather than relying on any
-// implicit Next.js basePath handling.
-const BASE = process.env.NEXT_PUBLIC_BASE_PATH || "";
-const LOGIN_PATH = `${BASE}/login`;
-const DASHBOARD_PATH = `${BASE}/dashboard`;
-const ROOT_PATH = BASE || "/";
-
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const token = request.cookies.get(SESSION_COOKIE)?.value;
 
-  if (pathname.startsWith(`${BASE}/api/`)) {
+  if (pathname.startsWith("/api/")) {
     return NextResponse.next();
   }
 
-  const isAuthPage = pathname === LOGIN_PATH;
-  const isRootPage = pathname === ROOT_PATH || pathname === `${ROOT_PATH}/`;
+  const isAuthPage = pathname === "/login";
 
-  if (!token && !isAuthPage && !isRootPage) {
+  if (!token && !isAuthPage && pathname !== "/") {
     const url = request.nextUrl.clone();
-    url.pathname = LOGIN_PATH;
+    url.pathname = "/login";
     url.searchParams.set("next", pathname);
     return NextResponse.redirect(url);
   }
 
-  if (token && (isAuthPage || isRootPage)) {
+  if (token && (pathname === "/login" || pathname === "/")) {
     const url = request.nextUrl.clone();
-    url.pathname = DASHBOARD_PATH;
+    url.pathname = "/dashboard";
     return NextResponse.redirect(url);
   }
 
-  if (!token && isRootPage) {
+  if (!token && pathname === "/") {
     const url = request.nextUrl.clone();
-    url.pathname = LOGIN_PATH;
+    url.pathname = "/login";
     return NextResponse.redirect(url);
   }
 
