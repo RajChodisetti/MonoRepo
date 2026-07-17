@@ -13,11 +13,12 @@ export function middleware(request: NextRequest) {
 
   const isAuthPage = pathname === "/login";
 
-  // request.nextUrl.clone() does not reliably reapply basePath to the
-  // Location header on NextResponse.redirect in this Next.js version, so
-  // the basePath is prefixed explicitly here rather than relied on
-  // implicitly.
-  const base = request.nextUrl.basePath || "";
+  // Neither request.nextUrl.clone() nor request.nextUrl.basePath reliably
+  // reapplies/exposes basePath for NextResponse.redirect's Location header
+  // in this Next.js version (verified empirically against a built
+  // container) — read the same build-time env var next.config.ts uses
+  // instead of relying on either.
+  const base = process.env.NEXT_PUBLIC_BASE_PATH || "";
 
   if (!token && !isAuthPage && pathname !== "/") {
     const url = request.nextUrl.clone();
