@@ -67,6 +67,13 @@ type ProfileReviewPreview struct {
 	OCRCompletedAt        *time.Time      `json:"ocr_completed_at,omitempty"`
 	OCRAttempts           int             `json:"ocr_attempts"`
 	OCRVerificationErrors json.RawMessage `json:"ocr_verification_errors"`
+	OCRImagesDiscovered   int             `json:"ocr_images_discovered"`
+	OCRImagesAnalyzed     int             `json:"ocr_images_analyzed"`
+	OCRImagesSucceeded    int             `json:"ocr_images_succeeded"`
+	OCRImagesFailed       int             `json:"ocr_images_failed"`
+	OCRAllImagesProcessed bool            `json:"ocr_all_images_processed"`
+	OCRProvider           string          `json:"ocr_provider"`
+	OCRModel              string          `json:"ocr_model"`
 	ReviewStatus          string          `json:"review_status"`
 	ReviewedAt            *time.Time      `json:"reviewed_at,omitempty"`
 	ReviewedBy            *uuid.UUID      `json:"reviewed_by,omitempty"`
@@ -104,6 +111,32 @@ func (service *Service) GetProfileReviewPreview(
 		       rp.ocr_completed_at,
 		       rp.ocr_attempts,
 		       rp.ocr_verification_errors,
+		       CASE
+		         WHEN jsonb_typeof(rp.raw_public_data #> '{menu_ocr,images_discovered}') = 'number'
+		         THEN (rp.raw_public_data #>> '{menu_ocr,images_discovered}')::int
+		         ELSE 0
+		       END,
+		       CASE
+		         WHEN jsonb_typeof(rp.raw_public_data #> '{menu_ocr,images_analyzed}') = 'number'
+		         THEN (rp.raw_public_data #>> '{menu_ocr,images_analyzed}')::int
+		         ELSE 0
+		       END,
+		       CASE
+		         WHEN jsonb_typeof(rp.raw_public_data #> '{menu_ocr,images_succeeded}') = 'number'
+		         THEN (rp.raw_public_data #>> '{menu_ocr,images_succeeded}')::int
+		         ELSE 0
+		       END,
+		       CASE
+		         WHEN jsonb_typeof(rp.raw_public_data #> '{menu_ocr,images_failed}') = 'number'
+		         THEN (rp.raw_public_data #>> '{menu_ocr,images_failed}')::int
+		         ELSE 0
+		       END,
+		       COALESCE(
+		         (rp.raw_public_data #>> '{menu_ocr,all_images_processed}')::boolean,
+		         false
+		       ),
+		       COALESCE(rp.raw_public_data #>> '{menu_ocr,provider}', ''),
+		       COALESCE(rp.raw_public_data #>> '{menu_ocr,model}', ''),
 		       rp.review_status,
 		       rp.reviewed_at,
 		       rp.reviewed_by,
@@ -149,6 +182,13 @@ func (service *Service) GetProfileReviewPreview(
 		&result.OCRCompletedAt,
 		&result.OCRAttempts,
 		&result.OCRVerificationErrors,
+		&result.OCRImagesDiscovered,
+		&result.OCRImagesAnalyzed,
+		&result.OCRImagesSucceeded,
+		&result.OCRImagesFailed,
+		&result.OCRAllImagesProcessed,
+		&result.OCRProvider,
+		&result.OCRModel,
 		&result.ReviewStatus,
 		&result.ReviewedAt,
 		&result.ReviewedBy,

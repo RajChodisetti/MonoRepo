@@ -101,6 +101,13 @@ export type ProfileReviewPreview = {
   ocr_completed_at?: string;
   ocr_attempts?: number;
   ocr_verification_errors?: unknown[];
+  ocr_images_discovered?: number;
+  ocr_images_analyzed?: number;
+  ocr_images_succeeded?: number;
+  ocr_images_failed?: number;
+  ocr_all_images_processed?: boolean;
+  ocr_provider?: string;
+  ocr_model?: string;
   review_status?: string;
   restaurant_updated_at?: string;
   profile_updated_at?: string;

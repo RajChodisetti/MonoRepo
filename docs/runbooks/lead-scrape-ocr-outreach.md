@@ -255,6 +255,13 @@ The scrape worker exposes no host port. It polls due `scrape_jobs` through the
 same PostgreSQL database as the API. Keep OCR disabled in `ingestion.env`; for
 the controlled batch below, enable it only on that one-shot container:
 
+The durable database OCR verifier ignores `MENU_OCR_MAX_IMAGES`: it refreshes
+and attempts every discovered scraped photo. A restaurant reaches
+`ocr_status=verified` only when every photo resolves and returns a successful
+structured result. Partial provider, resolution, or parsing failures persist
+processed/total counts and leave the restaurant `failed`; `no_images` is also
+not verified.
+
 ```bash
 docker compose --env-file /opt/tuvi/env/stack.env -p tuvi \
   -f infra/docker/docker-compose.vm.yml --profile jobs run --rm \

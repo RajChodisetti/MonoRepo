@@ -148,7 +148,7 @@ class Config:
 
     # ── Menu image OCR (Hugging Face vision primary) ─────
     MENU_OCR_ENABLED: bool        = os.getenv("MENU_OCR_ENABLED", "true").lower() in ("1", "true", "yes")
-    MENU_OCR_MODEL: str           = os.getenv("HF_VISION_MODEL", os.getenv("MENU_OCR_MODEL", "Qwen/Qwen2-VL-7B-Instruct"))
+    MENU_OCR_MODEL: str           = os.getenv("HF_VISION_MODEL", os.getenv("MENU_OCR_MODEL", "google/gemma-3-4b-it:deepinfra"))
     MENU_OCR_MAX_IMAGES: int      = int(os.getenv("MENU_OCR_MAX_IMAGES", "15"))
 
 # Major Australian cities for restaurant lead sourcing

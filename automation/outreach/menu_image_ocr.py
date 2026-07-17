@@ -82,6 +82,21 @@ For menu_items:
 """
 
 
+def all_scraped_photos_processed(
+    summary: dict,
+    images_discovered: int,
+    resolution_error_count: int,
+) -> bool:
+    """Return true only when every discovered photo has a successful result."""
+    return (
+        images_discovered > 0
+        and resolution_error_count == 0
+        and int(summary.get("images_analyzed") or 0) == images_discovered
+        and int(summary.get("images_succeeded") or 0) == images_discovered
+        and int(summary.get("images_failed") or 0) == 0
+    )
+
+
 @dataclass
 class MenuOCRConfig:
     huggingface_api_key: str = field(default_factory=hf_api_key)
@@ -147,6 +162,30 @@ def _parse_json_response(text: str) -> dict:
         text = re.sub(r"^```(?:json)?\s*", "", text)
         text = re.sub(r"\s*```$", "", text)
     return json.loads(text)
+
+
+def _response_usage(response: Any) -> dict[str, int]:
+    """Normalize OpenAI-compatible token usage without depending on SDK types."""
+    usage = getattr(response, "usage", None)
+    if usage is None:
+        return {}
+
+    normalized: dict[str, int] = {}
+    for source_name, target_name in (
+        ("prompt_tokens", "input_tokens"),
+        ("completion_tokens", "output_tokens"),
+        ("total_tokens", "total_tokens"),
+    ):
+        value = getattr(usage, source_name, None)
+        if value is None and isinstance(usage, dict):
+            value = usage.get(source_name)
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            continue
+        if parsed >= 0:
+            normalized[target_name] = parsed
+    return normalized
 
 
 def _validate_image_url(url: str) -> str:
@@ -417,7 +456,11 @@ class MenuImageAnalyzer:
         )
         raw = response.choices[0].message.content or "{}"
         parsed = _parse_json_response(raw)
-        return self._normalize_analysis(parsed, url)
+        result = self._normalize_analysis(parsed, url)
+        usage = _response_usage(response)
+        if usage:
+            result["usage"] = usage
+        return result
 
     def _analyze_openai(self, url: str, image_bytes: bytes, content_type: str) -> dict:
         assert self._openai is not None
@@ -437,7 +480,11 @@ class MenuImageAnalyzer:
         )
         raw = response.choices[0].message.content or "{}"
         parsed = _parse_json_response(raw)
-        return self._normalize_analysis(parsed, url)
+        result = self._normalize_analysis(parsed, url)
+        usage = _response_usage(response)
+        if usage:
+            result["usage"] = usage
+        return result
 
     def _analyze_gemini(self, url: str, image_bytes: bytes, content_type: str) -> dict:
         from google import genai
@@ -620,6 +667,8 @@ def enrich_restaurant_with_menu_ocr(
     cfg: MenuOCRConfig | None = None,
     analyzer: MenuImageAnalyzer | None = None,
     analysis_candidates: list[dict] | None = None,
+    *,
+    process_all_candidates: bool = False,
 ) -> dict:
     """
     Classify images, split menu_photos vs gallery, OCR menus, merge menu_items.
@@ -644,7 +693,9 @@ def enrich_restaurant_with_menu_ocr(
         candidate
         for candidate in analysis_candidates
         if isinstance(candidate, dict) and str(candidate.get("analysis_url") or "").strip()
-    ][: cfg.max_images]
+    ]
+    if not process_all_candidates:
+        candidates = candidates[: cfg.max_images]
     if not candidates:
         return record
 
@@ -656,6 +707,9 @@ def enrich_restaurant_with_menu_ocr(
     url_types: dict[str, str] = {}
     images_succeeded = 0
     images_failed = 0
+    input_tokens = 0
+    output_tokens = 0
+    total_tokens = 0
 
     log.info(f"  Menu OCR: analyzing {len(candidates)} image(s)…")
 
@@ -665,11 +719,14 @@ def enrich_restaurant_with_menu_ocr(
         source = str(candidate.get("source") or "public_url").strip()
         source_ref = str(candidate.get("source_ref") or "").strip()
         google_place_id = str(candidate.get("google_place_id") or "").strip()
+        source_index = candidate.get("source_index")
         attribution = candidate.get("author_attributions") or []
         source_metadata = {"source": source}
         if source == "google_places_photo":
             if google_place_id:
                 source_metadata["google_place_id"] = google_place_id
+            if isinstance(source_index, int) and source_index >= 0:
+                source_metadata["source_index"] = source_index
         elif source_ref:
             source_metadata["source_ref"] = source_ref
         if attribution:
@@ -677,6 +734,10 @@ def enrich_restaurant_with_menu_ocr(
         try:
             result = analyzer.analyze_image_url(url)
             images_succeeded += 1
+            usage = result.get("usage") or {}
+            input_tokens += int(usage.get("input_tokens") or 0)
+            output_tokens += int(usage.get("output_tokens") or 0)
+            total_tokens += int(usage.get("total_tokens") or 0)
             image_type = result["image_type"]
             confidence = result["confidence"]
             if persistent_url:
@@ -779,6 +840,9 @@ def enrich_restaurant_with_menu_ocr(
         "images_failed": images_failed,
         "menu_photos_found": len(menu_photos),
         "items_extracted": len(ocr_items),
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens": total_tokens,
         "classifications": classifications,
     })
 

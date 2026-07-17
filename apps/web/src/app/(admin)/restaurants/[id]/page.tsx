@@ -592,6 +592,9 @@ function RestaurantDetailInner() {
           <div className="alert alert-info" style={{ margin: 0 }}>
             <strong>OCR:</strong> {ocrStateLabel} · status {ocrStatus} · attempts{" "}
             {preview?.ocr_attempts ?? 0}
+            {(preview?.ocr_images_discovered ?? 0) > 0
+              ? ` · photos ${preview?.ocr_images_succeeded ?? 0}/${preview?.ocr_images_discovered ?? 0} successful`
+              : ""}
             {preview?.ocr_completed_at
               ? ` · completed ${formatDate(preview.ocr_completed_at)}`
               : ""}
@@ -622,6 +625,19 @@ function RestaurantDetailInner() {
                   {formatDate(preview.ocr_started_at)} · completed:{" "}
                   {formatDate(preview.ocr_completed_at)}
                 </div>
+                <div style={{ marginTop: "0.3rem", fontSize: "0.85rem" }}>
+                  Photos discovered: {preview.ocr_images_discovered ?? 0} · analyzed:{" "}
+                  {preview.ocr_images_analyzed ?? 0} · successful:{" "}
+                  {preview.ocr_images_succeeded ?? 0} · failed:{" "}
+                  {preview.ocr_images_failed ?? 0} · all processed:{" "}
+                  {preview.ocr_all_images_processed ? "yes" : "no"}
+                </div>
+                {preview.ocr_model ? (
+                  <div style={{ marginTop: "0.3rem", fontSize: "0.85rem" }}>
+                    Model: <code>{preview.ocr_model}</code>
+                    {preview.ocr_provider ? ` · provider: ${preview.ocr_provider}` : ""}
+                  </div>
+                ) : null}
                 {ocrErrors.length > 0 ? (
                   <ul style={{ margin: "0.45rem 0 0", paddingLeft: "1.2rem" }}>
                     {ocrErrors.map((ocrError, index) => (

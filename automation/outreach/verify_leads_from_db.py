@@ -30,6 +30,7 @@ from google_places_photo import (  # noqa: E402
 )
 from menu_image_ocr import (  # noqa: E402
     MenuOCRConfig,
+    all_scraped_photos_processed,
     collect_candidate_image_urls,
     enrich_restaurant_with_menu_ocr,
     is_trusted_automated_image_url,
@@ -37,6 +38,14 @@ from menu_image_ocr import (  # noqa: E402
 from tuvi_outreach_agent import Config  # noqa: E402
 
 log = logging.getLogger("verify_leads_from_db")
+
+
+class OCRIncompleteError(RuntimeError):
+    """The attempt ran, but not every discovered photo completed successfully."""
+
+    def __init__(self, message: str, summary: dict):
+        super().__init__(message)
+        self.summary = summary
 
 
 def env_enabled() -> bool:
@@ -101,9 +110,8 @@ def verify_one(
     if dry_run:
         if direct_urls or place_id:
             log.info(
-                "  %s — would refresh Places photos and OCR up to %d image(s)",
+                "  %s — would refresh Places photos and OCR every discovered image",
                 name,
-                cfg.max_images,
             )
             return "dry_run"
 
@@ -119,8 +127,25 @@ def verify_one(
             if not direct_urls:
                 # A provider/configuration failure is not evidence that the
                 # restaurant has no images. Leave it retryable as failed.
-                raise RuntimeError(
-                    "Google Places photos could not be refreshed for OCR"
+                raise OCRIncompleteError(
+                    "Google Places photos could not be refreshed for OCR",
+                    {
+                        "provider": cfg.primary_provider,
+                        "model": (
+                            cfg.hf_vision_model
+                            if cfg.primary_provider == "huggingface"
+                            else cfg.openai_model
+                            if cfg.primary_provider == "openai"
+                            else cfg.gemini_model
+                        ),
+                        "images_discovered": 0,
+                        "images_resolved": 0,
+                        "images_analyzed": 0,
+                        "images_succeeded": 0,
+                        "images_failed": 0,
+                        "all_images_processed": False,
+                        "photo_resolution_error_count": 1,
+                    },
                 ) from exc
             log.warning(
                 "  %s — Places photo refresh failed; using trusted direct image fallback: %s",
@@ -138,6 +163,14 @@ def verify_one(
                 claim_id=claim_id,
                 claim_fingerprint=claim_fingerprint,
                 errors=["no_images"],
+                summary={
+                    "images_discovered": 0,
+                    "images_resolved": 0,
+                    "images_analyzed": 0,
+                    "images_succeeded": 0,
+                    "images_failed": 0,
+                    "all_images_processed": False,
+                },
             )
         return "no_images"
 
@@ -147,20 +180,16 @@ def verify_one(
     analysis_candidates: list[dict] = []
     resolution_errors: list[str] = []
     if photo_refresh_error:
-        resolution_errors.append(f"photo resource refresh: {photo_refresh_error}")
+        resolution_errors.append("Google Places photo resource refresh failed")
     transient_photo_uris: list[str] = []
     transient_photo_names: list[str] = []
-    # Reserve one analysis slot for a trusted direct URL when available. This
-    # gives OCR a real fallback even when every successfully resolved Places
-    # photo later fails during download or model analysis.
-    places_limit = cfg.max_images
-    if direct_urls and cfg.max_images > 1:
-        places_limit -= 1
-    for photo in google_photos[:places_limit]:
+    for photo_index, photo in enumerate(google_photos):
         try:
             photo_uri = resolve_google_photo_uri(photo["name"], places_cfg)
         except Exception as exc:
-            resolution_errors.append(f"{photo['name']}: {exc}")
+            resolution_errors.append(
+                f"Google Places photo {photo_index + 1} could not be resolved"
+            )
             continue
         analysis_candidates.append({
             "analysis_url": photo_uri,
@@ -172,58 +201,74 @@ def verify_one(
             # analysis attempt. Persist the stable Place ID as provenance.
             "source_ref": "",
             "google_place_id": place_id,
+            "source_index": photo_index,
         })
         transient_photo_uris.append(photo_uri)
         transient_photo_names.append(photo["name"])
 
-    remaining = max(0, cfg.max_images - len(analysis_candidates))
     analysis_candidates.extend(
         {
             "analysis_url": url,
             "persistent_url": url,
             "source": "public_url",
         }
-        for url in direct_urls[:remaining]
+        for url in direct_urls
     )
 
+    images_discovered = len(google_photos) + len(direct_urls)
     if not analysis_candidates:
-        raise RuntimeError("Google Places photo resources could not be resolved for OCR")
+        raise OCRIncompleteError(
+            "No scraped photo could be resolved for OCR",
+            {
+                "provider": cfg.primary_provider,
+                "model": (
+                    cfg.hf_vision_model
+                    if cfg.primary_provider == "huggingface"
+                    else cfg.openai_model
+                    if cfg.primary_provider == "openai"
+                    else cfg.gemini_model
+                ),
+                "images_discovered": images_discovered,
+                "images_resolved": 0,
+                "images_analyzed": 0,
+                "images_succeeded": 0,
+                "images_failed": 0,
+                "all_images_processed": False,
+                "photo_resolution_error_count": len(resolution_errors),
+            },
+        )
 
-    log.info("  %s — OCR on %d image(s)", name, len(analysis_candidates))
+    log.info(
+        "  %s — OCR on all %d resolved image(s) from %d discovered photo(s)",
+        name,
+        len(analysis_candidates),
+        images_discovered,
+    )
 
     enrich_restaurant_with_menu_ocr(
         record,
         cfg,
         analysis_candidates=analysis_candidates,
+        process_all_candidates=True,
     )
     ocr_summary = record.get("menu_ocr") or {}
-    if (
-        int(ocr_summary.get("images_succeeded") or 0) < 1
-        and cfg.max_images == 1
-        and google_photos
-        and direct_urls
-        and analysis_candidates
-        and analysis_candidates[0].get("source") == "google_places_photo"
-    ):
-        # With a one-image limit, keep Places first and spend a fallback
-        # attempt only when that sole resolved Places image could not be
-        # analyzed. The direct URL has already passed the unattended
-        # Google-host allowlist above.
-        enrich_restaurant_with_menu_ocr(
-            record,
-            cfg,
-            analysis_candidates=[{
-                "analysis_url": direct_urls[0],
-                "persistent_url": direct_urls[0],
-                "source": "public_url",
-            }],
-        )
-        ocr_summary = record.get("menu_ocr") or {}
+    ocr_summary["images_discovered"] = images_discovered
+    ocr_summary["images_resolved"] = len(analysis_candidates)
+    ocr_summary["photo_resolution_error_count"] = len(resolution_errors)
+    ocr_summary["all_images_processed"] = all_scraped_photos_processed(
+        ocr_summary,
+        images_discovered,
+        len(resolution_errors),
+    )
     if resolution_errors:
         ocr_summary["photo_resolution_errors"] = resolution_errors
-        record["menu_ocr"] = ocr_summary
-    if int(ocr_summary.get("images_succeeded") or 0) < 1:
-        raise RuntimeError("No image could be analyzed successfully")
+    record["menu_ocr"] = ocr_summary
+    if not ocr_summary["all_images_processed"]:
+        succeeded = int(ocr_summary.get("images_succeeded") or 0)
+        raise OCRIncompleteError(
+            f"OCR completed successfully for {succeeded} of {images_discovered} scraped photos",
+            ocr_summary,
+        )
     serialized_record = json.dumps(record, ensure_ascii=False)
     if any(uri in serialized_record for uri in transient_photo_uris):
         raise RuntimeError("Transient Google Places photo URI reached persistent OCR output")
@@ -340,6 +385,11 @@ def main() -> int:
                 if not args.dry_run:
                     conn.rollback()
                     try:
+                        summary = (
+                            exc.summary
+                            if isinstance(exc, OCRIncompleteError)
+                            else None
+                        )
                         with conn.cursor() as cur:
                             mark_ocr_status(
                                 cur,
@@ -348,6 +398,7 @@ def main() -> int:
                                 claim_id=claim_id,
                                 claim_fingerprint=claim_fingerprint,
                                 errors=[str(exc)[:500]],
+                                summary=summary,
                             )
                         conn.commit()
                     except Exception:

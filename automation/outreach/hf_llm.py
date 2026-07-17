@@ -41,7 +41,7 @@ def hf_vision_model() -> str:
     return (
         os.getenv("HF_VISION_MODEL", "").strip()
         or os.getenv("MENU_OCR_MODEL", "").strip()
-        or "Qwen/Qwen2-VL-7B-Instruct"
+        or "google/gemma-3-4b-it:deepinfra"
     )
 
 

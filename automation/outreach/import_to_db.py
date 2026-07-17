@@ -588,9 +588,11 @@ def mark_ocr_status(
     claim_id: uuid.UUID,
     claim_fingerprint: str,
     errors: list[str] | None = None,
+    summary: dict | None = None,
 ) -> None:
     if status not in ("verified", "no_images", "failed"):
         raise ValueError(f"Unsupported OCR status: {status}")
+    summary_json = jdump(summary) if summary is not None else None
     lock_restaurant_workflow(cur, restaurant_id)
     cur.execute(
         """
@@ -610,6 +612,15 @@ def mark_ocr_status(
             ocr_claim_id = NULL,
             ocr_claim_fingerprint = NULL,
             ocr_verification_errors = %s::jsonb,
+            raw_public_data = CASE
+                WHEN %s::jsonb IS NULL THEN raw_public_data
+                ELSE jsonb_set(
+                    COALESCE(raw_public_data, '{}'::jsonb),
+                    '{menu_ocr}',
+                    %s::jsonb,
+                    true
+                )
+            END,
             updated_at = now()
         WHERE restaurant_id = %s
           AND ocr_status = 'running'
@@ -624,6 +635,8 @@ def mark_ocr_status(
             status,
             status,
             jdump(errors or []),
+            summary_json,
+            summary_json,
             restaurant_id,
             claim_id,
             claim_fingerprint,
