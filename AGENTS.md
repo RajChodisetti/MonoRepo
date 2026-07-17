@@ -793,7 +793,7 @@ Rules:
 
 ## Current Repo Shape
 
-_Last updated: 2026-07-16_
+_Last updated: 2026-07-17_
 
 ```text
 Root Go module with backend under backend/.
@@ -824,6 +824,7 @@ Melbourne triggering, OCR execution, pacing deployment, migration 000024, and re
 _Last updated: 2026-07-16_
 
 ```text
+2026-07-17 — Full-Stack/Backend/Security/DevOps — Deployed release 199241c with on-demand attributed Google Places photo URLs, explicit OCR checked state, real restaurant demo snapshots, and UUID-linked generator templates. A three-row OCR preflight resolved images but failed because the configured Qwen2-VL route is no longer served; OCR remains disabled pending explicit approval for a current model route.
 2026-07-16 — Documentation Agent — Merged origin/master (PR #8, admin_portal) into agent/tuvi-oauth-homepage-verification, bringing in the real apps/web admin portal (dashboard, scrape-jobs, restaurants, outreach screens) and automation/outreach scrape-ledger changes; updated docs/SERVICES.md and this Repo Shape entry to match. No production deployment performed; apps/web is not yet wired into infra/docker/docker-compose.vm.yml or the VM Caddyfile.
 2026-07-14 — Frontend/Security/DevOps — Deployed the logo-led Tuvi corporate and restaurant-services redesign plus public Privacy, Terms, and Google Workspace pages as website-only release 4eaf7fa.
 2026-07-14 — Backend/Security/Documentation — Added local durable outreach pacing: 40 account slots over eight hours, persisted 2–5 minute jitter/global gate, one provider attempt per job activation, and migration 24; production remains approval-gated.

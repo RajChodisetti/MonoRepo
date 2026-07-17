@@ -12,6 +12,83 @@ Each entry should explain:
 - how the work fits with the rest of the Phase 1 or Phase 2 plan;
 - risks, gaps, or follow-ups.
 
+## 2026-07-17 — Restaurant Photo URLs, OCR Visibility, Real Website Preview, and Production OCR Preflight
+
+**Role:** Full-Stack, Backend, Security, Test, and DevOps Agent
+
+**Delivered:** The restaurant-specific admin view now resolves and displays up
+to ten current Google Places photo URLs with dimensions and required author
+attribution, shows the complete URL and an open-image action, and keeps the
+Places credential server-side. The scraper had intentionally persisted the
+Google Place ID and photo count rather than expiring media URLs; the new
+`GET /api/v1/restaurants/{id}/images/google` adapter resolves fresh URLs on
+demand and returns `Cache-Control: no-store`. Existing OCR-classified menu and
+gallery images also show their stored URLs. The profile and overview tabs now
+distinguish “not checked,” running, verified, no-images, and failed OCR states,
+including attempts, start/completion timestamps, and sanitized errors.
+
+The Demo tab now exposes the existing database-driven generator for each
+restaurant UUID (mapped to the same current `?id=<index>&template=1|2|3`
+URLs used by `demo.tuvisolutions.com`) and explains the separate token-gated
+workflow. “Create restaurant demo draft” now snapshots the restaurant's actual
+public-safe database payload instead of the old `Sample Cafe` default;
+“Inspect payload” is read-only, “Publish” enforces OCR verification plus human
+profile approval, and “Unpublish” immediately revokes public access while
+retaining the draft. Campaign creation now supplies the required one-time demo
+token and is disabled when that token is unavailable.
+
+**Apollo / Photo Diagnosis:** The earlier scrape result was not an Apollo
+adapter failure: 45 candidates were enriched, 159 returned no candidate, 33
+were skipped because no usable domain existed, and the job recorded no Apollo
+provider errors. All 237 imported profiles had ten Google photo resources
+(2,370 total), but URLs were deliberately not persisted because Places media
+URLs expire. Before this release all 237 profiles were OCR `pending` with zero
+attempts and both `menu_images` and `gallery_images` empty.
+
+**Checks Run:** `go test ./backend/...` (157 passed), `go vet ./backend/...`,
+and `go build ./backend/cmd/...` passed. `npm run lint`,
+`npx tsc --noEmit --incremental false`, and a production Next.js build under
+Node 22 passed. The host's Node 23 reproduces the existing Next.js JSON-parser
+failure even on unchanged commit `82eb2e6`, so it is not introduced here.
+OpenAPI YAML parsing, Compose config validation, diff checks, Google Places
+adapter tests (including key/error redaction and attribution), and the new
+no-store handler test passed. In the production OCR dependency image, 24 of 26
+legacy automation tests passed; two outdated `daily_ingestion.py` tests fail
+because that retired entry point now intentionally refuses to run once the
+durable city pipeline is installed.
+
+**Production Deployment:** Commit `199241c` was fast-forwarded to the remote
+default branch `master` and deployed from a `git archive` release at
+`/opt/tuvi/releases/monorepo-199241c`. The API, worker, and admin-web containers
+were rebuilt/recreated; all run the exact release images with zero restarts.
+The new protected routes return 401 without authentication, the API root and
+admin login return 200, and the API container has the isolated Places key from
+root-owned `/opt/tuvi/env/places-api.env` rather than the Apollo/Hugging Face
+ingestion file. No migration or email send occurred. Rollback images are tagged
+`rollback-eaa525c`, `/opt/tuvi/previous-release-path` records the prior release,
+and the validated pre-OCR database backup is
+`/opt/tuvi/backups/pre-ocr-photo-ui-199241c.sql.gz` (mode 0600; 3,680,849 bytes
+uncompressed).
+
+**OCR Preflight / Blocker:** A deliberately limited three-profile OCR run was
+started after the backup. Google Places successfully resolved ten images for
+each profile, but all 30 Hugging Face calls returned HTTP 400. The live router
+model list confirms the configured `Qwen/Qwen2-VL-7B-Instruct` route is no
+longer served; current alternatives include
+`Qwen/Qwen3-VL-30B-A3B-Instruct`. The three rows are now correctly visible as
+`failed`, attempt 1, with sanitized errors; 234 remain pending and image tables
+remain empty. `LEAD_OCR_VERIFICATION_ENABLED=false` remains in production and
+no cron was installed. Changing the production vision model is an explicit
+model-route/cost approval gate, so recurring OCR is intentionally paused until
+that approval is received.
+
+**Business Value / Plan Fit:** Internal operators can now see the source photo
+URLs, immediately tell whether OCR actually checked a row, open the existing
+restaurant website generator by restaurant record, and understand the gated
+demo lifecycle. The controlled preflight converted a silent operational gap
+into a bounded, auditable model-configuration decision without enabling email
+or repeatedly billing a broken OCR route.
+
 ## 2026-07-17 — Lead Photo Management, Ad Hoc/Bulk Send with Preview, Demo Links, and Admin Portal Production Deployment
 
 **Role:** Full-Stack and DevOps Agent
