@@ -810,20 +810,23 @@ Session docs: docs/SESSION_DELIVERED.md and docs/SESSION_SUMMARY.md.
 
 ## Current Implementation State
 
-_Last updated: 2026-07-14_
+_Last updated: 2026-07-17_
 
 ```text
 P1-E01 foundation, P1-008 auth, P1-009 restaurant access, and P1-010 restaurant CRUD are implemented.
 Repository layout now matches docs/phase1/PHASE1_IMPLEMENTATION_GUIDE.md section 5 (domain packages).
 Workflow migrations 000001-000023 and the supporting services are deployed. The local worktree adds PostgreSQL-backed 40/account HTTP outreach pacing across eight hours with 24-hour continuation; migration 000024 and that pacing code remain undeployed.
-Melbourne triggering, OCR execution, pacing deployment, migration 000024, and real outreach remain pending explicit production approval.
+Production release 199241c includes attributed on-demand Google Places photos, explicit OCR state, real demo payload snapshots, and UUID-linked generator templates.
+Two bounded OCR pilots have failed because their selected Hugging Face routes were not live: 3 rows on legacy Qwen2-VL and 5 rows on the approved Qwen2.5-VL Hyperbolic route. OCR remains persistently disabled and unscheduled; 8 profiles are failed and 471 are pending.
+Pacing deployment, migration 000024, a current OCR provider route, and real outreach remain approval-gated.
 ```
 
 ## Recent Agent Updates
 
-_Last updated: 2026-07-16_
+_Last updated: 2026-07-17_
 
 ```text
+2026-07-17 — AI Workflow/Security/Cost-Eval/DevOps — With explicit approval, changed the production OCR model variables to Qwen2.5-VL-7B via Hyperbolic and ran an exactly five-profile pilot after database/config backups. All 50 calls returned HTTP 400 because the live model registry now maps this model only to Featherless; 0 verified / 5 failed, no image rows or drafts, and OCR remains disabled and unscheduled.
 2026-07-17 — Full-Stack/Backend/Security/DevOps — Deployed release 199241c with on-demand attributed Google Places photo URLs, explicit OCR checked state, real restaurant demo snapshots, and UUID-linked generator templates. A three-row OCR preflight resolved images but failed because the configured Qwen2-VL route is no longer served; OCR remains disabled pending explicit approval for a current model route.
 2026-07-16 — Documentation Agent — Merged origin/master (PR #8, admin_portal) into agent/tuvi-oauth-homepage-verification, bringing in the real apps/web admin portal (dashboard, scrape-jobs, restaurants, outreach screens) and automation/outreach scrape-ledger changes; updated docs/SERVICES.md and this Repo Shape entry to match. No production deployment performed; apps/web is not yet wired into infra/docker/docker-compose.vm.yml or the VM Caddyfile.
 2026-07-14 — Frontend/Security/DevOps — Deployed the logo-led Tuvi corporate and restaurant-services redesign plus public Privacy, Terms, and Google Workspace pages as website-only release 4eaf7fa.

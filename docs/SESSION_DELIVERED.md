@@ -12,6 +12,56 @@ Each entry should explain:
 - how the work fits with the rest of the Phase 1 or Phase 2 plan;
 - risks, gaps, or follow-ups.
 
+## 2026-07-17 — Approved Qwen2.5-VL Hyperbolic Production Pilot
+
+**Role:** AI Workflow, Security, Cost/Eval, and DevOps Agent
+
+**Approval and Scope:** The user explicitly approved changing the production
+OCR route to `Qwen/Qwen2.5-VL-7B-Instruct:hyperbolic` and running a
+five-restaurant pilot. The persistent OCR switch stayed disabled, no OCR
+schedule was installed, and the one-shot container was hard-limited to five
+pending profiles. Outreach remained disabled and no profile, demo, or campaign
+approval gate was bypassed.
+
+**Safety and Configuration:** Before the write, a validated live-database
+backup was created at
+`/opt/tuvi/backups/pre-qwen25-five-pilot-a2812de.sql.gz` (mode 0600;
+7,325,725 bytes uncompressed) and the root-owned ingestion configuration was
+backed up to
+`/opt/tuvi/backups/ingestion.env.pre-qwen25-five-pilot-a2812de` (mode 0600).
+Only `HF_VISION_MODEL` and `MENU_OCR_MODEL` were changed to the approved
+route. `LEAD_OCR_VERIFICATION_ENABLED=false` remains persisted, there are zero
+OCR cron entries, and no OCR container remains running.
+
+**Pilot Result:** The worker claimed exactly five pending profiles and
+resolved ten Google Places images for each. Hyperbolic returned HTTP 400 for
+all 50 vision requests, so the bounded job exited after
+`verified=0 failed=5`. The live database moved from 3 failed / 476 pending to
+8 failed / 471 pending, with each new failure recorded once and the sanitized
+error `No image could be analyzed successfully`. No profile remains in
+`running`; `menu_images` and `gallery_images` remain empty; demo sites stayed
+at one, campaigns stayed at zero, and no `lead.prepare` job or outreach action
+was created. Because no inference completed, the pilot produced no useful
+latency, token-usage, quality, or price sample; provider-side billing should be
+checked separately rather than inferred from HTTP status alone.
+
+**Root Cause and Checks:** Context7 and current official Hugging Face
+documentation confirmed the provider-suffix routing contract before the
+change. After the failed pilot, the live Hugging Face model metadata showed
+that `Qwen/Qwen2.5-VL-7B-Instruct` is now mapped only to
+`featherless-ai`; `hyperbolic` is no longer a live provider for this model.
+The OpenAI-compatible router's current model list also does not advertise this
+model. Production API and admin login checks both still return HTTP 200. The
+root-only pilot log is
+`/opt/tuvi/logs/qwen25-five-pilot-a2812de.log` (mode 0600).
+
+**Business Value / Follow-up:** The explicit approval was exercised with a
+bounded blast radius and left a complete audit/rollback trail, but this route
+cannot currently run the OCR workload. OCR remains off. Switching to
+Featherless or another current VLM/provider is a new production model-route
+decision and should begin with a non-restaurant compatibility probe before
+another database-backed pilot.
+
 ## 2026-07-17 — Restaurant Photo URLs, OCR Visibility, Real Website Preview, and Production OCR Preflight
 
 **Role:** Full-Stack, Backend, Security, Test, and DevOps Agent
