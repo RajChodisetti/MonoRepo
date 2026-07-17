@@ -36,6 +36,7 @@ type Config struct {
 	LLM           LLMConfig
 	Voice         VoiceConfig
 	Storage       StorageConfig
+	Places        PlacesConfig
 	Token         TokenConfig
 	Demo          DemoConfig
 	Jobs          JobsConfig
@@ -146,6 +147,16 @@ type StorageConfig struct {
 	SecretAccessKey string
 }
 
+// PlacesConfig is used only by server-side Google Places adapters. The API key
+// must never be returned to the browser or embedded in generated photo URLs.
+type PlacesConfig struct {
+	APIKey        string
+	APIBaseURL    string
+	PhotoLimit    int
+	PhotoMaxWidth int
+	Timeout       time.Duration
+}
+
 type TokenConfig struct {
 	Secret         string
 	AccessTokenTTL time.Duration
@@ -251,6 +262,13 @@ func Load() (Config, error) {
 			AccessKeyID:     parser.string("STORAGE_ACCESS_KEY_ID", ""),
 			SecretAccessKey: parser.string("STORAGE_SECRET_ACCESS_KEY", ""),
 		},
+		Places: PlacesConfig{
+			APIKey:        parser.string("GOOGLE_PLACES_API_KEY", ""),
+			APIBaseURL:    parser.string("PLACES_API_BASE_URL", "https://places.googleapis.com/v1"),
+			PhotoLimit:    parser.int("PLACES_PHOTO_LIMIT", 10),
+			PhotoMaxWidth: parser.int("PLACES_PHOTO_MAX_WIDTH", 1600),
+			Timeout:       parser.duration("PLACES_API_TIMEOUT", 20*time.Second),
+		},
 		Token: TokenConfig{
 			Secret:         parser.string("TOKEN_SECRET", localDevToken),
 			AccessTokenTTL: parser.duration("JWT_ACCESS_TOKEN_TTL", 24*time.Hour),
@@ -326,6 +344,18 @@ func (c Config) Validate() error {
 	}
 	if c.Database.ConnectTimeout <= 0 {
 		errs = append(errs, fmt.Errorf("DATABASE_CONNECT_TIMEOUT must be positive"))
+	}
+	if strings.TrimSpace(c.Places.APIBaseURL) == "" {
+		errs = append(errs, fmt.Errorf("PLACES_API_BASE_URL is required"))
+	}
+	if c.Places.PhotoLimit < 1 || c.Places.PhotoLimit > 10 {
+		errs = append(errs, fmt.Errorf("PLACES_PHOTO_LIMIT must be between 1 and 10"))
+	}
+	if c.Places.PhotoMaxWidth < 1 || c.Places.PhotoMaxWidth > 4800 {
+		errs = append(errs, fmt.Errorf("PLACES_PHOTO_MAX_WIDTH must be between 1 and 4800"))
+	}
+	if c.Places.Timeout <= 0 {
+		errs = append(errs, fmt.Errorf("PLACES_API_TIMEOUT must be positive"))
 	}
 	if len(c.Token.Secret) < 32 {
 		errs = append(errs, fmt.Errorf("TOKEN_SECRET must be at least 32 characters"))

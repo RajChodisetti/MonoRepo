@@ -43,6 +43,30 @@ func (repo *Postgres) GetRestaurantIDByPlaceID(ctx context.Context, placeID stri
 	return restaurantID, nil
 }
 
+func (repo *Postgres) GetGooglePlaceID(ctx context.Context, restaurantID uuid.UUID) (string, error) {
+	if repo.pool == nil {
+		return "", fmt.Errorf("database pool is not configured")
+	}
+
+	const query = `
+		SELECT COALESCE(google_place_id, '')
+		FROM restaurant_profiles
+		WHERE restaurant_id = $1`
+
+	var placeID string
+	err := repo.pool.QueryRow(ctx, query, restaurantID).Scan(&placeID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", repository.ErrNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("load restaurant google place id: %w", err)
+	}
+	if placeID == "" {
+		return "", repository.ErrNotFound
+	}
+	return placeID, nil
+}
+
 func (repo *Postgres) ListMenuImages(ctx context.Context, restaurantID uuid.UUID) ([]MenuImage, error) {
 	const query = `
 		SELECT id, restaurant_id, url, thumbnail_url, image_type, confidence,

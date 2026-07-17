@@ -57,18 +57,22 @@ type DemoReview struct {
 }
 
 type ProfileReviewPreview struct {
-	RestaurantID        uuid.UUID       `json:"restaurant_id"`
-	RestaurantName      string          `json:"restaurant_name"`
-	ContactEmail        string          `json:"contact_email"`
-	OCRStatus           string          `json:"ocr_status"`
-	OCRInputFingerprint string          `json:"ocr_input_fingerprint"`
-	OCRCompletedAt      *time.Time      `json:"ocr_completed_at,omitempty"`
-	ReviewStatus        string          `json:"review_status"`
-	ReviewedAt          *time.Time      `json:"reviewed_at,omitempty"`
-	ReviewedBy          *uuid.UUID      `json:"reviewed_by,omitempty"`
-	RestaurantUpdatedAt time.Time       `json:"restaurant_updated_at"`
-	ProfileUpdatedAt    time.Time       `json:"profile_updated_at"`
-	Profile             json.RawMessage `json:"profile"`
+	RestaurantID          uuid.UUID       `json:"restaurant_id"`
+	RestaurantName        string          `json:"restaurant_name"`
+	ContactEmail          string          `json:"contact_email"`
+	OCRStatus             string          `json:"ocr_status"`
+	OCRInputFingerprint   string          `json:"ocr_input_fingerprint"`
+	OCRChecked            bool            `json:"ocr_checked"`
+	OCRStartedAt          *time.Time      `json:"ocr_started_at,omitempty"`
+	OCRCompletedAt        *time.Time      `json:"ocr_completed_at,omitempty"`
+	OCRAttempts           int             `json:"ocr_attempts"`
+	OCRVerificationErrors json.RawMessage `json:"ocr_verification_errors"`
+	ReviewStatus          string          `json:"review_status"`
+	ReviewedAt            *time.Time      `json:"reviewed_at,omitempty"`
+	ReviewedBy            *uuid.UUID      `json:"reviewed_by,omitempty"`
+	RestaurantUpdatedAt   time.Time       `json:"restaurant_updated_at"`
+	ProfileUpdatedAt      time.Time       `json:"profile_updated_at"`
+	Profile               json.RawMessage `json:"profile"`
 }
 
 type Service struct {
@@ -96,7 +100,10 @@ func (service *Service) GetProfileReviewPreview(
 		       r.email,
 		       rp.ocr_status,
 		       rp.ocr_input_fingerprint,
+		       rp.ocr_started_at,
 		       rp.ocr_completed_at,
+		       rp.ocr_attempts,
+		       rp.ocr_verification_errors,
 		       rp.review_status,
 		       rp.reviewed_at,
 		       rp.reviewed_by,
@@ -138,7 +145,10 @@ func (service *Service) GetProfileReviewPreview(
 		&result.ContactEmail,
 		&result.OCRStatus,
 		&result.OCRInputFingerprint,
+		&result.OCRStartedAt,
 		&result.OCRCompletedAt,
+		&result.OCRAttempts,
+		&result.OCRVerificationErrors,
 		&result.ReviewStatus,
 		&result.ReviewedAt,
 		&result.ReviewedBy,
@@ -153,6 +163,7 @@ func (service *Service) GetProfileReviewPreview(
 		return ProfileReviewPreview{}, fmt.Errorf("load profile review preview: %w", err)
 	}
 	result.Profile = json.RawMessage(profile)
+	result.OCRChecked = result.OCRAttempts > 0
 	return result, nil
 }
 

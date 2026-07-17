@@ -470,7 +470,8 @@ paths:
       description: |
         Requires role `internal_admin`.
         Creates a **draft-only** demo and returns a one-time `token` in the response.
-        If `public_payload` is omitted, a default template is stored server-side.
+        If `public_payload` is omitted, the server snapshots the restaurant's current
+        public-safe profile, menu, image, and review data. It does not create a sample restaurant.
 
         Supplying `status=published` is rejected. Publish through
         `PATCH /api/v1/demo-sites/{id}/status` so OCR verification, human profile
@@ -528,6 +529,70 @@ paths:
                 $ref: '#/components/schemas/ProfileReviewPreview'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/restaurants/{id}/images/google:
+    parameters:
+      - $ref: '#/components/parameters/restaurantId'
+    get:
+      tags: [Restaurants, Lead Review]
+      summary: Refresh scraped Google Places photo URLs
+      operationId: getRestaurantGooglePhotos
+      security:
+        - bearerAuth: []
+      description: |
+        Requires restaurant-admin access. Looks up the stored Google Place ID and resolves
+        fresh Google Places media URLs on the server. The provider key is never returned.
+        URLs are temporary and the response is marked `Cache-Control: no-store`; required
+        author attributions accompany each image.
+      responses:
+        '200':
+          description: Fresh photo URLs and attribution
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: Always `no-store`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GooglePlacePhotos'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '502':
+          description: Google Places could not resolve the photo resources
+        '503':
+          description: The server-side Places credential is not configured
+
+  /api/v1/restaurants/{id}/generated-site:
+    parameters:
+      - $ref: '#/components/parameters/restaurantId'
+    get:
+      tags: [Restaurants, Demo Sites]
+      summary: Get this restaurant's database-driven website templates
+      operationId: getRestaurantGeneratedSite
+      security:
+        - bearerAuth: []
+      description: |
+        Requires restaurant-admin access. Maps the restaurant UUID to the same
+        zero-based index used by the existing public site generator and returns template
+        URLs. These URLs are internal previews, not token-gated share links.
+      responses:
+        '200':
+          description: Generator index and template URLs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GeneratedSite'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -1796,7 +1861,9 @@ components:
         public_payload:
           type: object
           additionalProperties: true
-          description: Stored server-side; only allowlisted keys returned on public demo
+          description: |
+            Optional explicit snapshot stored server-side. When omitted, the server builds
+            the current restaurant-specific public payload; only allowlisted keys are public.
 
     CreateDemoSiteResult:
       type: object
@@ -1846,7 +1913,10 @@ components:
         - restaurant_name
         - contact_email
         - ocr_status
+        - ocr_checked
         - ocr_input_fingerprint
+        - ocr_attempts
+        - ocr_verification_errors
         - review_status
         - restaurant_updated_at
         - profile_updated_at
@@ -1861,12 +1931,26 @@ components:
           type: string
         ocr_status:
           $ref: '#/components/schemas/OCRStatus'
+        ocr_checked:
+          type: boolean
+          description: True once at least one OCR attempt has started for this row.
         ocr_input_fingerprint:
           type: string
+        ocr_started_at:
+          type: string
+          format: date-time
+          nullable: true
         ocr_completed_at:
           type: string
           format: date-time
           nullable: true
+        ocr_attempts:
+          type: integer
+          minimum: 0
+        ocr_verification_errors:
+          type: array
+          items:
+            type: string
         review_status:
           $ref: '#/components/schemas/ProfileReviewStatus'
         reviewed_at:
@@ -1886,6 +1970,95 @@ components:
         profile:
           type: object
           additionalProperties: true
+
+    GooglePhotoAttribution:
+      type: object
+      required: [display_name]
+      properties:
+        display_name:
+          type: string
+        uri:
+          type: string
+          format: uri
+
+    GooglePlacePhoto:
+      type: object
+      required: [url, author_attributions]
+      properties:
+        url:
+          type: string
+          format: uri
+        width_px:
+          type: integer
+        height_px:
+          type: integer
+        author_attributions:
+          type: array
+          items:
+            $ref: '#/components/schemas/GooglePhotoAttribution'
+
+    GooglePlacePhotos:
+      type: object
+      required:
+        - restaurant_id
+        - google_place_id
+        - photos
+        - refreshed_at
+        - urls_are_temporary
+      properties:
+        restaurant_id:
+          type: string
+          format: uuid
+        google_place_id:
+          type: string
+        photos:
+          type: array
+          items:
+            $ref: '#/components/schemas/GooglePlacePhoto'
+        refreshed_at:
+          type: string
+          format: date-time
+        urls_are_temporary:
+          type: boolean
+
+    GeneratedSiteTemplate:
+      type: object
+      required: [id, name, url]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        url:
+          type: string
+          format: uri
+
+    GeneratedSite:
+      type: object
+      required:
+        - restaurant_id
+        - restaurant_name
+        - google_place_id
+        - site_index
+        - templates
+        - shareable
+      properties:
+        restaurant_id:
+          type: string
+          format: uuid
+        restaurant_name:
+          type: string
+        google_place_id:
+          type: string
+        site_index:
+          type: integer
+          minimum: 0
+        templates:
+          type: array
+          items:
+            $ref: '#/components/schemas/GeneratedSiteTemplate'
+        shareable:
+          type: boolean
 
     ProfileReview:
       type: object

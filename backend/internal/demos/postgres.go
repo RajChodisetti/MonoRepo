@@ -2,6 +2,7 @@ package demos
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -181,6 +182,22 @@ func (repo *Postgres) ListByRestaurantID(ctx context.Context, restaurantID uuid.
 	}
 
 	return sites, nil
+}
+
+func (repo *Postgres) BuildPublicPayload(ctx context.Context, restaurantID uuid.UUID) (json.RawMessage, error) {
+	if repo.pool == nil {
+		return nil, fmt.Errorf("database pool is not configured")
+	}
+
+	var payload []byte
+	err := repo.pool.QueryRow(ctx, `SELECT lead_artifact_current_public_payload($1)`, restaurantID).Scan(&payload)
+	if err != nil {
+		return nil, fmt.Errorf("build restaurant demo payload: %w", err)
+	}
+	if len(payload) == 0 {
+		return nil, repository.ErrNotFound
+	}
+	return json.RawMessage(payload), nil
 }
 
 var _ Repository = (*Postgres)(nil)

@@ -50,6 +50,7 @@ type SiteImages struct {
 
 type Repository interface {
 	GetRestaurantIDByPlaceID(ctx context.Context, placeID string) (uuid.UUID, error)
+	GetGooglePlaceID(ctx context.Context, restaurantID uuid.UUID) (string, error)
 	ListMenuImages(ctx context.Context, restaurantID uuid.UUID) ([]MenuImage, error)
 	ListGalleryImages(ctx context.Context, restaurantID uuid.UUID) ([]GalleryImage, error)
 	GetSiteImages(ctx context.Context, restaurantID uuid.UUID) (SiteImages, error)

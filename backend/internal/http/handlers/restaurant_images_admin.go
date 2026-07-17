@@ -3,12 +3,14 @@ package handlers
 import (
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/auth"
 	repository "github.com/rajchodisetti/restaurant-platform/backend/internal/platform/errors"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/profiles"
+	placesprovider "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/places"
 )
 
 // RestaurantImagesAdminHandler manages admin visibility (hide/restore) of
@@ -17,20 +19,67 @@ import (
 // the public demo site.
 type RestaurantImagesAdminHandler struct {
 	profiles   profiles.Repository
+	photos     placesprovider.PhotoResolver
 	writeJSON  func(http.ResponseWriter, int, any)
 	writeError func(http.ResponseWriter, int, string, string)
 }
 
 func NewRestaurantImagesAdminHandler(
 	profilesRepo profiles.Repository,
+	photoResolver placesprovider.PhotoResolver,
 	writeJSON func(http.ResponseWriter, int, any),
 	writeError func(http.ResponseWriter, int, string, string),
 ) *RestaurantImagesAdminHandler {
 	return &RestaurantImagesAdminHandler{
 		profiles:   profilesRepo,
+		photos:     photoResolver,
 		writeJSON:  writeJSON,
 		writeError: writeError,
 	}
+}
+
+// ListGoogle resolves fresh Google Places media URLs for one restaurant. The
+// response is deliberately no-store: these URLs are for admin inspection and
+// may expire, while the API key remains only on the server.
+func (handler *RestaurantImagesAdminHandler) ListGoogle(w http.ResponseWriter, r *http.Request) {
+	restaurantID, err := restaurantIDFromRequest(r)
+	if err != nil {
+		handler.writeError(w, http.StatusBadRequest, "invalid_request", "Restaurant id must be a valid UUID.")
+		return
+	}
+
+	placeID, err := handler.profiles.GetGooglePlaceID(r.Context(), restaurantID)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			handler.writeError(w, http.StatusNotFound, "place_not_found", "This restaurant has no Google Place ID.")
+			return
+		}
+		handler.writeInternalError(w, err)
+		return
+	}
+	if handler.photos == nil {
+		handler.writeError(w, http.StatusServiceUnavailable, "photos_unavailable", "Google Places photo viewing is not configured.")
+		return
+	}
+
+	photos, err := handler.photos.ListPhotoURLs(r.Context(), placeID)
+	if err != nil {
+		if errors.Is(err, placesprovider.ErrNotConfigured) {
+			handler.writeError(w, http.StatusServiceUnavailable, "photos_unavailable", "Google Places photo viewing is not configured.")
+			return
+		}
+		handler.writeError(w, http.StatusBadGateway, "photo_provider_error", "Google Places photos could not be refreshed.")
+		return
+	}
+
+	w.Header().Set("Cache-Control", "no-store")
+	handler.writeJSON(w, http.StatusOK, map[string]any{
+		"restaurant_id":      restaurantID,
+		"google_place_id":    placeID,
+		"photos":             photos,
+		"refreshed_at":       time.Now().UTC(),
+		"urls_are_temporary": true,
+	})
 }
 
 func (handler *RestaurantImagesAdminHandler) List(w http.ResponseWriter, r *http.Request) {

@@ -51,6 +51,41 @@ func (repo *Postgres) ListSiteRestaurants(ctx context.Context) ([]SiteRestaurant
 	return summaries, nil
 }
 
+func (repo *Postgres) GetSiteRestaurantByID(ctx context.Context, restaurantID uuid.UUID) (SiteRestaurantSummary, error) {
+	if repo.pool == nil {
+		return SiteRestaurantSummary{}, fmt.Errorf("database pool is not configured")
+	}
+
+	const query = `
+		WITH ranked AS (
+			SELECT r.id, r.name, COALESCE(rp.google_place_id, '') AS place_id,
+			       COALESCE(rp.city, '') AS city,
+			       row_number() OVER (ORDER BY r.created_at ASC, r.name ASC) - 1 AS site_index
+			FROM restaurants r
+			JOIN restaurant_profiles rp ON rp.restaurant_id = r.id
+			WHERE rp.google_place_id IS NOT NULL AND rp.google_place_id <> ''
+		)
+		SELECT id, name, place_id, city, site_index
+		FROM ranked
+		WHERE id = $1`
+
+	var summary SiteRestaurantSummary
+	err := repo.pool.QueryRow(ctx, query, restaurantID).Scan(
+		&summary.ID,
+		&summary.Name,
+		&summary.PlaceID,
+		&summary.City,
+		&summary.Index,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return SiteRestaurantSummary{}, repository.ErrNotFound
+	}
+	if err != nil {
+		return SiteRestaurantSummary{}, fmt.Errorf("load generated site restaurant: %w", err)
+	}
+	return summary, nil
+}
+
 func (repo *Postgres) GetSiteContentByIndex(ctx context.Context, index int) (SiteContent, error) {
 	summaries, err := repo.ListSiteRestaurants(ctx)
 	if err != nil {

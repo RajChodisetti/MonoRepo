@@ -11,8 +11,10 @@ import (
 
 type Mock struct {
 	RestaurantIDByPlaceID map[string]uuid.UUID
+	GooglePlaceIDs        map[uuid.UUID]string
 	MenuImages            map[uuid.UUID][]MenuImage
 	GalleryImages         map[uuid.UUID][]GalleryImage
+	SiteRestaurants       []SiteRestaurantSummary
 }
 
 func (mock *Mock) ListMenuImagesAdmin(ctx context.Context, restaurantID uuid.UUID) ([]MenuImage, error) {
@@ -80,6 +82,14 @@ func (mock *Mock) GetRestaurantIDByPlaceID(_ context.Context, placeID string) (u
 	return id, nil
 }
 
+func (mock *Mock) GetGooglePlaceID(_ context.Context, restaurantID uuid.UUID) (string, error) {
+	placeID := mock.GooglePlaceIDs[restaurantID]
+	if placeID == "" {
+		return "", repository.ErrNotFound
+	}
+	return placeID, nil
+}
+
 func (mock *Mock) ListMenuImages(_ context.Context, restaurantID uuid.UUID) ([]MenuImage, error) {
 	if mock.MenuImages == nil {
 		return nil, nil
@@ -113,7 +123,16 @@ func (mock *Mock) GetSiteImagesByPlaceID(ctx context.Context, placeID string) (S
 }
 
 func (mock *Mock) ListSiteRestaurants(_ context.Context) ([]SiteRestaurantSummary, error) {
-	return nil, nil
+	return mock.SiteRestaurants, nil
+}
+
+func (mock *Mock) GetSiteRestaurantByID(_ context.Context, restaurantID uuid.UUID) (SiteRestaurantSummary, error) {
+	for _, summary := range mock.SiteRestaurants {
+		if summary.ID == restaurantID {
+			return summary, nil
+		}
+	}
+	return SiteRestaurantSummary{}, repository.ErrNotFound
 }
 
 func (mock *Mock) GetSiteContentByIndex(_ context.Context, index int) (SiteContent, error) {

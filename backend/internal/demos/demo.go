@@ -40,4 +40,5 @@ type Repository interface {
 	Create(ctx context.Context, input CreateInput) (Site, error)
 	UpdateTokenHash(ctx context.Context, id uuid.UUID, tokenHash string) error
 	ListByRestaurantID(ctx context.Context, restaurantID uuid.UUID) ([]Site, error)
+	BuildPublicPayload(ctx context.Context, restaurantID uuid.UUID) (json.RawMessage, error)
 }

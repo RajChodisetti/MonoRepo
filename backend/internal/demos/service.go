@@ -155,7 +155,10 @@ func (service *Service) CreateDemoSite(ctx context.Context, principal auth.Princ
 
 	publicPayload := input.PublicPayload
 	if len(publicPayload) == 0 {
-		publicPayload = DefaultPublicPayload()
+		publicPayload, err = service.demos.BuildPublicPayload(ctx, restaurantID)
+		if err != nil {
+			return CreateDemoResult{}, err
+		}
 	}
 
 	var expiresAt *time.Time

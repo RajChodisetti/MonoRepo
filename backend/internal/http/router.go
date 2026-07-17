@@ -18,6 +18,7 @@ import (
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/config"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/db"
 	emailprovider "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/email"
+	placesprovider "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/places"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/reservations"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/restaurants"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/scrapejobs"
@@ -88,7 +89,18 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	leadReviewHandler := handlers.NewLeadReviewHandler(leadReviewService, writeJSON, writeError)
 	trackingHandler := handlers.NewTrackingHandler(dataStore.Campaigns, writeError)
 	restaurantPublicHandler := handlers.NewRestaurantPublicHandler(dataStore.Profiles, writeJSON, writeError)
-	restaurantImagesAdminHandler := handlers.NewRestaurantImagesAdminHandler(dataStore.Profiles, writeJSON, writeError)
+	restaurantImagesAdminHandler := handlers.NewRestaurantImagesAdminHandler(
+		dataStore.Profiles,
+		placesprovider.NewClient(cfg.Places),
+		writeJSON,
+		writeError,
+	)
+	restaurantSiteAdminHandler := handlers.NewRestaurantSiteAdminHandler(
+		dataStore.Profiles,
+		cfg.AppURLs.PublicWebURL,
+		writeJSON,
+		writeError,
+	)
 	reservationService := reservations.NewService(dataStore.Reservations)
 	reservationPublicHandler := handlers.NewReservationPublicHandler(reservationService, writeJSON, writeError)
 	companyConsultationHandler := handlers.NewCompanyConsultationHandler(consultationService, writeJSON)
@@ -153,9 +165,11 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	mux.Handle("POST /api/v1/scrape-jobs/{id}/retry", protectInternalAdmin(http.HandlerFunc(scrapeJobHandler.Retry)))
 
 	mux.Handle("GET /api/v1/restaurants/{id}/images", protectRestaurantAdmin(http.HandlerFunc(restaurantImagesAdminHandler.List)))
+	mux.Handle("GET /api/v1/restaurants/{id}/images/google", protectRestaurantAdmin(http.HandlerFunc(restaurantImagesAdminHandler.ListGoogle)))
 	mux.Handle("DELETE /api/v1/restaurants/{id}/images/{kind}/{imageId}", protectRestaurantAdmin(http.HandlerFunc(restaurantImagesAdminHandler.Hide)))
 	mux.Handle("POST /api/v1/restaurants/{id}/images/{kind}/{imageId}/restore", protectRestaurantAdmin(http.HandlerFunc(restaurantImagesAdminHandler.Unhide)))
 	mux.Handle("GET /api/v1/restaurants/{id}/demo-links", protectRestaurantAdmin(http.HandlerFunc(campaignHandler.ListDemoLinks)))
+	mux.Handle("GET /api/v1/restaurants/{id}/generated-site", protectRestaurantAdmin(http.HandlerFunc(restaurantSiteAdminHandler.Get)))
 	mux.Handle("GET /api/v1/restaurants/{id}/outreach/adhoc-preview", protectRestaurantAdmin(http.HandlerFunc(outreachBulkHandler.PreviewAdHoc)))
 	mux.Handle("POST /api/v1/restaurants/{id}/outreach/adhoc-send", protectRestaurantAdmin(http.HandlerFunc(outreachBulkHandler.SendAdHoc)))
 	mux.Handle("POST /api/v1/outreach/adhoc-send", protectInternalAdmin(http.HandlerFunc(outreachBulkHandler.SendAdHocBatch)))

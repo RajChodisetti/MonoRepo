@@ -302,6 +302,21 @@ table.data tr:hover td {
   font-size: 0.78rem;
 }
 
+.photo-url {
+  display: block;
+  max-height: 4.6rem;
+  overflow: auto;
+  padding: 0.45rem;
+  border: 1px solid var(--line);
+  border-radius: 0.35rem;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
 .photo-tile[data-hidden="true"] {
   opacity: 0.55;
 }

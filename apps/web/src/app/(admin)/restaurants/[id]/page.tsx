@@ -9,6 +9,7 @@ import type {
   Campaign,
   DemoLink,
   DemoSite,
+  GeneratedSite,
   Member,
   ProfileReviewPreview,
   Restaurant,
@@ -47,6 +48,9 @@ function RestaurantDetailInner() {
     null,
   );
   const [demoLinks, setDemoLinks] = useState<DemoLink[]>([]);
+  const [demoToken, setDemoToken] = useState("");
+  const [generatedSite, setGeneratedSite] = useState<GeneratedSite | null>(null);
+  const [generatedSiteError, setGeneratedSiteError] = useState<string | null>(null);
 
   // ad hoc send
   const [sendPreviewOpen, setSendPreviewOpen] = useState(false);
@@ -91,6 +95,21 @@ function RestaurantDetailInner() {
     setDemoLinks(data.items || []);
   }, [id]);
 
+  const loadGeneratedSite = useCallback(async () => {
+    setGeneratedSiteError(null);
+    try {
+      const data = await adminFetch<GeneratedSite>(
+        `restaurants/${id}/generated-site`,
+      );
+      setGeneratedSite(data);
+    } catch (err) {
+      setGeneratedSite(null);
+      setGeneratedSiteError(
+        err instanceof Error ? err.message : "Generated website is unavailable",
+      );
+    }
+  }, [id]);
+
   const loadMembers = useCallback(async () => {
     const data = await adminFetch<{ items: Member[] }>(
       `restaurants/${id}/members`,
@@ -104,6 +123,11 @@ function RestaurantDetailInner() {
       setError(null);
       try {
         await loadRestaurant();
+        try {
+          await loadProfile();
+        } catch {
+          // A manually created restaurant may not have a scrape profile yet.
+        }
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "Failed to load");
@@ -114,7 +138,7 @@ function RestaurantDetailInner() {
     return () => {
       cancelled = true;
     };
-  }, [loadRestaurant]);
+  }, [loadRestaurant, loadProfile]);
 
   useEffect(() => {
     setMessage(null);
@@ -124,13 +148,22 @@ function RestaurantDetailInner() {
         if (tab === "profile") await loadProfile();
         if (tab === "campaign") await loadCampaigns();
         if (tab === "members") await loadMembers();
-        if (tab === "demo") await loadDemoLinks();
+        if (tab === "demo") {
+          await Promise.all([loadDemoLinks(), loadGeneratedSite()]);
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load tab");
       }
     }
     loadTab();
-  }, [tab, loadProfile, loadCampaigns, loadMembers, loadDemoLinks]);
+  }, [
+    tab,
+    loadProfile,
+    loadCampaigns,
+    loadMembers,
+    loadDemoLinks,
+    loadGeneratedSite,
+  ]);
 
   async function saveOverview(e: FormEvent) {
     e.preventDefault();
@@ -228,10 +261,31 @@ function RestaurantDetailInner() {
         );
         setDemoPreview(previewRes);
       }
-      const token = res.token ? ` Token (save once): ${String(res.token)}` : "";
-      setMessage(`Demo draft created (${slug}).${token}`);
+      setDemoToken(typeof res.token === "string" ? res.token : "");
+      await loadDemoLinks();
+      setMessage(
+        `Restaurant-specific demo draft created (${slug}). Its one-time token is held in this browser session so you can create a campaign draft.`,
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Demo create failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function selectDemo(link: DemoLink) {
+    setDemoId(link.demo_site_id);
+    setDemoToken("");
+    setDemoPreview(null);
+    setBusy(true);
+    setError(null);
+    try {
+      const previewRes = await adminFetch<Record<string, unknown>>(
+        `demo-sites/${link.demo_site_id}/review-preview`,
+      );
+      setDemoPreview(previewRes);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to inspect demo");
     } finally {
       setBusy(false);
     }
@@ -269,6 +323,7 @@ function RestaurantDetailInner() {
         },
       });
       await loadDemoPreview();
+      await loadDemoLinks();
       setMessage(`Demo ${next}.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Demo status update failed");
@@ -278,14 +333,25 @@ function RestaurantDetailInner() {
   }
 
   async function createCampaign() {
+    if (!demoId || !demoToken) {
+      setError(
+        "Create a demo draft in this browser session first. Existing demo tokens are intentionally not returned by the API.",
+      );
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
       const res = await adminFetch<Campaign>(`restaurants/${id}/campaigns`, {
         method: "POST",
-        body: { campaign_type: "outreach" },
+        body: {
+          demo_site_id: demoId,
+          demo_token: demoToken,
+          campaign_type: "outreach",
+        },
       });
       await loadCampaigns();
+      await loadDemoLinks();
       setSelectedCampaign(res);
       setMessage("Campaign draft created.");
     } catch (err) {
@@ -403,6 +469,25 @@ function RestaurantDetailInner() {
     { id: "campaign", label: "Campaign" },
     { id: "members", label: "Members" },
   ];
+  const ocrStatus = preview?.ocr_status || "unknown";
+  const ocrChecked = Boolean(preview?.ocr_checked || (preview?.ocr_attempts || 0) > 0);
+  const ocrStateLabel =
+    ocrStatus === "running"
+      ? "OCR is checking this restaurant now"
+      : ocrStatus === "pending" && !ocrChecked
+        ? "Not checked by OCR yet"
+        : ocrStatus === "verified"
+          ? "Checked and verified"
+          : ocrStatus === "no_images"
+            ? "Checked — no usable images found"
+            : ocrStatus === "failed"
+              ? "Checked — OCR failed"
+              : ocrChecked
+                ? `Checked — ${ocrStatus}`
+                : "OCR state unavailable";
+  const ocrErrors = Array.isArray(preview?.ocr_verification_errors)
+    ? preview.ocr_verification_errors.map(String)
+    : [];
 
   return (
     <div>
@@ -504,6 +589,13 @@ function RestaurantDetailInner() {
             {restaurant.email_send_count ?? 0} · last:{" "}
             {formatDate(restaurant.last_email_sent_at)}
           </div>
+          <div className="alert alert-info" style={{ margin: 0 }}>
+            <strong>OCR:</strong> {ocrStateLabel} · status {ocrStatus} · attempts{" "}
+            {preview?.ocr_attempts ?? 0}
+            {preview?.ocr_completed_at
+              ? ` · completed ${formatDate(preview.ocr_completed_at)}`
+              : ""}
+          </div>
         </form>
       ) : null}
 
@@ -522,6 +614,21 @@ function RestaurantDetailInner() {
               <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
                 <StatusBadge status={preview.review_status || "draft"} />
                 <StatusBadge status={preview.ocr_status || "ocr"} />
+              </div>
+              <div className="alert alert-info" style={{ margin: 0 }}>
+                <strong>{ocrStateLabel}</strong>
+                <div style={{ marginTop: "0.3rem", fontSize: "0.85rem" }}>
+                  Attempts: {preview.ocr_attempts ?? 0} · started:{" "}
+                  {formatDate(preview.ocr_started_at)} · completed:{" "}
+                  {formatDate(preview.ocr_completed_at)}
+                </div>
+                {ocrErrors.length > 0 ? (
+                  <ul style={{ margin: "0.45rem 0 0", paddingLeft: "1.2rem" }}>
+                    {ocrErrors.map((ocrError, index) => (
+                      <li key={`${ocrError}-${index}`}>{ocrError}</li>
+                    ))}
+                  </ul>
+                ) : null}
               </div>
               <div>
                 <strong>Contact:</strong> {preview.contact_email || "—"}
@@ -560,11 +667,69 @@ function RestaurantDetailInner() {
 
       {tab === "demo" ? (
         <div style={{ display: "grid", gap: "1rem" }}>
+          <div className="card" style={{ display: "grid", gap: "0.75rem" }}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: "1rem" }}>Generated restaurant website</h3>
+              <p style={{ color: "var(--muted)", margin: "0.35rem 0 0", fontSize: "0.86rem" }}>
+                This is the existing database-driven website generator mapped from restaurant UUID{" "}
+                <code>{id}</code> to its current site index. It is an internal preview, not the
+                token-gated link to send a restaurant.
+              </p>
+            </div>
+            {generatedSiteError ? <ErrorBanner message={generatedSiteError} /> : null}
+            {generatedSite ? (
+              <>
+                <div style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
+                  Generator index: {generatedSite.site_index} · Google Place ID:{" "}
+                  <code>{generatedSite.google_place_id}</code>
+                </div>
+                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                  {generatedSite.templates.map((template) => (
+                    <a
+                      className="btn btn-primary"
+                      href={template.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      key={template.id}
+                    >
+                      Open {template.name}
+                    </a>
+                  ))}
+                </div>
+              </>
+            ) : !generatedSiteError ? (
+              <p style={{ color: "var(--muted)", margin: 0 }}>Loading generated website links…</p>
+            ) : null}
+          </div>
+
+          <div className="card" style={{ display: "grid", gap: "0.65rem" }}>
+            <h3 style={{ margin: 0, fontSize: "1rem" }}>What the demo controls do</h3>
+            <ol style={{ margin: 0, paddingLeft: "1.2rem", color: "var(--muted)", lineHeight: 1.65 }}>
+              <li>
+                <strong style={{ color: "var(--ink)" }}>Create demo draft</strong> snapshots this
+                restaurant&apos;s public-safe profile/menu data and creates a one-time access token.
+              </li>
+              <li>
+                <strong style={{ color: "var(--ink)" }}>Inspect payload</strong> shows the exact
+                server-side data the published website will receive; it does not publish anything.
+              </li>
+              <li>
+                <strong style={{ color: "var(--ink)" }}>Publish</strong> makes the token-gated
+                website available, but only after OCR is verified and the profile is approved.
+              </li>
+              <li>
+                <strong style={{ color: "var(--ink)" }}>Unpublish</strong> returns it to draft and
+                immediately revokes public access without deleting the snapshot.
+              </li>
+            </ol>
+          </div>
+
           <div className="card" style={{ display: "grid", gap: "0.6rem" }}>
-            <h3 style={{ margin: 0, fontSize: "0.95rem" }}>Demo links</h3>
+            <h3 style={{ margin: 0, fontSize: "0.95rem" }}>Token-gated demo records</h3>
             {demoLinks.length === 0 ? (
               <p style={{ color: "var(--muted)", margin: 0 }}>
-                No demo sites created yet for this lead.
+                No demo snapshot exists yet. OCR automatically creates one after a successful check,
+                or you can create one manually below.
               </p>
             ) : (
               <div className="table-wrap">
@@ -574,7 +739,8 @@ function RestaurantDetailInner() {
                       <th>Slug</th>
                       <th>Status</th>
                       <th>Created</th>
-                      <th>Link</th>
+                      <th>Published website</th>
+                      <th>Manage</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -586,15 +752,27 @@ function RestaurantDetailInner() {
                         </td>
                         <td>{formatDate(link.created_at)}</td>
                         <td>
-                          {link.preview_url ? (
+                          {link.preview_url && link.status === "published" ? (
                             <a href={link.preview_url} target="_blank" rel="noreferrer">
-                              Open demo
+                              Open published demo
                             </a>
                           ) : (
                             <span style={{ color: "var(--muted)" }}>
-                              No link yet (create a campaign for this demo)
+                              {link.status === "published"
+                                ? "Create a campaign to retain the shareable token"
+                                : "Unavailable while draft"}
                             </span>
                           )}
+                        </td>
+                        <td>
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={() => selectDemo(link)}
+                            disabled={busy}
+                          >
+                            Inspect payload
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -604,43 +782,53 @@ function RestaurantDetailInner() {
             )}
           </div>
           <div className="card" style={{ display: "grid", gap: "0.85rem" }}>
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "end" }}>
-            <button className="btn btn-primary" type="button" disabled={busy} onClick={createDemo}>
-              Create demo draft
-            </button>
-            <label style={{ display: "grid", gap: "0.35rem", minWidth: 280 }}>
-              <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>Demo site ID</span>
-              <input className="input" value={demoId} onChange={(e) => setDemoId(e.target.value)} placeholder="uuid" />
-            </label>
-            <button className="btn btn-secondary" type="button" disabled={busy || !demoId} onClick={loadDemoPreview}>
-              Load preview
-            </button>
-            <button className="btn btn-primary" type="button" disabled={busy || !demoId || !demoPreview} onClick={() => setDemoStatus("published")}>
-              Publish
-            </button>
-            <button className="btn btn-secondary" type="button" disabled={busy || !demoId || !demoPreview} onClick={() => setDemoStatus("draft")}>
-              Unpublish
-            </button>
-          </div>
-          {demoPreview ? (
-            <pre
-              style={{
-                margin: 0,
-                padding: "0.85rem",
-                background: "var(--bg)",
-                border: "1px solid var(--line)",
-                overflow: "auto",
-                maxHeight: 420,
-                fontSize: "0.82rem",
-              }}
-            >
-              {JSON.stringify(demoPreview, null, 2)}
-            </pre>
-          ) : (
-            <p style={{ color: "var(--muted)", margin: 0 }}>
-              Create a demo or paste an existing demo site id to review/publish.
-            </p>
-          )}
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+              <button className="btn btn-primary" type="button" disabled={busy} onClick={createDemo}>
+                Create restaurant demo draft
+              </button>
+              <button className="btn btn-secondary" type="button" disabled={busy || !demoId} onClick={loadDemoPreview}>
+                Refresh payload
+              </button>
+              <button className="btn btn-primary" type="button" disabled={busy || !demoId || !demoPreview} onClick={() => setDemoStatus("published")}>
+                Publish
+              </button>
+              <button className="btn btn-secondary" type="button" disabled={busy || !demoId || !demoPreview} onClick={() => setDemoStatus("draft")}>
+                Unpublish
+              </button>
+            </div>
+            {demoId ? (
+              <div style={{ color: "var(--muted)", fontSize: "0.82rem" }}>
+                Selected demo: <code>{demoId}</code>
+              </div>
+            ) : null}
+            {demoToken ? (
+              <div className="alert alert-info" style={{ margin: 0 }}>
+                The new demo&apos;s one-time token is held only in this page session. Create a campaign
+                draft before leaving if you need a retained shareable link.
+              </div>
+            ) : null}
+            {demoPreview ? (
+              <div>
+                <h4 style={{ margin: "0 0 0.45rem", fontSize: "0.9rem" }}>Reviewed public payload</h4>
+                <pre
+                  style={{
+                    margin: 0,
+                    padding: "0.85rem",
+                    background: "var(--bg)",
+                    border: "1px solid var(--line)",
+                    overflow: "auto",
+                    maxHeight: 420,
+                    fontSize: "0.82rem",
+                  }}
+                >
+                  {JSON.stringify(demoPreview, null, 2)}
+                </pre>
+              </div>
+            ) : (
+              <p style={{ color: "var(--muted)", margin: 0 }}>
+                Choose “Inspect payload” on an existing record, or create a new restaurant snapshot.
+              </p>
+            )}
           </div>
         </div>
       ) : null}
@@ -648,13 +836,24 @@ function RestaurantDetailInner() {
       {tab === "campaign" ? (
         <div style={{ display: "grid", gap: "1rem" }}>
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-            <button className="btn btn-primary" type="button" disabled={busy} onClick={createCampaign}>
+            <button
+              className="btn btn-primary"
+              type="button"
+              disabled={busy || !demoId || !demoToken}
+              onClick={createCampaign}
+            >
               Create campaign draft
             </button>
             <button className="btn btn-secondary" type="button" disabled={busy} onClick={loadCampaigns}>
               Refresh list
             </button>
           </div>
+          {!demoToken ? (
+            <p style={{ color: "var(--muted)", margin: 0, fontSize: "0.86rem" }}>
+              Create a new demo draft in the Demo tab first. Demo access tokens are returned only
+              once and are intentionally not recoverable from existing records.
+            </p>
+          ) : null}
           <div className="table-wrap">
             <table className="data">
               <thead>

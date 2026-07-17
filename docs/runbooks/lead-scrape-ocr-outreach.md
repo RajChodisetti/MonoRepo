@@ -122,6 +122,21 @@ pool behavior through Gmail's HTTPS API. If the generic adapter is intentionally
 unused, `EMAIL_PROVIDER=disabled` is valid while the rotating outreach pool is
 enabled through `EMAIL_DISABLE_SENDING=false`.
 
+The admin photo viewer resolves temporary Google Places media URLs through the
+Go API. Keep its key in `/opt/tuvi/env/places-api.env` (mode `0600`) so the API
+does not receive the Apollo or Hugging Face secrets from `ingestion.env`:
+
+```text
+GOOGLE_PLACES_API_KEY=<server-side Places API key>
+PLACES_API_BASE_URL=https://places.googleapis.com/v1
+PLACES_PHOTO_LIMIT=10
+PLACES_PHOTO_MAX_WIDTH=1600
+PLACES_API_TIMEOUT=20s
+```
+
+The response is deliberately `no-store`; media URLs are refreshed on demand and
+must be displayed with the author attribution returned alongside each URL.
+
 For Google Workspace, create one OAuth web application, request only
 `https://www.googleapis.com/auth/gmail.send`, obtain offline consent separately
 for each mailbox, and store that mailbox's refresh token in its entry.

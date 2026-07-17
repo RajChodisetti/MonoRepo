@@ -58,6 +58,10 @@ services:
     env_file:
       - path: ${TUVI_ENV_DIR:-/opt/tuvi/env}/stack.env
         required: false
+      # Restrict the Places key to the API photo resolver instead of sharing the
+      # ingestion file (which also contains Apollo and OCR credentials).
+      - path: ${TUVI_ENV_DIR:-/opt/tuvi/env}/places-api.env
+        required: false
     environment:
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
       REDIS_URL: redis://redis:6379

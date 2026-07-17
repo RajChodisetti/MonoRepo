@@ -95,11 +95,36 @@ export type ProfileReviewPreview = {
   restaurant_name?: string;
   contact_email?: string;
   ocr_status?: string;
+  ocr_checked?: boolean;
   ocr_input_fingerprint?: string;
+  ocr_started_at?: string;
+  ocr_completed_at?: string;
+  ocr_attempts?: number;
+  ocr_verification_errors?: unknown[];
   review_status?: string;
   restaurant_updated_at?: string;
   profile_updated_at?: string;
   profile?: Record<string, unknown>;
+};
+
+export type GooglePhotoAttribution = {
+  display_name: string;
+  uri?: string;
+};
+
+export type GooglePlacePhoto = {
+  url: string;
+  width_px?: number;
+  height_px?: number;
+  author_attributions: GooglePhotoAttribution[];
+};
+
+export type GooglePlacePhotos = {
+  restaurant_id: string;
+  google_place_id: string;
+  photos: GooglePlacePhoto[];
+  refreshed_at: string;
+  urls_are_temporary: boolean;
 };
 
 export type RestaurantImage = {
@@ -131,6 +156,21 @@ export type DemoLink = {
   preview_url?: string;
   created_at: string;
   updated_at: string;
+};
+
+export type GeneratedSiteTemplate = {
+  id: string;
+  name: string;
+  url: string;
+};
+
+export type GeneratedSite = {
+  restaurant_id: string;
+  restaurant_name: string;
+  google_place_id: string;
+  site_index: number;
+  templates: GeneratedSiteTemplate[];
+  shareable: boolean;
 };
 
 export type AdHocPreview = {
