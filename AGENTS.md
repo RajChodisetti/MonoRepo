@@ -816,9 +816,9 @@ _Last updated: 2026-07-17_
 P1-E01 foundation, P1-008 auth, P1-009 restaurant access, and P1-010 restaurant CRUD are implemented.
 Repository layout now matches docs/phase1/PHASE1_IMPLEMENTATION_GUIDE.md section 5 (domain packages).
 Workflow migrations 000001-000023 and the supporting services are deployed. The local worktree adds PostgreSQL-backed 40/account HTTP outreach pacing across eight hours with 24-hour continuation; migration 000024 and that pacing code remain undeployed.
-Production release 199241c includes attributed on-demand Google Places photos, explicit OCR state, real demo payload snapshots, and UUID-linked generator templates.
-Two bounded OCR pilots have failed because their selected Hugging Face routes were not live: 3 rows on legacy Qwen2-VL and 5 rows on the approved Qwen2.5-VL Hyperbolic route. OCR remains persistently disabled and unscheduled; 8 profiles are failed and 471 are pending.
-Pacing deployment, migration 000024, a current OCR provider route, and real outreach remain approval-gated.
+Production release fd2cc94 includes attributed on-demand Google Places photos, explicit OCR state/counts, real demo payload snapshots, UUID-linked generator templates, and migration 000028's full-photo OCR verification constraint.
+After two failed route pilots, Gemma 3 4B via DeepInfra passed the low-cost benchmark and a production pilot processed all 10/10 photos before verification. OCR remains persistently disabled and unscheduled; 1 profile is verified, 8 are failed, and 470 are pending.
+Pacing deployment, migration 000024, a bulk OCR operating window, and real outreach remain approval-gated.
 ```
 
 ## Recent Agent Updates
@@ -826,6 +826,7 @@ Pacing deployment, migration 000024, a current OCR provider route, and real outr
 _Last updated: 2026-07-17_
 
 ```text
+2026-07-17 — AI Workflow/Backend/Frontend/Security/Test/Cost-Eval/DevOps — Benchmarked four low-cost VLM routes, selected Gemma 3 4B via DeepInfra, deployed fd2cc94/migration 000028, and changed OCR verification to require every scraped photo. A one-row production pilot completed 10/10 photos in 51 seconds for about $0.00041; OCR remains disabled and unscheduled.
 2026-07-17 — AI Workflow/Security/Cost-Eval/DevOps — With explicit approval, changed the production OCR model variables to Qwen2.5-VL-7B via Hyperbolic and ran an exactly five-profile pilot after database/config backups. All 50 calls returned HTTP 400 because the live model registry now maps this model only to Featherless; 0 verified / 5 failed, no image rows or drafts, and OCR remains disabled and unscheduled.
 2026-07-17 — Full-Stack/Backend/Security/DevOps — Deployed release 199241c with on-demand attributed Google Places photo URLs, explicit OCR checked state, real restaurant demo snapshots, and UUID-linked generator templates. A three-row OCR preflight resolved images but failed because the configured Qwen2-VL route is no longer served; OCR remains disabled pending explicit approval for a current model route.
 2026-07-16 — Documentation Agent — Merged origin/master (PR #8, admin_portal) into agent/tuvi-oauth-homepage-verification, bringing in the real apps/web admin portal (dashboard, scrape-jobs, restaurants, outreach screens) and automation/outreach scrape-ledger changes; updated docs/SERVICES.md and this Repo Shape entry to match. No production deployment performed; apps/web is not yet wired into infra/docker/docker-compose.vm.yml or the VM Caddyfile.
@@ -841,7 +842,7 @@ _Last updated: 2026-07-17_
 
 ## Active Decisions
 
-_Last updated: 2026-07-14_
+_Last updated: 2026-07-17_
 
 ```text
 - Go is primary backend language.
@@ -851,7 +852,7 @@ _Last updated: 2026-07-14_
 - P1 foundation uses standard net/http routing, slog logging, pgxpool for PostgreSQL, SQL files plus internal migration runner, and an in-memory worker queue. See docs/adr/2026-06-17-p1-foundation-stack.md.
 - Implemented demo links use per-demo random opaque tokens, bcrypt hashes, expiry, and server-side payloads; see ADR `2026-07-14-token-gated-demo-access.md` (core shorthand above remains unchanged).
 - City acquisition is Google Places first with Apollo used only for missing owner/work-email enrichment; one persisted 500-call window resumes after 24 hours.
-- OCR `verified` creates drafts only; profile approval, demo publication, campaign approval, and bulk-start remain separate administrator gates.
+- Durable OCR uses `google/gemma-3-4b-it:deepinfra`; `verified` requires every discovered scraped photo to resolve and return a successful structured result. Verification creates drafts only; profile approval, demo publication, campaign approval, and bulk-start remain separate administrator gates.
 - Bulk outreach supports Google Workspace Gmail and Zoho HTTP APIs with PostgreSQL-backed 40/account cycles, durable eight-hour pacing, 24-hour cooldowns, leases, and at-most-once ambiguity handling; SMTP is rejected. Migration 000024 is still required before this pacing code is deployed.
 - AI receptionist is inbound-only for MVP and must disclose AI identity.
 - Phase 2 agents start approval-gated and auditable.

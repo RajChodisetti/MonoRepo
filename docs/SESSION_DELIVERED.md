@@ -12,6 +12,69 @@ Each entry should explain:
 - how the work fits with the rest of the Phase 1 or Phase 2 plan;
 - risks, gaps, or follow-ups.
 
+## 2026-07-17 — Low-Cost OCR Selection and Full-Photo Verification
+
+**Role:** AI Workflow, Backend, Frontend, Security, Test, Cost/Eval, and DevOps
+Agent
+
+**Model Evaluation:** Current Hugging Face provider metadata was checked through
+Context7, official documentation, and the live OpenAI-compatible router model
+catalog. Four inexpensive VLM routes were tested read-only against the same
+licensed restaurant-menu, plated-food, and non-restaurant fixtures. The free
+Ternary Bonsai route and `Qwen/Qwen3.5-9B:deepinfra` each completed only one of
+three requests. `google/gemma-3-4b-it:deepinfra` and Gemma 3 12B both completed
+and correctly classified all three; the 4B model extracted ten visible menu
+items and was selected because its live listed price was lower at $0.05 per
+million input tokens and $0.10 per million output tokens. Root-only benchmark
+artifacts are under `/opt/tuvi/benchmarks/`.
+
+**Delivered:** Durable database OCR now processes every discovered Google
+Places and trusted direct scraped photo, ignoring the manual/file
+`MENU_OCR_MAX_IMAGES` cap. Verification requires an exact full-success
+contract: discovered, analyzed, and successful counts must match; there must be
+zero resolution/model/parsing failures. Partial attempts persist their model,
+processed/total/failed counts, token usage, and sanitized errors before ending
+as `failed`. Migration 000028 resets any legacy partial-success verification
+and adds a database check preventing `ocr_status=verified` unless
+`menu_ocr.all_images_processed=true`. The restaurant Overview and Profile
+Review UI now shows discovered/analyzed/successful/failed counts, the all-photo
+result, model, and provider.
+
+**Checks Run:** `go test ./backend/...`, `go vet ./backend/...`, and
+`go build ./backend/cmd/...` passed. Admin `npm run lint` and
+`npx tsc --noEmit --incremental false` passed; the production Node 22 Docker
+build passed. Six new OCR contract/unit tests passed locally and in the exact
+production OCR image. The full production-image automation suite ran 32 tests:
+30 passed and only the same two obsolete `daily_ingestion.py` tests failed
+because that retired entry point intentionally refuses to replace the durable
+pipeline. Migration 000028 passed a transaction/rollback test against the live
+database before it was applied.
+
+**Production Deployment and Pilot:** Commit `fd2cc94` was pushed to `master`
+and deployed at `/opt/tuvi/releases/monorepo-fd2cc94`; migration 000028 is
+active. API, worker, and admin-web were recreated from the exact release, and
+API/admin health checks return HTTP 200. A validated backup exists at
+`/opt/tuvi/backups/pre-full-photo-ocr-fd2cc94.sql.gz` (mode 0600; 7,326,193
+bytes uncompressed), with a matching root-owned ingestion-config backup.
+
+The one-restaurant production pilot discovered, resolved, analyzed, and
+successfully classified all ten photos in 51 seconds, so and only then did the
+row become verified. It used 6,110 input and 1,068 output tokens, approximately
+$0.00041 at the current listed rate, and extracted no menu items because none
+of those ten photos was classified as a menu document. The downstream worker
+created one demo draft and one campaign draft; nothing was approved, published,
+or sent. Production is now 1 verified, 8 failed, and 470 pending.
+`LEAD_OCR_VERIFICATION_ENABLED=false` remains persisted, there is no OCR cron,
+and no OCR container remains running.
+
+**Business Value / Follow-up:** OCR now proves full photo coverage instead of
+mistaking one successful image for restaurant verification, while exposing the
+evidence needed for human review and cost tracking. At the pilot rate, 470
+similar pending restaurants would cost roughly $0.19 in model tokens but take
+about 6.7 serial hours; image complexity and provider latency can vary. A bulk
+run remains intentionally unscheduled so its batch size and operating window
+can be chosen explicitly.
+
 ## 2026-07-17 — Approved Qwen2.5-VL Hyperbolic Production Pilot
 
 **Role:** AI Workflow, Security, Cost/Eval, and DevOps Agent

@@ -1,7 +1,7 @@
 # Session Summary
 
-**Latest (2026-07-17):** With explicit approval, production OCR was configured for `Qwen/Qwen2.5-VL-7B-Instruct:hyperbolic` and a one-shot five-restaurant pilot was run after validated database and ingestion-config backups.
-**Pilot result:** Exactly five profiles and 50 Google Places images were attempted; all calls returned HTTP 400, producing 0 verified and 5 failed rows. Production now has 8 failed and 471 pending profiles, with no running claims, persisted OCR images, new drafts, campaigns, or outreach actions.
-**Root cause:** Hugging Face's live model metadata now maps this model only to `featherless-ai`; Hyperbolic is no longer a live provider for it, and no successful inference/cost/latency sample was produced.
-**Safety:** Persistent OCR remains disabled, no OCR cron or container is running, API/admin health checks return 200, and the root-only backup/log audit trail is intact.
-**Approval needed:** Any switch to Featherless or another current VLM/provider is a separate production model-route decision; start with a non-restaurant compatibility probe before another database pilot.
+**Latest (2026-07-17):** Four low-cost vision routes were benchmarked; `google/gemma-3-4b-it:deepinfra` passed all menu/food/other cases and was selected at a live listed $0.05/M input and $0.10/M output tokens.
+**Verification contract:** Release `fd2cc94` and migration 000028 require every discovered scraped photo to resolve and return a successful structured result before `ocr_status=verified`; partial counts, model, token use, and sanitized errors are persisted and shown in the restaurant UI.
+**Production pilot:** One restaurant completed all 10/10 photos in 51 seconds using 6,110 input and 1,068 output tokens (about $0.00041), then created draft-only demo/campaign artifacts. Production is 1 verified, 8 failed, and 470 pending.
+**Verified:** Go tests/vet/build, admin lint/TypeScript/Node 22 build, six new OCR tests, migration transaction test, deployment health, backup, and database constraint checks passed; 30/32 automation tests passed with only the two known retired-ingestion tests failing.
+**Safety:** OCR remains persistently disabled and unscheduled, no OCR container is running, and no profile/demo/campaign approval, publication, or outreach send occurred.
