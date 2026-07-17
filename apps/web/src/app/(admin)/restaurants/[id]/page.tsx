@@ -7,14 +7,17 @@ import { adminFetch } from "@/lib/client-api";
 import { RESTAURANT_STATUSES, formatDate } from "@/lib/constants";
 import type {
   Campaign,
+  DemoLink,
   DemoSite,
   Member,
   ProfileReviewPreview,
   Restaurant,
 } from "@/lib/types";
 import { EmptyState, ErrorBanner, PageHeader, StatusBadge } from "@/components/ui";
+import { PhotoGallery } from "@/components/PhotoGallery";
+import { SendPreviewModal } from "@/components/SendPreviewModal";
 
-type Tab = "overview" | "profile" | "demo" | "campaign" | "members";
+type Tab = "overview" | "photos" | "profile" | "demo" | "campaign" | "members";
 
 function RestaurantDetailInner() {
   const params = useParams<{ id: string }>();
@@ -43,6 +46,10 @@ function RestaurantDetailInner() {
   const [demoPreview, setDemoPreview] = useState<Record<string, unknown> | null>(
     null,
   );
+  const [demoLinks, setDemoLinks] = useState<DemoLink[]>([]);
+
+  // ad hoc send
+  const [sendPreviewOpen, setSendPreviewOpen] = useState(false);
 
   // campaigns
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -75,6 +82,13 @@ function RestaurantDetailInner() {
       `restaurants/${id}/campaigns`,
     );
     setCampaigns(data.items || []);
+  }, [id]);
+
+  const loadDemoLinks = useCallback(async () => {
+    const data = await adminFetch<{ items: DemoLink[] }>(
+      `restaurants/${id}/demo-links`,
+    );
+    setDemoLinks(data.items || []);
   }, [id]);
 
   const loadMembers = useCallback(async () => {
@@ -110,12 +124,13 @@ function RestaurantDetailInner() {
         if (tab === "profile") await loadProfile();
         if (tab === "campaign") await loadCampaigns();
         if (tab === "members") await loadMembers();
+        if (tab === "demo") await loadDemoLinks();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load tab");
       }
     }
     loadTab();
-  }, [tab, loadProfile, loadCampaigns, loadMembers]);
+  }, [tab, loadProfile, loadCampaigns, loadMembers, loadDemoLinks]);
 
   async function saveOverview(e: FormEvent) {
     e.preventDefault();
@@ -382,6 +397,7 @@ function RestaurantDetailInner() {
 
   const tabs: { id: Tab; label: string }[] = [
     { id: "overview", label: "Overview" },
+    { id: "photos", label: "Photos" },
     { id: "profile", label: "Profile review" },
     { id: "demo", label: "Demo" },
     { id: "campaign", label: "Campaign" },
@@ -394,10 +410,26 @@ function RestaurantDetailInner() {
         title={restaurant?.name || "Restaurant"}
         subtitle={restaurant?.email || restaurant?.id}
         actions={
-          <Link className="btn btn-secondary" href="/restaurants">
-            All restaurants
-          </Link>
+          <>
+            <button
+              className="btn btn-primary"
+              type="button"
+              onClick={() => setSendPreviewOpen(true)}
+              disabled={!restaurant}
+            >
+              Send email
+            </button>
+            <Link className="btn btn-secondary" href="/restaurants">
+              All restaurants
+            </Link>
+          </>
         }
+      />
+      <SendPreviewModal
+        open={sendPreviewOpen}
+        restaurantIds={restaurant ? [restaurant.id] : []}
+        onClose={() => setSendPreviewOpen(false)}
+        onSent={loadRestaurant}
       />
       <ErrorBanner message={error} />
       {message ? (
@@ -475,6 +507,12 @@ function RestaurantDetailInner() {
         </form>
       ) : null}
 
+      {tab === "photos" ? (
+        <div className="card">
+          <PhotoGallery restaurantId={id} />
+        </div>
+      ) : null}
+
       {tab === "profile" ? (
         <div className="card" style={{ display: "grid", gap: "0.85rem" }}>
           {!preview ? (
@@ -521,7 +559,51 @@ function RestaurantDetailInner() {
       ) : null}
 
       {tab === "demo" ? (
-        <div className="card" style={{ display: "grid", gap: "0.85rem" }}>
+        <div style={{ display: "grid", gap: "1rem" }}>
+          <div className="card" style={{ display: "grid", gap: "0.6rem" }}>
+            <h3 style={{ margin: 0, fontSize: "0.95rem" }}>Demo links</h3>
+            {demoLinks.length === 0 ? (
+              <p style={{ color: "var(--muted)", margin: 0 }}>
+                No demo sites created yet for this lead.
+              </p>
+            ) : (
+              <div className="table-wrap">
+                <table className="data">
+                  <thead>
+                    <tr>
+                      <th>Slug</th>
+                      <th>Status</th>
+                      <th>Created</th>
+                      <th>Link</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {demoLinks.map((link) => (
+                      <tr key={link.demo_site_id}>
+                        <td>{link.slug}</td>
+                        <td>
+                          <StatusBadge status={link.status} />
+                        </td>
+                        <td>{formatDate(link.created_at)}</td>
+                        <td>
+                          {link.preview_url ? (
+                            <a href={link.preview_url} target="_blank" rel="noreferrer">
+                              Open demo
+                            </a>
+                          ) : (
+                            <span style={{ color: "var(--muted)" }}>
+                              No link yet (create a campaign for this demo)
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+          <div className="card" style={{ display: "grid", gap: "0.85rem" }}>
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "end" }}>
             <button className="btn btn-primary" type="button" disabled={busy} onClick={createDemo}>
               Create demo draft
@@ -559,6 +641,7 @@ function RestaurantDetailInner() {
               Create a demo or paste an existing demo site id to review/publish.
             </p>
           )}
+          </div>
         </div>
       ) : null}
 

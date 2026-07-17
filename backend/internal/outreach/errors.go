@@ -19,7 +19,31 @@ var (
 	ErrBulkJobActive   = errors.New("a bulk outreach job is already queued or running")
 	ErrNotConfigured   = errors.New("bulk outreach email accounts are not configured")
 	ErrSendingDisabled = errors.New("email sending is disabled")
+
+	// Ad hoc send errors (single-lead / multi-select, outside the quota-managed
+	// bulk pipeline).
+	ErrNoContactEmail  = errors.New("restaurant has no valid contact email")
+	ErrEmailSuppressed = errors.New("recipient has opted out of outreach email")
+	ErrNoCampaignDraft = errors.New("no campaign draft exists yet for this restaurant")
 )
+
+// AdHocSendResult is the per-restaurant outcome of an ad hoc (non-bulk) send.
+type AdHocSendResult struct {
+	RestaurantID uuid.UUID `json:"restaurant_id"`
+	Sent         bool      `json:"sent"`
+	Error        string    `json:"error,omitempty"`
+}
+
+// AdHocPreview is the rendered content of the latest campaign draft for a
+// restaurant, shown before an ad hoc send is confirmed.
+type AdHocPreview struct {
+	RestaurantID    uuid.UUID `json:"restaurant_id"`
+	RestaurantName  string    `json:"restaurant_name"`
+	RecipientEmail  string    `json:"recipient_email"`
+	Subject         string    `json:"subject"`
+	BodyHTML        string    `json:"body_html"`
+	BodyText        string    `json:"body_text"`
+}
 
 type BulkSendSummary struct {
 	Attempted       int        `json:"attempted"`

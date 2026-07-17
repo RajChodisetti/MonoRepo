@@ -32,6 +32,14 @@ func (repo *mockRepo) CountEligibleLeads(ctx context.Context) (int, error) {
 	return repo.count, nil
 }
 
+func (repo *mockRepo) IsEmailSuppressed(ctx context.Context, email string) (bool, error) {
+	return false, nil
+}
+
+func (repo *mockRepo) RecordAdHocEmailSent(ctx context.Context, restaurantID uuid.UUID, recipientEmail string) error {
+	return nil
+}
+
 type mockEnqueuer struct {
 	jobID string
 	err   error
@@ -65,7 +73,9 @@ func TestTriggerBulkSendRequiresConfiguredAccounts(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 		outreach.DemoTokenResolver{},
+		nil,
 		nil,
 		config.EmailConfig{Provider: "zoho"},
 		config.OutreachConfig{BulkMax: 150},
@@ -88,8 +98,10 @@ func TestTriggerBulkSendEnqueuesJob(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 		outreach.DemoTokenResolver{},
 		testAccountPool(t),
+		nil,
 		config.EmailConfig{},
 		config.OutreachConfig{
 			BulkMax: 150,
@@ -126,8 +138,10 @@ func TestTriggerBulkSendRejectsDisabledSending(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 		outreach.DemoTokenResolver{},
 		testAccountPool(t),
+		nil,
 		config.EmailConfig{Provider: "zoho", DisableSending: true},
 		config.OutreachConfig{
 			BulkMax:      150,
@@ -207,8 +221,10 @@ func TestRunBulkSendUsesExistingApprovedCampaign(t *testing.T) {
 		nil,
 		campaignRepo,
 		campaignService,
+		nil,
 		outreach.DemoTokenResolver{},
 		testAccountPool(t),
+		nil,
 		config.EmailConfig{Provider: "zoho"},
 		config.OutreachConfig{
 			BulkMax:      150,

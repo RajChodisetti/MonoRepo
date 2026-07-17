@@ -71,8 +71,10 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 		dataStore.Pool(),
 		dataStore.Campaigns,
 		campaignService,
+		accessService,
 		outreach.DemoTokenResolver{Campaigns: dataStore.Campaigns, Demos: dataStore.Demos},
 		outreachAccountPool,
+		emailProvider,
 		cfg.Email,
 		cfg.Outreach,
 		&jobs.OutreachBulkEnqueuer{Queue: jobQueue},
@@ -86,6 +88,7 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	leadReviewHandler := handlers.NewLeadReviewHandler(leadReviewService, writeJSON, writeError)
 	trackingHandler := handlers.NewTrackingHandler(dataStore.Campaigns, writeError)
 	restaurantPublicHandler := handlers.NewRestaurantPublicHandler(dataStore.Profiles, writeJSON, writeError)
+	restaurantImagesAdminHandler := handlers.NewRestaurantImagesAdminHandler(dataStore.Profiles, writeJSON, writeError)
 	reservationService := reservations.NewService(dataStore.Reservations)
 	reservationPublicHandler := handlers.NewReservationPublicHandler(reservationService, writeJSON, writeError)
 	companyConsultationHandler := handlers.NewCompanyConsultationHandler(consultationService, writeJSON)
@@ -148,6 +151,14 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	mux.Handle("GET /api/v1/scrape-jobs", protectInternalAdmin(http.HandlerFunc(scrapeJobHandler.List)))
 	mux.Handle("GET /api/v1/scrape-jobs/{id}", protectInternalAdmin(http.HandlerFunc(scrapeJobHandler.Get)))
 	mux.Handle("POST /api/v1/scrape-jobs/{id}/retry", protectInternalAdmin(http.HandlerFunc(scrapeJobHandler.Retry)))
+
+	mux.Handle("GET /api/v1/restaurants/{id}/images", protectRestaurantAdmin(http.HandlerFunc(restaurantImagesAdminHandler.List)))
+	mux.Handle("DELETE /api/v1/restaurants/{id}/images/{kind}/{imageId}", protectRestaurantAdmin(http.HandlerFunc(restaurantImagesAdminHandler.Hide)))
+	mux.Handle("POST /api/v1/restaurants/{id}/images/{kind}/{imageId}/restore", protectRestaurantAdmin(http.HandlerFunc(restaurantImagesAdminHandler.Unhide)))
+	mux.Handle("GET /api/v1/restaurants/{id}/demo-links", protectRestaurantAdmin(http.HandlerFunc(campaignHandler.ListDemoLinks)))
+	mux.Handle("GET /api/v1/restaurants/{id}/outreach/adhoc-preview", protectRestaurantAdmin(http.HandlerFunc(outreachBulkHandler.PreviewAdHoc)))
+	mux.Handle("POST /api/v1/restaurants/{id}/outreach/adhoc-send", protectRestaurantAdmin(http.HandlerFunc(outreachBulkHandler.SendAdHoc)))
+	mux.Handle("POST /api/v1/outreach/adhoc-send", protectInternalAdmin(http.HandlerFunc(outreachBulkHandler.SendAdHocBatch)))
 
 	mux.HandleFunc("GET /t/click/{token}", trackingHandler.Click)
 	mux.HandleFunc("GET /t/open/{token}", trackingHandler.Open)

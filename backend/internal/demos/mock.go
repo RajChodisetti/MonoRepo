@@ -72,6 +72,16 @@ func (mock *Mock) UpdateTokenHash(ctx context.Context, id uuid.UUID, tokenHash s
 	return repository.ErrNotFound
 }
 
+func (mock *Mock) ListByRestaurantID(ctx context.Context, restaurantID uuid.UUID) ([]Site, error) {
+	sites := make([]Site, 0)
+	for _, record := range mock.Sites {
+		if record.RestaurantID == restaurantID {
+			sites = append(sites, record)
+		}
+	}
+	return sites, nil
+}
+
 var _ Repository = (*Mock)(nil)
 
 func DefaultPublicPayload() json.RawMessage {

@@ -2,6 +2,7 @@ package profiles
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -12,6 +13,60 @@ type Mock struct {
 	RestaurantIDByPlaceID map[string]uuid.UUID
 	MenuImages            map[uuid.UUID][]MenuImage
 	GalleryImages         map[uuid.UUID][]GalleryImage
+}
+
+func (mock *Mock) ListMenuImagesAdmin(ctx context.Context, restaurantID uuid.UUID) ([]MenuImage, error) {
+	return mock.ListMenuImages(ctx, restaurantID)
+}
+
+func (mock *Mock) ListGalleryImagesAdmin(ctx context.Context, restaurantID uuid.UUID) ([]GalleryImage, error) {
+	return mock.ListGalleryImages(ctx, restaurantID)
+}
+
+func (mock *Mock) HideMenuImage(_ context.Context, restaurantID, imageID, hiddenBy uuid.UUID) error {
+	for i, img := range mock.MenuImages[restaurantID] {
+		if img.ID == imageID {
+			now := time.Now()
+			mock.MenuImages[restaurantID][i].HiddenAt = &now
+			mock.MenuImages[restaurantID][i].HiddenBy = &hiddenBy
+			return nil
+		}
+	}
+	return repository.ErrNotFound
+}
+
+func (mock *Mock) HideGalleryImage(_ context.Context, restaurantID, imageID, hiddenBy uuid.UUID) error {
+	for i, img := range mock.GalleryImages[restaurantID] {
+		if img.ID == imageID {
+			now := time.Now()
+			mock.GalleryImages[restaurantID][i].HiddenAt = &now
+			mock.GalleryImages[restaurantID][i].HiddenBy = &hiddenBy
+			return nil
+		}
+	}
+	return repository.ErrNotFound
+}
+
+func (mock *Mock) UnhideMenuImage(_ context.Context, restaurantID, imageID uuid.UUID) error {
+	for i, img := range mock.MenuImages[restaurantID] {
+		if img.ID == imageID {
+			mock.MenuImages[restaurantID][i].HiddenAt = nil
+			mock.MenuImages[restaurantID][i].HiddenBy = nil
+			return nil
+		}
+	}
+	return repository.ErrNotFound
+}
+
+func (mock *Mock) UnhideGalleryImage(_ context.Context, restaurantID, imageID uuid.UUID) error {
+	for i, img := range mock.GalleryImages[restaurantID] {
+		if img.ID == imageID {
+			mock.GalleryImages[restaurantID][i].HiddenAt = nil
+			mock.GalleryImages[restaurantID][i].HiddenBy = nil
+			return nil
+		}
+	}
+	return repository.ErrNotFound
 }
 
 func (mock *Mock) GetRestaurantIDByPlaceID(_ context.Context, placeID string) (uuid.UUID, error) {

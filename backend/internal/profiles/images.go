@@ -21,6 +21,8 @@ type MenuImage struct {
 	Metadata     json.RawMessage `json:"metadata,omitempty"`
 	CreatedAt    time.Time       `json:"created_at"`
 	UpdatedAt    time.Time       `json:"updated_at"`
+	HiddenAt     *time.Time      `json:"hidden_at,omitempty"`
+	HiddenBy     *uuid.UUID      `json:"hidden_by,omitempty"`
 }
 
 type GalleryImage struct {
@@ -36,6 +38,8 @@ type GalleryImage struct {
 	Metadata     json.RawMessage `json:"metadata,omitempty"`
 	CreatedAt    time.Time       `json:"created_at"`
 	UpdatedAt    time.Time       `json:"updated_at"`
+	HiddenAt     *time.Time      `json:"hidden_at,omitempty"`
+	HiddenBy     *uuid.UUID      `json:"hidden_by,omitempty"`
 }
 
 type SiteImages struct {
@@ -50,5 +54,14 @@ type Repository interface {
 	ListGalleryImages(ctx context.Context, restaurantID uuid.UUID) ([]GalleryImage, error)
 	GetSiteImages(ctx context.Context, restaurantID uuid.UUID) (SiteImages, error)
 	GetSiteImagesByPlaceID(ctx context.Context, placeID string) (SiteImages, error)
+
+	// Admin variants include hidden images; the plain List* methods above do not.
+	ListMenuImagesAdmin(ctx context.Context, restaurantID uuid.UUID) ([]MenuImage, error)
+	ListGalleryImagesAdmin(ctx context.Context, restaurantID uuid.UUID) ([]GalleryImage, error)
+	HideMenuImage(ctx context.Context, restaurantID, imageID, hiddenBy uuid.UUID) error
+	HideGalleryImage(ctx context.Context, restaurantID, imageID, hiddenBy uuid.UUID) error
+	UnhideMenuImage(ctx context.Context, restaurantID, imageID uuid.UUID) error
+	UnhideGalleryImage(ctx context.Context, restaurantID, imageID uuid.UUID) error
+
 	SiteRepository
 }

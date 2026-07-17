@@ -1,5 +1,7 @@
 "use client";
 
+import { withBasePath } from "@/lib/base-path";
+
 export async function adminFetch<T = unknown>(
   path: string,
   options: {
@@ -9,9 +11,11 @@ export async function adminFetch<T = unknown>(
   } = {},
 ): Promise<T> {
   const url = new URL(
-    path.startsWith("/api/admin/")
-      ? path
-      : `/api/admin/proxy/${path.replace(/^\//, "")}`,
+    withBasePath(
+      path.startsWith("/api/admin/")
+        ? path
+        : `/api/admin/proxy/${path.replace(/^\//, "")}`,
+    ),
     window.location.origin,
   );
   if (options.query) {

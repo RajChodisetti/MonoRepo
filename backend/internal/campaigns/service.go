@@ -107,6 +107,50 @@ func (service *Service) CreateDraft(ctx context.Context, principal auth.Principa
 	}, draft)
 }
 
+type DemoSiteLink struct {
+	DemoSiteID uuid.UUID  `json:"demo_site_id"`
+	Slug       string     `json:"slug"`
+	Status     string     `json:"status"`
+	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
+	PreviewURL string     `json:"preview_url,omitempty"`
+	CreatedAt  time.Time  `json:"created_at"`
+	UpdatedAt  time.Time  `json:"updated_at"`
+}
+
+// ListDemoLinks surfaces every demo site created for a restaurant, with a
+// live preview URL when a campaign has already been drafted against that
+// demo (which is what carries the plaintext token needed to build the link).
+func (service *Service) ListDemoLinks(ctx context.Context, principal auth.Principal, restaurantID uuid.UUID) ([]DemoSiteLink, error) {
+	if err := service.access.CanAccessRestaurant(ctx, principal, restaurantID); err != nil {
+		return nil, err
+	}
+	if !auth.IsInternalAdmin(principal.Role) {
+		return nil, restaurants.ErrForbidden
+	}
+
+	sites, err := service.demos.ListByRestaurantID(ctx, restaurantID)
+	if err != nil {
+		return nil, err
+	}
+
+	links := make([]DemoSiteLink, 0, len(sites))
+	for _, site := range sites {
+		link := DemoSiteLink{
+			DemoSiteID: site.ID,
+			Slug:       site.Slug,
+			Status:     site.Status,
+			ExpiresAt:  site.ExpiresAt,
+			CreatedAt:  site.CreatedAt,
+			UpdatedAt:  site.UpdatedAt,
+		}
+		if token, tokenErr := service.repo.GetLatestDemoTokenByDemoSiteID(ctx, site.ID); tokenErr == nil && token != "" {
+			link.PreviewURL = buildTokenGatedDemoPreviewURL(service.publicWebURL, site.Slug, token, "1")
+		}
+		links = append(links, link)
+	}
+	return links, nil
+}
+
 func (service *Service) ListByRestaurant(ctx context.Context, principal auth.Principal, restaurantID uuid.UUID) ([]Campaign, error) {
 	if err := service.access.CanAccessRestaurant(ctx, principal, restaurantID); err != nil {
 		return nil, err

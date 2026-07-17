@@ -39,4 +39,5 @@ type Repository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (Site, error)
 	Create(ctx context.Context, input CreateInput) (Site, error)
 	UpdateTokenHash(ctx context.Context, id uuid.UUID, tokenHash string) error
+	ListByRestaurantID(ctx context.Context, restaurantID uuid.UUID) ([]Site, error)
 }

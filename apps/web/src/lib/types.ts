@@ -102,6 +102,52 @@ export type ProfileReviewPreview = {
   profile?: Record<string, unknown>;
 };
 
+export type RestaurantImage = {
+  id: string;
+  restaurant_id: string;
+  url: string;
+  thumbnail_url?: string;
+  image_type?: string;
+  title?: string;
+  source?: string;
+  sort_order?: number;
+  created_at?: string;
+  updated_at?: string;
+  hidden_at?: string;
+  hidden_by?: string;
+};
+
+export type RestaurantImages = {
+  restaurant_id: string;
+  menu_images: RestaurantImage[];
+  gallery_images: RestaurantImage[];
+};
+
+export type DemoLink = {
+  demo_site_id: string;
+  slug: string;
+  status: string;
+  expires_at?: string;
+  preview_url?: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AdHocPreview = {
+  restaurant_id: string;
+  restaurant_name?: string;
+  recipient_email?: string;
+  subject: string;
+  body_html: string;
+  body_text: string;
+};
+
+export type AdHocSendResult = {
+  restaurant_id: string;
+  sent: boolean;
+  error?: string;
+};
+
 export type Member = {
   id?: string;
   user_id?: string;

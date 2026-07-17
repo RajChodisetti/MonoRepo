@@ -141,4 +141,46 @@ func (repo *Postgres) UpdateTokenHash(ctx context.Context, id uuid.UUID, tokenHa
 	return nil
 }
 
+func (repo *Postgres) ListByRestaurantID(ctx context.Context, restaurantID uuid.UUID) ([]Site, error) {
+	if repo.pool == nil {
+		return nil, fmt.Errorf("database pool is not configured")
+	}
+
+	const query = `
+		SELECT id, restaurant_id, slug, token_hash, status, public_payload, expires_at, created_at, updated_at
+		FROM demo_sites
+		WHERE restaurant_id = $1
+		ORDER BY created_at DESC`
+
+	rows, err := repo.pool.Query(ctx, query, restaurantID)
+	if err != nil {
+		return nil, fmt.Errorf("list demo sites: %w", err)
+	}
+	defer rows.Close()
+
+	sites := make([]Site, 0)
+	for rows.Next() {
+		var record Site
+		if err := rows.Scan(
+			&record.ID,
+			&record.RestaurantID,
+			&record.Slug,
+			&record.TokenHash,
+			&record.Status,
+			&record.PublicPayload,
+			&record.ExpiresAt,
+			&record.CreatedAt,
+			&record.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan demo site: %w", err)
+		}
+		sites = append(sites, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list demo sites rows: %w", err)
+	}
+
+	return sites, nil
+}
+
 var _ Repository = (*Postgres)(nil)

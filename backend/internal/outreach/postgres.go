@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -12,6 +14,8 @@ import (
 type Repository interface {
 	ListEligibleLeads(ctx context.Context, limit int) ([]EligibleLead, error)
 	CountEligibleLeads(ctx context.Context) (int, error)
+	IsEmailSuppressed(ctx context.Context, email string) (bool, error)
+	RecordAdHocEmailSent(ctx context.Context, restaurantID uuid.UUID, recipientEmail string) error
 }
 
 type Postgres struct {
@@ -132,6 +136,45 @@ func (repo *Postgres) CountEligibleLeads(ctx context.Context) (int, error) {
 		return 0, fmt.Errorf("count eligible leads: %w", err)
 	}
 	return count, nil
+}
+
+func (repo *Postgres) IsEmailSuppressed(ctx context.Context, email string) (bool, error) {
+	if repo.pool == nil {
+		return false, fmt.Errorf("database pool is not configured")
+	}
+
+	const query = `SELECT EXISTS (SELECT 1 FROM email_suppressions WHERE email = lower(trim($1)))`
+	var suppressed bool
+	if err := repo.pool.QueryRow(ctx, query, strings.ToLower(strings.TrimSpace(email))).Scan(&suppressed); err != nil {
+		return false, fmt.Errorf("check email suppression: %w", err)
+	}
+	return suppressed, nil
+}
+
+func (repo *Postgres) RecordAdHocEmailSent(ctx context.Context, restaurantID uuid.UUID, recipientEmail string) error {
+	if repo.pool == nil {
+		return fmt.Errorf("database pool is not configured")
+	}
+
+	const query = `
+		UPDATE restaurants
+		SET is_contacted = true,
+		    email_sent = true,
+		    email_send_count = email_send_count + 1,
+		    last_email_sent_at = now(),
+		    last_email_recipient = $2,
+		    status = CASE WHEN status IN ('lead', 'demo_ready') THEN 'emailed' ELSE status END,
+		    updated_at = now()
+		WHERE id = $1`
+
+	result, err := repo.pool.Exec(ctx, query, restaurantID, recipientEmail)
+	if err != nil {
+		return fmt.Errorf("record ad hoc email sent: %w", err)
+	}
+	if result.RowsAffected() != 1 {
+		return fmt.Errorf("restaurant was not found while recording ad hoc email")
+	}
+	return nil
 }
 
 func HasActiveBulkJob(ctx context.Context, pool *pgxpool.Pool, jobType string) (bool, string, error) {

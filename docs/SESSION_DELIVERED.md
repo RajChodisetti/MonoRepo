@@ -12,6 +12,48 @@ Each entry should explain:
 - how the work fits with the rest of the Phase 1 or Phase 2 plan;
 - risks, gaps, or follow-ups.
 
+## 2026-07-16 — Admin Portal Merge and Documentation Sync
+
+**Role:** Documentation Agent
+
+**Delivered:** Fetched `origin/master` and merged its 4 new commits — most
+notably PR #8 (`admin_portal`) — into `agent/tuvi-oauth-homepage-verification`.
+This replaces the `apps/web` placeholder with the real Next.js `internal_admin`
+console (dashboard, scrape-jobs list/detail/retry, restaurant list/detail with
+profile-OCR review + demo + campaign + member management, outreach bulk-send),
+which talks to the Go API only through its own same-origin `/api/admin/*`
+BFF/proxy route with an httpOnly session cookie. The merge also brought in
+`automation/outreach/scrape_ledger.py`, `daily_pipeline.py`, `identity.py`, and
+migration `000009_scrape_ledger`. Updated `docs/SERVICES.md` (port plan,
+long-running services, interlinks, notes) and `AGENTS.md` LIVING MEMORY >
+Current Repo Shape / Recent Agent Updates to describe `apps/web` as the live
+admin UI instead of a placeholder. Reviewed `RTK.md` (local Codex CLI
+token-saving wrapper doc) for accuracy; no change needed — content is unrelated
+to this feature and still correct.
+
+**Checks Run:** `git merge` completed with no conflicts (verified via
+`git status` after merge). No code was written, so no test suite was run;
+`apps/web/README.md` (already accurate from the source commit) was cross-checked
+against the actual route files (`src/app/(admin)/**`, `src/lib/api.ts`,
+`src/lib/client-api.ts`, `src/app/api/admin/proxy/[...path]/route.ts`,
+`src/middleware.ts`) before writing doc updates.
+
+**Business Value / Plan Fit:** Keeps agent-facing context (AGENTS.md,
+docs/SERVICES.md) truthful about repo shape so future sessions don't
+mis-describe `apps/web` as unimplemented. Surfaces a real gap: the admin portal
+is not yet part of `infra/docker/docker-compose.vm.yml` or the VM Caddyfile, so
+it is not reachable on any `tuvisolutions.com` subdomain yet — flagged as a
+follow-up rather than actioned, since VM/Caddy changes are a production
+deployment decision requiring explicit approval.
+
+**Production Deployment:** None. This session only merged branches locally and
+edited documentation; nothing was pushed or deployed.
+
+**Follow-ups:** Decide and implement a VM domain (e.g.
+`admin.tuvisolutions.com`) and add an `apps/web` service block to
+`docker-compose.vm.yml` + the Caddyfile if/when the admin portal should be
+reachable outside the VM's private network.
+
 ## 2026-07-15 — Equal Restaurant Demo Sizing and Deployment
 
 **Role:** Frontend, DevOps, and Documentation Agent

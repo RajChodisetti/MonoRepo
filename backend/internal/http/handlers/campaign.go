@@ -129,6 +129,28 @@ func (handler *CampaignHandler) List(w http.ResponseWriter, r *http.Request) {
 	handler.writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }
 
+func (handler *CampaignHandler) ListDemoLinks(w http.ResponseWriter, r *http.Request) {
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		handler.writeError(w, http.StatusUnauthorized, "unauthorized", "Authentication required.")
+		return
+	}
+
+	restaurantID, err := restaurantIDFromRequest(r)
+	if err != nil {
+		handler.writeError(w, http.StatusBadRequest, "invalid_request", "Restaurant id must be a valid UUID.")
+		return
+	}
+
+	links, err := handler.service.ListDemoLinks(r.Context(), principal, restaurantID)
+	if err != nil {
+		handler.mapCampaignError(w, err)
+		return
+	}
+
+	handler.writeJSON(w, http.StatusOK, map[string]any{"items": links})
+}
+
 func (handler *CampaignHandler) Get(w http.ResponseWriter, r *http.Request) {
 	principal, ok := auth.PrincipalFromContext(r.Context())
 	if !ok {

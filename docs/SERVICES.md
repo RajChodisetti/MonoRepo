@@ -14,6 +14,7 @@ This repo contains long-running services, one-shot jobs, static sites, and autom
 | `8000` | Voice sales agent | Expected in-repo service at `voice-sales-agent/`; FastAPI/WebSocket voice runtime used by both websites. |
 | `5173` | Restaurant services catalog | Vite default dev port. |
 | `5500` | Presentation site | Static Python HTTP server. |
+| `3002` | Admin portal (`apps/web`) | Next.js internal_admin console; proxies to the main API through same-origin `/api/admin/*` BFF routes with an httpOnly session cookie. |
 
 ## Long-Running Services
 
@@ -28,6 +29,7 @@ This repo contains long-running services, one-shot jobs, static sites, and autom
 | Voice sales agent | `cd voice-sales-agent && make dev` or Docker compose | Provider keys and service env | Expected to expose `GET /readyz/browser` and `WS /browser-stream`. Restaurant template passes `restaurant_index`; corporate site passes `agent=corporate`; corporate bookings call main API company consultation endpoints. |
 | Restaurant services catalog | `cd apps/restaurant-services-catalog && npm run dev` | Node deps | Standalone Vite site; deploys with Wrangler. |
 | Presentation site | `cd presentation && python3 -m http.server 5500` | Python | Standalone static presentation. |
+| Admin portal | `cd apps/web && npm run dev` | Node deps; main API for `internal_admin` login | Runs on `3002`. Screens: dashboard, scrape-jobs (list/detail/retry), restaurants (list/detail: profile review, demo, campaign, members), outreach bulk-send. Requires an `internal_admin` user (`make seed-admin`). |
 
 ## Stack Commands
 
@@ -102,10 +104,15 @@ main API company consultations
   -> optional Google Calendar
   -> configured Resend or Zoho generic HTTP API provider
   <- voice-sales-agent corporate flow via MONOREPO_API_URL=http://localhost:8080
+
+admin portal (apps/web) :3002
+  -> Next.js BFF routes /api/admin/* (login/logout/me/proxy), httpOnly session cookie
+  -> proxy forwards to main API :8080 /api/v1/* with Bearer token (API_BASE_URL, default https://api.tuvisolutions.com)
+  -> restaurants, campaigns, scrape-jobs, outreach bulk-send admin endpoints
 ```
 
 ## Notes
 
-- `apps/web` is currently only a placeholder for the future Phase 1 dashboard.
+- `apps/web` is the internal admin console (Next.js, port `3002`) for the lead workflow: scrape jobs, restaurant/profile review, demo + campaign approval, and bulk outreach. It calls the main API only through its own same-origin proxy route, never directly from the browser.
 - The voice agent source lives at `voice-sales-agent/`; use `make voice-up` from the MonoRepo root for the Docker profile.
 - `tuvi-website/backend` is legacy reference code. Normal runtime uses the main API for consultation scheduling.

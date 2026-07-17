@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,6 +16,7 @@ import (
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/campaigns"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/config"
 	emailprovider "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/email"
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/restaurants"
 )
 
 type Service struct {
@@ -22,8 +24,10 @@ type Service struct {
 	pool            *pgxpool.Pool
 	campaigns       campaigns.Repository
 	campaignService *campaigns.Service
+	restaurants     *restaurants.Service
 	tokenResolver   DemoTokenResolver
 	emailPool       *emailprovider.AccountPool
+	emailProvider   emailprovider.Provider
 	emailCfg        config.EmailConfig
 	outreachCfg     config.OutreachConfig
 	enqueuer        BulkJobEnqueuer
@@ -35,8 +39,10 @@ func NewService(
 	pool *pgxpool.Pool,
 	campaignsRepo campaigns.Repository,
 	campaignService *campaigns.Service,
+	restaurantsService *restaurants.Service,
 	tokenResolver DemoTokenResolver,
 	emailPool *emailprovider.AccountPool,
+	emailProvider emailprovider.Provider,
 	emailCfg config.EmailConfig,
 	outreachCfg config.OutreachConfig,
 	enqueuer BulkJobEnqueuer,
@@ -50,8 +56,10 @@ func NewService(
 		pool:            pool,
 		campaigns:       campaignsRepo,
 		campaignService: campaignService,
+		restaurants:     restaurantsService,
 		tokenResolver:   tokenResolver,
 		emailPool:       emailPool,
+		emailProvider:   emailProvider,
 		emailCfg:        emailCfg,
 		outreachCfg:     outreachCfg,
 		enqueuer:        enqueuer,
@@ -454,6 +462,139 @@ func (service *Service) sendLead(ctx context.Context, lead EligibleLead, bulkJob
 
 func (service *Service) emailSendingEnabled() bool {
 	return !service.emailCfg.DisableSending
+}
+
+// latestCampaignContent returns the most recently created campaign for a
+// restaurant (any status), which carries the subject/HTML/text rendered at
+// draft/regenerate time. Ad hoc send/preview deliberately does not require
+// approval/publish/OCR gates, but it still needs real rendered content to
+// send, so it reuses whatever draft already exists rather than rendering ad
+// hoc content outside the audited draft lifecycle.
+func (service *Service) latestCampaignContent(ctx context.Context, principal auth.Principal, restaurantID uuid.UUID) (campaigns.Campaign, error) {
+	records, err := service.campaignService.ListByRestaurant(ctx, principal, restaurantID)
+	if err != nil {
+		return campaigns.Campaign{}, err
+	}
+	if len(records) == 0 {
+		return campaigns.Campaign{}, ErrNoCampaignDraft
+	}
+	return records[0], nil
+}
+
+// PreviewAdHoc renders what an ad hoc send would deliver right now, without
+// sending or mutating any state.
+func (service *Service) PreviewAdHoc(ctx context.Context, principal auth.Principal, restaurantID uuid.UUID) (AdHocPreview, error) {
+	if !auth.IsInternalAdmin(principal.Role) {
+		return AdHocPreview{}, restaurants.ErrForbidden
+	}
+
+	restaurant, err := service.restaurants.GetRestaurant(ctx, principal, restaurantID)
+	if err != nil {
+		return AdHocPreview{}, err
+	}
+
+	campaign, err := service.latestCampaignContent(ctx, principal, restaurantID)
+	if err != nil {
+		return AdHocPreview{}, err
+	}
+
+	return AdHocPreview{
+		RestaurantID:   restaurantID,
+		RestaurantName: restaurant.Name,
+		RecipientEmail: restaurant.Email,
+		Subject:        campaign.Subject,
+		BodyHTML:       campaign.BodyHTML,
+		BodyText:       campaign.BodyText,
+	}, nil
+}
+
+// SendAdHoc sends the latest campaign draft's rendered content to a single
+// restaurant immediately, outside the quota-managed bulk pipeline. It still
+// enforces the global sending kill switch and the opt-out suppression list —
+// those are compliance requirements, not internal review-workflow gates.
+func (service *Service) SendAdHoc(ctx context.Context, principal auth.Principal, restaurantID uuid.UUID) (AdHocSendResult, error) {
+	if !auth.IsInternalAdmin(principal.Role) {
+		return AdHocSendResult{RestaurantID: restaurantID}, restaurants.ErrForbidden
+	}
+	if !service.emailSendingEnabled() {
+		return AdHocSendResult{RestaurantID: restaurantID}, ErrSendingDisabled
+	}
+	if service.emailProvider == nil {
+		return AdHocSendResult{RestaurantID: restaurantID}, ErrNotConfigured
+	}
+
+	restaurant, err := service.restaurants.GetRestaurant(ctx, principal, restaurantID)
+	if err != nil {
+		return AdHocSendResult{RestaurantID: restaurantID}, err
+	}
+	email := strings.TrimSpace(restaurant.Email)
+	if email == "" {
+		return AdHocSendResult{RestaurantID: restaurantID}, ErrNoContactEmail
+	}
+
+	suppressed, err := service.repo.IsEmailSuppressed(ctx, email)
+	if err != nil {
+		return AdHocSendResult{RestaurantID: restaurantID}, err
+	}
+	if suppressed {
+		return AdHocSendResult{RestaurantID: restaurantID}, ErrEmailSuppressed
+	}
+
+	campaign, err := service.latestCampaignContent(ctx, principal, restaurantID)
+	if err != nil {
+		return AdHocSendResult{RestaurantID: restaurantID}, err
+	}
+
+	_, err = service.emailProvider.Send(ctx, emailprovider.SendRequest{
+		To:       email,
+		Subject:  campaign.Subject,
+		HTMLBody: campaign.BodyHTML,
+		TextBody: campaign.BodyText,
+		Metadata: map[string]string{
+			"restaurant_id": restaurantID.String(),
+			"campaign_id":   campaign.ID.String(),
+			"send_type":     "adhoc",
+		},
+	})
+	if err != nil {
+		return AdHocSendResult{RestaurantID: restaurantID}, fmt.Errorf("send ad hoc email: %w", err)
+	}
+
+	if err := service.repo.RecordAdHocEmailSent(ctx, restaurantID, email); err != nil {
+		service.log.ErrorContext(ctx, "adhoc_email_sent_but_record_failed",
+			"restaurant_id", restaurantID.String(), "error", err)
+	}
+
+	return AdHocSendResult{RestaurantID: restaurantID, Sent: true}, nil
+}
+
+// SendAdHocBatch sends to multiple restaurants, collecting a per-restaurant
+// result rather than failing the whole batch on one lead's error. Capped to
+// keep this synchronous HTTP-request path bounded — unlike the durable bulk
+// pipeline, ad hoc sends have no async job queue or pacing.
+const adHocBatchLimit = 25
+
+func (service *Service) SendAdHocBatch(ctx context.Context, principal auth.Principal, restaurantIDs []uuid.UUID) ([]AdHocSendResult, error) {
+	if !auth.IsInternalAdmin(principal.Role) {
+		return nil, restaurants.ErrForbidden
+	}
+	if len(restaurantIDs) == 0 {
+		return nil, fmt.Errorf("restaurant_ids must not be empty")
+	}
+	if len(restaurantIDs) > adHocBatchLimit {
+		return nil, fmt.Errorf("cannot send to more than %d restaurants at once", adHocBatchLimit)
+	}
+
+	results := make([]AdHocSendResult, 0, len(restaurantIDs))
+	for _, restaurantID := range restaurantIDs {
+		result, err := service.SendAdHoc(ctx, principal, restaurantID)
+		if err != nil {
+			result.RestaurantID = restaurantID
+			result.Error = err.Error()
+		}
+		results = append(results, result)
+	}
+	return results, nil
 }
 
 func (service *Service) UpdateJobSummary(

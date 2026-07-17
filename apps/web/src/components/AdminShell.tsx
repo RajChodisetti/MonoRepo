@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { withBasePath } from "@/lib/base-path";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard" },
@@ -18,14 +19,14 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    fetch("/api/admin/auth/me")
+    fetch(withBasePath("/api/admin/auth/me"))
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => setEmail(d?.user?.email ?? null))
       .catch(() => setEmail(null));
   }, []);
 
   async function logout() {
-    await fetch("/api/admin/auth/logout", { method: "POST" });
+    await fetch(withBasePath("/api/admin/auth/logout"), { method: "POST" });
     router.replace("/login");
     router.refresh();
   }

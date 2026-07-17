@@ -793,16 +793,16 @@ Rules:
 
 ## Current Repo Shape
 
-_Last updated: 2026-07-14_
+_Last updated: 2026-07-16_
 
 ```text
 Root Go module with backend under backend/.
 Domain packages include internal/restaurants, demos, auth, campaigns, outreach, scrapejobs, leadprep, and leadreview.
-Automation includes a durable PostgreSQL-backed Python city scrape worker and claimed OCR worker.
+Automation includes a durable PostgreSQL-backed Python city scrape worker and claimed OCR worker, plus automation/outreach/scrape_ledger.py and a new daily_pipeline.py/identity.py pairing; migration 000009_scrape_ledger backs the ledger.
 HTTP layer: internal/http with handlers and middleware.
 Platform: internal/platform/{config,db,logger,errors,metadata,migrations,telemetry}.
 SQL migrations: backend/migrations, including durable scrape/OCR/outreach workflow migrations 000015-000024; migration 000024 is not yet deployed. Integration test slot: backend/tests.
-Frontend apps: tuvi-website/app canonical Next.js corporate site, apps/web placeholder, and apps/restaurant-services-catalog Vite restaurant-services catalog.
+Frontend apps: tuvi-website/app canonical Next.js corporate site, apps/web internal admin portal (Next.js, port 3002, BFF-proxied to the main API — no longer a placeholder), and apps/restaurant-services-catalog Vite restaurant-services catalog.
 Phase 1 docs: docs/phase1/PHASE1_IMPLEMENTATION_GUIDE.md and PHASE1_TECHNICAL_BACKLOG.md.
 Phase 2 docs: docs/phase2/ (placeholders). ADRs: docs/adr/.
 Session docs: docs/SESSION_DELIVERED.md and docs/SESSION_SUMMARY.md.
@@ -821,9 +821,10 @@ Melbourne triggering, OCR execution, pacing deployment, migration 000024, and re
 
 ## Recent Agent Updates
 
-_Last updated: 2026-07-14_
+_Last updated: 2026-07-16_
 
 ```text
+2026-07-16 — Documentation Agent — Merged origin/master (PR #8, admin_portal) into agent/tuvi-oauth-homepage-verification, bringing in the real apps/web admin portal (dashboard, scrape-jobs, restaurants, outreach screens) and automation/outreach scrape-ledger changes; updated docs/SERVICES.md and this Repo Shape entry to match. No production deployment performed; apps/web is not yet wired into infra/docker/docker-compose.vm.yml or the VM Caddyfile.
 2026-07-14 — Frontend/Security/DevOps — Deployed the logo-led Tuvi corporate and restaurant-services redesign plus public Privacy, Terms, and Google Workspace pages as website-only release 4eaf7fa.
 2026-07-14 — Backend/Security/Documentation — Added local durable outreach pacing: 40 account slots over eight hours, persisted 2–5 minute jitter/global gate, one provider attempt per job activation, and migration 24; production remains approval-gated.
 2026-07-14 — Backend/Security/DevOps/Documentation — Implemented the local durable city scrape → OCR → reviewed token-gated demo/campaign → quota-managed HTTP outreach workflow and operating runbook; no production actions were taken.

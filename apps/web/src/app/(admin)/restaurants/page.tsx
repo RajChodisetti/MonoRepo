@@ -1,13 +1,16 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { adminFetch } from "@/lib/client-api";
 import { RESTAURANT_STATUSES, formatDate } from "@/lib/constants";
 import type { Restaurant } from "@/lib/types";
 import { EmptyState, ErrorBanner, PageHeader, StatusBadge } from "@/components/ui";
+import { SendPreviewModal } from "@/components/SendPreviewModal";
 
 export default function RestaurantsPage() {
+  const router = useRouter();
   const [items, setItems] = useState<Restaurant[]>([]);
   const [name, setName] = useState("");
   const [status, setStatus] = useState("");
@@ -16,6 +19,8 @@ export default function RestaurantsPage() {
   const [includeArchived, setIncludeArchived] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -129,6 +134,32 @@ export default function RestaurantsPage() {
         </button>
       </div>
 
+      {selected.size > 0 ? (
+        <div
+          className="card"
+          style={{
+            marginBottom: "1rem",
+            display: "flex",
+            alignItems: "center",
+            gap: "0.75rem",
+            justifyContent: "space-between",
+            position: "sticky",
+            top: "0.5rem",
+            zIndex: 10,
+          }}
+        >
+          <span>{selected.size} selected</span>
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            <button className="btn btn-secondary" type="button" onClick={() => setSelected(new Set())}>
+              Clear
+            </button>
+            <button className="btn btn-primary" type="button" onClick={() => setPreviewOpen(true)}>
+              Preview &amp; send {selected.size} selected
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {loading ? <EmptyState message="Loading restaurants…" /> : null}
       {!loading && items.length === 0 ? (
         <EmptyState message="No restaurants match these filters." />
@@ -139,6 +170,20 @@ export default function RestaurantsPage() {
           <table className="data">
             <thead>
               <tr>
+                <th>
+                  <input
+                    type="checkbox"
+                    checked={items.length > 0 && items.every((r) => selected.has(r.id))}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelected(new Set(items.map((r) => r.id)));
+                      } else {
+                        setSelected(new Set());
+                      }
+                    }}
+                    aria-label="Select all"
+                  />
+                </th>
                 <th>Name</th>
                 <th>Email</th>
                 <th>Status</th>
@@ -151,7 +196,26 @@ export default function RestaurantsPage() {
             </thead>
             <tbody>
               {items.map((r) => (
-                <tr key={r.id}>
+                <tr
+                  key={r.id}
+                  onClick={() => router.push(`/restaurants/${r.id}`)}
+                  style={{ cursor: "pointer" }}
+                >
+                  <td onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={selected.has(r.id)}
+                      onChange={(e) => {
+                        setSelected((prev) => {
+                          const next = new Set(prev);
+                          if (e.target.checked) next.add(r.id);
+                          else next.delete(r.id);
+                          return next;
+                        });
+                      }}
+                      aria-label={`Select ${r.name}`}
+                    />
+                  </td>
                   <td>{r.name}</td>
                   <td>{r.email || "—"}</td>
                   <td>
@@ -165,7 +229,7 @@ export default function RestaurantsPage() {
                       : "No"}
                   </td>
                   <td>{formatDate(r.updated_at)}</td>
-                  <td>
+                  <td onClick={(e) => e.stopPropagation()}>
                     <Link href={`/restaurants/${r.id}`}>Open</Link>
                   </td>
                 </tr>
@@ -174,6 +238,13 @@ export default function RestaurantsPage() {
           </table>
         </div>
       ) : null}
+
+      <SendPreviewModal
+        open={previewOpen}
+        restaurantIds={[...selected]}
+        onClose={() => setPreviewOpen(false)}
+        onSent={load}
+      />
     </div>
   );
 }

@@ -193,6 +193,25 @@ services:
         condition: service_started
     restart: unless-stopped
 
+  admin-web:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.web
+      args:
+        NEXT_PUBLIC_BASE_PATH: /admin
+    env_file:
+      - path: ${TUVI_ENV_DIR:-/opt/tuvi/env}/stack.env
+        required: false
+    environment:
+      NODE_ENV: production
+      API_BASE_URL: http://api:8080
+    ports:
+      - "127.0.0.1:${TUVI_ADMIN_WEB_PORT:-13002}:3002"
+    depends_on:
+      api:
+        condition: service_started
+    restart: unless-stopped
+
   voice-agent:
     build:
       context: ../../voice-sales-agent
