@@ -12,6 +12,92 @@ Each entry should explain:
 - how the work fits with the rest of the Phase 1 or Phase 2 plan;
 - risks, gaps, or follow-ups.
 
+## 2026-07-17 — Lead Photo Management, Ad Hoc/Bulk Send with Preview, Demo Links, and Admin Portal Production Deployment
+
+**Role:** Full-Stack and DevOps Agent
+
+**Delivered:** In the admin portal (`apps/web`), the restaurant lead detail
+view gained a Photos tab (list/hide/restore scraped menu and gallery images,
+soft-hide via new `hidden_at`/`hidden_by` columns so the public site-image
+endpoints and underlying scrape data are unaffected), a Demo links section,
+and a header "Send email" button; the restaurants list gained checkbox
+multi-select with a bulk send action bar. Both flows share a
+`SendPreviewModal` that renders the exact subject/HTML/text before the send
+is confirmed. Backend additions: `GET/DELETE/POST` image visibility
+endpoints, `GET .../demo-links`, and a new ad hoc outreach send path
+(`POST .../outreach/adhoc-send`, single and batch) — a deliberate product
+decision, made explicitly with the user, to skip the OCR/profile/demo/
+campaign approval gates the existing quota-managed bulk pipeline enforces,
+while still keeping the `EMAIL_DISABLE_SENDING` kill switch and the
+`email_suppressions` opt-out list as non-negotiable. The existing
+`POST /api/v1/outreach/bulk-send` pipeline is unmodified. Migration 000026
+adds the visibility columns; a pre-existing migration numbering collision
+(both the current work and the earlier `admin_portal` merge had claimed
+`000009`) was discovered and fixed by renumbering the unrelated,
+never-applied `scrape_ledger` migration to `000027`.
+
+**Deployed:** `apps/web` is now live at `https://api.tuvisolutions.com/admin`
+— same host as the API, Caddy path-routed (`handle /admin*`), no new
+subdomain, per explicit instruction. This is the admin portal's first
+production deployment (previously undeployed). Two real bugs were found and
+fixed only by deploying and testing against a running container, not by
+documentation review: (1) `next start` re-evaluates `next.config.ts`
+(and therefore `basePath`) at server boot, so `NEXT_PUBLIC_BASE_PATH` had to
+be set in the Docker runtime stage, not only the builder stage that produces
+the static assets — without it, every page under `/admin/*` 404'd while the
+same paths worked fine unprefixed; (2) `apps/web`'s Next.js pin (15.5.0) had
+a flagged CVE, upgraded to 15.5.20 in the same pass. `api` and `worker` were
+rebuilt and recreated to ship the new Go endpoints; no other existing
+service (postgres, redis, scrape-worker, voice-agent, tuvi-website, template,
+catalog) was rebuilt or restarted.
+
+**Checks Run:** `go build ./... && go vet ./... && go test ./...` — full
+backend suite green, including 5 new tests for the ad hoc send path
+(disabled-sending rejection, suppressed-email rejection, no-campaign-draft
+rejection, successful send + restaurant record update, batch partial
+results). `npx tsc --noEmit` clean on `apps/web` after every change (the
+local host's Node v23 breaks `next build`'s SWC step for unrelated reasons —
+confirmed pre-existing by testing the already-shipped `tuvi-website` app,
+which fails identically — so real build verification was done via the
+Node 22 Docker image, matching this repo's own Dockerfile convention).
+Production verification: pre- and post-migration Postgres backups taken
+against the correct live database (`monorepo`, not the legacy
+`tuvi`/`restaurant_platform` role/db pair, which turned out to be an inert
+leftover from before an earlier least-privilege database migration);
+`schema_migrations` confirms 000026 and 000027 applied; `https://api.
+tuvisolutions.com/admin/login` returns 200; `/admin/dashboard` without a
+session correctly redirects to `/admin/login?next=...`; the Go API's
+existing public endpoints, `/docs/`, `/openapi.yaml`, and the other four
+Tuvi domains (corporate site, voice, demo, and the unrelated Tilnest/
+SustainabilityWise/n8n sites sharing the VM) all verified unaffected
+post-deploy.
+
+**Business Value / Plan Fit:** Gives the internal_admin operator a working
+way to curate scraped photos, see a lead's demo link(s) without leaving the
+detail view, and send outreach to one or several hand-picked leads with a
+mandatory preview — closing the gap between "leads exist in the database"
+and "a human can act on them" that the admin portal's first (undeployed)
+merge left open.
+
+**Production Deployment:** Deployed via `git archive` snapshots into new
+`/opt/tuvi/releases/monorepo-<sha>` directories (release directories on this
+VM are not git checkouts), following the existing symlink-swap/rollback
+convention. Final release: `eaa525c`. `/opt/tuvi/MonoRepo` now points there;
+`/opt/tuvi/previous-release-path` records the prior release for rollback.
+
+**Risks / Follow-ups:** `EMAIL_DISABLE_SENDING=true` remains the production
+default (unchanged, per the existing human-approval gate in
+`docs/runbooks/vm-deployment-plan.md`) — the new ad hoc send buttons will
+503 in production until that separate decision is made, identical to
+today's existing bulk-send button. Several intermediate release directories
+from this session's iterative debugging (`monorepo-b19b870` through
+`monorepo-a00160a`) remain on the VM under `/opt/tuvi/releases/`; harmless
+(98GB free) but could be pruned. The bare `https://api.tuvisolutions.com/admin`
+root (no further path) takes two redirect hops to reach the login page
+instead of one (`/admin` → `/admin/dashboard` → `/admin/login`) — cosmetic
+only, not a functional issue, not investigated further given time already
+spent on the basePath root cause above.
+
 ## 2026-07-16 — Admin Portal Merge and Documentation Sync
 
 **Role:** Documentation Agent

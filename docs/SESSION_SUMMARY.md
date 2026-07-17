@@ -1,7 +1,7 @@
 # Session Summary
 
-**Latest (2026-07-16):** Merged `origin/master`'s admin_portal PR into this branch — `apps/web` is now the real Next.js internal admin console (port 3002), not a placeholder.
-**Admin portal:** Dashboard, scrape-jobs, restaurant/profile review, demo/campaign approval, and outreach bulk-send screens, proxied to the Go API via `/api/admin/*` with an httpOnly session cookie.
-**Docs:** `docs/SERVICES.md` and `AGENTS.md` LIVING MEMORY updated to reflect the new repo shape; `RTK.md` reviewed and left unchanged (still accurate).
-**Gap:** The admin portal is not yet in `infra/docker/docker-compose.vm.yml` or the VM Caddyfile — no public domain serves it yet.
-**Previous (2026-07-15):** PostgreSQL is the sole authority for consultation availability/bookings; migration 25 and commit `000cdd8` are deployed and healthy.
+**Latest (2026-07-17):** Admin portal is live in production at `https://api.tuvisolutions.com/admin` — new lead Photos tab (hide/restore images), Demo links section, and single/multi-select "Send email" with a mandatory preview modal, backed by a new ad hoc outreach send path that intentionally skips the bulk pipeline's approval gates (explicit product decision) but keeps the send-disabled kill switch and opt-out suppression list.
+**Deployment fixes:** Found and fixed two real bugs only visible once deployed — `NEXT_PUBLIC_BASE_PATH` was missing from the Docker runtime stage (next start re-reads next.config.ts at boot), and a migration-numbering collision from the earlier admin_portal merge (renumbered 000009_scrape_ledger → 000027). Next.js bumped 15.5.0 → 15.5.20 (fixes a flagged CVE).
+**Verified:** Backend suite green (go build/vet/test, 5 new ad hoc-send tests); production login page, redirect-to-login, and all pre-existing API/domain traffic (docs, openapi, public API, corporate site, voice, demo, and the unrelated Tilnest/SustainabilityWise/n8n sites on the same VM) confirmed unaffected post-deploy.
+**Gap (unchanged, expected):** `EMAIL_DISABLE_SENDING=true` remains the production default — new send buttons will 503 until that separate human-approval decision is made, same as the existing bulk-send button today.
+**Previous (2026-07-16):** Admin portal merged from `origin/master`, `apps/web` became the real Next.js console instead of a placeholder (not yet deployed at that point).
