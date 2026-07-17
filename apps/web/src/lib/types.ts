@@ -90,16 +90,86 @@ export type DemoSite = {
   updated_at: string;
 };
 
+export type RestaurantProfile = {
+  description?: string;
+  opening_hours?: unknown;
+  phone?: string;
+  website?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  google_place_id?: string;
+  rating?: number | null;
+  reviews_count?: number | null;
+  price_level?: string | number | null;
+  cuisines?: unknown;
+  owners?: unknown;
+  images?: unknown;
+  dietary_options?: unknown;
+  parking_info?: unknown;
+  reservation_policy?: unknown;
+  brand_tone?: unknown;
+  scrape_status?: string;
+  scrape_errors?: unknown;
+};
+
 export type ProfileReviewPreview = {
   restaurant_id: string;
   restaurant_name?: string;
   contact_email?: string;
   ocr_status?: string;
   ocr_input_fingerprint?: string;
+  ocr_completed_at?: string;
   review_status?: string;
+  reviewed_at?: string;
+  reviewed_by?: string;
   restaurant_updated_at?: string;
   profile_updated_at?: string;
-  profile?: Record<string, unknown>;
+  profile?: RestaurantProfile;
+};
+
+export type SiteImage = {
+  id?: string;
+  url?: string;
+  thumbnail_url?: string;
+  image_type?: string;
+  title?: string;
+  source?: string;
+};
+
+export type SiteImages = {
+  restaurant_id?: string;
+  menu_images?: SiteImage[];
+  gallery_images?: SiteImage[];
+};
+
+export type SiteMenuItem = {
+  name?: string;
+  category?: string;
+  description?: string;
+  price?: string;
+  image_url?: string;
+};
+
+export type SiteReview = {
+  reviewer?: string;
+  review?: string;
+  stars?: number | null;
+  date?: string;
+};
+
+export type SiteContent = {
+  restaurant_id?: string;
+  place_id?: string;
+  name?: string;
+  menu_items?: SiteMenuItem[];
+  menu_images?: SiteImage[];
+  gallery_images?: SiteImage[];
+  reviews?: SiteReview[];
+  thumbnail?: string;
 };
 
 export type Member = {

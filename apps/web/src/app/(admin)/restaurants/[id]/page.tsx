@@ -11,22 +11,26 @@ import type {
   Member,
   ProfileReviewPreview,
   Restaurant,
+  SiteContent,
+  SiteImages,
 } from "@/lib/types";
 import { EmptyState, ErrorBanner, PageHeader, StatusBadge } from "@/components/ui";
+import { ScrapedDetailsPanel } from "@/components/ScrapedDetailsPanel";
 
-type Tab = "overview" | "profile" | "demo" | "campaign" | "members";
+type Tab = "overview" | "scraped" | "profile" | "demo" | "campaign" | "members";
 
 function RestaurantDetailInner() {
   const params = useParams<{ id: string }>();
   const search = useSearchParams();
   const id = params.id;
-  const initialTab = (search.get("tab") as Tab) || "overview";
+  const initialTab = (search.get("tab") as Tab) || "scraped";
 
   const [tab, setTab] = useState<Tab>(initialTab);
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [detailsLoading, setDetailsLoading] = useState(true);
 
   // overview form
   const [name, setName] = useState("");
@@ -35,8 +39,10 @@ function RestaurantDetailInner() {
   const [shownInterest, setShownInterest] = useState(false);
   const [status, setStatus] = useState("lead");
 
-  // profile
+  // profile / scrape details
   const [preview, setPreview] = useState<ProfileReviewPreview | null>(null);
+  const [siteImages, setSiteImages] = useState<SiteImages | null>(null);
+  const [siteContent, setSiteContent] = useState<SiteContent | null>(null);
 
   // demo
   const [demoId, setDemoId] = useState("");
@@ -68,6 +74,34 @@ function RestaurantDetailInner() {
       `restaurants/${id}/profile/review-preview`,
     );
     setPreview(data);
+    return data;
+  }, [id]);
+
+  const loadScrapedExtras = useCallback(async (profilePreview?: ProfileReviewPreview | null) => {
+    try {
+      const images = await adminFetch<SiteImages>(
+        `restaurants/${id}/site-images`,
+        { public: true },
+      );
+      setSiteImages(images);
+    } catch {
+      setSiteImages(null);
+    }
+
+    const placeId = profilePreview?.profile?.google_place_id;
+    if (placeId) {
+      try {
+        const content = await adminFetch<SiteContent>(
+          `site/by-place/${encodeURIComponent(placeId)}`,
+          { public: true },
+        );
+        setSiteContent(content);
+      } catch {
+        setSiteContent(null);
+      }
+    } else {
+      setSiteContent(null);
+    }
   }, [id]);
 
   const loadCampaigns = useCallback(async () => {
@@ -88,26 +122,43 @@ function RestaurantDetailInner() {
     let cancelled = false;
     async function boot() {
       setError(null);
+      setDetailsLoading(true);
       try {
         await loadRestaurant();
+        try {
+          const p = await loadProfile();
+          if (!cancelled) await loadScrapedExtras(p);
+        } catch {
+          // profile may not exist yet for brand-new leads
+          if (!cancelled) {
+            setPreview(null);
+            setSiteImages(null);
+            setSiteContent(null);
+          }
+        }
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "Failed to load");
         }
+      } finally {
+        if (!cancelled) setDetailsLoading(false);
       }
     }
     boot();
     return () => {
       cancelled = true;
     };
-  }, [loadRestaurant]);
+  }, [loadRestaurant, loadProfile, loadScrapedExtras]);
 
   useEffect(() => {
     setMessage(null);
     setError(null);
     async function loadTab() {
       try {
-        if (tab === "profile") await loadProfile();
+        if (tab === "scraped" || tab === "profile") {
+          const p = await loadProfile();
+          await loadScrapedExtras(p);
+        }
         if (tab === "campaign") await loadCampaigns();
         if (tab === "members") await loadMembers();
       } catch (err) {
@@ -115,7 +166,7 @@ function RestaurantDetailInner() {
       }
     }
     loadTab();
-  }, [tab, loadProfile, loadCampaigns, loadMembers]);
+  }, [tab, loadProfile, loadScrapedExtras, loadCampaigns, loadMembers]);
 
   async function saveOverview(e: FormEvent) {
     e.preventDefault();
@@ -381,7 +432,8 @@ function RestaurantDetailInner() {
   }
 
   const tabs: { id: Tab; label: string }[] = [
-    { id: "overview", label: "Overview" },
+    { id: "scraped", label: "Scraped details" },
+    { id: "overview", label: "Edit lead" },
     { id: "profile", label: "Profile review" },
     { id: "demo", label: "Demo" },
     { id: "campaign", label: "Campaign" },
@@ -424,6 +476,15 @@ function RestaurantDetailInner() {
           </button>
         ))}
       </div>
+
+      {tab === "scraped" ? (
+        <ScrapedDetailsPanel
+          preview={preview}
+          siteImages={siteImages}
+          siteContent={siteContent}
+          loading={detailsLoading}
+        />
+      ) : null}
 
       {tab === "overview" && restaurant ? (
         <form onSubmit={saveOverview} className="card" style={{ display: "grid", gap: "0.85rem", maxWidth: 640 }}>
@@ -476,7 +537,14 @@ function RestaurantDetailInner() {
       ) : null}
 
       {tab === "profile" ? (
-        <div className="card" style={{ display: "grid", gap: "0.85rem" }}>
+        <div style={{ display: "grid", gap: "1rem" }}>
+          <ScrapedDetailsPanel
+            preview={preview}
+            siteImages={siteImages}
+            siteContent={siteContent}
+            loading={detailsLoading}
+          />
+          <div className="card" style={{ display: "grid", gap: "0.85rem" }}>
           {!preview ? (
             <p style={{ color: "var(--muted)", margin: 0 }}>Loading preview…</p>
           ) : (
@@ -488,19 +556,6 @@ function RestaurantDetailInner() {
               <div>
                 <strong>Contact:</strong> {preview.contact_email || "—"}
               </div>
-              <pre
-                style={{
-                  margin: 0,
-                  padding: "0.85rem",
-                  background: "var(--bg)",
-                  border: "1px solid var(--line)",
-                  overflow: "auto",
-                  maxHeight: 360,
-                  fontSize: "0.82rem",
-                }}
-              >
-                {JSON.stringify(preview.profile ?? preview, null, 2)}
-              </pre>
               <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
                 <button className="btn btn-primary" type="button" disabled={busy} onClick={() => reviewProfile("approved")}>
                   Approve profile
@@ -511,12 +566,21 @@ function RestaurantDetailInner() {
                 <button className="btn btn-secondary" type="button" disabled={busy} onClick={() => reviewProfile("draft")}>
                   Reset to draft
                 </button>
-                <button className="btn btn-secondary" type="button" disabled={busy} onClick={loadProfile}>
+                <button
+                  className="btn btn-secondary"
+                  type="button"
+                  disabled={busy}
+                  onClick={async () => {
+                    const p = await loadProfile();
+                    await loadScrapedExtras(p);
+                  }}
+                >
                   Refresh preview
                 </button>
               </div>
             </>
           )}
+          </div>
         </div>
       ) : null}
 
