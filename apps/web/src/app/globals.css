@@ -1,0 +1,228 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #f4f6f5;
+  --bg-elevated: #ffffff;
+  --ink: #12201c;
+  --muted: #5c6b66;
+  --line: #d8e0dc;
+  --accent: #0f6b5c;
+  --accent-soft: #e3f2ef;
+  --ok: #1b7a4a;
+  --ok-bg: #e8f6ee;
+  --warn: #9a6b12;
+  --warn-bg: #fbf3e0;
+  --bad: #a33b2e;
+  --bad-bg: #f9ecea;
+  --neutral: #3d4a46;
+  --neutral-bg: #eef1ef;
+  --sidebar: #0d1f1a;
+  --sidebar-text: #d7e6e1;
+  --sidebar-muted: #8aa399;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-elevated: var(--bg-elevated);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --font-sans: var(--font-source-sans);
+  --font-display: var(--font-fraunces);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-source-sans), system-ui, sans-serif;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+}
+
+.badge-ok {
+  color: var(--ok);
+  background: var(--ok-bg);
+  border-color: color-mix(in srgb, var(--ok) 20%, transparent);
+}
+
+.badge-warn {
+  color: var(--warn);
+  background: var(--warn-bg);
+  border-color: color-mix(in srgb, var(--warn) 20%, transparent);
+}
+
+.badge-bad {
+  color: var(--bad);
+  background: var(--bad-bg);
+  border-color: color-mix(in srgb, var(--bad) 20%, transparent);
+}
+
+.badge-neutral {
+  color: var(--neutral);
+  background: var(--neutral-bg);
+  border-color: color-mix(in srgb, var(--neutral) 15%, transparent);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.55rem 0.95rem;
+  border: 1px solid transparent;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 88%, black);
+}
+
+.btn-secondary {
+  background: var(--bg-elevated);
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.btn-danger {
+  background: var(--bad-bg);
+  border-color: color-mix(in srgb, var(--bad) 30%, transparent);
+  color: var(--bad);
+}
+
+.input,
+.select,
+.textarea {
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  background: white;
+  color: var(--ink);
+  font: inherit;
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+  outline: 2px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  outline-offset: 1px;
+}
+
+.card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--line);
+  padding: 1.1rem 1.25rem;
+}
+
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+}
+
+table.data {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+table.data th,
+table.data td {
+  padding: 0.7rem 0.85rem;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+table.data th {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--bg) 70%, white);
+}
+
+table.data tr:hover td {
+  background: color-mix(in srgb, var(--accent-soft) 55%, white);
+}
+
+.alert {
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--line);
+  font-size: 0.92rem;
+}
+
+.alert-error {
+  background: var(--bad-bg);
+  border-color: color-mix(in srgb, var(--bad) 25%, transparent);
+  color: var(--bad);
+}
+
+.alert-info {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--accent);
+}
+
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 1rem;
+  overflow-x: auto;
+}
+
+.tab {
+  padding: 0.65rem 0.9rem;
+  color: var(--muted);
+  font-weight: 600;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+}
+
+.tab[data-active="true"] {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}

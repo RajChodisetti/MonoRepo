@@ -1,0 +1,14 @@
+# Daily restaurant scrape cron (Docker scrape-cron service)
+# Runs at 2:00 AM UTC daily inside the scrape-cron container.
+#
+# Manual test (from automation/outreach/):
+#   python daily_pipeline.py --cities Sydney Melbourne Perth --total 500
+#
+# Environment (set in .env or docker-compose):
+#   SCRAPE_REFRESH_DAYS=7        # re-scrape records older than N days
+#   SCRAPE_CITIES=Sydney,Melbourne,Perth
+#   SCRAPE_DAILY_LIMIT=500
+#   DATABASE_URL=postgresql://postgres:postgres@postgres:5432/restaurant_platform
+#
+# Crontab line installed by docker-compose scrape-cron service:
+0 2 * * * cd /app && python daily_pipeline.py >> /var/log/scrape.log 2>&1
