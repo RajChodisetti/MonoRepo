@@ -798,7 +798,7 @@ _Last updated: 2026-07-16_
 ```text
 Root Go module with backend under backend/.
 Domain packages include internal/restaurants, demos, auth, campaigns, outreach, scrapejobs, leadprep, and leadreview.
-Automation includes a durable PostgreSQL-backed Python city scrape worker and claimed OCR worker, plus automation/outreach/scrape_ledger.py and a new daily_pipeline.py/identity.py pairing; migration 000009_scrape_ledger backs the ledger.
+Automation includes a durable PostgreSQL-backed Python city scrape worker and claimed OCR worker, plus automation/outreach/scrape_ledger.py and a new daily_pipeline.py/identity.py pairing; migration 000027_scrape_ledger backs the ledger (renumbered from 000009, which collided with the already-applied production migration 000009_email_campaigns).
 HTTP layer: internal/http with handlers and middleware.
 Platform: internal/platform/{config,db,logger,errors,metadata,migrations,telemetry}.
 SQL migrations: backend/migrations, including durable scrape/OCR/outreach workflow migrations 000015-000024; migration 000024 is not yet deployed. Integration test slot: backend/tests.

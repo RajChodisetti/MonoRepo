@@ -24,7 +24,7 @@ profile-OCR review + demo + campaign + member management, outreach bulk-send),
 which talks to the Go API only through its own same-origin `/api/admin/*`
 BFF/proxy route with an httpOnly session cookie. The merge also brought in
 `automation/outreach/scrape_ledger.py`, `daily_pipeline.py`, `identity.py`, and
-migration `000009_scrape_ledger`. Updated `docs/SERVICES.md` (port plan,
+migration `000027_scrape_ledger` (renumbered from 000009 during deployment after discovering it collided with the already-applied production migration 000009_email_campaigns). Updated `docs/SERVICES.md` (port plan,
 long-running services, interlinks, notes) and `AGENTS.md` LIVING MEMORY >
 Current Repo Shape / Recent Agent Updates to describe `apps/web` as the live
 admin UI instead of a placeholder. Reviewed `RTK.md` (local Codex CLI
