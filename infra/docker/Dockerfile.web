@@ -18,6 +18,14 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3002
 ENV HOSTNAME=0.0.0.0
 
+# next start re-evaluates next.config.ts (and therefore its basePath) at
+# server boot, not just at build time — this must be set here too, not only
+# in the builder stage above, or the running server silently serves with no
+# basePath even though the prebuilt static assets/manifest were generated
+# with one.
+ARG NEXT_PUBLIC_BASE_PATH=/admin
+ENV NEXT_PUBLIC_BASE_PATH=${NEXT_PUBLIC_BASE_PATH}
+
 COPY --from=builder /src/apps/web/package*.json ./
 COPY --from=builder /src/apps/web/node_modules ./node_modules
 COPY --from=builder /src/apps/web/.next ./.next
