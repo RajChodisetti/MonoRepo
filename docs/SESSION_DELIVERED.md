@@ -2168,3 +2168,54 @@ not be run in this workspace.
 **Risks / Follow-ups:** The change is local and unreleased. Production remains on
 `caffcfb`/migration `000030`; the hybrid media and mobile-switch work still require
 the previously documented storage configuration and explicit deployment approval.
+
+## 2026-07-19 — Hybrid Media and Mobile Template Production Deployment
+
+**Role:** Full-Stack, Backend, Frontend, AI Workflow, Security, Test, DevOps,
+and Documentation Agent
+
+**Delivered:** Pushed `b5f7299` and corrective packaging commit `6c21c15`
+directly to `master`, then deployed the immutable `6c21c15` release at
+`/opt/tuvi/releases/monorepo-6c21c15`. Migration `000031` is applied. Fresh,
+attributed Google Places photo resolution, exact OCR resource-fingerprint
+matching, public menu-document exclusion, non-destructive media imports,
+OCR-aware template placements, authenticated admin media controls, and the
+clear mobile template preview control are live.
+
+The release was built before downtime. A compressed database backup was saved
+as `/opt/tuvi/backups/monorepo-pre-b5f7299-20260719T174044Z.dump`, alongside
+protected stack and ingestion environment backups. The first production smoke
+found that `Dockerfile.ocr` omitted the new shared `media_asset_metadata.py`
+module. The OCR container was isolated in a restart loop; the API, admin, and
+templates remained healthy. Commit `6c21c15` added the missing module to the
+image, focused OCR/import tests passed 13/13, and only the OCR image/container
+was rebuilt. The corrected OCR worker is running with zero restarts.
+
+**Live Verification:** API, Go worker, scrape worker, OCR worker, admin portal,
+template, corporate website, and voice containers are running with zero
+restarts and no current error/traceback/panic/fatal logs. Public corporate site,
+restaurant API, admin login, voice readiness, and template variants 1/2/3 all
+return HTTP 200. Restaurant detail responses return `Cache-Control: no-store,
+max-age=0`. Schema version is 31 and `restaurant_media_assets` exists.
+
+Migration `000031` safely returned the 21 old fingerprint-less `verified`
+profiles to `pending`; production now has 940 pending and 4 failed profiles.
+There are 154 email-equipped unverified candidates. Today's shared OCR allowance
+was already 200/200, so the background worker is intentionally waiting for the
+UTC reset and has not exceeded the provider limit. The persisted outreach email
+job remains off and all three Gmail sender-health records remain healthy.
+
+**Checks Run:** Pre-release checks remained green: 165 Go tests across 44
+packages, Go vet/build, 13 OCR/import tests, Python compilation, admin lint and
+TypeScript, template TypeScript, both Node 22 production builds, OpenAPI,
+Compose validation, and diff checks. Production Docker builds succeeded for
+migrate, API, worker, scrape worker, OCR worker, admin, and template. Post-release
+database, container, logs, local HTTP, public HTTPS, cache-header, Gmail-health,
+outreach-control, OCR-budget, and release-symlink checks passed.
+
+**Risks / Follow-ups:** No S3-compatible production bucket/CDN is configured,
+so owner/licensed uploads remain unavailable while `STORAGE_PROVIDER=disabled`.
+This does not block live Google photo resolution. Personalized Google photos
+will remain fail-closed until the post-reset OCR worker writes exact resource
+fingerprints; menu documents remain excluded. The 200-request daily ceiling means
+the 154 eligible profiles will complete progressively rather than all at once.
