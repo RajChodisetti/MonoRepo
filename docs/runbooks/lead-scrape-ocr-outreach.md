@@ -203,6 +203,9 @@ LEAD_OCR_VERIFICATION_ENABLED=false
 LEAD_OCR_BATCH_SIZE=50
 LEAD_OCR_MAX_ATTEMPTS=3
 LEAD_OCR_RETRY_AFTER_HOURS=24
+LEAD_OCR_DAILY_REQUEST_LIMIT=200
+OCR_WORKER_POLL_SECONDS=900
+MENU_OCR_TIMEOUT=45
 HUGGING_FACE_API_KEY=<vision provider key>
 HF_VISION_MODEL=<supported vision model>
 ```
@@ -246,7 +249,7 @@ backup described above, run these as separate phases from
 ```bash
 docker compose --env-file /opt/tuvi/env/stack.env -p tuvi \
   -f infra/docker/docker-compose.vm.yml --profile jobs \
-  build migrate api worker scrape-worker ocr-job
+  build migrate api worker scrape-worker ocr-worker ocr-job
 
 docker compose --env-file /opt/tuvi/env/stack.env -p tuvi \
   -f infra/docker/docker-compose.vm.yml up -d postgres redis
@@ -262,11 +265,15 @@ docker compose --env-file /opt/tuvi/env/stack.env -p tuvi \
 
 docker compose --env-file /opt/tuvi/env/stack.env -p tuvi \
   -f infra/docker/docker-compose.vm.yml up -d --no-deps scrape-worker
+
+docker compose --env-file /opt/tuvi/env/stack.env -p tuvi \
+  -f infra/docker/docker-compose.vm.yml up -d --no-deps ocr-worker
 ```
 
-The scrape worker exposes no host port. It polls due `scrape_jobs` through the
-same PostgreSQL database as the API. Keep OCR disabled in `ingestion.env`; for
-the controlled batch below, enable it only on that one-shot container:
+The scrape and OCR workers expose no host ports. Both poll durable PostgreSQL
+state. Keep OCR disabled for the migration itself; enable the long-running OCR
+worker only after its provider key, daily budget, and email-only candidate query
+have been verified. The one-shot command below remains available for diagnosis.
 
 The durable database OCR verifier ignores `MENU_OCR_MAX_IMAGES`: it refreshes
 and attempts every discovered scraped photo. A restaurant reaches
@@ -359,7 +366,7 @@ docker compose --env-file /opt/tuvi/env/stack.env -p tuvi \
   -f infra/docker/docker-compose.vm.yml logs -f --tail=200 scrape-worker
 ```
 
-## Run and schedule OCR
+## Run background OCR
 
 Run one database-networked OCR batch:
 
@@ -369,21 +376,35 @@ docker compose --env-file /opt/tuvi/env/stack.env -p tuvi \
   -e LEAD_OCR_VERIFICATION_ENABLED=true ocr-job
 ```
 
-Inspect this controlled batch first. Only after its state transitions and draft
-artifacts are accepted, set `LEAD_OCR_VERIFICATION_ENABLED=true` in
-`/opt/tuvi/env/ingestion.env` and schedule the same one-shot job hourly with a
-non-overlapping lock (adjust the path if needed):
+After the controlled batch is accepted, set
+`LEAD_OCR_VERIFICATION_ENABLED=true` in `/opt/tuvi/env/ingestion.env` and start
+the durable background service:
 
-```cron
-15 * * * * cd /opt/tuvi/MonoRepo && flock -n /var/lock/tuvi-ocr.lock docker compose --env-file /opt/tuvi/env/stack.env -p tuvi -f infra/docker/docker-compose.vm.yml --profile jobs run --rm ocr-job >> /opt/tuvi/logs/ocr.log 2>&1
+```bash
+docker compose --env-file /opt/tuvi/env/stack.env -p tuvi \
+  -f infra/docker/docker-compose.vm.yml up -d --no-deps ocr-worker
 ```
+
+Do not keep the former host OCR cron beside `ocr-worker`. The worker polls every
+`OCR_WORKER_POLL_SECONDS` and claims only restaurants whose canonical
+`restaurants.email` is nonblank. Before every vision-provider request it makes
+an atomic reservation in `ocr_daily_request_usage`. The enforced global limit
+cannot exceed 200 requests per UTC day and survives container restarts. SDK
+automatic retries are disabled so one reservation can cause at most one provider
+request.
+
+Provider calls and image downloads use `MENU_OCR_TIMEOUT`. A timeout, HTTP 429,
+or temporary provider failure returns the active claim (and any unstarted batch
+claims) to `pending` without consuming an OCR attempt. A provider request that
+times out still counts against the daily limit because its remote outcome is
+ambiguous.
 
 OCR state meanings:
 
 - `pending`: ready to claim.
 - `running`: claimed; stale claims older than two hours can be reclaimed.
-- `verified`: at least one image was analyzed successfully; `lead.prepare` is
-  queued in the same transaction.
+- `verified`: every discovered image resolved and was analyzed successfully;
+  `lead.prepare` is queued in the same transaction.
 - `no_images`: no trusted Google-hosted direct image or Places photo resource was available;
   it is terminal and not outreach eligible.
 - `failed`: resolution or OCR failed and is not eligible. An unchanged input is

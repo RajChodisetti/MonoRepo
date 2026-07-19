@@ -676,6 +676,47 @@ def mark_ocr_verified(
     )
 
 
+def release_ocr_claim(
+    cur,
+    restaurant_id: uuid.UUID,
+    *,
+    claim_id: uuid.UUID,
+    claim_fingerprint: str,
+    reason: str,
+) -> None:
+    """Return quota/timeout work to pending without consuming an attempt."""
+    lock_restaurant_workflow(cur, restaurant_id)
+    cur.execute(
+        """
+        UPDATE restaurant_profiles
+        SET ocr_status = 'pending',
+            ocr_verified = false,
+            ocr_verified_at = NULL,
+            ocr_started_at = NULL,
+            ocr_completed_at = NULL,
+            ocr_attempts = GREATEST(ocr_attempts - 1, 0),
+            ocr_claim_id = NULL,
+            ocr_claim_fingerprint = NULL,
+            ocr_verification_errors = %s::jsonb,
+            updated_at = now()
+        WHERE restaurant_id = %s
+          AND ocr_status = 'running'
+          AND ocr_claim_id = %s
+          AND ocr_claim_fingerprint = %s
+          AND ocr_input_fingerprint = %s
+        """,
+        (
+            jdump([str(reason or "OCR work deferred")[:500]]),
+            restaurant_id,
+            claim_id,
+            claim_fingerprint,
+            claim_fingerprint,
+        ),
+    )
+    if cur.rowcount != 1:
+        raise StaleOCRClaim("OCR claim or input fingerprint is no longer current")
+
+
 def append_ocr_verification_error(cur, restaurant_id: uuid.UUID, message: str) -> None:
     cur.execute(
         """
@@ -785,6 +826,7 @@ def fetch_unverified_leads(
             )
               AND rp.raw_public_data IS NOT NULL
               AND rp.raw_public_data <> '{}'::jsonb
+              AND NULLIF(BTRIM(r.email), '') IS NOT NULL
             ORDER BY rp.created_at ASC
             LIMIT %s
             """,
@@ -834,6 +876,7 @@ def fetch_unverified_leads(
                 )
                   AND rp.raw_public_data IS NOT NULL
                   AND rp.raw_public_data <> '{}'::jsonb
+                  AND NULLIF(BTRIM(r.email), '') IS NOT NULL
                 ORDER BY rp.created_at ASC
                 LIMIT %s
                 FOR UPDATE OF rp SKIP LOCKED

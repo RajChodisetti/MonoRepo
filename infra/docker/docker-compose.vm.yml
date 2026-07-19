@@ -114,6 +114,23 @@ services:
         condition: service_started
     restart: unless-stopped
 
+  ocr-worker:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.ocr
+    command: ["python", "verify_leads_from_db.py", "--watch"]
+    env_file:
+      - path: ${TUVI_ENV_DIR:-/opt/tuvi/env}/stack.env
+        required: false
+      - path: ${TUVI_ENV_DIR:-/opt/tuvi/env}/ingestion.env
+        required: false
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
   ocr-job:
     profiles: [jobs]
     build:

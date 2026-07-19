@@ -16,6 +16,7 @@ COPY automation/outreach/verify_leads_from_db.py ./
 COPY automation/outreach/vision_ocr_benchmark.py ./
 COPY automation/outreach/import_to_db.py ./
 COPY automation/outreach/menu_image_ocr.py ./
+COPY automation/outreach/ocr_request_budget.py ./
 COPY automation/outreach/google_places_photo.py ./
 COPY automation/outreach/hf_llm.py ./
 COPY automation/outreach/env_loader.py ./

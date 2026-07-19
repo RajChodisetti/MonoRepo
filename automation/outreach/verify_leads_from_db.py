@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import sys
+import time
 import uuid
 
 from env_loader import load_project_env
@@ -21,19 +22,27 @@ from import_to_db import (  # noqa: E402
     get_conn,
     load_env,
     mark_ocr_status,
+    release_ocr_claim,
     StaleOCRClaim,
     verify_ocr_schema,
 )
 from google_places_photo import (  # noqa: E402
+    PhotoRequestTransientError,
     fetch_fresh_google_photo_resources,
     resolve_google_photo_uri,
 )
 from menu_image_ocr import (  # noqa: E402
     MenuOCRConfig,
+    MenuImageAnalyzer,
+    OCRTransientError,
     all_scraped_photos_processed,
     collect_candidate_image_urls,
     enrich_restaurant_with_menu_ocr,
     is_trusted_automated_image_url,
+)
+from ocr_request_budget import (  # noqa: E402
+    DurableOCRRequestBudget,
+    OCRDailyBudgetExhausted,
 )
 from tuvi_outreach_agent import Config  # noqa: E402
 
@@ -75,6 +84,22 @@ def ocr_retry_after_hours() -> int:
         return 24
 
 
+def ocr_daily_request_limit() -> int:
+    try:
+        configured = int(os.getenv("LEAD_OCR_DAILY_REQUEST_LIMIT", "200").strip())
+    except ValueError:
+        configured = 200
+    return min(200, max(1, configured))
+
+
+def ocr_worker_poll_seconds() -> int:
+    try:
+        configured = int(os.getenv("OCR_WORKER_POLL_SECONDS", "900").strip())
+    except ValueError:
+        configured = 900
+    return max(60, configured)
+
+
 def verify_one(
     cur,
     restaurant_id: uuid.UUID,
@@ -82,6 +107,7 @@ def verify_one(
     name: str,
     cfg: MenuOCRConfig,
     places_cfg: Config,
+    analyzer: MenuImageAnalyzer,
     *,
     claim_id: uuid.UUID | None,
     claim_fingerprint: str,
@@ -122,6 +148,10 @@ def verify_one(
             google_photos = fetch_fresh_google_photo_resources(place_id, places_cfg)
             if isinstance(images_block, dict):
                 images_block["google_photo_count"] = len(google_photos)
+        except PhotoRequestTransientError as exc:
+            raise OCRTransientError(
+                "Google Places photo refresh timed out or was temporarily unavailable"
+            ) from exc
         except Exception as exc:
             photo_refresh_error = str(exc)
             if not direct_urls:
@@ -186,7 +216,11 @@ def verify_one(
     for photo_index, photo in enumerate(google_photos):
         try:
             photo_uri = resolve_google_photo_uri(photo["name"], places_cfg)
-        except Exception as exc:
+        except PhotoRequestTransientError as exc:
+            raise OCRTransientError(
+                "Google Places photo resolution timed out or was temporarily unavailable"
+            ) from exc
+        except Exception:
             resolution_errors.append(
                 f"Google Places photo {photo_index + 1} could not be resolved"
             )
@@ -248,6 +282,7 @@ def verify_one(
     enrich_restaurant_with_menu_ocr(
         record,
         cfg,
+        analyzer=analyzer,
         analysis_candidates=analysis_candidates,
         process_all_candidates=True,
     )
@@ -298,17 +333,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--limit", type=int, default=0, help="Max restaurants to process (default: LEAD_OCR_BATCH_SIZE)")
     parser.add_argument("--dry-run", action="store_true", help="Log actions without writing to DB")
     parser.add_argument("--force", action="store_true", help="Run even when LEAD_OCR_VERIFICATION_ENABLED is false")
+    parser.add_argument("--watch", action="store_true", help="Run continuously as the background OCR worker")
+    parser.add_argument("--poll-seconds", type=int, default=0, help="Background poll interval (default: OCR_WORKER_POLL_SECONDS)")
     parser.add_argument("-v", "--verbose", action="store_true")
     return parser.parse_args()
 
 
-def main() -> int:
-    args = parse_args()
-    logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.INFO,
-        format="%(asctime)s  [%(levelname)s]  %(message)s",
-    )
-
+def run_once(args: argparse.Namespace) -> int:
     if not args.force and not env_enabled():
         log.info("LEAD_OCR_VERIFICATION_ENABLED is not true — skipping")
         return 0
@@ -324,6 +355,31 @@ def main() -> int:
 
     log.info("Connecting to database (limit=%d, dry_run=%s)", limit, args.dry_run)
     conn = get_conn(database_url)
+    budget_conn = None
+    budget = None
+    try:
+        if not args.dry_run:
+            budget_conn = get_conn(database_url)
+            budget = DurableOCRRequestBudget(
+                budget_conn,
+                daily_limit=ocr_daily_request_limit(),
+            )
+            snapshot = budget.snapshot()
+            if snapshot.remaining == 0:
+                log.info(
+                    "OCR daily request budget exhausted (%d/%d); waiting for the UTC reset",
+                    snapshot.requests_used,
+                    snapshot.daily_limit,
+                )
+                conn.close()
+                budget_conn.close()
+                return 0
+        analyzer = MenuImageAnalyzer(cfg, request_budget=budget)
+    except Exception:
+        conn.close()
+        if budget_conn is not None:
+            budget_conn.close()
+        raise
 
     verified = 0
     skipped = 0
@@ -343,12 +399,12 @@ def main() -> int:
                 # Persist running claims before any remote OCR/photo requests.
                 conn.commit()
             if not leads:
-                log.info("No pending leads with raw_public_data")
+                log.info("No pending email-equipped leads with raw_public_data")
                 return 0
 
             log.info("Found %d unverified lead(s)", len(leads))
 
-        for restaurant_id, record, name, claim_id, claim_fingerprint in leads:
+        for index, (restaurant_id, record, name, claim_id, claim_fingerprint) in enumerate(leads):
             label = name or str(restaurant_id)
             try:
                 with conn.cursor() as cur:
@@ -359,6 +415,7 @@ def main() -> int:
                         label,
                         cfg,
                         places_cfg,
+                        analyzer,
                         claim_id=claim_id,
                         claim_fingerprint=claim_fingerprint,
                         dry_run=args.dry_run,
@@ -375,6 +432,29 @@ def main() -> int:
                     log.info("  - %s → no_images (not email eligible)", label)
                 else:
                     skipped += 1
+            except (OCRDailyBudgetExhausted, OCRTransientError) as exc:
+                skipped += 1
+                conn.rollback()
+                if not args.dry_run:
+                    try:
+                        with conn.cursor() as cur:
+                            for pending in leads[index:]:
+                                pending_id, _, _, pending_claim_id, pending_fingerprint = pending
+                                if pending_claim_id is None:
+                                    continue
+                                release_ocr_claim(
+                                    cur,
+                                    pending_id,
+                                    claim_id=pending_claim_id,
+                                    claim_fingerprint=pending_fingerprint,
+                                    reason=str(exc),
+                                )
+                        conn.commit()
+                    except Exception:
+                        conn.rollback()
+                        raise
+                log.warning("  - %s — OCR deferred safely: %s", label, exc)
+                return 0
             except StaleOCRClaim as exc:
                 skipped += 1
                 conn.rollback()
@@ -408,6 +488,31 @@ def main() -> int:
         return 1 if failed else 0
     finally:
         conn.close()
+        if budget_conn is not None:
+            budget_conn.close()
+
+
+def main() -> int:
+    args = parse_args()
+    logging.basicConfig(
+        level=logging.DEBUG if args.verbose else logging.INFO,
+        format="%(asctime)s  [%(levelname)s]  %(message)s",
+    )
+
+    if not args.watch:
+        return run_once(args)
+
+    poll_seconds = max(60, args.poll_seconds or ocr_worker_poll_seconds())
+    log.info("OCR background worker started (poll_seconds=%d)", poll_seconds)
+    while True:
+        try:
+            run_once(args)
+        except KeyboardInterrupt:
+            log.info("OCR background worker stopped")
+            return 0
+        except Exception:
+            log.exception("OCR background cycle failed; retrying after the poll interval")
+        time.sleep(poll_seconds)
 
 
 if __name__ == "__main__":

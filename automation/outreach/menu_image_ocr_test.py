@@ -2,7 +2,11 @@
 
 import unittest
 
-from menu_image_ocr import MenuOCRConfig, enrich_restaurant_with_menu_ocr
+from menu_image_ocr import (
+    MenuOCRConfig,
+    OCRTransientError,
+    enrich_restaurant_with_menu_ocr,
+)
 
 
 class FakeAnalyzer:
@@ -23,6 +27,11 @@ class FakeAnalyzer:
                 "total_tokens": 15,
             },
         }
+
+
+class TimeoutAnalyzer:
+    def analyze_image_url(self, _url: str) -> dict:
+        raise OCRTransientError("provider timed out")
 
 
 class MenuImageOCRTest(unittest.TestCase):
@@ -69,6 +78,23 @@ class MenuImageOCRTest(unittest.TestCase):
 
         self.assertEqual(len(analyzer.urls), 1)
         self.assertEqual(record["menu_ocr"]["images_analyzed"], 1)
+
+    def test_transient_timeout_is_not_collapsed_into_permanent_image_failure(self):
+        cfg = MenuOCRConfig(huggingface_api_key="test", delay=0)
+        candidates = [{
+            "analysis_url": "https://images.example.test/photo.jpg",
+            "persistent_url": "",
+            "source": "google_places_photo",
+        }]
+
+        with self.assertRaises(OCRTransientError):
+            enrich_restaurant_with_menu_ocr(
+                {},
+                cfg,
+                TimeoutAnalyzer(),
+                candidates,
+                process_all_candidates=True,
+            )
 
 
 if __name__ == "__main__":

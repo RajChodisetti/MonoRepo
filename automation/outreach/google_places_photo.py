@@ -19,6 +19,10 @@ from tuvi_outreach_agent import Config
 PHOTO_RESOURCE_RE = re.compile(r"^places/[^/?#]+/photos/[^/?#]+$")
 
 
+class PhotoRequestTransientError(RuntimeError):
+    """A timeout, rate limit, or temporary Places failure safe to retry later."""
+
+
 def _validated_photo_resources(photos: list[dict]) -> list[dict]:
     """Return unique, validated photo metadata from a fresh Place response."""
     resources: list[dict] = []
@@ -66,7 +70,9 @@ def fetch_fresh_google_photo_resources(place_id: str, cfg: Config) -> list[dict]
             )
         except requests.RequestException as exc:
             if attempt >= attempts:
-                raise RuntimeError("Google Places photo resource refresh failed") from exc
+                raise PhotoRequestTransientError(
+                    "Google Places photo resource refresh timed out or was unavailable"
+                ) from exc
         else:
             if 200 <= response.status_code < 300:
                 try:
@@ -75,18 +81,18 @@ def fetch_fresh_google_photo_resources(place_id: str, cfg: Config) -> list[dict]
                     raise RuntimeError("Google Places photo resource refresh returned invalid JSON") from exc
                 return _validated_photo_resources(payload.get("photos") or [])
 
-            if response.status_code < 500 and response.status_code != 429:
+            if response.status_code < 500 and response.status_code not in (408, 429):
                 raise RuntimeError(
                     f"Google Places photo resource refresh HTTP {response.status_code}"
                 )
             if attempt >= attempts:
-                raise RuntimeError(
+                raise PhotoRequestTransientError(
                     f"Google Places photo resource refresh HTTP {response.status_code}"
                 )
 
         time.sleep(backoff ** (attempt - 1))
 
-    raise RuntimeError("Google Places photo resource refresh failed")
+    raise PhotoRequestTransientError("Google Places photo resource refresh failed")
 
 
 def resolve_google_photo_uri(
@@ -132,7 +138,9 @@ def resolve_google_photo_uri(
             )
         except requests.RequestException as exc:
             if attempt >= attempts:
-                raise RuntimeError("Google Places photo media request failed") from exc
+                raise PhotoRequestTransientError(
+                    "Google Places photo media request timed out or was unavailable"
+                ) from exc
         else:
             if 200 <= response.status_code < 300:
                 try:
@@ -144,11 +152,13 @@ def resolve_google_photo_uri(
                     raise RuntimeError("Google Places photo media returned an invalid URI")
                 return photo_uri
 
-            if response.status_code < 500 and response.status_code != 429:
+            if response.status_code < 500 and response.status_code not in (408, 429):
                 raise RuntimeError(f"Google Places photo media HTTP {response.status_code}")
             if attempt >= attempts:
-                raise RuntimeError(f"Google Places photo media HTTP {response.status_code}")
+                raise PhotoRequestTransientError(
+                    f"Google Places photo media HTTP {response.status_code}"
+                )
 
         time.sleep(backoff ** (attempt - 1))
 
-    raise RuntimeError("Google Places photo media request failed")
+    raise PhotoRequestTransientError("Google Places photo media request failed")

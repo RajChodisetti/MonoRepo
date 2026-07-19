@@ -29,6 +29,7 @@ from urllib.parse import urljoin, urlparse
 import requests
 from env_loader import load_project_env
 from hf_llm import create_hf_client, hf_api_key, hf_enabled, hf_vision_model
+from ocr_request_budget import OCRDailyBudgetExhausted
 
 load_project_env()
 
@@ -80,6 +81,29 @@ For menu_items:
 - price_numeric: float without currency symbol, or null if unknown.
 - If not a menu, menu_items must be [].
 """
+
+
+class OCRTransientError(RuntimeError):
+    """An OCR input or provider failure that should be retried without penalty."""
+
+
+def _is_transient_provider_error(exc: Exception) -> bool:
+    error_name = type(exc).__name__.lower()
+    if "timeout" in error_name or error_name in {
+        "apiconnectionerror",
+        "ratelimiterror",
+        "connecterror",
+        "networkerror",
+    }:
+        return True
+    raw_status = getattr(exc, "status_code", None)
+    if raw_status is None:
+        raw_status = getattr(exc, "code", None)
+    try:
+        status = int(raw_status)
+    except (TypeError, ValueError):
+        return False
+    return status in (408, 429) or status >= 500
 
 
 def all_scraped_photos_processed(
@@ -400,48 +424,87 @@ def _image_ref_for_openai(url: str, image_bytes: bytes, content_type: str) -> di
 
 
 class MenuImageAnalyzer:
-    def __init__(self, cfg: MenuOCRConfig | None = None):
+    def __init__(self, cfg: MenuOCRConfig | None = None, request_budget=None):
         self.cfg = cfg or MenuOCRConfig()
+        self._request_budget = request_budget
         self._hf = None
         self._openai = None
         self._gemini = None
 
         if self.cfg.huggingface_api_key:
-            self._hf = create_hf_client()
+            self._hf = create_hf_client(
+                timeout=max(1.0, float(self.cfg.timeout)),
+                max_retries=0,
+            )
         elif self.cfg.openai_api_key:
             from openai import OpenAI
-            self._openai = OpenAI(api_key=self.cfg.openai_api_key)
+            self._openai = OpenAI(
+                api_key=self.cfg.openai_api_key,
+                timeout=max(1.0, float(self.cfg.timeout)),
+                max_retries=0,
+            )
         elif self.cfg.gemini_api_key:
             from google import genai
-            self._gemini = genai.Client(api_key=self.cfg.gemini_api_key)
+            from google.genai import types
+
+            self._gemini = genai.Client(
+                api_key=self.cfg.gemini_api_key,
+                http_options=types.HttpOptions(
+                    timeout=max(1, int(self.cfg.timeout)) * 1000,
+                    retry_options=types.HttpRetryOptions(attempts=1),
+                ),
+            )
+
+    def _reserve_provider_request(self) -> None:
+        if self._request_budget is None:
+            return
+        snapshot = self._request_budget.reserve()
+        log.info(
+            "  OCR daily request budget: %d/%d used",
+            snapshot.requests_used,
+            snapshot.daily_limit,
+        )
 
     def analyze_image_url(self, url: str) -> dict:
         url = _validate_public_image_target(url)
         host = (urlparse(url).hostname or "").lower()
         is_google = _is_google_image_host(host)
 
-        if self._hf and is_google:
-            return self._analyze_huggingface(url, b"", "image/jpeg")
+        try:
+            if self._hf and is_google:
+                return self._analyze_huggingface(url, b"", "image/jpeg")
 
-        image_bytes, content_type = download_image(
-            url,
-            timeout=self.cfg.timeout,
-            max_bytes=self.cfg.max_image_bytes,
-        )
+            try:
+                image_bytes, content_type = download_image(
+                    url,
+                    timeout=self.cfg.timeout,
+                    max_bytes=self.cfg.max_image_bytes,
+                )
+            except requests.Timeout as exc:
+                raise OCRTransientError("Image download timed out; the OCR claim will be retried") from exc
 
-        if self._hf:
-            return self._analyze_huggingface(url, image_bytes, content_type)
-        if self._openai:
-            return self._analyze_openai(url, image_bytes, content_type)
-        if self._gemini:
-            return self._analyze_gemini(url, image_bytes, content_type)
-        raise RuntimeError(
-            "No vision API configured (set HUGGING_FACE_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY)"
-        )
+            if self._hf:
+                return self._analyze_huggingface(url, image_bytes, content_type)
+            if self._openai:
+                return self._analyze_openai(url, image_bytes, content_type)
+            if self._gemini:
+                return self._analyze_gemini(url, image_bytes, content_type)
+            raise RuntimeError(
+                "No vision API configured (set HUGGING_FACE_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY)"
+            )
+        except (OCRDailyBudgetExhausted, OCRTransientError):
+            raise
+        except Exception as exc:
+            if _is_transient_provider_error(exc):
+                raise OCRTransientError(
+                    "OCR provider timed out or was temporarily unavailable; the claim will be retried"
+                ) from exc
+            raise
 
     def _analyze_huggingface(self, url: str, image_bytes: bytes, content_type: str) -> dict:
         assert self._hf is not None
         image_part = _image_ref_for_openai(url, image_bytes, content_type)
+        self._reserve_provider_request()
         response = self._hf.chat.completions.create(
             model=self.cfg.hf_vision_model,
             messages=[{
@@ -465,6 +528,7 @@ class MenuImageAnalyzer:
     def _analyze_openai(self, url: str, image_bytes: bytes, content_type: str) -> dict:
         assert self._openai is not None
         image_part = _image_ref_for_openai(url, image_bytes, content_type)
+        self._reserve_provider_request()
         response = self._openai.chat.completions.create(
             model=self.cfg.openai_model,
             messages=[{
@@ -491,6 +555,7 @@ class MenuImageAnalyzer:
         from google.genai import types
 
         assert self._gemini is not None
+        self._reserve_provider_request()
         response = self._gemini.models.generate_content(
             model=self.cfg.gemini_model,
             contents=[
@@ -790,6 +855,8 @@ def enrich_restaurant_with_menu_ocr(
             else:
                 gallery.append({**entry, "title": "uncertain"})
 
+        except (OCRDailyBudgetExhausted, OCRTransientError):
+            raise
         except Exception as exc:
             images_failed += 1
             display_ref = persistent_url or source_ref or source
