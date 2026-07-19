@@ -36,6 +36,9 @@ func loadOutreachConfig(parser *envParser) OutreachConfig {
 		SendJitterMin:               parser.duration("OUTREACH_SEND_JITTER_MIN", 2*time.Minute),
 		SendJitterMax:               parser.duration("OUTREACH_SEND_JITTER_MAX", 5*time.Minute),
 		AccountCooldown:             parser.duration("OUTREACH_EMAIL_COOLDOWN", 24*time.Hour),
+		EmailHealthEnabled:          parser.bool("OUTREACH_EMAIL_HEALTH_ENABLED", true),
+		EmailHealthRecipient:        parser.string("OUTREACH_EMAIL_HEALTH_RECIPIENT", "rajchodisetti@gmail.com"),
+		EmailHealthInterval:         parser.duration("OUTREACH_EMAIL_HEALTH_INTERVAL", 24*time.Hour),
 		ZohoAccountsJSON:            parser.string("OUTREACH_ZOHO_ACCOUNTS_JSON", ""),
 		GoogleWorkspaceAccountsJSON: parser.string("OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON", ""),
 	}

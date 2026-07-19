@@ -16,6 +16,7 @@ export default function RestaurantsPage() {
   const [status, setStatus] = useState("");
   const [isContacted, setIsContacted] = useState("");
   const [shownInterest, setShownInterest] = useState("");
+  const [ocrStatus, setOcrStatus] = useState("");
   const [includeArchived, setIncludeArchived] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -32,6 +33,7 @@ export default function RestaurantsPage() {
           status: status || undefined,
           is_contacted: isContacted || undefined,
           shown_interest: shownInterest || undefined,
+          ocr_status: ocrStatus || undefined,
           include_archived: includeArchived ? true : undefined,
         },
       });
@@ -41,7 +43,7 @@ export default function RestaurantsPage() {
     } finally {
       setLoading(false);
     }
-  }, [name, status, isContacted, shownInterest, includeArchived]);
+  }, [name, status, isContacted, shownInterest, ocrStatus, includeArchived]);
 
   useEffect(() => {
     const t = setTimeout(load, 200);
@@ -129,6 +131,17 @@ export default function RestaurantsPage() {
           />
           <span style={{ fontSize: "0.9rem" }}>Include archived</span>
         </label>
+        <label style={{ display: "grid", gap: "0.35rem" }}>
+          <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>OCR</span>
+          <select className="select" value={ocrStatus} onChange={(e) => setOcrStatus(e.target.value)}>
+            <option value="">All</option>
+            <option value="verified">Verified only</option>
+            <option value="pending">Pending</option>
+            <option value="running">Running</option>
+            <option value="failed">Failed</option>
+            <option value="no_images">No images</option>
+          </select>
+        </label>
         <button className="btn btn-secondary" type="button" onClick={load}>
           Refresh
         </button>
@@ -187,6 +200,7 @@ export default function RestaurantsPage() {
                 <th>Name</th>
                 <th>Email</th>
                 <th>Status</th>
+                <th>OCR</th>
                 <th>Contacted</th>
                 <th>Interest</th>
                 <th>Emailed</th>
@@ -221,6 +235,7 @@ export default function RestaurantsPage() {
                   <td>
                     <StatusBadge status={r.status} />
                   </td>
+                  <td><StatusBadge status={r.ocr_status || "pending"} /></td>
                   <td>{r.is_contacted ? "Yes" : "No"}</td>
                   <td>{r.shown_interest ? "Yes" : "No"}</td>
                   <td>

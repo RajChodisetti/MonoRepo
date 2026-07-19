@@ -121,6 +121,9 @@ type OutreachConfig struct {
 	SendJitterMin               time.Duration
 	SendJitterMax               time.Duration
 	AccountCooldown             time.Duration
+	EmailHealthEnabled          bool
+	EmailHealthRecipient        string
+	EmailHealthInterval         time.Duration
 	ZohoAccounts                []ZohoMailConfig
 	ZohoAccountsJSON            string
 	GoogleWorkspaceAccounts     []GmailMailConfig
@@ -390,6 +393,14 @@ func (c Config) Validate() error {
 	if c.Outreach.AccountCooldown < 24*time.Hour {
 		errs = append(errs, fmt.Errorf("OUTREACH_EMAIL_COOLDOWN must be at least 24h"))
 	}
+	if c.Outreach.EmailHealthInterval < 24*time.Hour {
+		errs = append(errs, fmt.Errorf("OUTREACH_EMAIL_HEALTH_INTERVAL must be at least 24h"))
+	}
+	if c.Outreach.EmailHealthEnabled && len(c.Outreach.GoogleWorkspaceAccounts) > 0 {
+		if _, err := canonicalOutreachMailbox(c.Outreach.EmailHealthRecipient); err != nil {
+			errs = append(errs, fmt.Errorf("OUTREACH_EMAIL_HEALTH_RECIPIENT must be a single valid email address"))
+		}
+	}
 	if c.App.Env == EnvProduction && strings.TrimSpace(c.Email.RedirectTo) != "" {
 		errs = append(errs, fmt.Errorf("EMAIL_REDIRECT_TO must be empty in production"))
 	}
@@ -451,7 +462,7 @@ func (c Config) Validate() error {
 }
 
 func (c Config) validateEmailURLs() []error {
-	if c.Email.DisableSending {
+	if c.Email.DisableSending && len(c.Outreach.GoogleWorkspaceAccounts) == 0 {
 		return nil
 	}
 

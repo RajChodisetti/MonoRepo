@@ -173,8 +173,9 @@ Every ticket must satisfy these unless explicitly not applicable:
 - API supports create/list/get/update/archive.
 - Required fields are validated.
 - Status field supports lead lifecycle.
-- List endpoint supports search and status filter.
-- restaurantant -  name, email , is_contacted, timestamp , shown_interest
+- List endpoint supports search, lifecycle status, and OCR status filters.
+- Restaurant responses include name, email, profile phone, OCR status, contact state, timestamps, and shown-interest state.
+- Contacted is set by confirmed provider sends; shown interest is set by tracked email-link clicks.
 
 ### P1-011 — Create restaurant profile schema and API
 
@@ -374,6 +375,8 @@ Every ticket must satisfy these unless explicitly not applicable:
 - Provider errors are wrapped with safe error messages.
 - Emails can be disabled or redirected in local/staging.
 - Disabled or redirected attempts are recorded as skipped and do not mark a lead contacted.
+- Restaurant outreach uses an env-driven Gmail OAuth account list; adding a mailbox requires no code change.
+- Every configured Gmail mailbox has a visible daily real-message health result.
 
 ### P1-027 — Generate personalized email draft
 
@@ -383,6 +386,7 @@ Every ticket must satisfy these unless explicitly not applicable:
 
 - Draft includes restaurant name.
 - Draft includes demo link.
+- Draft includes the Tuvi restaurant-services presentation plus tracked Cinematic, Aurora, and Elysian personalized website links.
 - Draft includes one clear CTA.
 - Draft includes opt-out text.
 - Draft can be reviewed before sending.
@@ -394,6 +398,7 @@ Every ticket must satisfy these unless explicitly not applicable:
 **Acceptance criteria:**
 
 - Admin can trigger send from dashboard.
+- Admin can enable or disable the persisted Gmail job from the Outreach UI; credentials remain in secret configuration.
 - Email job is queued.
 - Sent event is recorded.
 - Campaign status updates.
@@ -411,6 +416,7 @@ Every ticket must satisfy these unless explicitly not applicable:
 - User is redirected to demo.
 - Multiple clicks are recorded.
 - Invalid tracking token returns safe error.
+- A successfully recorded click marks the restaurant shown-interest/interested.
 
 ### P1-030 — Implement open tracking pixel if provider supports it
 
@@ -468,10 +474,13 @@ Every ticket must satisfy these unless explicitly not applicable:
 **Acceptance criteria:**
 
 - Demo page view is tracked.
+- The selected template and browser foreground time are stored for outreach and admin-preview sessions.
+- Restaurant-specific engagement includes AI receptionist transcript turns when present.
 - Reservation CTA click is tracked.
 - AI receptionist CTA click is tracked.
 - Content automation CTA click is tracked.
 - Events include demo site ID.
+- Signed demo sessions retain active duration and AI receptionist transcript turns for the protected restaurant detail view.
 
 ### P1-035 — Build analytics summary endpoint
 

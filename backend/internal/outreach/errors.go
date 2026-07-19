@@ -37,12 +37,12 @@ type AdHocSendResult struct {
 // AdHocPreview is the rendered content of the latest campaign draft for a
 // restaurant, shown before an ad hoc send is confirmed.
 type AdHocPreview struct {
-	RestaurantID    uuid.UUID `json:"restaurant_id"`
-	RestaurantName  string    `json:"restaurant_name"`
-	RecipientEmail  string    `json:"recipient_email"`
-	Subject         string    `json:"subject"`
-	BodyHTML        string    `json:"body_html"`
-	BodyText        string    `json:"body_text"`
+	RestaurantID   uuid.UUID `json:"restaurant_id"`
+	RestaurantName string    `json:"restaurant_name"`
+	RecipientEmail string    `json:"recipient_email"`
+	Subject        string    `json:"subject"`
+	BodyHTML       string    `json:"body_html"`
+	BodyText       string    `json:"body_text"`
 }
 
 type BulkSendSummary struct {
@@ -55,11 +55,19 @@ type BulkSendSummary struct {
 	NextAvailableAt *time.Time `json:"next_available_at,omitempty"`
 }
 
-type TriggerResult struct {
-	JobID                string `json:"job_id"`
-	Status               string `json:"status"`
-	MaxSends             int    `json:"max_sends"`
-	PendingEligibleCount int    `json:"pending_eligible_count"`
+type EmailJobControl struct {
+	Enabled   bool       `json:"enabled"`
+	EnabledAt *time.Time `json:"enabled_at,omitempty"`
+	EnabledBy *uuid.UUID `json:"enabled_by,omitempty"`
+	UpdatedAt time.Time  `json:"updated_at"`
+}
+
+type EmailJobActionResult struct {
+	EmailJob             EmailJobControl `json:"email_job"`
+	JobID                string          `json:"job_id,omitempty"`
+	Status               string          `json:"status"`
+	MaxSends             int             `json:"max_sends"`
+	PendingEligibleCount int             `json:"pending_eligible_count"`
 }
 
 type StatusResult struct {
@@ -68,6 +76,7 @@ type StatusResult struct {
 	ActiveJob            *ActiveJobStatus    `json:"active_job,omitempty"`
 	LastCompletedJob     *CompletedJobStatus `json:"last_completed_job,omitempty"`
 	NextAvailableAt      *time.Time          `json:"next_available_at,omitempty"`
+	EmailJob             EmailJobControl     `json:"email_job"`
 }
 
 type ActiveJobStatus struct {

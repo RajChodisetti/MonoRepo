@@ -9,11 +9,12 @@ import (
 
 func TestBuildDraftIncludesPlaceholders(t *testing.T) {
 	draft := campaigns.BuildDraft(campaigns.DraftInput{
-		RestaurantName: "Aurora Cafe",
-		SiteIndex:      2,
-		DemoWebURL:     "http://localhost:3000",
-		DemoSlug:       "aurora-cafe",
-		DemoToken:      "demo-token",
+		RestaurantName:      "Aurora Cafe",
+		SiteIndex:           2,
+		DemoWebURL:          "http://localhost:3000",
+		DemoSlug:            "aurora-cafe",
+		DemoToken:           "demo-token",
+		PresentationSiteURL: "https://tuvisolutions.com/services/restaurants",
 	})
 
 	if !strings.Contains(draft.Subject, "Aurora Cafe") {
@@ -24,6 +25,9 @@ func TestBuildDraftIncludesPlaceholders(t *testing.T) {
 	}
 	for _, placeholder := range []string{
 		"{{CLICK_URL}}",
+		"{{TEMPLATE_1_URL}}",
+		"{{TEMPLATE_2_URL}}",
+		"{{TEMPLATE_3_URL}}",
 		"{{UNSUBSCRIBE_URL}}",
 	} {
 		if !strings.Contains(draft.BodyHTML, placeholder) {
@@ -33,15 +37,18 @@ func TestBuildDraftIncludesPlaceholders(t *testing.T) {
 	if !strings.Contains(draft.BodyText, "{{UNSUBSCRIBE_URL}}") {
 		t.Fatal("body_text missing unsubscribe placeholder")
 	}
-	for _, name := range []string{"AI Voice Receptionist", "Custom Apps"} {
+	for _, name := range []string{"Cinematic personalized website", "Aurora personalized website", "Elysian personalized website", "Tuvi restaurant services presentation"} {
 		if !strings.Contains(draft.BodyHTML, name) {
 			t.Fatalf("body_html missing service %q", name)
 		}
 	}
-	for _, banned := range []string{"Cinematic", "Elysian", "We already built"} {
+	for _, banned := range []string{"We already built"} {
 		if strings.Contains(draft.BodyHTML, banned) {
 			t.Fatalf("body_html should not contain %q", banned)
 		}
+	}
+	if !strings.Contains(draft.BodyHTML, "https://tuvisolutions.com/services/restaurants") {
+		t.Fatal("body_html missing Tuvi presentation website")
 	}
 }
 

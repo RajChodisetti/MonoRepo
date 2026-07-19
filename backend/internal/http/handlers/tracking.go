@@ -8,6 +8,7 @@ import (
 
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/campaigns"
 	repository "github.com/rajchodisetti/restaurant-platform/backend/internal/platform/errors"
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/restaurants"
 )
 
 var trackingPixelGIF = []byte{
@@ -19,15 +20,17 @@ var trackingPixelGIF = []byte{
 }
 
 type TrackingHandler struct {
-	repo       campaigns.Repository
-	writeError func(http.ResponseWriter, int, string, string)
+	repo        campaigns.Repository
+	restaurants restaurants.Repository
+	writeError  func(http.ResponseWriter, int, string, string)
 }
 
 func NewTrackingHandler(
 	repo campaigns.Repository,
+	restaurantRepo restaurants.Repository,
 	writeError func(http.ResponseWriter, int, string, string),
 ) *TrackingHandler {
-	return &TrackingHandler{repo: repo, writeError: writeError}
+	return &TrackingHandler{repo: repo, restaurants: restaurantRepo, writeError: writeError}
 }
 
 func (handler *TrackingHandler) Click(w http.ResponseWriter, r *http.Request) {
@@ -47,7 +50,9 @@ func (handler *TrackingHandler) Click(w http.ResponseWriter, r *http.Request) {
 	}
 
 	meta, _ := json.Marshal(map[string]string{"token": token, "target_url": record.TargetURL})
-	_ = handler.repo.InsertEvent(r.Context(), record.CampaignID, record.RestaurantID, campaigns.EventClicked, meta)
+	if err := handler.repo.InsertEvent(r.Context(), record.CampaignID, record.RestaurantID, campaigns.EventClicked, meta); err == nil && handler.restaurants != nil {
+		_, _ = handler.restaurants.MarkShownInterest(r.Context(), record.RestaurantID)
+	}
 
 	target := strings.TrimSpace(record.TargetURL)
 	if target == "" {

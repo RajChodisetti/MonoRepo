@@ -26,6 +26,55 @@ func NewPostgres(pool *pgxpool.Pool) *Postgres {
 	return &Postgres{pool: pool}
 }
 
+func GetEmailJobControl(ctx context.Context, pool *pgxpool.Pool) (EmailJobControl, error) {
+	if pool == nil {
+		return EmailJobControl{}, nil
+	}
+	const query = `
+		SELECT enabled, enabled_at, enabled_by, updated_at
+		FROM outreach_runtime_control
+		WHERE control_key = 'email_job'`
+	var control EmailJobControl
+	err := pool.QueryRow(ctx, query).Scan(
+		&control.Enabled,
+		&control.EnabledAt,
+		&control.EnabledBy,
+		&control.UpdatedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return EmailJobControl{}, nil
+	}
+	if err != nil {
+		return EmailJobControl{}, fmt.Errorf("get outreach email job control: %w", err)
+	}
+	return control, nil
+}
+
+func SetEmailJobControl(ctx context.Context, pool *pgxpool.Pool, enabled bool, enabledBy *uuid.UUID) (EmailJobControl, error) {
+	if pool == nil {
+		return EmailJobControl{}, fmt.Errorf("database pool is not configured")
+	}
+	const query = `
+		INSERT INTO outreach_runtime_control (control_key, enabled, enabled_at, enabled_by, updated_at)
+		VALUES ('email_job', $1, CASE WHEN $1 THEN now() ELSE NULL END, CASE WHEN $1 THEN $2 ELSE NULL END, now())
+		ON CONFLICT (control_key) DO UPDATE
+		SET enabled = EXCLUDED.enabled,
+		    enabled_at = EXCLUDED.enabled_at,
+		    enabled_by = EXCLUDED.enabled_by,
+		    updated_at = now()
+		RETURNING enabled, enabled_at, enabled_by, updated_at`
+	var control EmailJobControl
+	if err := pool.QueryRow(ctx, query, enabled, enabledBy).Scan(
+		&control.Enabled,
+		&control.EnabledAt,
+		&control.EnabledBy,
+		&control.UpdatedAt,
+	); err != nil {
+		return EmailJobControl{}, fmt.Errorf("set outreach email job control: %w", err)
+	}
+	return control, nil
+}
+
 const eligibleLeadsBaseQuery = `
 	FROM restaurants r
 	JOIN restaurant_profiles rp ON rp.restaurant_id = r.id

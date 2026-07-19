@@ -7,14 +7,14 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/rajchodisetti/restaurant-platform/backend/internal/profiles"
 	repository "github.com/rajchodisetti/restaurant-platform/backend/internal/platform/errors"
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/profiles"
 )
 
 type RestaurantPublicHandler struct {
-	profiles    profiles.Repository
-	writeJSON   func(http.ResponseWriter, int, any)
-	writeError  func(http.ResponseWriter, int, string, string)
+	profiles   profiles.Repository
+	writeJSON  func(http.ResponseWriter, int, any)
+	writeError func(http.ResponseWriter, int, string, string)
 }
 
 func NewRestaurantPublicHandler(
@@ -87,6 +87,20 @@ func (handler *RestaurantPublicHandler) GetSiteContentByIndex(w http.ResponseWri
 		return
 	}
 
+	handler.writeJSON(w, http.StatusOK, payload)
+}
+
+func (handler *RestaurantPublicHandler) GetSiteContentByID(w http.ResponseWriter, r *http.Request) {
+	restaurantID, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		handler.writeError(w, http.StatusBadRequest, "invalid_id", "Restaurant id must be a valid UUID.")
+		return
+	}
+	payload, err := handler.profiles.GetSiteContentByID(r.Context(), restaurantID)
+	if err != nil {
+		handler.writeNotFoundOrInternal(w, err)
+		return
+	}
 	handler.writeJSON(w, http.StatusOK, payload)
 }
 

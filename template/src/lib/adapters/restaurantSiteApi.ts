@@ -401,6 +401,21 @@ export async function fetchSiteRestaurant(index: number): Promise<RestaurantCont
   }
 }
 
+export async function fetchSiteRestaurantByID(restaurantID: string): Promise<RestaurantContent | null> {
+  const base = apiBase();
+  if (!base || !/^[0-9a-f-]{36}$/i.test(restaurantID)) return null;
+  try {
+    const res = await fetch(
+      `${base}/api/public/v1/site/restaurants/by-id/${encodeURIComponent(restaurantID)}`,
+      { cache: "no-store" },
+    );
+    if (!res.ok) return null;
+    return adaptSiteContent((await res.json()) as ApiSiteContent);
+  } catch {
+    return null;
+  }
+}
+
 export async function getRestaurantCountFromApi(): Promise<number | null> {
   const list = await fetchSiteRestaurantList();
   return list?.count ?? null;

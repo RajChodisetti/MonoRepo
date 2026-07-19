@@ -10,6 +10,7 @@ import (
 
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/campaigns"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/http/handlers"
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/restaurants"
 )
 
 func TestTrackingClickRedirects(t *testing.T) {
@@ -29,7 +30,10 @@ func TestTrackingClickRedirects(t *testing.T) {
 		},
 	}
 
-	handler := handlers.NewTrackingHandler(repo, func(w http.ResponseWriter, status int, code, message string) {
+	restaurantRepo := &restaurants.Mock{Restaurants: map[uuid.UUID]restaurants.Restaurant{
+		restaurantID: {ID: restaurantID, Status: restaurants.StatusEmailed},
+	}}
+	handler := handlers.NewTrackingHandler(repo, restaurantRepo, func(w http.ResponseWriter, status int, code, message string) {
 		http.Error(w, message, status)
 	})
 
@@ -52,5 +56,12 @@ func TestTrackingClickRedirects(t *testing.T) {
 	}
 	if len(events) != 1 || events[0].EventType != campaigns.EventClicked {
 		t.Fatalf("events = %+v, want one clicked event", events)
+	}
+	restaurant, err := restaurantRepo.GetByID(context.Background(), restaurantID)
+	if err != nil {
+		t.Fatalf("GetByID() error = %v", err)
+	}
+	if !restaurant.ShownInterest || restaurant.Status != restaurants.StatusInterested {
+		t.Fatalf("restaurant = %+v, want shown interest and interested status", restaurant)
 	}
 }

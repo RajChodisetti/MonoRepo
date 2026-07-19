@@ -29,14 +29,15 @@ func TestRenderOutreachEmail(t *testing.T) {
 	}
 	for _, token := range []string{
 		"{{CLICK_URL}}",
+		"{{TEMPLATE_1_URL}}",
+		"{{TEMPLATE_2_URL}}",
 		"{{TEMPLATE_3_URL}}",
 		"{{UNSUBSCRIBE_URL}}",
-		"AI Voice Receptionist",
-		"Presentation Websites",
-		"Reservation Requests",
-		"Custom Apps",
+		"Cinematic personalized website",
+		"Aurora personalized website",
+		"Elysian personalized website",
+		"Tuvi restaurant services presentation",
 		"http://localhost:5500",
-		"http://localhost:3001",
 		"live website preview for Spice Garden",
 		"Open Spice Garden demo",
 	} {
@@ -47,13 +48,24 @@ func TestRenderOutreachEmail(t *testing.T) {
 	if strings.Contains(draft.BodyHTML, "%7b") {
 		t.Fatal("body_html has URL-escaped CLICK_URL braces")
 	}
-	// Long template-card section removed
-	for _, banned := range []string{"We already built a preview", "Cinematic", "Aurora", "Elysian"} {
+	for _, banned := range []string{"We already built a preview"} {
 		if strings.Contains(draft.BodyHTML, banned) {
 			t.Fatalf("body_html should not contain %q", banned)
 		}
 	}
-	if !strings.Contains(draft.BodyText, "AI Voice Receptionist") {
-		t.Fatal("body_text missing AI Voice Receptionist")
+	if !strings.Contains(draft.BodyText, "Tuvi restaurant services presentation") {
+		t.Fatal("body_text missing presentation link")
+	}
+}
+
+func TestRenderOutreachEmailUsesConfiguredPresentationURL(t *testing.T) {
+	draft, err := RenderOutreachEmailWithLinks("Spice Garden", OutreachLinkConfig{
+		PresentationURL: "https://tuvisolutions.com/services/restaurants",
+	})
+	if err != nil {
+		t.Fatalf("RenderOutreachEmailWithLinks() error = %v", err)
+	}
+	if !strings.Contains(draft.BodyHTML, "https://tuvisolutions.com/services/restaurants") {
+		t.Fatal("body_html missing configured Tuvi presentation URL")
 	}
 }

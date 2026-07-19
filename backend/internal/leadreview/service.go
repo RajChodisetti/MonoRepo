@@ -74,6 +74,8 @@ type ProfileReviewPreview struct {
 	OCRAllImagesProcessed bool            `json:"ocr_all_images_processed"`
 	OCRProvider           string          `json:"ocr_provider"`
 	OCRModel              string          `json:"ocr_model"`
+	ApolloStatus          string          `json:"apollo_status"`
+	ApolloEmailFound      bool            `json:"apollo_email_found"`
 	ReviewStatus          string          `json:"review_status"`
 	ReviewedAt            *time.Time      `json:"reviewed_at,omitempty"`
 	ReviewedBy            *uuid.UUID      `json:"reviewed_by,omitempty"`
@@ -137,6 +139,11 @@ func (service *Service) GetProfileReviewPreview(
 		       ),
 		       COALESCE(rp.raw_public_data #>> '{menu_ocr,provider}', ''),
 		       COALESCE(rp.raw_public_data #>> '{menu_ocr,model}', ''),
+		       COALESCE(
+		         NULLIF(rp.raw_public_data #>> '{apollo_enrichment,status}', ''),
+		         CASE WHEN rp.apollo_lead <> '{}'::jsonb THEN 'enriched' ELSE 'not_recorded' END
+		       ),
+		       COALESCE(NULLIF(rp.apollo_lead #>> '{contact,email}', ''), '') <> '',
 		       rp.review_status,
 		       rp.reviewed_at,
 		       rp.reviewed_by,
@@ -189,6 +196,8 @@ func (service *Service) GetProfileReviewPreview(
 		&result.OCRAllImagesProcessed,
 		&result.OCRProvider,
 		&result.OCRModel,
+		&result.ApolloStatus,
+		&result.ApolloEmailFound,
 		&result.ReviewStatus,
 		&result.ReviewedAt,
 		&result.ReviewedBy,

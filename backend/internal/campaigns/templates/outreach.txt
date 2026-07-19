@@ -4,7 +4,7 @@ Tuvi Solutions builds restaurant tools to help with that — and we've already c
 
 Preview: __CLICK_URL__
 
-Explore what we offer:
+Choose a personalized website and explore Tuvi:
 {{range .Services}}
 - {{.Title}}: {{.Description}}
   {{.URL}}

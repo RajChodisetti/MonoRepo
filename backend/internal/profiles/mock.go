@@ -15,6 +15,7 @@ type Mock struct {
 	MenuImages            map[uuid.UUID][]MenuImage
 	GalleryImages         map[uuid.UUID][]GalleryImage
 	SiteRestaurants       []SiteRestaurantSummary
+	SiteContents          []SiteContent
 }
 
 func (mock *Mock) ListMenuImagesAdmin(ctx context.Context, restaurantID uuid.UUID) ([]MenuImage, error) {
@@ -133,6 +134,15 @@ func (mock *Mock) GetSiteRestaurantByID(_ context.Context, restaurantID uuid.UUI
 		}
 	}
 	return SiteRestaurantSummary{}, repository.ErrNotFound
+}
+
+func (mock *Mock) GetSiteContentByID(_ context.Context, restaurantID uuid.UUID) (SiteContent, error) {
+	for _, content := range mock.SiteContents {
+		if content.RestaurantID == restaurantID {
+			return content, nil
+		}
+	}
+	return SiteContent{}, repository.ErrNotFound
 }
 
 func (mock *Mock) GetSiteContentByIndex(_ context.Context, index int) (SiteContent, error) {

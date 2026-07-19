@@ -97,6 +97,14 @@ func (repo *Postgres) GetSiteContentByIndex(ctx context.Context, index int) (Sit
 	return repo.buildSiteContent(ctx, summaries[index])
 }
 
+func (repo *Postgres) GetSiteContentByID(ctx context.Context, restaurantID uuid.UUID) (SiteContent, error) {
+	summary, err := repo.GetSiteRestaurantByID(ctx, restaurantID)
+	if err != nil {
+		return SiteContent{}, err
+	}
+	return repo.buildSiteContent(ctx, summary)
+}
+
 func (repo *Postgres) GetSiteContentByPlaceID(ctx context.Context, placeID string) (SiteContent, error) {
 	summaries, err := repo.ListSiteRestaurants(ctx)
 	if err != nil {

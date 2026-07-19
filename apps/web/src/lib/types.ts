@@ -42,6 +42,9 @@ export type Restaurant = {
   id: string;
   name: string;
   email?: string;
+  phone?: string;
+  address?: string;
+  ocr_status?: string;
   status: string;
   is_contacted?: boolean;
   shown_interest?: boolean;
@@ -57,15 +60,46 @@ export type BulkSendStatus = {
   max_sends: number;
   next_available_at?: string;
   active_job?: {
-    id: string;
+    job_id: string;
     status: string;
-    created_at?: string;
   };
   last_completed_job?: {
-    id: string;
+    job_id: string;
     status: string;
-    created_at?: string;
+    summary?: {
+      attempted: number;
+      sent: number;
+      failed: number;
+      skipped: number;
+      stopped_reason?: string;
+    };
   };
+  email_job: {
+    enabled: boolean;
+    enabled_at?: string;
+    enabled_by?: string;
+    updated_at?: string;
+  };
+};
+
+export type EmailAccountHealth = {
+  account_key: string;
+  provider: string;
+  provider_identity: string;
+  from_email: string;
+  enabled: boolean;
+  status: string;
+  last_checked_at?: string;
+  next_check_at?: string;
+  provider_message_id?: string;
+  last_error?: string;
+};
+
+export type EmailAccountHealthResponse = {
+  enabled: boolean;
+  recipient: string;
+  interval_hours: number;
+  accounts: EmailAccountHealth[];
 };
 
 export type Campaign = {
@@ -108,10 +142,31 @@ export type ProfileReviewPreview = {
   ocr_all_images_processed?: boolean;
   ocr_provider?: string;
   ocr_model?: string;
+  apollo_status?: string;
+  apollo_email_found?: boolean;
   review_status?: string;
   restaurant_updated_at?: string;
   profile_updated_at?: string;
   profile?: Record<string, unknown>;
+};
+
+export type DemoTranscript = {
+  id: string;
+  role: string;
+  content: string;
+  occurred_at: string;
+};
+
+export type DemoSession = {
+  id: string;
+  demo_site_id?: string;
+  restaurant_id: string;
+  template_id: "1" | "2" | "3";
+  started_at: string;
+  last_seen_at: string;
+  ended_at?: string;
+  duration_seconds: number;
+  transcript: DemoTranscript[];
 };
 
 export type GooglePhotoAttribution = {

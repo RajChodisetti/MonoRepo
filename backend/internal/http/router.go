@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/analytics"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/auth"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/campaigns"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/consultations"
@@ -36,6 +37,7 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	authService := auth.NewService(dataStore.Users, tokenManager)
 	accessService := restaurants.NewService(dataStore.Restaurants, dataStore.Memberships)
 	demoService := demos.NewService(dataStore.Demos, accessService, cfg.Demo.TokenTTL)
+	demoEngagementService := analytics.NewService(demoService, analytics.NewPostgres(dataStore.Pool()))
 
 	jobQueue := jobs.NewPostgresQueue(dataStore.Pool(), cfg.Jobs.BufferSize, cfg.Jobs.RetryDelay)
 	var jobEnqueuer campaigns.SendJobEnqueuer = &jobs.CampaignEnqueuer{Queue: jobQueue}
@@ -56,8 +58,19 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	restaurantHandler := handlers.NewRestaurantHandler(accessService, writeJSON, writeError)
 	demoPublicHandler := handlers.NewDemoPublicHandler(demoService, writeJSON, writeError)
 	demoAdminHandler := handlers.NewDemoAdminHandler(demoService, writeJSON, writeError)
+	demoEngagementHandler := handlers.NewDemoEngagementHandler(demoEngagementService, writeJSON, writeError)
 	campaignHandler := handlers.NewCampaignHandler(campaignService, writeJSON, writeError)
 	outreachRepo := outreach.NewPostgres(dataStore.Pool())
+	emailHealthService, emailHealthErr := emailprovider.NewHealthServiceFromConfig(
+		context.Background(),
+		cfg.Email,
+		cfg.Outreach,
+		outreachRepo,
+	)
+	if emailHealthErr != nil {
+		log.WarnContext(context.Background(), "email_health_unavailable", "error", emailHealthErr)
+		emailHealthService = nil
+	}
 	outreachAccountPool, outreachPoolErr := emailprovider.NewPersistentAccountPoolFromConfig(
 		context.Background(),
 		cfg.Email,
@@ -82,12 +95,13 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 		log,
 	)
 	outreachBulkHandler := handlers.NewOutreachBulkHandler(outreachService, writeJSON, writeError)
+	emailHealthHandler := handlers.NewEmailHealthHandler(emailHealthService, cfg.Outreach, writeJSON, writeError)
 	scrapeJobRepo := scrapejobs.NewPostgres(dataStore.Pool())
 	scrapeJobService := scrapejobs.NewService(scrapeJobRepo)
 	scrapeJobHandler := handlers.NewScrapeJobHandler(scrapeJobService, writeJSON, writeError)
 	leadReviewService := leadreview.NewService(dataStore.Pool())
 	leadReviewHandler := handlers.NewLeadReviewHandler(leadReviewService, writeJSON, writeError)
-	trackingHandler := handlers.NewTrackingHandler(dataStore.Campaigns, writeError)
+	trackingHandler := handlers.NewTrackingHandler(dataStore.Campaigns, dataStore.Restaurants, writeError)
 	restaurantPublicHandler := handlers.NewRestaurantPublicHandler(dataStore.Profiles, writeJSON, writeError)
 	restaurantImagesAdminHandler := handlers.NewRestaurantImagesAdminHandler(
 		dataStore.Profiles,
@@ -158,7 +172,9 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	mux.Handle("POST /api/v1/campaigns/{id}/regenerate", protectInternalAdmin(http.HandlerFunc(campaignHandler.Regenerate)))
 	mux.Handle("POST /api/v1/campaigns/{id}/stop", protectInternalAdmin(http.HandlerFunc(campaignHandler.Stop)))
 	mux.Handle("POST /api/v1/outreach/bulk-send", protectInternalAdmin(http.HandlerFunc(outreachBulkHandler.Trigger)))
+	mux.Handle("PATCH /api/v1/outreach/email-job", protectInternalAdmin(http.HandlerFunc(outreachBulkHandler.SetEmailJob)))
 	mux.Handle("GET /api/v1/outreach/bulk-send/status", protectInternalAdmin(http.HandlerFunc(outreachBulkHandler.Status)))
+	mux.Handle("GET /api/v1/outreach/email-accounts/health", protectInternalAdmin(http.HandlerFunc(emailHealthHandler.Status)))
 	mux.Handle("POST /api/v1/scrape-jobs", protectInternalAdmin(http.HandlerFunc(scrapeJobHandler.Trigger)))
 	mux.Handle("GET /api/v1/scrape-jobs", protectInternalAdmin(http.HandlerFunc(scrapeJobHandler.List)))
 	mux.Handle("GET /api/v1/scrape-jobs/{id}", protectInternalAdmin(http.HandlerFunc(scrapeJobHandler.Get)))
@@ -170,6 +186,8 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	mux.Handle("POST /api/v1/restaurants/{id}/images/{kind}/{imageId}/restore", protectRestaurantAdmin(http.HandlerFunc(restaurantImagesAdminHandler.Unhide)))
 	mux.Handle("GET /api/v1/restaurants/{id}/demo-links", protectRestaurantAdmin(http.HandlerFunc(campaignHandler.ListDemoLinks)))
 	mux.Handle("GET /api/v1/restaurants/{id}/generated-site", protectRestaurantAdmin(http.HandlerFunc(restaurantSiteAdminHandler.Get)))
+	mux.Handle("GET /api/v1/restaurants/{id}/demo-engagement", protectRestaurantAdmin(http.HandlerFunc(demoEngagementHandler.ListByRestaurant)))
+	mux.Handle("POST /api/v1/restaurants/{id}/demo-engagement/preview", protectRestaurantAdmin(http.HandlerFunc(demoEngagementHandler.StartAdminPreview)))
 	mux.Handle("GET /api/v1/restaurants/{id}/outreach/adhoc-preview", protectRestaurantAdmin(http.HandlerFunc(outreachBulkHandler.PreviewAdHoc)))
 	mux.Handle("POST /api/v1/restaurants/{id}/outreach/adhoc-send", protectRestaurantAdmin(http.HandlerFunc(outreachBulkHandler.SendAdHoc)))
 	mux.Handle("POST /api/v1/outreach/adhoc-send", protectInternalAdmin(http.HandlerFunc(outreachBulkHandler.SendAdHocBatch)))
@@ -179,9 +197,13 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	mux.HandleFunc("GET /t/unsubscribe/{token}", trackingHandler.Unsubscribe)
 
 	mux.HandleFunc("GET /api/public/v1/demo/{slug}", demoPublicHandler.Get)
+	mux.HandleFunc("POST /api/public/v1/demo/{slug}/sessions", demoEngagementHandler.Start)
+	mux.HandleFunc("POST /api/public/v1/demo-sessions/{session_id}/events", demoEngagementHandler.Touch)
+	mux.HandleFunc("POST /api/public/v1/demo-sessions/{session_id}/transcript", demoEngagementHandler.Transcript)
 	mux.HandleFunc("GET /api/public/v1/restaurants/{id}/site-images", restaurantPublicHandler.GetSiteImagesByID)
 	mux.HandleFunc("GET /api/public/v1/restaurants/by-place/{place_id}/site-images", restaurantPublicHandler.GetSiteImagesByPlaceID)
 	mux.HandleFunc("GET /api/public/v1/site/restaurants", restaurantPublicHandler.ListSiteRestaurants)
+	mux.HandleFunc("GET /api/public/v1/site/restaurants/by-id/{id}", restaurantPublicHandler.GetSiteContentByID)
 	mux.HandleFunc("GET /api/public/v1/site/restaurants/{index}", restaurantPublicHandler.GetSiteContentByIndex)
 	mux.HandleFunc("GET /api/public/v1/site/by-place/{place_id}", restaurantPublicHandler.GetSiteContentByPlaceID)
 	mux.HandleFunc("GET /api/public/v1/restaurants/{id}/table-availability", reservationPublicHandler.GetTableAvailability)

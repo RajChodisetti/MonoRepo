@@ -67,39 +67,51 @@ func NewService(
 	}
 }
 
-func (service *Service) TriggerBulkSend(ctx context.Context, principal auth.Principal) (TriggerResult, error) {
+func (service *Service) SetEmailJob(ctx context.Context, principal auth.Principal, enabled bool) (EmailJobActionResult, error) {
 	if !auth.IsInternalAdmin(principal.Role) {
-		return TriggerResult{}, fmt.Errorf("forbidden")
+		return EmailJobActionResult{}, fmt.Errorf("forbidden")
 	}
-	if !service.emailSendingEnabled() {
-		return TriggerResult{}, ErrSendingDisabled
+	if !enabled {
+		control, err := SetEmailJobControl(ctx, service.pool, false, nil)
+		return EmailJobActionResult{
+			EmailJob: control,
+			Status:   "disabled",
+			MaxSends: service.outreachCfg.BulkMax,
+		}, err
 	}
 	if service.emailPool == nil {
-		return TriggerResult{}, ErrNotConfigured
+		return EmailJobActionResult{}, ErrNotConfigured
 	}
 	if err := validateBulkMax(service.outreachCfg.BulkMax); err != nil {
-		return TriggerResult{}, err
+		return EmailJobActionResult{}, err
 	}
-
 	active, _, err := HasActiveBulkJob(ctx, service.pool, BulkSendJobType)
 	if err != nil {
-		return TriggerResult{}, err
+		return EmailJobActionResult{}, err
 	}
 	if active {
-		return TriggerResult{}, ErrBulkJobActive
+		return EmailJobActionResult{}, ErrBulkJobActive
 	}
-
 	pending, err := service.repo.CountEligibleLeads(ctx)
 	if err != nil {
-		return TriggerResult{}, err
+		return EmailJobActionResult{}, err
 	}
-
+	control, err := SetEmailJobControl(ctx, service.pool, true, &principal.UserID)
+	if err != nil {
+		return EmailJobActionResult{}, err
+	}
 	jobID, err := service.enqueuer.EnqueueBulkSend(ctx, principal.UserID)
 	if err != nil {
-		return TriggerResult{}, err
+		// A concurrent admin activation may have won the queue's unique active-job
+		// constraint after our read check. Keep the shared control enabled for that
+		// winning job; only revert when no active job was created.
+		if !errors.Is(err, ErrBulkJobActive) {
+			_, _ = SetEmailJobControl(ctx, service.pool, false, nil)
+		}
+		return EmailJobActionResult{}, err
 	}
-
-	return TriggerResult{
+	return EmailJobActionResult{
+		EmailJob:             control,
 		JobID:                jobID,
 		Status:               "queued",
 		MaxSends:             service.outreachCfg.BulkMax,
@@ -121,6 +133,11 @@ func (service *Service) GetStatus(ctx context.Context, principal auth.Principal)
 		PendingEligibleCount: pending,
 		MaxSends:             service.outreachCfg.BulkMax,
 	}
+	control, err := GetEmailJobControl(ctx, service.pool)
+	if err != nil {
+		return StatusResult{}, err
+	}
+	result.EmailJob = control
 	if service.emailPool != nil && service.emailPool.Durable() {
 		nextAvailableAt, err := service.emailPool.NextAvailableAt(ctx)
 		if err != nil {
@@ -166,8 +183,13 @@ func (service *Service) RunBulkSend(ctx context.Context, triggeredBy uuid.UUID, 
 	}
 	startedAttempted := summary.Attempted
 
-	if !service.emailSendingEnabled() {
-		return summary, ErrSendingDisabled
+	jobControl, err := GetEmailJobControl(ctx, service.pool)
+	if err != nil {
+		return summary, err
+	}
+	if service.pool != nil && !jobControl.Enabled {
+		summary.StoppedReason = "disabled_by_admin"
+		return summary, nil
 	}
 	if service.emailPool == nil {
 		return summary, ErrNotConfigured
@@ -188,10 +210,21 @@ func (service *Service) RunBulkSend(ctx context.Context, triggeredBy uuid.UUID, 
 
 	if len(leads) == 0 {
 		summary.StoppedReason = "no_eligible_leads"
+		_, _ = SetEmailJobControl(ctx, service.pool, false, nil)
 		return summary, nil
 	}
 
 	for _, lead := range leads {
+		if service.pool != nil {
+			control, controlErr := GetEmailJobControl(ctx, service.pool)
+			if controlErr != nil {
+				return summary, controlErr
+			}
+			if !control.Enabled {
+				summary.StoppedReason = "disabled_by_admin"
+				break
+			}
+		}
 		if !service.emailPool.Durable() && service.emailPool.Exhausted() {
 			summary.StoppedReason = "account_limit_reached"
 			break
@@ -230,6 +263,7 @@ func (service *Service) RunBulkSend(ctx context.Context, triggeredBy uuid.UUID, 
 			)
 			summary.Failed++
 			summary.StoppedReason = "delivery_error"
+			_, _ = SetEmailJobControl(ctx, service.pool, false, nil)
 			return summary, err
 		} else if sent {
 			summary.Attempted++
@@ -284,6 +318,9 @@ func (service *Service) RunBulkSend(ctx context.Context, triggeredBy uuid.UUID, 
 		"triggered_by", triggeredBy,
 		"stopped_reason", summary.StoppedReason,
 	)
+	if summary.NextAvailableAt == nil {
+		_, _ = SetEmailJobControl(ctx, service.pool, false, nil)
+	}
 
 	return summary, nil
 }

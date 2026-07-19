@@ -39,7 +39,7 @@ func (handler *OutreachBulkHandler) Trigger(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	result, err := handler.service.TriggerBulkSend(r.Context(), principal)
+	result, err := handler.service.SetEmailJob(r.Context(), principal, true)
 	if errors.Is(err, outreach.ErrBulkJobActive) {
 		handler.writeError(w, http.StatusConflict, "bulk_job_active", "A bulk outreach job is already queued or running.")
 		return
@@ -58,6 +58,42 @@ func (handler *OutreachBulkHandler) Trigger(w http.ResponseWriter, r *http.Reque
 	}
 
 	handler.writeJSON(w, http.StatusAccepted, result)
+}
+
+type setEmailJobRequest struct {
+	Enabled *bool `json:"enabled"`
+}
+
+func (handler *OutreachBulkHandler) SetEmailJob(w http.ResponseWriter, r *http.Request) {
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		handler.writeError(w, http.StatusUnauthorized, "unauthorized", "Authentication is required.")
+		return
+	}
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<16))
+	if err != nil {
+		handler.writeError(w, http.StatusBadRequest, "invalid_request", "Could not read request body.")
+		return
+	}
+	var request setEmailJobRequest
+	if json.Unmarshal(body, &request) != nil || request.Enabled == nil {
+		handler.writeError(w, http.StatusBadRequest, "invalid_request", "enabled must be true or false.")
+		return
+	}
+	result, err := handler.service.SetEmailJob(r.Context(), principal, *request.Enabled)
+	if errors.Is(err, outreach.ErrBulkJobActive) {
+		handler.writeError(w, http.StatusConflict, "bulk_job_active", "A bulk outreach job is already queued or running.")
+		return
+	}
+	if errors.Is(err, outreach.ErrNotConfigured) {
+		handler.writeError(w, http.StatusServiceUnavailable, "outreach_not_configured", "Gmail OAuth outreach accounts are not configured.")
+		return
+	}
+	if err != nil {
+		handler.writeError(w, http.StatusInternalServerError, "email_job_control_failed", err.Error())
+		return
+	}
+	handler.writeJSON(w, http.StatusOK, result)
 }
 
 func (handler *OutreachBulkHandler) Status(w http.ResponseWriter, r *http.Request) {

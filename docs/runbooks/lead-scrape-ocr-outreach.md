@@ -30,13 +30,14 @@ POST city scrape job
 ```
 
 Creating a scrape job, running OCR, or preparing drafts does not send email.
-Real email still requires all three record approvals, email sending enabled, and
-an internal administrator starting the bulk workflow.
+Real email still requires all three record approvals and an internal
+administrator enabling the persisted email job from the Outreach UI.
 
 ## Required deployment order
 
-1. Keep `LEAD_OCR_VERIFICATION_ENABLED=false` and
-   `EMAIL_DISABLE_SENDING=true` during rollout.
+1. Keep `LEAD_OCR_VERIFICATION_ENABLED=false`, keep the Outreach UI email job
+   disabled, and retain `EMAIL_DISABLE_SENDING=true` for the generic adapter
+   during rollout.
 2. Remove or disable every legacy `cron_lead_ingestion.sh` /
    `daily_ingestion.py` crontab entry so it cannot race the durable request
    ledger during or after rollout.
@@ -50,12 +51,14 @@ an internal administrator starting the bulk workflow.
    `000020`.
 5. Deploy/build the updated API, Go worker, scrape-worker, and OCR-job images,
    but do not start their application processes yet.
-6. Apply migrations `000015` through `000023`, in order. `000019` depends on
+6. Apply migrations `000015` through `000029`, in order. `000019` depends on
    the review-audit columns introduced by `000018`; `000021` binds tracking and
    delivery audit rows to the immutable address actually used for outreach.
    `000022` returns legacy automatic artifacts to draft, queues fresh preparation,
    and binds new artifacts to both OCR input and the exact identity/public payload.
-   `000023` makes maximum-depth coverage gaps a durable, visible waiting state.
+   `000023` makes maximum-depth coverage gaps a durable, visible waiting state;
+   `000024` adds durable eight-hour Gmail pacing; and `000029` adds daily Gmail
+   health evidence plus signed-demo engagement sessions/transcripts.
 7. Start the updated API and Go worker before enabling OCR. The updated Go worker must
    know the `lead.prepare` job type before OCR can enqueue it.
    Migration `000018` resets pre-audit profile approvals and demo publications
@@ -113,14 +116,17 @@ OUTREACH_SEND_JITTER_MIN=2m
 OUTREACH_SEND_JITTER_MAX=5m
 OUTREACH_ZOHO_ACCOUNTS_JSON=[]
 OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON=[{"key":"workspace-sales-1","mailbox_email":"sales1@example.com","from_email":"sales1@example.com","client_id":"<oauth client id>","client_secret":"<secret>","refresh_token":"<offline refresh token>"}]
+OUTREACH_EMAIL_HEALTH_ENABLED=true
+OUTREACH_EMAIL_HEALTH_RECIPIENT=rajchodisetti@gmail.com
+OUTREACH_EMAIL_HEALTH_INTERVAL=24h
 ```
 
 The singleton `ZOHO_*` values configure the generic Zoho adapter used by other
-email flows; `OUTREACH_ZOHO_ACCOUNTS_JSON` configures the independently rotated
-bulk-outreach pool. `OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON` provides the same
-pool behavior through Gmail's HTTPS API. If the generic adapter is intentionally
-unused, `EMAIL_PROVIDER=disabled` is valid while the rotating outreach pool is
-enabled through `EMAIL_DISABLE_SENDING=false`.
+email flows; quota-managed restaurant outreach uses only the Gmail accounts in
+`OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON`. Add another JSON entry to add a sender
+without a code change. If the generic adapter is intentionally unused,
+`EMAIL_PROVIDER=disabled` is valid while the Gmail outreach pool is configured;
+the restaurant outreach job is enabled from the admin UI.
 
 The admin photo viewer resolves temporary Google Places media URLs through the
 Go API. Keep its key in `/opt/tuvi/env/places-api.env` (mode `0600`) so the API
@@ -153,10 +159,17 @@ offset. During an on-time cycle, adjacent offsets normally yield effective gaps
 of about 9-15 minutes. A separate global 2-5 minute minimum-delay guard spans
 account transitions and prevents delayed/restarted workers from catching up in
 a burst. After slot 40, the account becomes available again only after its
-24-hour cooldown. Gmail and Zoho both use OAuth and HTTPS APIs; SMTP is rejected.
+24-hour cooldown. Gmail uses OAuth and the HTTPS API; SMTP is rejected.
 Configuration rejects duplicate provider identities even when aliases use
 different keys, and PostgreSQL retains the usage/cooldown row across credential
 rotation.
+
+The worker sends one real Gmail health-check message per configured mailbox to
+`OUTREACH_EMAIL_HEALTH_RECIPIENT` when the account is first registered and then
+once every 24 hours. Successful provider message IDs and safe failures are shown
+on the Outreach admin page. Health checks are controlled independently by
+`OUTREACH_EMAIL_HEALTH_ENABLED`; the restaurant outreach run is controlled by
+the persisted admin UI toggle.
 
 The limit is conservative: it is at most 40 reserved provider attempts, not a
 promise of 40 accepted or delivered emails. Fewer eligible approved leads,
@@ -507,19 +520,22 @@ input.
 Before production enabling:
 
 1. Confirm the four production URL values exactly match the values above.
-2. Confirm every configured sender is verified by Zoho.
+2. Confirm every configured Gmail sender shows healthy in the Outreach UI.
 3. Confirm `EMAIL_REDIRECT_TO` is empty in production.
 4. Regenerate and re-review any old draft containing a local URL using the
    administrator sequence above. Production
    rendered-email preflight rejects unresolved placeholders, HTTP links,
    localhost/loopback links, and unapproved hosts before a provider call.
-5. Set `EMAIL_DISABLE_SENDING=false` and restart both API and Go worker.
+5. Open the Outreach admin page and confirm the job is disabled before starting.
 
-Start one approved bulk workflow:
+Start one approved bulk workflow from the Outreach admin page by selecting
+**Enable email job**. The equivalent authenticated API call is:
 
 ```bash
-curl -fsS -X POST "$TUVI_API/api/v1/outreach/bulk-send" \
-  -H "Authorization: Bearer $ADMIN_TOKEN" | jq
+curl -fsS -X PATCH "$TUVI_API/api/v1/outreach/email-job" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"enabled":true}' | jq
 
 curl -fsS "$TUVI_API/api/v1/outreach/bulk-send/status" \
   -H "Authorization: Bearer $ADMIN_TOKEN" | jq
@@ -696,8 +712,9 @@ requeue it merely because the old worker job is now `failed`.
 
 ## Stop controls
 
-- Disable new email immediately with `EMAIL_DISABLE_SENDING=true` and restart
-  API/worker. Already accepted provider sends cannot be recalled.
+- Disable the email job from the Outreach admin page. The currently in-flight
+  Gmail request is allowed to finish so its delivery state is recorded; no next
+  provider request starts. Already accepted provider sends cannot be recalled.
 - Stop an individual campaign with `POST /api/v1/campaigns/{id}/stop`.
 - Stop new scrape execution by stopping `scrape-worker`; checkpoints remain in
   PostgreSQL for a later restart.

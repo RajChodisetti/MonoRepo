@@ -50,9 +50,9 @@ func (handler *RestaurantSiteAdminHandler) Get(w http.ResponseWriter, r *http.Re
 	}
 
 	templates := []map[string]any{
-		{"id": "1", "name": "Cinematic", "url": generatedSiteURL(handler.publicWebURL, summary.Index, "1")},
-		{"id": "2", "name": "Aurora", "url": generatedSiteURL(handler.publicWebURL, summary.Index, "2")},
-		{"id": "3", "name": "Elysian reservations", "url": generatedSiteURL(handler.publicWebURL, summary.Index, "3")},
+		{"id": "1", "name": "Cinematic", "url": generatedSiteURL(handler.publicWebURL, summary.ID.String(), summary.Index, "1")},
+		{"id": "2", "name": "Aurora", "url": generatedSiteURL(handler.publicWebURL, summary.ID.String(), summary.Index, "2")},
+		{"id": "3", "name": "Elysian reservations", "url": generatedSiteURL(handler.publicWebURL, summary.ID.String(), summary.Index, "3")},
 	}
 	handler.writeJSON(w, http.StatusOK, map[string]any{
 		"restaurant_id":   summary.ID,
@@ -64,13 +64,14 @@ func (handler *RestaurantSiteAdminHandler) Get(w http.ResponseWriter, r *http.Re
 	})
 }
 
-func generatedSiteURL(baseURL string, index int, templateID string) string {
+func generatedSiteURL(baseURL, restaurantID string, index int, templateID string) string {
 	parsed, err := url.Parse(baseURL)
 	if err != nil {
 		return ""
 	}
 	query := parsed.Query()
 	query.Set("id", strconv.Itoa(index))
+	query.Set("restaurant_id", strings.TrimSpace(restaurantID))
 	query.Set("template", templateID)
 	parsed.RawQuery = query.Encode()
 	return parsed.String()

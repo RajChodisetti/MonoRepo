@@ -63,6 +63,7 @@ type SiteContent struct {
 type SiteRepository interface {
 	ListSiteRestaurants(ctx context.Context) ([]SiteRestaurantSummary, error)
 	GetSiteRestaurantByID(ctx context.Context, restaurantID uuid.UUID) (SiteRestaurantSummary, error)
+	GetSiteContentByID(ctx context.Context, restaurantID uuid.UUID) (SiteContent, error)
 	GetSiteContentByIndex(ctx context.Context, index int) (SiteContent, error)
 	GetSiteContentByPlaceID(ctx context.Context, placeID string) (SiteContent, error)
 }

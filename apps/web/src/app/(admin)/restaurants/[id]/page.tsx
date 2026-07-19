@@ -8,6 +8,7 @@ import { RESTAURANT_STATUSES, formatDate } from "@/lib/constants";
 import type {
   Campaign,
   DemoLink,
+  DemoSession,
   DemoSite,
   GeneratedSite,
   Member,
@@ -18,7 +19,38 @@ import { EmptyState, ErrorBanner, PageHeader, StatusBadge } from "@/components/u
 import { PhotoGallery } from "@/components/PhotoGallery";
 import { SendPreviewModal } from "@/components/SendPreviewModal";
 
-type Tab = "overview" | "photos" | "profile" | "demo" | "campaign" | "members";
+type Tab = "overview" | "photos" | "profile" | "demo" | "campaign" | "engagement" | "members";
+
+function formatDuration(seconds: number) {
+  const safe = Math.max(0, Math.round(seconds || 0));
+  const minutes = Math.floor(safe / 60);
+  const remainder = safe % 60;
+  return minutes > 0 ? `${minutes}m ${remainder}s` : `${remainder}s`;
+}
+
+function templateName(templateID: DemoSession["template_id"]) {
+  if (templateID === "2") return "Aurora";
+  if (templateID === "3") return "Elysian";
+  return "Cinematic";
+}
+
+function apolloStatusMessage(status?: string, emailFound?: boolean) {
+  if (emailFound) return "Apollo found a work email for this restaurant.";
+  switch (status) {
+    case "skipped_no_domain":
+      return "Apollo could not run because the restaurant has no usable website or company domain.";
+    case "no_candidate":
+      return "Apollo searched the available domain but found no suitable owner/manager candidate.";
+    case "no_match":
+      return "Apollo found candidates, but none produced a verified work email match.";
+    case "enriched":
+      return "Apollo enriched the restaurant, but did not return a usable work email.";
+    case "not_recorded":
+      return "No Apollo enrichment result has been recorded for this restaurant yet.";
+    default:
+      return status ? `Apollo result: ${status}. No usable email was returned.` : "Apollo status is unavailable.";
+  }
+}
 
 function RestaurantDetailInner() {
   const params = useParams<{ id: string }>();
@@ -35,8 +67,6 @@ function RestaurantDetailInner() {
   // overview form
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [isContacted, setIsContacted] = useState(false);
-  const [shownInterest, setShownInterest] = useState(false);
   const [status, setStatus] = useState("lead");
 
   // profile
@@ -59,6 +89,9 @@ function RestaurantDetailInner() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
 
+  // demo engagement
+  const [demoSessions, setDemoSessions] = useState<DemoSession[]>([]);
+
   // members
   const [members, setMembers] = useState<Member[]>([]);
   const [memberUserId, setMemberUserId] = useState("");
@@ -69,8 +102,6 @@ function RestaurantDetailInner() {
     setRestaurant(data);
     setName(data.name || "");
     setEmail(data.email || "");
-    setIsContacted(!!data.is_contacted);
-    setShownInterest(!!data.shown_interest);
     setStatus(data.status || "lead");
   }, [id]);
 
@@ -86,6 +117,13 @@ function RestaurantDetailInner() {
       `restaurants/${id}/campaigns`,
     );
     setCampaigns(data.items || []);
+  }, [id]);
+
+  const loadEngagement = useCallback(async () => {
+    const data = await adminFetch<{ items: DemoSession[] }>(
+      `restaurants/${id}/demo-engagement`,
+    );
+    setDemoSessions(data.items || []);
   }, [id]);
 
   const loadDemoLinks = useCallback(async () => {
@@ -147,6 +185,7 @@ function RestaurantDetailInner() {
       try {
         if (tab === "profile") await loadProfile();
         if (tab === "campaign") await loadCampaigns();
+        if (tab === "engagement") await loadEngagement();
         if (tab === "members") await loadMembers();
         if (tab === "demo") {
           await Promise.all([loadDemoLinks(), loadGeneratedSite()]);
@@ -160,6 +199,7 @@ function RestaurantDetailInner() {
     tab,
     loadProfile,
     loadCampaigns,
+    loadEngagement,
     loadMembers,
     loadDemoLinks,
     loadGeneratedSite,
@@ -176,8 +216,6 @@ function RestaurantDetailInner() {
         body: {
           name,
           email,
-          is_contacted: isContacted,
-          shown_interest: shownInterest,
         },
       });
       if (status !== restaurant?.status) {
@@ -307,26 +345,36 @@ function RestaurantDetailInner() {
     }
   }
 
-  async function setDemoStatus(next: "published" | "draft") {
-    if (!demoId || !demoPreview) return;
+  async function viewPersonalizedWebsite(
+    template: NonNullable<typeof generatedSite>["templates"][number],
+  ) {
+    const previewWindow = window.open("about:blank", "_blank");
+    if (!previewWindow) {
+      setError("Allow pop-ups for the admin portal to view the personalized website.");
+      return;
+    }
+    previewWindow.opener = null;
     setBusy(true);
     setError(null);
     try {
-      const updatedAt =
-        (demoPreview.updated_at as string) ||
-        ((demoPreview.demo_site as { updated_at?: string })?.updated_at as string);
-      await adminFetch(`demo-sites/${demoId}/status`, {
-        method: "PATCH",
-        body: {
-          status: next,
-          expected_updated_at: updatedAt,
-        },
+      const capability = await adminFetch<{
+        session_id: string;
+        session_token: string;
+      }>(`restaurants/${id}/demo-engagement/preview`, {
+        method: "POST",
+        body: { template_id: template.id },
       });
-      await loadDemoPreview();
-      await loadDemoLinks();
-      setMessage(`Demo ${next}.`);
+      const url = new URL(template.url);
+      url.hash = new URLSearchParams({
+        engagement_session: capability.session_id,
+        engagement_token: capability.session_token,
+      }).toString();
+      previewWindow.location.replace(url.toString());
+      setMessage(`${template.name} personalized website opened; engagement tracking started.`);
+      await loadEngagement();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Demo status update failed");
+		previewWindow.close();
+		setError(err instanceof Error ? err.message : "Personalized website could not be opened");
     } finally {
       setBusy(false);
     }
@@ -467,6 +515,7 @@ function RestaurantDetailInner() {
     { id: "profile", label: "Profile review" },
     { id: "demo", label: "Demo" },
     { id: "campaign", label: "Campaign" },
+    { id: "engagement", label: "Engagement" },
     { id: "members", label: "Members" },
   ];
   const ocrStatus = preview?.ocr_status || "unknown";
@@ -559,6 +608,14 @@ function RestaurantDetailInner() {
             <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
           </label>
           <label style={{ display: "grid", gap: "0.35rem" }}>
+            <span style={{ fontWeight: 600, fontSize: "0.85rem" }}>Phone</span>
+            <input className="input" value={restaurant.phone || ""} readOnly disabled />
+          </label>
+          <label style={{ display: "grid", gap: "0.35rem" }}>
+            <span style={{ fontWeight: 600, fontSize: "0.85rem" }}>Address</span>
+            <textarea className="input" value={restaurant.address || ""} readOnly disabled rows={2} />
+          </label>
+          <label style={{ display: "grid", gap: "0.35rem" }}>
             <span style={{ fontWeight: 600, fontSize: "0.85rem" }}>Status</span>
             <select className="select" value={status} onChange={(e) => setStatus(e.target.value)}>
               {RESTAURANT_STATUSES.map((s) => (
@@ -569,13 +626,16 @@ function RestaurantDetailInner() {
             </select>
           </label>
           <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-            <input type="checkbox" checked={isContacted} onChange={(e) => setIsContacted(e.target.checked)} />
+            <input type="checkbox" checked={!!restaurant.is_contacted} readOnly disabled />
             Contacted
           </label>
           <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-            <input type="checkbox" checked={shownInterest} onChange={(e) => setShownInterest(e.target.checked)} />
+            <input type="checkbox" checked={!!restaurant.shown_interest} readOnly disabled />
             Shown interest
           </label>
+          <div style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
+            Contacted is set after Gmail confirms a send. Shown interest is set after a tracked email link is clicked.
+          </div>
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
             <button className="btn btn-primary" type="submit" disabled={busy}>
               Save changes
@@ -649,6 +709,14 @@ function RestaurantDetailInner() {
               <div>
                 <strong>Contact:</strong> {preview.contact_email || "—"}
               </div>
+              <div className="alert alert-info" style={{ margin: 0 }}>
+                <strong>Apollo:</strong> {apolloStatusMessage(preview.apollo_status, preview.apollo_email_found)}
+                {preview.apollo_status ? (
+                  <div style={{ marginTop: "0.25rem", fontSize: "0.82rem" }}>
+                    Provider result: <code>{preview.apollo_status}</code>
+                  </div>
+                ) : null}
+              </div>
               <pre
                 style={{
                   margin: 0,
@@ -701,15 +769,15 @@ function RestaurantDetailInner() {
                 </div>
                 <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
                   {generatedSite.templates.map((template) => (
-                    <a
+                    <button
                       className="btn btn-primary"
-                      href={template.url}
-                      target="_blank"
-                      rel="noreferrer"
+                      type="button"
+                      onClick={() => viewPersonalizedWebsite(template)}
+                      disabled={busy}
                       key={template.id}
                     >
-                      Open {template.name}
-                    </a>
+                      View {template.name} personalized website
+                    </button>
                   ))}
                 </div>
               </>
@@ -719,23 +787,15 @@ function RestaurantDetailInner() {
           </div>
 
           <div className="card" style={{ display: "grid", gap: "0.65rem" }}>
-            <h3 style={{ margin: 0, fontSize: "1rem" }}>What the demo controls do</h3>
+            <h3 style={{ margin: 0, fontSize: "1rem" }}>How personalized website previews work</h3>
             <ol style={{ margin: 0, paddingLeft: "1.2rem", color: "var(--muted)", lineHeight: 1.65 }}>
               <li>
-                <strong style={{ color: "var(--ink)" }}>Create demo draft</strong> snapshots this
-                restaurant&apos;s public-safe profile/menu data and creates a one-time access token.
+                <strong style={{ color: "var(--ink)" }}>View personalized website</strong> opens the
+                selected Cinematic, Aurora, or Elysian restaurant website and starts an admin-preview session clock.
               </li>
               <li>
                 <strong style={{ color: "var(--ink)" }}>Inspect payload</strong> shows the exact
-                server-side data the published website will receive; it does not publish anything.
-              </li>
-              <li>
-                <strong style={{ color: "var(--ink)" }}>Publish</strong> makes the token-gated
-                website available, but only after OCR is verified and the profile is approved.
-              </li>
-              <li>
-                <strong style={{ color: "var(--ink)" }}>Unpublish</strong> returns it to draft and
-                immediately revokes public access without deleting the snapshot.
+                server-side public-safe data used by approved outreach; it does not expose a public publish control.
               </li>
             </ol>
           </div>
@@ -755,7 +815,6 @@ function RestaurantDetailInner() {
                       <th>Slug</th>
                       <th>Status</th>
                       <th>Created</th>
-                      <th>Published website</th>
                       <th>Manage</th>
                     </tr>
                   </thead>
@@ -767,19 +826,6 @@ function RestaurantDetailInner() {
                           <StatusBadge status={link.status} />
                         </td>
                         <td>{formatDate(link.created_at)}</td>
-                        <td>
-                          {link.preview_url && link.status === "published" ? (
-                            <a href={link.preview_url} target="_blank" rel="noreferrer">
-                              Open published demo
-                            </a>
-                          ) : (
-                            <span style={{ color: "var(--muted)" }}>
-                              {link.status === "published"
-                                ? "Create a campaign to retain the shareable token"
-                                : "Unavailable while draft"}
-                            </span>
-                          )}
-                        </td>
                         <td>
                           <button
                             type="button"
@@ -804,12 +850,6 @@ function RestaurantDetailInner() {
               </button>
               <button className="btn btn-secondary" type="button" disabled={busy || !demoId} onClick={loadDemoPreview}>
                 Refresh payload
-              </button>
-              <button className="btn btn-primary" type="button" disabled={busy || !demoId || !demoPreview} onClick={() => setDemoStatus("published")}>
-                Publish
-              </button>
-              <button className="btn btn-secondary" type="button" disabled={busy || !demoId || !demoPreview} onClick={() => setDemoStatus("draft")}>
-                Unpublish
               </button>
             </div>
             {demoId ? (
@@ -954,6 +994,53 @@ function RestaurantDetailInner() {
               </div>
             </div>
           ) : null}
+        </div>
+      ) : null}
+
+      {tab === "engagement" ? (
+        <div style={{ display: "grid", gap: "1rem" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "center" }}>
+            <p style={{ color: "var(--muted)", margin: 0 }}>
+              Outreach-link and admin-preview visits, selected template, active time, and AI receptionist transcript turns for this restaurant.
+            </p>
+            <button className="btn btn-secondary" type="button" onClick={loadEngagement}>
+              Refresh
+            </button>
+          </div>
+          {demoSessions.length === 0 ? (
+            <EmptyState message="No personalized website engagement has been recorded yet." />
+          ) : (
+            demoSessions.map((session) => (
+              <div className="card" key={session.id} style={{ display: "grid", gap: "0.7rem" }}>
+                <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", alignItems: "center" }}>
+                  <strong>{formatDate(session.started_at)}</strong>
+                  <StatusBadge status={templateName(session.template_id)} />
+                  <span>Time on demo: {formatDuration(session.duration_seconds)}</span>
+                  <span style={{ color: "var(--muted)" }}>
+                    Last seen {formatDate(session.last_seen_at)}
+                  </span>
+                  <StatusBadge status={session.ended_at ? "ended" : "active"} />
+                </div>
+                {session.transcript.length === 0 ? (
+                  <p style={{ color: "var(--muted)", margin: 0 }}>No AI receptionist transcript in this visit.</p>
+                ) : (
+                  <div style={{ display: "grid", gap: "0.45rem" }}>
+                    {session.transcript.map((turn) => (
+                      <div key={turn.id} style={{ borderLeft: "3px solid var(--line)", paddingLeft: "0.7rem" }}>
+                        <div style={{ display: "flex", gap: "0.5rem", alignItems: "baseline" }}>
+                          <strong style={{ textTransform: "capitalize" }}>{turn.role}</strong>
+                          <span style={{ color: "var(--muted)", fontSize: "0.78rem" }}>
+                            {formatDate(turn.occurred_at)}
+                          </span>
+                        </div>
+                        <div style={{ whiteSpace: "pre-wrap", marginTop: "0.15rem" }}>{turn.content}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))
+          )}
         </div>
       ) : null}
 

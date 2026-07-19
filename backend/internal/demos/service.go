@@ -31,27 +31,9 @@ func NewService(demos Repository, accessService *restaurants.Service, tokenTTL t
 }
 
 func (service *Service) ResolvePublicDemo(ctx context.Context, slug, token string) (PublicDemoPayload, error) {
-	slug = strings.TrimSpace(slug)
-	token = strings.TrimSpace(token)
-	if slug == "" || token == "" {
-		return PublicDemoPayload{}, ErrDemoNotFound
-	}
-
-	record, err := service.demos.GetBySlug(ctx, slug)
+	record, err := service.ResolvePublicSite(ctx, slug, token)
 	if err != nil {
-		return PublicDemoPayload{}, ErrDemoNotFound
-	}
-
-	if record.Status != StatusPublished {
-		return PublicDemoPayload{}, ErrDemoNotFound
-	}
-
-	if record.ExpiresAt != nil && time.Now().After(*record.ExpiresAt) {
-		return PublicDemoPayload{}, ErrDemoNotFound
-	}
-
-	if err := CheckDemoToken(record.TokenHash, token); err != nil {
-		return PublicDemoPayload{}, ErrDemoNotFound
+		return PublicDemoPayload{}, err
 	}
 
 	payload := MapPublicPayload(record.PublicPayload)
@@ -59,6 +41,34 @@ func (service *Service) ResolvePublicDemo(ctx context.Context, slug, token strin
 	// mutable public_payload supplied by an administrator or ingestion job.
 	payload.RestaurantID = record.RestaurantID.String()
 	return payload, nil
+}
+
+// ResolvePublicSite validates the complete public-demo capability and returns
+// its server-owned identity for downstream engagement tracking.
+func (service *Service) ResolvePublicSite(ctx context.Context, slug, token string) (Site, error) {
+	slug = strings.TrimSpace(slug)
+	token = strings.TrimSpace(token)
+	if slug == "" || token == "" {
+		return Site{}, ErrDemoNotFound
+	}
+
+	record, err := service.demos.GetBySlug(ctx, slug)
+	if err != nil {
+		return Site{}, ErrDemoNotFound
+	}
+
+	if record.Status != StatusPublished {
+		return Site{}, ErrDemoNotFound
+	}
+
+	if record.ExpiresAt != nil && time.Now().After(*record.ExpiresAt) {
+		return Site{}, ErrDemoNotFound
+	}
+
+	if err := CheckDemoToken(record.TokenHash, token); err != nil {
+		return Site{}, ErrDemoNotFound
+	}
+	return record, nil
 }
 
 type CreateDemoResult struct {

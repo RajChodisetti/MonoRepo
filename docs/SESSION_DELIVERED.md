@@ -1911,3 +1911,87 @@ consultation table remains empty. No fake production booking was created.
 `status=success` with 16 current slots; the voice status returns `ready`; the
 public website and voice host return HTTP 200; the rendered website contains the
 voice widget; and new API logs contain no calendar-provider initialization.
+
+## 2026-07-18 — Gmail Outreach Health and Restaurant Admin Completion
+
+**Role:** Full-Stack, Backend, Frontend, Security, Test, and Documentation Agent
+
+**GitHub / Local State:** Fetched and pruned all remotes. GitHub reports no open
+pull requests; PRs 1–8 are merged. The current local HEAD `44b6d7c` is identical
+to `origin/master`. Work stayed on `agent/tuvi-oauth-homepage-verification` to
+preserve unrelated dirty-worktree files; no user-owned change was overwritten.
+
+**Delivered:** Made the restaurant outreach account pool Gmail-only and kept it
+configuration-driven through `OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON`, so a new
+mailbox needs no code change. Added migration `000029`, a PostgreSQL sender-health
+ledger, and a worker loop that sends one real check from every configured Gmail
+mailbox to `rajchodisetti@gmail.com` when first registered and at least every 24
+hours. The Outreach UI now shows each account's pending/checking/healthy/failed
+state, last and next check, provider acceptance, and safe error. Existing
+migration `000024` remains the strategic delivery schedule: 40 attempts per
+account over eight hours, persisted 2–5 minute jitter/global gap, and 24-hour
+cooldown/continuation.
+
+The restaurant outreach job is now operationally controlled by a persisted
+on/off control in the Outreach admin UI instead of `EMAIL_DISABLE_SENDING`.
+Enabling queues the durable workflow; disabling prevents the next Gmail request
+from starting while allowing an in-flight request to resolve safely. The job
+continues to select only OCR-verified rows with an email plus the existing human
+profile, demo, and campaign approval evidence. Gmail OAuth credentials remain in
+secret environment configuration, and health checks remain separately controlled.
+
+Fixed all Cinematic, Aurora, and Elysian admin preview URLs to carry the immutable
+restaurant UUID and added a public UUID content resolver, preventing index changes
+or fallback sample data from showing the wrong site. Outgoing email service cards
+now include both the Tuvi restaurant-services presentation and three distinct
+restaurant-specific signed template links. The restaurant demo UI no longer
+exposes Publish/Unpublish or a public-demo link; its View personalized website
+buttons create a protected session capability and begin tracking before opening
+the chosen template.
+
+Made Contacted and Shown interest read-only automation results in the restaurant
+view. Confirmed sends already set Contacted/emailed; successful tracked link events
+now set Shown interest/interested. Added signed-demo session capabilities,
+heartbeats/end foreground-only duration, selected-template evidence, forwarded AI
+receptionist transcript turns, a protected restaurant engagement API, and an
+Engagement tab. Added phone, address, and OCR status to restaurant responses, an
+OCR table column and verified-only filter, and per-row Apollo outcomes in profile
+review.
+
+Secured the voice service's existing call/transcript read routes and administrative
+controls with the already-configured `CALL_API_SECRET` dependency and constant-time
+credential comparison. Production currently contains 10 generic call rows and 308
+transcript turns but zero restaurant-indexed calls, so there is no historical
+restaurant-specific transcript set to migrate into the new tenant-checked ledger.
+
+**Live Read-Only Findings:** The production environment and inspected backup have
+zero Gmail and zero Zoho outreach account records, so no credential could be tested
+and no real health email was sent. Production data has 708 restaurants: 589 lack
+email and 15 lack phone. Apollo successfully enriched 119 rows and all 119 have an
+email; 511 missing-email rows are `no_candidate` and 78 are `skipped_no_domain`.
+
+**Checks Run:** `go test ./backend/...` — all backend packages pass, including
+new admin-preview/template tests; `go vet ./backend/...` — pass; admin
+`npx tsc --noEmit --incremental false` — pass; admin `npm run lint` — pass;
+template `npx tsc --noEmit
+--incremental false` — pass; Redocly OpenAPI lint — valid with three pre-existing
+warnings plus the existing localhost-server warning when run without the Makefile
+skip; voice `python3 -m py_compile voice-sales-agent/bot.py` — pass; `git diff
+--check` — pass. Current Gmail and FastAPI documentation was checked with Context7
+to verify OAuth refresh-token, `users.messages.send`, and protected dependency behavior.
+Clean Node 22 production builds pass for both the admin and template apps. The
+template app has no ESLint 9 configuration, so its standalone lint command remains
+an existing tooling gap; its TypeScript and production-build checks are clean.
+
+**Business Value / Plan Fit:** Completes the Phase 1 visibility loop from configured
+sender → UI-authorized paced outreach → confirmed contact → tracked interest →
+personalized template/foreground time/transcript, while retaining human profile,
+demo, and campaign approval gates.
+
+**Risks / Follow-ups:** Nothing was deployed, migrated, committed, pushed, or sent.
+Deployment requires explicit approval, migrations `000024` and `000029`, and valid
+per-mailbox Gmail OAuth records. The three pasted Google API keys were treated as
+exposed, were not stored or tested, and cannot authorize mailbox sending; they must
+be revoked/rotated. Each Gmail mailbox needs offline OAuth consent and a refresh
+token with `gmail.send` permission. Daily health status proves Gmail API acceptance,
+not inbox delivery.

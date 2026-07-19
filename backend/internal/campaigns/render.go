@@ -20,7 +20,6 @@ const (
 	placeholderUnsubscribeURL = "{{UNSUBSCRIBE_URL}}"
 
 	defaultPresentationURL = "http://localhost:5500"
-	defaultMarketingURL    = "http://localhost:3001"
 )
 
 type OutreachServiceLink struct {
@@ -59,34 +58,29 @@ func buildOutreachEmailData(restaurantName string, links OutreachLinkConfig) Out
 	if presentationURL == "" {
 		presentationURL = defaultPresentationURL
 	}
-	marketingURL := strings.TrimSpace(links.MarketingURL)
-	if marketingURL == "" {
-		marketingURL = defaultMarketingURL
-	}
 
 	// Use an internal marker so html/template does not URL-escape placeholder
 	// braces; injectOutreachPlaceholders rewrites it after render.
-	reservationDemoURL := htmltemplate.URL("__TEMPLATE_3_URL__")
 	services := []OutreachServiceLink{
 		{
-			Title:       "AI Voice Receptionist",
-			Description: "24/7 calls, reservation requests & callbacks",
+			Title:       "Cinematic personalized website",
+			Description: "A bold, story-led website built from your restaurant details",
+			URL:         htmltemplate.URL("__TEMPLATE_1_URL__"),
+		},
+		{
+			Title:       "Aurora personalized website",
+			Description: "A warm, modern alternative using the same restaurant content",
+			URL:         htmltemplate.URL("__TEMPLATE_2_URL__"),
+		},
+		{
+			Title:       "Elysian personalized website",
+			Description: "A polished reservation-focused experience for your guests",
+			URL:         htmltemplate.URL("__TEMPLATE_3_URL__"),
+		},
+		{
+			Title:       "Tuvi restaurant services presentation",
+			Description: "See the complete AI receptionist, website, reservation, and growth offering",
 			URL:         htmltemplate.URL(presentationURL),
-		},
-		{
-			Title:       "Presentation Websites",
-			Description: "Modern sites from your real menu & photos",
-			URL:         htmltemplate.URL(presentationURL),
-		},
-		{
-			Title:       "Reservation Requests",
-			Description: "Guests submit table requests on your demo site",
-			URL:         reservationDemoURL,
-		},
-		{
-			Title:       "Custom Apps",
-			Description: "QR ordering, loyalty & more",
-			URL:         htmltemplate.URL(marketingURL),
 		},
 	}
 
