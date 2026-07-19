@@ -1,8 +1,19 @@
 import type { Metadata } from "next";
 import type { RestaurantContent } from "@/data/types/restaurant";
 
+function cleanHours(hours: RestaurantContent["hours"]): [string, string][] {
+  return Object.entries(hours as Record<string, unknown>)
+    .filter(([day, value]) => day.toLowerCase() !== "open_now" && typeof value === "string" && value.trim() !== "")
+    .map(([day, value]) => [day, String(value)]);
+}
+
+function formatDayLabel(value: string): string {
+  return value.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 export function buildItalianMetadata(restaurant: RestaurantContent): Metadata {
-  const title = `${restaurant.name} | Italian Restaurant in ${restaurant.city}`;
+  const cuisine = restaurant.cuisine || "Italian Restaurant";
+  const title = `${restaurant.name} | ${cuisine} in ${restaurant.city}`;
   const description =
     restaurant.subheadline ||
     `Reserve a table at ${restaurant.name}, an Italian restaurant in ${restaurant.city}.`;
@@ -47,9 +58,9 @@ export function buildItalianJsonLd(restaurant: RestaurantContent) {
           reviewCount: restaurant.reviewsCount || restaurant.reviews.length,
         }
       : undefined,
-    openingHoursSpecification: Object.entries(restaurant.hours).map(([day, hours]) => ({
+    openingHoursSpecification: cleanHours(restaurant.hours).map(([day, hours]) => ({
       "@type": "OpeningHoursSpecification",
-      dayOfWeek: day.charAt(0).toUpperCase() + day.slice(1),
+      dayOfWeek: formatDayLabel(day),
       description: hours,
     })),
   };

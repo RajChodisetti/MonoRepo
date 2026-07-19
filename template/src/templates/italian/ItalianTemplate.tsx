@@ -63,6 +63,16 @@ function formatPriceLevel(value?: string): string {
   return value.replace(/\s+/g, " ").trim();
 }
 
+function cleanHours(hours: RestaurantContent["hours"]): [string, string][] {
+  return Object.entries(hours as Record<string, unknown>)
+    .filter(([day, value]) => day.toLowerCase() !== "open_now" && typeof value === "string" && value.trim() !== "")
+    .map(([day, value]) => [day, String(value)]);
+}
+
+function formatDayLabel(value: string): string {
+  return value.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 function buildMapsUrl(restaurant: RestaurantContent): string {
   if (restaurant.coordinates) {
     return `https://www.google.com/maps?q=${restaurant.coordinates.latitude},${restaurant.coordinates.longitude}`;
@@ -498,7 +508,7 @@ export default function ItalianTemplate({ restaurant }: { restaurant: Restaurant
     ...restaurant.galleryImages,
     ...(heroMedia ? [heroMedia] : []),
   ]).slice(0, 8);
-  const openHours = Object.entries(restaurant.hours).slice(0, 7);
+  const openHours = cleanHours(restaurant.hours).slice(0, 7);
   const mapsUrl = buildMapsUrl(restaurant);
   const cuisine = restaurant.cuisine || "Italian cuisine";
   const placeLabel = restaurant.city || restaurant.locationLabel || restaurant.address || "the neighborhood";
@@ -702,7 +712,7 @@ export default function ItalianTemplate({ restaurant }: { restaurant: Restaurant
               <dl>
                 {openHours.map(([day, hours]) => (
                   <div key={day}>
-                    <dt>{day}</dt>
+                    <dt>{formatDayLabel(day)}</dt>
                     <dd>{hours}</dd>
                   </div>
                 ))}
