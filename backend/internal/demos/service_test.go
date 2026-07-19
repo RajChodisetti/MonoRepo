@@ -86,7 +86,7 @@ func TestCreateDemoSiteBuildsRestaurantSpecificPayload(t *testing.T) {
 	payload := json.RawMessage(`{"restaurant_name":"Real Restaurant","cuisine":"Indian"}`)
 	demosRepo := &Mock{PublicPayloads: map[uuid.UUID]json.RawMessage{restaurantID: payload}}
 	restaurantsRepo := &restaurants.Mock{Restaurants: map[uuid.UUID]restaurants.Restaurant{
-		restaurantID: {ID: restaurantID, Name: "Real Restaurant"},
+		restaurantID: {ID: restaurantID, Name: "Real Restaurant", Status: restaurants.StatusLead},
 	}}
 	service := NewService(
 		demosRepo,
@@ -107,5 +107,12 @@ func TestCreateDemoSiteBuildsRestaurantSpecificPayload(t *testing.T) {
 	}
 	if string(record.PublicPayload) != string(payload) {
 		t.Fatalf("PublicPayload = %s, want %s", record.PublicPayload, payload)
+	}
+	restaurant, err := restaurantsRepo.GetByID(context.Background(), restaurantID)
+	if err != nil {
+		t.Fatalf("GetByID() error = %v", err)
+	}
+	if restaurant.Status != restaurants.StatusDemoReady {
+		t.Fatalf("restaurant status = %q, want %q", restaurant.Status, restaurants.StatusDemoReady)
 	}
 }

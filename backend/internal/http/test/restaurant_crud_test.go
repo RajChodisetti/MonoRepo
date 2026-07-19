@@ -65,6 +65,110 @@ func TestListRestaurantsFilterByRestaurantQueryParam(t *testing.T) {
 	}
 }
 
+func TestListRestaurantsFilterByDemoReadyStatus(t *testing.T) {
+	adminID := uuid.New()
+	demoReadyID := uuid.New()
+	leadID := uuid.New()
+
+	router := testRouterWithStores(
+		t,
+		fakeReadiness{},
+		&auth.Mock{},
+		&restaurants.Mock{
+			Restaurants: map[uuid.UUID]restaurants.Restaurant{
+				demoReadyID: {
+					ID:     demoReadyID,
+					Name:   "Demo Ready Cafe",
+					Email:  "demo@example.com",
+					Status: restaurants.StatusDemoReady,
+				},
+				leadID: {
+					ID:     leadID,
+					Name:   "Lead Cafe",
+					Email:  "lead@example.com",
+					Status: restaurants.StatusLead,
+				},
+			},
+		},
+		&restaurants.MembershipMock{},
+		&demos.Mock{},
+	)
+
+	token, _, err := auth.NewTokenManager(testTokenSecret, time.Hour).IssueToken(adminID, "admin@example.com", auth.RoleInternalAdmin)
+	if err != nil {
+		t.Fatalf("IssueToken() error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/restaurants?status=demo_ready", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Demo Ready Cafe") {
+		t.Fatalf("body = %s, want Demo Ready Cafe", body)
+	}
+	if strings.Contains(body, "Lead Cafe") {
+		t.Fatalf("body = %s, should not include Lead Cafe", body)
+	}
+}
+
+func TestListRestaurantsFilterByOCRVerifiedStatus(t *testing.T) {
+	adminID := uuid.New()
+	verifiedID := uuid.New()
+	pendingID := uuid.New()
+
+	router := testRouterWithStores(
+		t,
+		fakeReadiness{},
+		&auth.Mock{},
+		&restaurants.Mock{
+			Restaurants: map[uuid.UUID]restaurants.Restaurant{
+				verifiedID: {
+					ID:        verifiedID,
+					Name:      "Verified Cafe",
+					Email:     "verified@example.com",
+					Status:    restaurants.StatusLead,
+					OCRStatus: "verified",
+				},
+				pendingID: {
+					ID:        pendingID,
+					Name:      "Pending Cafe",
+					Email:     "pending@example.com",
+					Status:    restaurants.StatusLead,
+					OCRStatus: "pending",
+				},
+			},
+		},
+		&restaurants.MembershipMock{},
+		&demos.Mock{},
+	)
+
+	token, _, err := auth.NewTokenManager(testTokenSecret, time.Hour).IssueToken(adminID, "admin@example.com", auth.RoleInternalAdmin)
+	if err != nil {
+		t.Fatalf("IssueToken() error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/restaurants?ocr_status=verified", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Verified Cafe") {
+		t.Fatalf("body = %s, want Verified Cafe", body)
+	}
+	if strings.Contains(body, "Pending Cafe") {
+		t.Fatalf("body = %s, should not include Pending Cafe", body)
+	}
+}
+
 func TestListRestaurantsInvalidStatusReturnsBadRequest(t *testing.T) {
 	adminID := uuid.New()
 	router := testRouterWithStores(t, fakeReadiness{}, &auth.Mock{}, &restaurants.Mock{}, &restaurants.MembershipMock{}, &demos.Mock{})

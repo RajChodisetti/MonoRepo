@@ -136,6 +136,10 @@ func (service *Service) CreateDemoSite(ctx context.Context, principal auth.Princ
 	if !auth.IsInternalAdmin(principal.Role) {
 		return CreateDemoResult{}, restaurants.ErrForbidden
 	}
+	currentRestaurant, err := service.access.GetRestaurant(ctx, principal, restaurantID)
+	if err != nil {
+		return CreateDemoResult{}, err
+	}
 
 	slug := strings.TrimSpace(input.Slug)
 	if slug == "" {
@@ -187,6 +191,11 @@ func (service *Service) CreateDemoSite(ctx context.Context, principal auth.Princ
 	})
 	if err != nil {
 		return CreateDemoResult{}, err
+	}
+	if currentRestaurant.Status == restaurants.StatusLead {
+		if _, err := service.access.UpdateRestaurantStatus(ctx, principal, restaurantID, restaurants.StatusDemoReady); err != nil {
+			return CreateDemoResult{}, fmt.Errorf("mark restaurant demo ready: %w", err)
+		}
 	}
 
 	return CreateDemoResult{

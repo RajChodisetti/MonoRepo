@@ -2219,3 +2219,33 @@ This does not block live Google photo resolution. Personalized Google photos
 will remain fail-closed until the post-reset OCR worker writes exact resource
 fingerprints; menu documents remain excluded. The 200-request daily ceiling means
 the 154 eligible profiles will complete progressively rather than all at once.
+
+## 2026-07-19 — Restaurant List Filter Lifecycle Fix
+
+**Role:** Backend, Test, and Documentation Agent
+
+**Delivered:** Fixed the admin restaurant list's `demo_ready` lifecycle gap.
+Automatic lead preparation now advances a lead to `demo_ready` when it creates,
+refreshes, or reuses generated demo/outreach draft artifacts. Manual admin demo
+draft creation now also advances only fresh `lead` records to `demo_ready`,
+without downgrading emailed, interested, client, lost, or archived restaurants.
+Migration `000032` backfills existing `lead` restaurants that already have draft
+or published demo records, so the Status → `demo_ready` filter can return
+already-generated demos after deployment.
+
+Added focused regressions proving the admin list accepts and returns
+`status=demo_ready` and `ocr_status=verified` results. The OCR filter code path
+was already value-compatible; the new test protects it from regressing while the
+demo-ready lifecycle fix removes the common combined-filter empty-list case.
+
+**Checks Run:** Focused restaurant HTTP filter tests passed; focused demo-service
+status-transition test passed; `go test ./backend/...` passed with 167 tests in
+44 packages; `go vet ./backend/...` passed; `git diff --check` passed.
+
+**Business Value / Plan Fit:** Admins can reliably find leads that have moved
+from scraping/OCR into the personalized-demo review stage, which supports the
+Phase 1 lead → demo → outreach workflow.
+
+**Risks / Follow-ups:** The ignored local database tunnel at `127.0.0.1:15432`
+was unavailable, so migration `000032` was not applied locally. Production or
+staging deployment requires the normal migration approval gate.

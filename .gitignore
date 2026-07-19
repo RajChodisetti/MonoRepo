@@ -6,6 +6,10 @@ phase2
 bin/
 coverage.out
 
+# Python
+__pycache__/
+*.pyc
+
 # Frontend placeholder / future Next.js
 apps/web/.next/
 apps/web/node_modules/

@@ -1,0 +1,2 @@
+-- No-op: automatically downgrading restaurant lifecycle status could undo
+-- legitimate operator actions after this migration has run.
