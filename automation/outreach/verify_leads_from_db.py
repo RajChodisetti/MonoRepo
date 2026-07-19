@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import logging
 import os
@@ -39,6 +40,11 @@ from menu_image_ocr import (  # noqa: E402
     collect_candidate_image_urls,
     enrich_restaurant_with_menu_ocr,
     is_trusted_automated_image_url,
+)
+from media_asset_metadata import (  # noqa: E402
+    media_asset_public_url,
+    recommended_placement,
+    website_media_type,
 )
 from ocr_request_budget import (  # noqa: E402
     DurableOCRRequestBudget,
@@ -98,6 +104,190 @@ def ocr_worker_poll_seconds() -> int:
     except ValueError:
         configured = 900
     return max(60, configured)
+
+
+def media_ocr_batch_size() -> int:
+    try:
+        configured = int(os.getenv("MEDIA_OCR_BATCH_SIZE", "10").strip())
+    except ValueError:
+        configured = 10
+    return max(1, min(50, configured))
+
+
+def claim_media_asset(cur, *, max_attempts: int) -> tuple | None:
+    claim_id = uuid.uuid4()
+    cur.execute(
+        """
+        WITH candidate AS (
+          SELECT id
+          FROM restaurant_media_assets
+          WHERE source_kind IN ('owner_upload', 'licensed')
+            AND approval_status = 'draft'
+            AND hidden_at IS NULL
+            AND vision_attempts < %s
+            AND (
+              vision_status = 'pending'
+              OR (vision_status = 'failed' AND updated_at < now() - interval '24 hours')
+              OR (vision_status = 'running' AND vision_claimed_at < now() - interval '1 hour')
+            )
+          ORDER BY created_at, id
+          FOR UPDATE SKIP LOCKED
+          LIMIT 1
+        )
+        UPDATE restaurant_media_assets asset
+        SET vision_status = 'running',
+            vision_attempts = asset.vision_attempts + 1,
+            vision_claim_id = %s,
+            vision_claimed_at = now(),
+            vision_last_error = '',
+            updated_at = now()
+        FROM candidate
+        WHERE asset.id = candidate.id
+        RETURNING asset.id, asset.restaurant_id, asset.storage_key,
+                  asset.media_type, asset.placement_role, asset.vision_claim_id
+        """,
+        (max_attempts, claim_id),
+    )
+    return cur.fetchone()
+
+
+def release_media_asset_claim(cur, asset_id, claim_id, reason: str) -> None:
+    cur.execute(
+        """
+        UPDATE restaurant_media_assets
+        SET vision_status = 'pending',
+            vision_attempts = GREATEST(vision_attempts - 1, 0),
+            vision_claim_id = NULL,
+            vision_claimed_at = NULL,
+            vision_last_error = %s,
+            updated_at = now()
+        WHERE id = %s AND vision_status = 'running' AND vision_claim_id = %s
+        """,
+        (str(reason)[:500], asset_id, claim_id),
+    )
+
+
+def process_pending_media_assets(conn, analyzer: MenuImageAnalyzer, *, limit: int) -> dict:
+    """Classify durable owned/licensed uploads before public approval.
+
+    The same PostgreSQL request budget used by scraped-photo OCR is attached to
+    the analyzer, so these calls share the global 200-request UTC-day ceiling.
+    """
+    if not os.getenv("STORAGE_PUBLIC_BASE_URL", "").strip():
+        return {"verified": 0, "rejected_menu": 0, "failed": 0}
+
+    stats = {"verified": 0, "rejected_menu": 0, "rejected_uncertain": 0, "failed": 0}
+    max_attempts = ocr_max_attempts()
+    for _ in range(max(1, limit)):
+        with conn.cursor() as cur:
+            asset = claim_media_asset(cur, max_attempts=max_attempts)
+        conn.commit()
+        if asset is None:
+            break
+
+        asset_id, restaurant_id, storage_key, current_type, current_role, claim_id = asset
+        image_url = media_asset_public_url(storage_key)
+        try:
+            if not image_url:
+                raise RuntimeError("STORAGE_PUBLIC_BASE_URL is not configured")
+            result = analyzer.analyze_image_url(image_url)
+            detected_type = str(result.get("image_type") or "other").strip().lower()
+            is_menu = detected_type == "menu_document"
+            confidence = float(result.get("confidence") or 0)
+            is_uncertain = confidence < analyzer.cfg.min_confidence or (
+                detected_type == "other" and bool(result.get("contains_text", False))
+            )
+            website_type = website_media_type(detected_type, current_type)
+            approval_status = "rejected" if is_menu or is_uncertain else "approved"
+            placement_role = current_role if approval_status == "rejected" else recommended_placement(result, current_role)
+            rejection_reason = (
+                "Rejected: OCR detected a menu document"
+                if is_menu
+                else "Rejected: OCR classification was not confident enough for public display"
+                if is_uncertain
+                else ""
+            )
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE restaurant_media_assets
+                    SET media_type = %s,
+                        caption = %s,
+                        alt_text = %s,
+                        tags = %s::jsonb,
+                        quality_score = %s,
+                        hero_score = %s,
+                        orientation = %s,
+                        subject_position = %s,
+                        contains_people = %s,
+                        contains_text = %s,
+                        placement_role = %s,
+                        approval_status = %s,
+                        vision_status = 'verified',
+                        vision_claim_id = NULL,
+                        vision_claimed_at = NULL,
+                        vision_last_error = %s,
+                        vision_result = %s::jsonb,
+                        vision_analyzed_at = now(),
+                        updated_at = now()
+                    WHERE id = %s AND vision_status = 'running' AND vision_claim_id = %s
+                    """,
+                    (
+                        website_type,
+                        str(result.get("caption") or "")[:180],
+                        str(result.get("alt_text") or "")[:180],
+                        json.dumps(result.get("tags") or []),
+                        result.get("quality_score"),
+                        result.get("hero_score"),
+                        result.get("orientation") or "unknown",
+                        result.get("subject_position") or "center",
+                        bool(result.get("contains_people", False)),
+                        bool(result.get("contains_text", False)),
+                        placement_role,
+                        approval_status,
+                        rejection_reason,
+                        json.dumps({key: value for key, value in result.items() if key != "url"}),
+                        asset_id,
+                        claim_id,
+                    ),
+                )
+                if cur.rowcount != 1:
+                    raise StaleOCRClaim("durable media OCR claim changed before completion")
+            conn.commit()
+            if is_menu:
+                stats["rejected_menu"] += 1
+                log.info("  - media %s rejected: menu documents are admin-only", asset_id)
+            elif is_uncertain:
+                stats["rejected_uncertain"] += 1
+                log.info("  - media %s rejected: classification was not website-safe", asset_id)
+            else:
+                stats["verified"] += 1
+                log.info("  ✓ media %s approved as %s for restaurant %s", asset_id, website_type, restaurant_id)
+        except (OCRDailyBudgetExhausted, OCRTransientError) as exc:
+            conn.rollback()
+            with conn.cursor() as cur:
+                release_media_asset_claim(cur, asset_id, claim_id, str(exc))
+            conn.commit()
+            raise
+        except Exception as exc:
+            conn.rollback()
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE restaurant_media_assets
+                    SET vision_status = 'failed',
+                        vision_claim_id = NULL,
+                        vision_claimed_at = NULL,
+                        vision_last_error = %s,
+                        updated_at = now()
+                    WHERE id = %s AND vision_status = 'running' AND vision_claim_id = %s
+                    """,
+                    (str(exc)[:500], asset_id, claim_id),
+                )
+            conn.commit()
+            stats["failed"] += 1
+            log.error("  ✗ media %s OCR failed: %s", asset_id, exc)
+    return stats
 
 
 def verify_one(
@@ -236,6 +426,11 @@ def verify_one(
             "source_ref": "",
             "google_place_id": place_id,
             "source_index": photo_index,
+            # Persist only a one-way identifier for exact OCR/runtime matching.
+            # The expirable provider resource name itself remains in memory.
+            "source_fingerprint": hashlib.sha256(
+                f"{place_id}\0{photo['name']}".encode("utf-8")
+            ).hexdigest(),
         })
         transient_photo_uris.append(photo_uri)
         transient_photo_names.append(photo["name"])
@@ -386,6 +581,25 @@ def run_once(args: argparse.Namespace) -> int:
     failed = 0
 
     try:
+        if not args.dry_run:
+            try:
+                media_stats = process_pending_media_assets(
+                    conn,
+                    analyzer,
+                    limit=media_ocr_batch_size(),
+                )
+                if any(media_stats.values()):
+                    log.info(
+                        "Durable media OCR: approved=%d rejected_menu=%d rejected_uncertain=%d failed=%d",
+                        media_stats["verified"],
+                        media_stats["rejected_menu"],
+                        media_stats["rejected_uncertain"],
+                        media_stats["failed"],
+                    )
+            except (OCRDailyBudgetExhausted, OCRTransientError) as exc:
+                log.warning("Durable media OCR deferred safely: %s", exc)
+                return 0
+
         with conn.cursor() as cur:
             verify_ocr_schema(cur)
             leads = fetch_unverified_leads(

@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Image from "next/image";
 import { gsap, registerGsap } from "@/lib/gsap";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import type { MenuItem } from "@/data/types/menu";
+import SourceAwareImage, { mediaForURL } from "@/components/SourceAwareImage";
 import { isFoodMenuImage } from "../lib/menuImages";
 
 export default function ScrollDishSlideshow({ dishes: rawDishes }: { dishes: MenuItem[] }) {
@@ -60,9 +60,8 @@ export default function ScrollDishSlideshow({ dishes: rawDishes }: { dishes: Men
               }`}
             >
               {d.image && (
-                <Image
-                  src={d.image}
-                  alt={d.name}
+                <SourceAwareImage
+                  media={mediaForURL(d.image, d.name, "food")}
                   fill
                   loading="lazy"
                   className="object-contain bg-[#141210] p-6"

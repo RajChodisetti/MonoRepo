@@ -87,7 +87,7 @@ export default function AuroraNav({ restaurant }: { restaurant: RestaurantConten
               </a>
             ))}
             <div className="mt-3 border-t border-white/10 pt-3">
-              <TemplateSwitchButton variant="aurora" />
+              <TemplateSwitchButton variant="aurora" mode="mobile" />
             </div>
           </motion.div>
         )}

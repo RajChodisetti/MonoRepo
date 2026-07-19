@@ -37,35 +37,38 @@ export function getTemplateLabel(id: TemplateId): string {
 export function getTemplateSwitchCopy(current: TemplateId) {
   const next = getNextTemplate(current);
   const targetLabel = getTemplateLabel(next);
+  const currentLabel = getTemplateLabel(current);
+  const position = TEMPLATE_CYCLE.indexOf(current) + 1;
+  const shared = { currentLabel, targetLabel, position, total: TEMPLATE_CYCLE.length };
 
   if (current === "1") {
     return {
-      eyebrow: "New look available",
-      title: "Try our Aurora template",
+      ...shared,
+      eyebrow: "Same restaurant, new look",
+      title: "Preview the Aurora design",
       description:
-        "Switch to a futuristic glass design with interactive sections and a bold tech feel.",
-      cta: `Switch to ${targetLabel}`,
-      targetLabel,
+        "Keep the same restaurant details and photos in a futuristic glass design with a bold visual feel.",
+      cta: `Preview ${targetLabel}`,
     };
   }
 
   if (current === "2") {
     return {
-      eyebrow: "Premium option",
-      title: "Try our Elysian template",
+      ...shared,
+      eyebrow: "Same restaurant, new look",
+      title: "Preview the Elysian design",
       description:
-        "Switch to an ultra-premium gold and black fine dining experience with cinematic interactions.",
-      cta: `Switch to ${targetLabel}`,
-      targetLabel,
+        "Keep the same restaurant details and photos in a premium gold-and-black dining design.",
+      cta: `Preview ${targetLabel}`,
     };
   }
 
   return {
-    eyebrow: "Classic option",
-    title: "Try our Cinematic template",
+    ...shared,
+    eyebrow: "Same restaurant, new look",
+    title: "Preview the Cinematic design",
     description:
-      "Switch to a warm, editorial dining experience with scroll storytelling and elegant typography.",
-    cta: `Switch to ${targetLabel}`,
-    targetLabel,
+      "Keep the same restaurant details and photos in a warm editorial design with elegant typography.",
+    cta: `Preview ${targetLabel}`,
   };
 }

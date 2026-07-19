@@ -9,6 +9,7 @@ import type {
   GooglePlacePhotos,
   RestaurantImage,
   RestaurantImages,
+  RestaurantOwnedMedia,
 } from "@/lib/types";
 import { EmptyState, ErrorBanner } from "@/components/ui";
 
@@ -97,6 +98,69 @@ function GooglePhotoTile({ photo, index }: { photo: GooglePlacePhoto; index: num
             ))}
           </span>
         ) : null}
+        {photo.google_maps_uri ? (
+          <a href={photo.google_maps_uri} target="_blank" rel="noreferrer">
+            View source on Google Maps
+          </a>
+        ) : null}
+        {photo.flag_content_uri ? (
+          <a href={photo.flag_content_uri} target="_blank" rel="noreferrer">
+            Report this photo
+          </a>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function OwnedMediaTile({
+  image,
+  restaurantId,
+  onChanged,
+}: {
+  image: RestaurantOwnedMedia;
+  restaurantId: string;
+  onChanged: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const hidden = !!image.hidden_at;
+
+  async function toggle() {
+    setBusy(true);
+    try {
+      await adminFetch(
+        hidden
+          ? `restaurants/${restaurantId}/media/${image.id}/restore`
+          : `restaurants/${restaurantId}/media/${image.id}`,
+        { method: hidden ? "POST" : "DELETE" },
+      );
+      onChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="photo-tile" data-hidden={hidden}>
+      <img src={image.url} alt={image.alt_text || image.caption || image.media_type} loading="lazy" />
+      <div className="photo-tile-body">
+        <strong>{image.caption || image.media_type}</strong>
+        <span style={{ color: "var(--muted)" }}>
+          {image.source_kind} · {image.placement_role || "gallery"} · OCR {image.vision_status || "pending"}
+          {image.approval_status ? ` · ${image.approval_status}` : ""}
+        </span>
+        {image.vision_last_error ? (
+          <span style={{ color: "var(--danger)", fontSize: "0.78rem" }}>{image.vision_last_error}</span>
+        ) : null}
+        <button
+          type="button"
+          className={hidden ? "btn btn-secondary" : "btn btn-danger"}
+          onClick={toggle}
+          disabled={busy}
+        >
+          {hidden ? "Restore" : "Remove"}
+        </button>
+        <a href={image.url} target="_blank" rel="noreferrer">Open full image</a>
       </div>
     </div>
   );
@@ -108,6 +172,8 @@ export function PhotoGallery({ restaurantId }: { restaurantId: string }) {
   const [googlePhotos, setGooglePhotos] = useState<GooglePlacePhotos | null>(null);
   const [googleError, setGoogleError] = useState<string | null>(null);
   const [googleBusy, setGoogleBusy] = useState(false);
+  const [uploadBusy, setUploadBusy] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [showHidden, setShowHidden] = useState(false);
 
   const load = useCallback(async () => {
@@ -142,14 +208,89 @@ export function PhotoGallery({ restaurantId }: { restaurantId: string }) {
     loadGooglePhotos();
   }, [load, loadGooglePhotos]);
 
+  async function uploadOwnedMedia(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setUploadBusy(true);
+    setUploadError(null);
+    const form = event.currentTarget;
+    try {
+      await adminFetch(`restaurants/${restaurantId}/media`, {
+        method: "POST",
+        body: new FormData(form),
+      });
+      form.reset();
+      await load();
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "Failed to upload media");
+    } finally {
+      setUploadBusy(false);
+    }
+  }
+
   if (error) return <ErrorBanner message={error} />;
   if (!images) return <EmptyState message="Loading photos…" />;
 
   const menu = showHidden ? images.menu_images : images.menu_images.filter((i) => !i.hidden_at);
   const gallery = showHidden ? images.gallery_images : images.gallery_images.filter((i) => !i.hidden_at);
+  const owned = showHidden ? images.owned_media : images.owned_media.filter((i) => !i.hidden_at);
 
   return (
     <div style={{ display: "grid", gap: "1rem" }}>
+      <div>
+        <h3 style={{ margin: "0 0 0.35rem", fontSize: "0.95rem" }}>Owned or licensed website media</h3>
+        <p style={{ color: "var(--muted)", fontSize: "0.82rem", margin: "0 0 0.75rem" }}>
+          Uploaded files remain private until background OCR confirms they are not menu documents. Only approved media appears on personalized sites.
+        </p>
+        <form onSubmit={uploadOwnedMedia} style={{ display: "grid", gap: "0.65rem", maxWidth: "52rem" }}>
+          <input name="file" type="file" accept="image/jpeg,image/png,image/gif" required />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(11rem, 1fr))", gap: "0.65rem" }}>
+            <label>Type
+              <select name="media_type" defaultValue="other" required>
+                <option value="exterior">Exterior</option>
+                <option value="interior">Interior</option>
+                <option value="food">Food</option>
+                <option value="drink">Drink</option>
+                <option value="logo">Logo</option>
+                <option value="team">Team</option>
+                <option value="event">Event</option>
+                <option value="other">Other</option>
+              </select>
+            </label>
+            <label>Placement
+              <select name="placement_role" defaultValue="gallery">
+                <option value="hero">Hero</option>
+                <option value="about">About</option>
+                <option value="gallery">Gallery</option>
+                <option value="food_gallery">Food gallery</option>
+                <option value="ambience_gallery">Ambience gallery</option>
+                <option value="logo">Logo</option>
+              </select>
+            </label>
+            <label>Rights
+              <select name="rights_status" defaultValue="owner_granted" required>
+                <option value="owner_granted">Owner granted</option>
+                <option value="licensed">Separately licensed</option>
+              </select>
+            </label>
+          </div>
+          <input name="caption" type="text" maxLength={180} placeholder="Optional factual caption" />
+          <input name="alt_text" type="text" maxLength={180} placeholder="Optional accessible description" />
+          <ErrorBanner message={uploadError} />
+          <button type="submit" className="btn btn-primary" disabled={uploadBusy} style={{ justifySelf: "start" }}>
+            {uploadBusy ? "Uploading…" : "Upload for OCR review"}
+          </button>
+        </form>
+        {owned.length === 0 ? (
+          <EmptyState message="No owned or licensed website media uploaded yet." />
+        ) : (
+          <div className="photo-grid" style={{ marginTop: "0.75rem" }}>
+            {owned.map((image) => (
+              <OwnedMediaTile key={image.id} image={image} restaurantId={restaurantId} onChanged={load} />
+            ))}
+          </div>
+        )}
+      </div>
+
       <div>
         <div
           style={{
@@ -197,7 +338,7 @@ export function PhotoGallery({ restaurantId }: { restaurantId: string }) {
       </label>
 
       <div>
-        <h3 style={{ margin: "0 0 0.5rem", fontSize: "0.95rem" }}>OCR menu images ({menu.length})</h3>
+        <h3 style={{ margin: "0 0 0.5rem", fontSize: "0.95rem" }}>OCR menu images — admin only ({menu.length})</h3>
         {menu.length === 0 ? (
           <EmptyState message="No menu images." />
         ) : (

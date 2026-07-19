@@ -2076,3 +2076,95 @@ configured internal recipient inbox for placement. OCR will stop reserving calls
 at 200/200 and resume after the UTC date changes. Keep the Outreach UI email job
 off until profiles, demos, campaigns, recipients, and opt-out content have been
 reviewed for a real send window.
+
+## 2026-07-19 — Hybrid Restaurant Media and OCR-Aware Website Galleries (Local)
+
+**Role:** Full-Stack, Backend, Frontend, AI Workflow, Security, Test, and
+Documentation Agent
+
+**Delivered:** Implemented a hybrid media pipeline that keeps Google Places
+photos live-only and uncached while providing durable S3-compatible storage for
+restaurant-owned and separately licensed images. New migration `000031` adds
+source, rights, approval, placement, accessibility, visual-quality, OCR, and
+visibility metadata without storing Google photo URLs, resource names, or bytes.
+The import path now replaces only OCR-owned image rows and never deletes existing
+durable/manual rows when a Google-only OCR result has no persistent URL.
+
+Public restaurant and signed-demo payloads now resolve fresh Google Places photos
+at request time, pair them with their fresh attribution/report links, and expose
+only photos whose one-way resource fingerprint exactly matches a website-safe
+OCR classification. Unmatched, unclassified, low-confidence, text-heavy unknown,
+and menu-document photos fail closed.
+Public responses are non-cacheable, and live
+Google media bypasses the Next.js image optimizer. Restaurant-owned/licensed
+assets use immutable CDN URLs, remain draft until the shared OCR worker verifies
+them, and are rejected if identified as a menu document. The upload and visibility
+controls are available in the authenticated restaurant photo view with OCR state,
+errors, source rights, captions, and placement metadata.
+
+Expanded OCR classification to food, drink, interior, exterior, logo, team,
+event, menu document, and other, plus factual captions, accessible alt text,
+tags, orientation, subject placement, people/text flags, and quality/hero scores.
+All three personalized templates now use this metadata for source-aware hero
+selection, ambience/food gallery filters, lightboxes, and safe reusable placements.
+Google photos carry visible attribution at every rendered placement. Only durable
+owned/licensed media is reused across story, experience, footer, and SEO surfaces.
+Menu documents are excluded from public handlers, demo snapshots, legacy gallery
+fallbacks, menu-item image fallbacks, templates, uploads, and SEO.
+
+**Checks Run:** `go test ./backend/...` — 165 pass in 44 packages; `go vet
+./backend/...` and `go build ./backend/cmd/...` — pass; focused OCR/import suite —
+13 pass; changed Python modules compile; admin `npm run lint` and both TypeScript
+checks — pass; Node 22 optimized production builds for admin and template — pass;
+Redocly OpenAPI lint — valid with four existing warnings; `git diff --check` —
+pass; VM Compose configuration validation — pass. Context7 current AWS SDK v2 and Next.js documentation was used for the
+S3-compatible client, endpoint configuration, multipart proxy limit, and public
+image behavior. Docker Desktop was unavailable, so no container build or database
+migration was run locally.
+
+**Business Value / Plan Fit:** Existing personalized sites can display current,
+properly attributed non-menu Google imagery without depending on expired database
+URLs. Restaurants can progressively replace provider media with controlled,
+stable, OCR-enriched assets that improve the templates and remain portable.
+
+**Risks / Follow-ups:** This work is not committed, pushed, migrated, or deployed.
+Production remains on release `caffcfb` with migrations through `000030`.
+Deployment requires explicit approval plus an S3-compatible bucket/CDN configured
+with `STORAGE_*` variables and the template's matching public media base URL. The
+live Google path intentionally fails closed until each resource fingerprint has
+a successful OCR classification; migration `000031` returns older positional-only
+Google classifications to pending, and the existing background worker prioritizes
+restaurants with demos while retaining the shared 200-request UTC-day ceiling.
+
+## 2026-07-19 — Mobile Template Switch Clarity (Local)
+
+**Role:** Frontend, Test, and Documentation Agent
+
+**Delivered:** Reworked the shared template switcher used by Cinematic, Aurora,
+and Elysian on mobile. The mobile control is now a full-width website-design card
+that identifies the current design, shows its position in the three-template set,
+names the next preview, and explicitly says that restaurant details and photos do
+not change. Desktop copy now says “Preview” rather than implying a permanent
+switch. Elysian's desktop and mobile controls have separate responsive visibility,
+removing the duplicate control at smaller widths. Navigation now uses the current
+pathname and a cloned `useSearchParams` value, so restaurant IDs, signed-demo
+tokens, and other query parameters survive a template preview.
+
+**Photo URL Clarification:** Personalized demos never try to reopen the removed
+OCR URL. The API resolves current Google Places media URLs for each request and
+returns a photo only when its one-way provider-resource fingerprint exactly
+matches a website-safe OCR classification. If Google changes the underlying
+resource identity, the old URL is not reused and the photo fails closed until an
+OCR refresh. Durable owner/licensed media continues to use its stable configured
+object-storage URL.
+
+**Checks Run:** Template TypeScript check — pass; Node 22 optimized production
+build — pass; local development server returned HTTP 200 for Cinematic, Aurora,
+and Elysian sample routes; `git diff --check` — pass. Context7 current Next.js
+App Router guidance was used for query-parameter preservation. The in-app browser
+runtime had no available browser, so interactive screenshot verification could
+not be run in this workspace.
+
+**Risks / Follow-ups:** The change is local and unreleased. Production remains on
+`caffcfb`/migration `000030`; the hybrid media and mobile-switch work still require
+the previously documented storage configuration and explicit deployment approval.

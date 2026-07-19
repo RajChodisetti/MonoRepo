@@ -275,6 +275,7 @@ func TestLoadRejectsEnabledStorageWithoutCredentials(t *testing.T) {
 		"STORAGE_ACCESS_KEY_ID",
 		"STORAGE_SECRET_ACCESS_KEY",
 		"STORAGE_REGION or STORAGE_ENDPOINT",
+		"STORAGE_PUBLIC_BASE_URL",
 	} {
 		if !strings.Contains(msg, want) {
 			t.Fatalf("Load() error = %q, want it to contain %q", msg, want)
@@ -341,6 +342,8 @@ func clearEnv(t *testing.T) {
 		"STORAGE_BUCKET",
 		"STORAGE_REGION",
 		"STORAGE_ENDPOINT",
+		"STORAGE_PUBLIC_BASE_URL",
+		"STORAGE_USE_PATH_STYLE",
 		"STORAGE_ACCESS_KEY_ID",
 		"STORAGE_SECRET_ACCESS_KEY",
 		"GOOGLE_PLACES_API_KEY",

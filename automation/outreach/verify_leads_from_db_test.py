@@ -1,8 +1,14 @@
 """Unit tests for the durable all-scraped-photos OCR completion gate."""
 
 import unittest
+from unittest.mock import patch
 
 from menu_image_ocr import all_scraped_photos_processed
+from media_asset_metadata import (
+    media_asset_public_url,
+    recommended_placement,
+    website_media_type,
+)
 
 
 class OCRCompletionGateTest(unittest.TestCase):
@@ -44,6 +50,31 @@ class OCRCompletionGateTest(unittest.TestCase):
                 0,
                 0,
             )
+        )
+
+    def test_owned_media_type_and_placement_are_template_ready(self):
+        self.assertEqual(website_media_type("food_photo", "other"), "food")
+        self.assertEqual(
+            recommended_placement(
+                {
+                    "image_type": "exterior",
+                    "orientation": "landscape",
+                    "hero_score": 0.9,
+                },
+                "gallery",
+            ),
+            "hero",
+        )
+
+    @patch.dict(
+        "os.environ",
+        {"STORAGE_PUBLIC_BASE_URL": "https://cdn.example.test/media"},
+        clear=False,
+    )
+    def test_owned_media_public_url_escapes_object_key(self):
+        self.assertEqual(
+            media_asset_public_url("restaurants/a/my image.jpg"),
+            "https://cdn.example.test/media/restaurants/a/my%20image.jpg",
         )
 
 

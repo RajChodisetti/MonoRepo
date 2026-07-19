@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Image from "next/image";
 import { gsap, registerGsap } from "@/lib/gsap";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import type { StoryStep } from "@/data/types/restaurant";
+import SourceAwareImage, { mediaForURL } from "@/components/SourceAwareImage";
 
 export default function RestaurantStorySection({
   steps,
@@ -63,9 +63,8 @@ export default function RestaurantStorySection({
                 i === active ? "opacity-100 scale-100" : "opacity-0 scale-105"
               }`}
             >
-              <Image
-                src={step.image}
-                alt={step.title}
+              <SourceAwareImage
+                media={mediaForURL(step.image, step.title)}
                 fill
                 loading="lazy"
                 className="object-cover"

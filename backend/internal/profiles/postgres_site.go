@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/url"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -181,8 +183,14 @@ func (repo *Postgres) buildSiteContent(ctx context.Context, summary SiteRestaura
 	if err != nil {
 		return SiteContent{}, fmt.Errorf("load site profile: %w", err)
 	}
+	if isTemporaryGoogleMediaURL(content.Thumbnail) {
+		content.Thumbnail = ""
+	}
 
-	menuImages, err := repo.ListMenuImages(ctx, summary.ID)
+	// Include hidden menu documents in the exclusion set as well. Hiding an
+	// admin-only menu scan must never let the same URL fall through to a dish
+	// card or any public website surface.
+	menuImages, err := repo.ListMenuImagesAdmin(ctx, summary.ID)
 	if err != nil {
 		return SiteContent{}, err
 	}
@@ -207,7 +215,6 @@ func (repo *Postgres) buildSiteContent(ctx context.Context, summary SiteRestaura
 	}
 
 	content.MenuItems = menuItems
-	content.MenuImages = menuImages
 	content.GalleryImages = galleryImages
 	content.Reviews = reviews
 
@@ -292,7 +299,7 @@ func (repo *Postgres) listSiteReviews(ctx context.Context, restaurantID uuid.UUI
 }
 
 func pickFoodImageURL(imageURL string, imagesJSON json.RawMessage, menuBoardURLs map[string]struct{}) string {
-	if imageURL != "" {
+	if imageURL != "" && !isTemporaryGoogleMediaURL(imageURL) {
 		if _, isMenu := menuBoardURLs[imageURL]; !isMenu {
 			return imageURL
 		}
@@ -316,6 +323,9 @@ func pickFoodImageURL(imageURL string, imagesJSON json.RawMessage, menuBoardURLs
 		if url == "" {
 			continue
 		}
+		if isTemporaryGoogleMediaURL(url) {
+			continue
+		}
 		if _, isMenu := menuBoardURLs[url]; isMenu {
 			continue
 		}
@@ -332,4 +342,14 @@ func pickFoodImageURL(imageURL string, imagesJSON json.RawMessage, menuBoardURLs
 	}
 
 	return ""
+}
+
+func isTemporaryGoogleMediaURL(value string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(value))
+	if err != nil {
+		return false
+	}
+	hostname := strings.ToLower(strings.TrimSuffix(parsed.Hostname(), "."))
+	return hostname == "googleusercontent.com" || strings.HasSuffix(hostname, ".googleusercontent.com") ||
+		hostname == "ggpht.com" || strings.HasSuffix(hostname, ".ggpht.com")
 }

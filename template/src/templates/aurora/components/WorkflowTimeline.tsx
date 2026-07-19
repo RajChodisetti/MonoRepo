@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Image from "next/image";
 import { gsap, registerGsap } from "@/lib/gsap";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import type { StoryStep } from "@/data/types/restaurant";
 import BlurReveal from "./ui/BlurReveal";
+import SourceAwareImage, { mediaForURL } from "@/components/SourceAwareImage";
 
 export default function WorkflowTimeline({ steps }: { steps: StoryStep[] }) {
   const sectionRef = useRef<HTMLElement>(null);
@@ -83,7 +83,7 @@ export default function WorkflowTimeline({ steps }: { steps: StoryStep[] }) {
                 i === active ? "opacity-100 scale-100" : "opacity-0 scale-105"
               }`}
             >
-              <Image src={s.image} alt={s.title} fill className="object-cover" sizes="50vw" />
+              <SourceAwareImage media={mediaForURL(s.image, s.title)} fill className="object-cover" sizes="50vw" />
               <div className="absolute inset-0 bg-gradient-to-t from-[#09090B] via-[#09090B]/40 to-transparent" />
               <div className="absolute bottom-0 p-8">
                 <h3 className="aurora-heading text-2xl font-bold text-white">{s.title}</h3>

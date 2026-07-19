@@ -15,11 +15,13 @@ import (
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/http/handlers"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/jobs"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/leadreview"
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/media"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/outreach"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/config"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/db"
 	emailprovider "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/email"
 	placesprovider "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/places"
+	storageprovider "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/storage"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/reservations"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/restaurants"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/scrapejobs"
@@ -37,6 +39,19 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	authService := auth.NewService(dataStore.Users, tokenManager)
 	accessService := restaurants.NewService(dataStore.Restaurants, dataStore.Memberships)
 	demoService := demos.NewService(dataStore.Demos, accessService, cfg.Demo.TokenTTL)
+	placesClient := placesprovider.NewClient(cfg.Places)
+	objectStore, storageErr := storageprovider.New(context.Background(), cfg.Storage)
+	if storageErr != nil {
+		log.WarnContext(context.Background(), "restaurant_media_storage_unavailable", "error", storageErr)
+		objectStore = storageprovider.Disabled{}
+	}
+	mediaService := media.NewService(
+		media.NewPostgres(dataStore.Pool()),
+		dataStore.Profiles,
+		placesClient,
+		objectStore,
+		log,
+	)
 	demoEngagementService := analytics.NewService(demoService, analytics.NewPostgres(dataStore.Pool()))
 
 	jobQueue := jobs.NewPostgresQueue(dataStore.Pool(), cfg.Jobs.BufferSize, cfg.Jobs.RetryDelay)
@@ -56,7 +71,7 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	adminHandler := handlers.NewAdminHandler(dataStore.Users, writeJSON, writeError)
 	userHandler := handlers.NewUserHandler(dataStore.Users, dataStore.Restaurants, dataStore.Memberships, writeJSON, writeError)
 	restaurantHandler := handlers.NewRestaurantHandler(accessService, writeJSON, writeError)
-	demoPublicHandler := handlers.NewDemoPublicHandler(demoService, writeJSON, writeError)
+	demoPublicHandler := handlers.NewDemoPublicHandler(demoService, mediaService, writeJSON, writeError)
 	demoAdminHandler := handlers.NewDemoAdminHandler(demoService, writeJSON, writeError)
 	demoEngagementHandler := handlers.NewDemoEngagementHandler(demoEngagementService, writeJSON, writeError)
 	campaignHandler := handlers.NewCampaignHandler(campaignService, writeJSON, writeError)
@@ -102,10 +117,11 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	leadReviewService := leadreview.NewService(dataStore.Pool())
 	leadReviewHandler := handlers.NewLeadReviewHandler(leadReviewService, writeJSON, writeError)
 	trackingHandler := handlers.NewTrackingHandler(dataStore.Campaigns, dataStore.Restaurants, writeError)
-	restaurantPublicHandler := handlers.NewRestaurantPublicHandler(dataStore.Profiles, writeJSON, writeError)
+	restaurantPublicHandler := handlers.NewRestaurantPublicHandler(dataStore.Profiles, mediaService, writeJSON, writeError)
 	restaurantImagesAdminHandler := handlers.NewRestaurantImagesAdminHandler(
 		dataStore.Profiles,
-		placesprovider.NewClient(cfg.Places),
+		placesClient,
+		mediaService,
 		writeJSON,
 		writeError,
 	)
@@ -182,6 +198,9 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 
 	mux.Handle("GET /api/v1/restaurants/{id}/images", protectRestaurantAdmin(http.HandlerFunc(restaurantImagesAdminHandler.List)))
 	mux.Handle("GET /api/v1/restaurants/{id}/images/google", protectRestaurantAdmin(http.HandlerFunc(restaurantImagesAdminHandler.ListGoogle)))
+	mux.Handle("POST /api/v1/restaurants/{id}/media", protectRestaurantAdmin(http.HandlerFunc(restaurantImagesAdminHandler.Upload)))
+	mux.Handle("DELETE /api/v1/restaurants/{id}/media/{assetId}", protectRestaurantAdmin(http.HandlerFunc(restaurantImagesAdminHandler.HideOwned)))
+	mux.Handle("POST /api/v1/restaurants/{id}/media/{assetId}/restore", protectRestaurantAdmin(http.HandlerFunc(restaurantImagesAdminHandler.RestoreOwned)))
 	mux.Handle("DELETE /api/v1/restaurants/{id}/images/{kind}/{imageId}", protectRestaurantAdmin(http.HandlerFunc(restaurantImagesAdminHandler.Hide)))
 	mux.Handle("POST /api/v1/restaurants/{id}/images/{kind}/{imageId}/restore", protectRestaurantAdmin(http.HandlerFunc(restaurantImagesAdminHandler.Unhide)))
 	mux.Handle("GET /api/v1/restaurants/{id}/demo-links", protectRestaurantAdmin(http.HandlerFunc(campaignHandler.ListDemoLinks)))

@@ -38,8 +38,12 @@ log = logging.getLogger("menu_image_ocr")
 IMAGE_TYPES = frozenset({
     "menu_document",
     "food_photo",
+    "drink",
     "interior",
+    "exterior",
     "logo",
+    "team",
+    "event",
     "other",
 })
 
@@ -53,9 +57,18 @@ CLASSIFY_AND_OCR_PROMPT = """You analyze restaurant photos for a data pipeline.
 Look at the image and return JSON only (no markdown):
 
 {
-  "image_type": "menu_document" | "food_photo" | "interior" | "logo" | "other",
+  "image_type": "menu_document" | "food_photo" | "drink" | "interior" | "exterior" | "logo" | "team" | "event" | "other",
   "confidence": 0.0-1.0,
   "reason": "one short sentence",
+  "caption": "short factual website caption with no invented claims",
+  "alt_text": "concise accessible description of what is visibly shown",
+  "tags": ["up to 8 short visible-content tags"],
+  "quality_score": 0.0-1.0,
+  "hero_score": 0.0-1.0,
+  "orientation": "landscape" | "portrait" | "square" | "unknown",
+  "subject_position": "left" | "center" | "right",
+  "contains_people": true | false,
+  "contains_text": true | false,
   "menu_items": [
     {
       "name": "dish name",
@@ -69,10 +82,21 @@ Look at the image and return JSON only (no markdown):
 
 Rules:
 - menu_document: printed/digital MENU with multiple dish names and often prices (board, paper, PDF screenshot, menu page). NOT a single plated dish photo.
-- food_photo: a prepared dish, drink, or close-up of food on a plate/bowl.
-- interior: dining room, bar, storefront, staff, decor.
+- food_photo: a prepared dish or close-up of food on a plate/bowl.
+- drink: a beverage is the main subject.
+- interior: dining room, bar, seating, or indoor decor.
+- exterior: storefront, patio, facade, entrance, or outdoor restaurant space.
 - logo: brand mark only.
+- team: one or more staff members are the main subject.
+- event: live entertainment, celebration, or hosted restaurant event.
 - other: anything else.
+
+For website metadata:
+- Describe only what is visible. Never invent a dish name, award, quality claim, occasion, location, or restaurant identity.
+- caption may be empty when a useful factual caption is not possible.
+- alt_text should describe the visual, not start with "image of" or "photo of".
+- hero_score measures suitability as a wide website hero: composition, clarity, lighting, and useful negative space.
+- quality_score measures technical/display quality, not how good the restaurant or food is.
 
 For menu_items:
 - ONLY fill menu_items when image_type is menu_document.
@@ -588,6 +612,38 @@ class MenuImageAnalyzer:
             confidence = 0.5
         confidence = max(0.0, min(1.0, confidence))
 
+        def score(name: str, default: float = 0.0) -> float:
+            try:
+                value = float(parsed.get(name))
+            except (TypeError, ValueError):
+                value = default
+            return max(0.0, min(1.0, value))
+
+        def boolean(name: str) -> bool:
+            value = parsed.get(name, False)
+            if isinstance(value, bool):
+                return value
+            return str(value or "").strip().lower() in {"1", "true", "yes"}
+
+        tags: list[str] = []
+        seen_tags: set[str] = set()
+        for raw_tag in parsed.get("tags") or []:
+            tag = str(raw_tag or "").strip()[:40]
+            key = tag.lower()
+            if not tag or key in seen_tags:
+                continue
+            seen_tags.add(key)
+            tags.append(tag)
+            if len(tags) == 8:
+                break
+
+        orientation = str(parsed.get("orientation") or "unknown").strip().lower()
+        if orientation not in {"landscape", "portrait", "square", "unknown"}:
+            orientation = "unknown"
+        subject_position = str(parsed.get("subject_position") or "center").strip().lower()
+        if subject_position not in {"left", "center", "right"}:
+            subject_position = "center"
+
         menu_items: list[dict] = []
         if image_type in MENU_TYPES:
             for raw in parsed.get("menu_items") or []:
@@ -607,6 +663,15 @@ class MenuImageAnalyzer:
             "image_type": image_type,
             "confidence": confidence,
             "reason": (parsed.get("reason") or "").strip(),
+            "caption": str(parsed.get("caption") or "").strip()[:180],
+            "alt_text": str(parsed.get("alt_text") or "").strip()[:180],
+            "tags": tags,
+            "quality_score": score("quality_score", confidence),
+            "hero_score": score("hero_score", 0.0),
+            "orientation": orientation,
+            "subject_position": subject_position,
+            "contains_people": boolean("contains_people"),
+            "contains_text": boolean("contains_text"),
             "menu_items": menu_items,
         }
 
@@ -785,6 +850,7 @@ def enrich_restaurant_with_menu_ocr(
         source_ref = str(candidate.get("source_ref") or "").strip()
         google_place_id = str(candidate.get("google_place_id") or "").strip()
         source_index = candidate.get("source_index")
+        source_fingerprint = str(candidate.get("source_fingerprint") or "").strip()
         attribution = candidate.get("author_attributions") or []
         source_metadata = {"source": source}
         if source == "google_places_photo":
@@ -792,6 +858,8 @@ def enrich_restaurant_with_menu_ocr(
                 source_metadata["google_place_id"] = google_place_id
             if isinstance(source_index, int) and source_index >= 0:
                 source_metadata["source_index"] = source_index
+            if re.fullmatch(r"[0-9a-f]{64}", source_fingerprint):
+                source_metadata["source_fingerprint"] = source_fingerprint
         elif source_ref:
             source_metadata["source_ref"] = source_ref
         if attribution:
@@ -818,11 +886,29 @@ def enrich_restaurant_with_menu_ocr(
                     if isinstance(item, dict)
                 ]
 
-            persisted_classification = {
-                key: value
-                for key, value in result.items()
-                if key not in ("url", "menu_items")
-            }
+            if persistent_url:
+                persisted_classification = {
+                    key: value
+                    for key, value in result.items()
+                    if key not in ("url", "menu_items", "usage")
+                }
+            else:
+                # Google Places media is live-only. Persist its stable Place ID,
+                # source index, and internal classification, but not generated
+                # website copy or the temporary media URL/name.
+                persisted_classification = {
+                    "image_type": image_type,
+                    "confidence": confidence,
+                    "reason": result.get("reason", ""),
+                }
+            persisted_classification["public_eligible"] = bool(
+                image_type not in MENU_TYPES
+                and confidence >= cfg.min_confidence
+                and not (
+                    image_type == "other"
+                    and bool(result.get("contains_text", False))
+                )
+            )
             persisted_classification["menu_items"] = normalized_items
             if persistent_url:
                 persisted_classification["url"] = persistent_url
@@ -836,7 +922,19 @@ def enrich_restaurant_with_menu_ocr(
                 "reason": result.get("reason", ""),
             }
             if persistent_url:
-                entry.update({"url": persistent_url, "thumbnail": persistent_url})
+                entry.update({
+                    "url": persistent_url,
+                    "thumbnail": persistent_url,
+                    "caption": result.get("caption", ""),
+                    "alt_text": result.get("alt_text", ""),
+                    "tags": result.get("tags", []),
+                    "quality_score": result.get("quality_score"),
+                    "hero_score": result.get("hero_score"),
+                    "orientation": result.get("orientation", "unknown"),
+                    "subject_position": result.get("subject_position", "center"),
+                    "contains_people": result.get("contains_people", False),
+                    "contains_text": result.get("contains_text", False),
+                })
             else:
                 entry.update(source_metadata)
 
@@ -844,12 +942,12 @@ def enrich_restaurant_with_menu_ocr(
                 menu_photos.append(entry)
                 ocr_items.extend(normalized_items)
                 log.info(f"    [{idx}] menu_document ({confidence:.0%}) — {len(normalized_items)} items")
-            elif image_type == "food_photo":
+            elif image_type in ("food_photo", "drink"):
                 gallery.append({**entry, "title": ""})
-                if persistent_url:
+                if persistent_url and image_type == "food_photo":
                     _attach_food_image_to_item(record.get("menu_items") or [], persistent_url)
-                log.info(f"    [{idx}] food_photo ({confidence:.0%})")
-            elif image_type in ("interior", "logo", "other"):
+                log.info(f"    [{idx}] {image_type} ({confidence:.0%})")
+            elif image_type in ("interior", "exterior", "logo", "team", "event", "other"):
                 gallery.append({**entry, "title": image_type})
                 log.info(f"    [{idx}] {image_type} ({confidence:.0%})")
             else:

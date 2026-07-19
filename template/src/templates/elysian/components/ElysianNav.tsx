@@ -48,8 +48,8 @@ export default function ElysianNav({
               {l.label}
             </a>
           ))}
-          <div className="mt-4 md:hidden">
-            <TemplateSwitchButton variant="elysian" />
+          <div className="mt-4 min-[901px]:hidden">
+            <TemplateSwitchButton variant="elysian" mode="mobile" />
           </div>
         </nav>
         <div className="nav-actions">

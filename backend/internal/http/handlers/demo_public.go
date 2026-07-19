@@ -4,22 +4,28 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/google/uuid"
+
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/demos"
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/media"
 )
 
 type DemoPublicHandler struct {
 	demoService *demos.Service
+	media       *media.Service
 	writeJSON   func(http.ResponseWriter, int, any)
 	writeError  func(http.ResponseWriter, int, string, string)
 }
 
 func NewDemoPublicHandler(
 	demoService *demos.Service,
+	mediaService *media.Service,
 	writeJSON func(http.ResponseWriter, int, any),
 	writeError func(http.ResponseWriter, int, string, string),
 ) *DemoPublicHandler {
 	return &DemoPublicHandler{
 		demoService: demoService,
+		media:       mediaService,
 		writeJSON:   writeJSON,
 		writeError:  writeError,
 	}
@@ -40,6 +46,14 @@ func (handler *DemoPublicHandler) Get(w http.ResponseWriter, r *http.Request) {
 		handler.writeError(w, http.StatusInternalServerError, "internal_error", "An internal error occurred.")
 		return
 	}
+	if handler.media != nil {
+		payload.Media = handler.media.PublicForRestaurant(r.Context(), recordRestaurantID(payload.RestaurantID), 10)
+	}
 
 	handler.writeJSON(w, http.StatusOK, payload)
+}
+
+func recordRestaurantID(value string) uuid.UUID {
+	restaurantID, _ := uuid.Parse(value)
+	return restaurantID
 }

@@ -1,13 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Image from "next/image";
 import { AnimatePresence, motion } from "framer-motion";
 import type { GalleryImage } from "@/data/types/gallery";
+import SourceAwareImage from "@/components/SourceAwareImage";
+import PhotoAttribution from "@/components/PhotoAttribution";
 
 const PER_SLIDE = 3;
 
 type Variant = "cinematic" | "aurora";
+type GalleryFilter = "all" | "food" | "ambience" | "other";
 
 function chunkImages(images: GalleryImage[], size: number): GalleryImage[][] {
   const chunks: GalleryImage[][] = [];
@@ -33,6 +35,7 @@ export default function GallerySlider({
   subtitle,
   hideHeader = false,
   imageFit = "cover",
+  categorized = true,
 }: {
   images: GalleryImage[];
   variant: Variant;
@@ -41,8 +44,20 @@ export default function GallerySlider({
   subtitle?: string;
   hideHeader?: boolean;
   imageFit?: "cover" | "contain";
+  categorized?: boolean;
 }) {
-  const slides = useMemo(() => chunkImages(images, PER_SLIDE), [images]);
+  const availableFilters = useMemo(() => {
+    const present = new Set(images.map((image) => image.type));
+    return (["all", "food", "ambience", "other"] as GalleryFilter[]).filter(
+      (filter) => filter === "all" || present.has(filter),
+    );
+  }, [images]);
+  const [filter, setFilter] = useState<GalleryFilter>("all");
+  const visibleImages = useMemo(
+    () => (filter === "all" ? images : images.filter((image) => image.type === filter)),
+    [filter, images],
+  );
+  const slides = useMemo(() => chunkImages(visibleImages, PER_SLIDE), [visibleImages]);
   const [index, setIndex] = useState(0);
   const [modal, setModal] = useState<GalleryImage | null>(null);
   const [direction, setDirection] = useState(1);
@@ -61,6 +76,10 @@ export default function GallerySlider({
     const timer = setInterval(() => go(1), 6000);
     return () => clearInterval(timer);
   }, [go, slides.length]);
+
+  useEffect(() => {
+    setIndex(0);
+  }, [filter]);
 
   if (!images.length) return null;
 
@@ -99,6 +118,29 @@ export default function GallerySlider({
         )}
 
         <div className={hideHeader ? "relative" : "relative mt-12"}>
+          {categorized && availableFilters.length > 2 ? (
+            <div className="mb-8 flex flex-wrap justify-center gap-2" role="group" aria-label="Gallery categories">
+              {availableFilters.map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => setFilter(item)}
+                  aria-pressed={filter === item}
+                  className={`rounded-full border px-4 py-2 text-xs uppercase tracking-wider transition-colors ${
+                    filter === item
+                      ? isCinematic
+                        ? "border-brass bg-brass text-charcoal"
+                        : "border-purple-400 bg-purple-500/20 text-white"
+                      : isCinematic
+                        ? "border-cream/20 text-cream/70 hover:border-brass/50"
+                        : "border-white/15 text-white/65 hover:border-purple-400/50"
+                  }`}
+                >
+                  {item === "all" ? "All photos" : item === "food" ? "Food & drink" : item === "ambience" ? "Space & atmosphere" : "More"}
+                </button>
+              ))}
+            </div>
+          ) : null}
           <div className="overflow-hidden">
             <AnimatePresence mode="wait" initial={false}>
               <motion.div
@@ -110,25 +152,30 @@ export default function GallerySlider({
                 className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
               >
                 {current.map((img) => (
-                  <button
-                    key={img.url}
-                    type="button"
-                    onClick={() => setModal(img)}
-                    className={`${cardClass} group`}
-                  >
-                    <Image
-                      src={img.url}
-                      alt={img.alt}
-                      fill
-                      loading="lazy"
-                      className={
-                        imageFit === "contain"
-                          ? "object-contain p-2"
-                          : `object-cover transition duration-500 ${isCinematic ? "group-hover:scale-105" : ""}`
-                      }
-                      sizes="(max-width: 768px) 100vw, 33vw"
-                    />
-                  </button>
+                  <div key={img.url} className={`${cardClass} group`}>
+                    <button
+                      type="button"
+                      onClick={() => setModal(img)}
+                      className="absolute inset-0"
+                    >
+                      <SourceAwareImage
+                        media={img}
+                        fill
+                        loading="lazy"
+                        className={
+                          imageFit === "contain"
+                            ? "object-contain p-2"
+                            : `object-cover transition duration-500 ${isCinematic ? "group-hover:scale-105" : ""}`
+                        }
+                        sizes="(max-width: 768px) 100vw, 33vw"
+                      />
+                    </button>
+                    {img.sourceKind === "google_places_live" ? (
+                      <div className="absolute inset-x-2 bottom-2 z-10 rounded bg-black/65 px-2 py-1 text-white/80">
+                        <PhotoAttribution media={img} compact />
+                      </div>
+                    ) : null}
+                  </div>
                 ))}
               </motion.div>
             </AnimatePresence>
@@ -172,8 +219,8 @@ export default function GallerySlider({
           )}
 
           <p className={`mt-4 text-center text-xs ${isCinematic ? "text-cream/40" : "text-white/35"}`}>
-            Showing {index * PER_SLIDE + 1}–{Math.min((index + 1) * PER_SLIDE, images.length)} of{" "}
-            {images.length}
+            Showing {index * PER_SLIDE + 1}–{Math.min((index + 1) * PER_SLIDE, visibleImages.length)} of{" "}
+            {visibleImages.length}
           </p>
         </div>
       </div>
@@ -196,7 +243,10 @@ export default function GallerySlider({
               className="relative h-[70vh] w-full max-w-4xl"
               onClick={(e) => e.stopPropagation()}
             >
-              <Image src={modal.url} alt={modal.alt} fill className="object-contain" sizes="90vw" />
+              <SourceAwareImage media={modal} fill className="object-contain" sizes="90vw" />
+              <div className="absolute inset-x-0 bottom-0 bg-black/70 px-4 py-3 text-white">
+                <PhotoAttribution media={modal} />
+              </div>
               <button
                 type="button"
                 className={`absolute -top-10 right-0 text-sm uppercase tracking-wider ${

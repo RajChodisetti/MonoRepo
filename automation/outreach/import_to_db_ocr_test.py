@@ -28,6 +28,7 @@ class OCRClaimQueryTest(unittest.TestCase):
 
         self.assertEqual(rows, [])
         self.assertIn("NULLIF(BTRIM(r.email), '') IS NOT NULL", cur.query)
+        self.assertIn("demo.status = 'published'", cur.query)
 
     def test_claim_selects_only_restaurants_with_email(self):
         cur = FakeCursor()
@@ -36,6 +37,7 @@ class OCRClaimQueryTest(unittest.TestCase):
 
         self.assertEqual(rows, [])
         self.assertIn("NULLIF(BTRIM(r.email), '') IS NOT NULL", cur.query)
+        self.assertIn("demo.status = 'published'", cur.query)
 
     def test_transient_release_restores_pending_without_attempt_penalty(self):
         cur = FakeCursor()

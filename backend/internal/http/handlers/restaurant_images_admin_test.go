@@ -18,7 +18,7 @@ type fakePhotoResolver struct {
 	err    error
 }
 
-func (resolver fakePhotoResolver) ListPhotoURLs(context.Context, string) ([]placesprovider.Photo, error) {
+func (resolver fakePhotoResolver) ListPhotoURLs(context.Context, string, int) ([]placesprovider.Photo, error) {
 	return resolver.photos, resolver.err
 }
 
@@ -30,6 +30,7 @@ func TestListGoogleReturnsFreshURLsWithoutCaching(t *testing.T) {
 	handler := NewRestaurantImagesAdminHandler(
 		profilesRepo,
 		fakePhotoResolver{photos: []placesprovider.Photo{{URL: "https://images.example.test/photo.jpg"}}},
+		nil,
 		func(w http.ResponseWriter, status int, value any) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(status)

@@ -1,6 +1,5 @@
 import type { GalleryImage } from "@/data/types/gallery";
 import type { MenuCategory, MenuItem } from "@/data/types/menu";
-import type { MenuListImage } from "@/data/types/menuImages";
 import type {
   ExperienceCard,
   RestaurantContent,
@@ -43,13 +42,7 @@ export type ApiSiteContent = {
     image_url?: string;
     images?: { url?: string; thumbnail?: string; image_type?: string }[];
   }[];
-  menu_images?: {
-    url: string;
-    thumbnail_url?: string;
-    image_type?: string;
-    confidence?: number;
-    title?: string;
-  }[];
+  media?: ApiPublicMedia[];
   gallery_images?: {
     url: string;
     thumbnail_url?: string;
@@ -62,6 +55,26 @@ export type ApiSiteContent = {
     stars?: number;
     date?: string;
   }[];
+};
+
+type ApiPublicMedia = {
+  url: string;
+  source_kind: "google_places_live" | "owner_upload" | "licensed";
+  media_type: "exterior" | "interior" | "food" | "drink" | "logo" | "team" | "event" | "other";
+  caption?: string;
+  alt_text?: string;
+  tags?: string[];
+  quality_score?: number;
+  hero_score?: number;
+  width_px?: number;
+  height_px?: number;
+  orientation?: string;
+  subject_position?: string;
+  placement_role?: string;
+  unoptimized?: boolean;
+  author_attributions?: { display_name: string; uri?: string; photo_uri?: string }[];
+  google_maps_uri?: string;
+  flag_content_uri?: string;
 };
 
 export type SiteRestaurantList = {
@@ -88,6 +101,7 @@ export type SignedDemoPayload = {
   }[];
   reservation_cta?: string;
   ai_receptionist_cta?: string;
+  media?: ApiPublicMedia[];
 };
 
 function apiBase(): string {
@@ -118,17 +132,59 @@ function pickMenuItemImage(item: NonNullable<ApiSiteContent["menu_items"]>[numbe
 
 function galleryType(imageType?: string): GalleryImage["type"] {
   const t = (imageType || "").toLowerCase();
-  if (t === "food_photo" || t === "food") return "food";
-  if (t === "interior" || t === "ambience") return "ambience";
+  if (t === "food_photo" || t === "food" || t === "drink") return "food";
+  if (t === "interior" || t === "ambience" || t === "exterior") return "ambience";
   return "other";
 }
 
+function publicMediaToGallery(data: ApiSiteContent, item: ApiPublicMedia): GalleryImage {
+  return {
+    url: item.url,
+    alt: item.alt_text || `${data.name} ${item.media_type || "photo"}`,
+    type: galleryType(item.media_type),
+    mediaType: item.media_type,
+    sourceKind: item.source_kind,
+    caption: item.caption,
+    tags: item.tags,
+    qualityScore: item.quality_score,
+    heroScore: item.hero_score,
+    width: item.width_px,
+    height: item.height_px,
+    orientation: item.orientation,
+    subjectPosition: item.subject_position,
+    placementRole: item.placement_role,
+    unoptimized: item.source_kind === "google_places_live" || item.unoptimized,
+    authorAttributions: (item.author_attributions || []).map((attribution) => ({
+      displayName: attribution.display_name,
+      uri: attribution.uri,
+      photoUri: attribution.photo_uri,
+    })),
+    googleMapsUri: item.google_maps_uri,
+    flagContentUri: item.flag_content_uri,
+  };
+}
+
+function selectHeroMedia(data: ApiSiteContent): GalleryImage | undefined {
+  const media = (data.media || []).map((item) => publicMediaToGallery(data, item));
+  return (
+    media.find((item) => item.placementRole === "hero") ||
+    [...media]
+      .filter((item) => item.orientation === "landscape" && item.heroScore != null)
+      .sort((left, right) => (right.heroScore || 0) - (left.heroScore || 0))[0] ||
+    media.find((item) => item.mediaType === "exterior") ||
+    media.find((item) => item.mediaType === "interior") ||
+    media.find((item) => item.type === "food") ||
+    media[0]
+  );
+}
+
 function heroPoster(data: ApiSiteContent): string {
-  const food = (data.gallery_images || []).find((g) => galleryType(g.image_type) === "food");
-  if (food?.url) return food.url;
+  const selected = selectHeroMedia(data);
+  if (selected?.url) return selected.url;
   const amb = (data.gallery_images || []).find((g) => galleryType(g.image_type) === "ambience");
   if (amb?.url) return amb.url;
-  return data.thumbnail || data.menu_images?.[0]?.url || "";
+  const food = (data.gallery_images || []).find((g) => galleryType(g.image_type) === "food");
+  return food?.url || data.thumbnail || "";
 }
 
 function getVideoAssets(poster: string): VideoAssets {
@@ -155,25 +211,27 @@ function buildMenuCategories(data: ApiSiteContent): MenuCategory[] {
   return [...groups.entries()].map(([name, items]) => ({ name, items }));
 }
 
-function buildMenuListImages(data: ApiSiteContent): MenuListImage[] {
-  return (data.menu_images || []).map((img, i) => ({
-    url: img.url,
-    thumbnail: img.thumbnail_url || img.url,
-    alt: img.title ? `${data.name} menu — ${img.title}` : `${data.name} menu ${i + 1}`,
-    confidence: img.confidence,
-  }));
-}
-
 function buildGalleryImages(data: ApiSiteContent): GalleryImage[] {
-  return (data.gallery_images || []).slice(0, 24).map((img, i) => ({
-    url: img.url,
-    alt: img.title ? `${data.name} — ${img.title}` : `${data.name} gallery ${i + 1}`,
-    type: galleryType(img.image_type),
-  }));
+  const liveOrOwned = (data.media || []).map((item) => publicMediaToGallery(data, item));
+  const seen = new Set(liveOrOwned.map((item) => item.url));
+  const legacy = (data.gallery_images || []).filter((img) => {
+    const imageType = (img.image_type || "").toLowerCase();
+    return imageType !== "menu_document" && imageType !== "menu_list" && imageType !== "menu_ocr" && !seen.has(img.url);
+  }).map((img, i): GalleryImage => {
+    const type = galleryType(img.image_type);
+    return {
+      url: img.url,
+      alt: img.title ? `${data.name} — ${img.title}` : `${data.name} gallery ${i + 1}`,
+      type,
+      sourceKind: "legacy_public_url",
+      mediaType: type === "ambience" ? "interior" : type,
+    };
+  });
+  return [...liveOrOwned, ...legacy].slice(0, 24);
 }
 
 function buildSignatureDishes(data: ApiSiteContent): MenuItem[] {
-  return (data.menu_items || [])
+  const matchedMenuItems = (data.menu_items || [])
     .filter((item) => pickMenuItemImage(item))
     .slice(0, 6)
     .map((item) => ({
@@ -184,9 +242,26 @@ function buildSignatureDishes(data: ApiSiteContent): MenuItem[] {
       isChefSpecial: true,
       category: normalizeCategory(item.category || "Menu"),
     }));
+  const usedURLs = new Set(matchedMenuItems.map((item) => item.image).filter(Boolean));
+  const foodMedia = (data.media || [])
+    .filter(
+      (item) =>
+        item.source_kind !== "google_places_live" &&
+        (item.media_type === "food" || item.media_type === "drink") &&
+        !usedURLs.has(item.url),
+    )
+    .slice(0, 6 - matchedMenuItems.length)
+    .map((item, index): MenuItem => ({
+      name: `From the kitchen${index > 0 ? ` · ${index + 1}` : ""}`,
+      description: item.caption || `A glimpse of what is served at ${data.name}.`,
+      image: item.url,
+      isChefSpecial: true,
+      category: item.media_type === "drink" ? "Drinks" : "Kitchen",
+    }));
+  return [...matchedMenuItems, ...foodMedia];
 }
 
-function buildStorySteps(data: ApiSiteContent, images: string[]): StoryStep[] {
+function buildStorySteps(data: ApiSiteContent, images: string[], fallbackPoster: string): StoryStep[] {
   const cuisine = primaryCuisine(data.cuisines).toLowerCase();
   const city = data.city || "town";
   const titles = [
@@ -196,7 +271,7 @@ function buildStorySteps(data: ApiSiteContent, images: string[]): StoryStep[] {
     "A room designed for conversation",
     "Hospitality that feels personal",
   ];
-  const poster = heroPoster(data);
+  const poster = fallbackPoster;
   const descriptions = [
     `Our kitchen at ${data.name} draws on ${cuisine} heritage and the spirit of ${city}.`,
     "Every plate is prepared with care, technique, and warmth.",
@@ -251,7 +326,12 @@ export function adaptSiteContent(data: ApiSiteContent): RestaurantContent {
   const locationLabel = [city, state, country].filter(Boolean).join(", ");
   const poster = heroPoster(data);
   const gallery = buildGalleryImages(data);
-  const storyImages = gallery.filter((g) => g.type !== "other").map((g) => g.url).slice(0, 5);
+  const selectedHeroMedia = selectHeroMedia(data) || gallery[0];
+  const durableGallery = gallery.filter((image) => image.sourceKind !== "google_places_live");
+  const durablePoster = selectedHeroMedia?.sourceKind === "google_places_live"
+    ? durableGallery[0]?.url || ""
+    : poster;
+  const storyImages = durableGallery.filter((g) => g.type !== "other").map((g) => g.url).slice(0, 5);
   const phone = data.phone || "";
 
   return {
@@ -288,11 +368,11 @@ export function adaptSiteContent(data: ApiSiteContent): RestaurantContent {
     },
     secondaryCTA: { label: "View Menu", href: "#menu" },
     heroPoster: poster,
+    heroMedia: selectedHeroMedia,
     videos: getVideoAssets(poster),
-    storySteps: buildStorySteps(data, storyImages),
+    storySteps: buildStorySteps(data, storyImages, durablePoster),
     signatureDishes: buildSignatureDishes(data),
     menuCategories: buildMenuCategories(data),
-    menuListImages: buildMenuListImages(data),
     galleryImages: gallery,
     reviews: (data.reviews || []).slice(0, 6).map((rev) => ({
       reviewer: rev.reviewer || "Guest",
@@ -300,7 +380,7 @@ export function adaptSiteContent(data: ApiSiteContent): RestaurantContent {
       stars: rev.stars || 5,
       date: rev.date,
     })),
-    experienceCards: buildExperienceCards(data, poster),
+    experienceCards: buildExperienceCards(data, durablePoster),
   };
 }
 
@@ -332,6 +412,7 @@ function adaptSignedDemoPayload(payload: SignedDemoPayload, fallbackIndex: numbe
     hours: payload.hours || {},
     thumbnail: hero,
     menu_items: menuItems,
+    media: payload.media,
     gallery_images: hero
       ? [{ url: hero, thumbnail_url: hero, image_type: "food_photo" }]
       : [],
@@ -375,7 +456,7 @@ export async function fetchSiteRestaurant(index: number): Promise<RestaurantCont
   if (!base) return null;
   try {
     const res = await fetch(`${base}/api/public/v1/site/restaurants/${index}`, {
-      next: { revalidate: 60 },
+      cache: "no-store",
     });
     if (!res.ok) return null;
     const data = (await res.json()) as ApiSiteContent;

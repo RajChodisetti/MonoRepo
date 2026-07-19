@@ -172,6 +172,7 @@ export type DemoSession = {
 export type GooglePhotoAttribution = {
   display_name: string;
   uri?: string;
+  photo_uri?: string;
 };
 
 export type GooglePlacePhoto = {
@@ -179,6 +180,8 @@ export type GooglePlacePhoto = {
   width_px?: number;
   height_px?: number;
   author_attributions: GooglePhotoAttribution[];
+  google_maps_uri?: string;
+  flag_content_uri?: string;
 };
 
 export type GooglePlacePhotos = {
@@ -208,6 +211,29 @@ export type RestaurantImages = {
   restaurant_id: string;
   menu_images: RestaurantImage[];
   gallery_images: RestaurantImage[];
+  owned_media: RestaurantOwnedMedia[];
+};
+
+export type RestaurantOwnedMedia = {
+  id: string;
+  url: string;
+  source_kind: "owner_upload" | "licensed";
+  media_type: "exterior" | "interior" | "food" | "drink" | "logo" | "team" | "event" | "other";
+  caption?: string;
+  alt_text?: string;
+  tags?: string[];
+  quality_score?: number;
+  hero_score?: number;
+  width_px?: number;
+  height_px?: number;
+  orientation?: string;
+  placement_role?: string;
+  approval_status?: "draft" | "approved" | "rejected";
+  rights_status?: "owner_granted" | "licensed";
+  vision_status?: "pending" | "running" | "verified" | "failed";
+  vision_last_error?: string;
+  vision_analyzed_at?: string;
+  hidden_at?: string;
 };
 
 export type DemoLink = {

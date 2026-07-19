@@ -33,6 +33,7 @@ export default function CinematicTemplate({
         <ScrollVideoSection
           videoSrc={restaurant.videos.kitchen.src}
           posterSrc={restaurant.videos.kitchen.poster}
+          posterMedia={restaurant.heroMedia}
           eyebrow="In the kitchen"
           title="Where every plate begins with craft"
           description={`At ${restaurant.name}, our kitchen moves with rhythm — fire, seasoning, and the patience to get it right.`}

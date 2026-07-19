@@ -197,6 +197,7 @@ services:
         TEMPLATE: ${TEMPLATE:-2}
         NEXT_PUBLIC_API_URL: ${TEMPLATE_NEXT_PUBLIC_API_URL:-https://api.tuvisolutions.com}
         NEXT_PUBLIC_VOICE_AGENT_URL: ${TEMPLATE_NEXT_PUBLIC_VOICE_AGENT_URL:-https://voice.tuvisolutions.com}
+        NEXT_PUBLIC_MEDIA_BASE_URL: ${TEMPLATE_MEDIA_PUBLIC_BASE_URL:-}
     env_file:
       - path: ${TUVI_ENV_DIR:-/opt/tuvi/env}/template.env
         required: false
@@ -204,6 +205,7 @@ services:
       TEMPLATE: ${TEMPLATE:-2}
       NEXT_PUBLIC_API_URL: ${TEMPLATE_NEXT_PUBLIC_API_URL:-https://api.tuvisolutions.com}
       NEXT_PUBLIC_VOICE_AGENT_URL: ${TEMPLATE_NEXT_PUBLIC_VOICE_AGENT_URL:-https://voice.tuvisolutions.com}
+      NEXT_PUBLIC_MEDIA_BASE_URL: ${TEMPLATE_MEDIA_PUBLIC_BASE_URL:-}
       VOICE_AGENT_URL: http://voice-agent:8000
     ports:
       - "127.0.0.1:${TUVI_TEMPLATE_PORT:-13000}:3000"

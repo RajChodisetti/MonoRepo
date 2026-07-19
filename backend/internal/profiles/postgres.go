@@ -118,9 +118,25 @@ func (repo *Postgres) ListGalleryImages(ctx context.Context, restaurantID uuid.U
 		SELECT id, restaurant_id, url, thumbnail_url, image_type, confidence,
 		       title, source, sort_order, metadata, created_at, updated_at, hidden_at, hidden_by
 		FROM gallery_images
-		WHERE restaurant_id = $1 AND hidden_at IS NULL
+		WHERE restaurant_id = $1
+		  AND hidden_at IS NULL
+		  AND lower(COALESCE(image_type, '')) NOT IN ('menu_document', 'menu_list', 'menu_ocr')
 		ORDER BY sort_order ASC, created_at ASC`
-	return repo.queryGalleryImages(ctx, query, restaurantID)
+	images, err := repo.queryGalleryImages(ctx, query, restaurantID)
+	if err != nil {
+		return nil, err
+	}
+	filtered := make([]GalleryImage, 0, len(images))
+	for _, image := range images {
+		if isTemporaryGoogleMediaURL(image.URL) {
+			continue
+		}
+		if isTemporaryGoogleMediaURL(image.ThumbnailURL) {
+			image.ThumbnailURL = ""
+		}
+		filtered = append(filtered, image)
+	}
+	return filtered, nil
 }
 
 func (repo *Postgres) ListGalleryImagesAdmin(ctx context.Context, restaurantID uuid.UUID) ([]GalleryImage, error) {

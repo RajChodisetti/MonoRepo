@@ -53,7 +53,6 @@ type SiteContent struct {
 	Longitude     *float64        `json:"longitude,omitempty"`
 	Hours         json.RawMessage `json:"hours"`
 	MenuItems     []SiteMenuItem  `json:"menu_items"`
-	MenuImages    []MenuImage     `json:"menu_images"`
 	GalleryImages []GalleryImage  `json:"gallery_images"`
 	Reviews       []SiteReview    `json:"reviews"`
 	Thumbnail     string          `json:"thumbnail,omitempty"`

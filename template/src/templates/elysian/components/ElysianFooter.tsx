@@ -57,11 +57,12 @@ export default function ElysianFooter({
           <div className="footer-insta">
             <h4>Gallery</h4>
             <div className="insta-grid">
-              {footer.instaImages.map((url, i) => (
+              {footer.instaImages.map((image, i) => (
                 <ElysianImage
-                  key={url + i}
-                  src={url}
-                  alt={`${name} gallery ${i + 1}`}
+                  key={image.url + i}
+                  src={image.url}
+                  alt={image.alt || `${name} gallery ${i + 1}`}
+                  media={image}
                   width={300}
                   height={300}
                   sizes="150px"

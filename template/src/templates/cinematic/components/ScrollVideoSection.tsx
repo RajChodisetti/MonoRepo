@@ -1,14 +1,17 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import Image from "next/image";
 import { gsap, registerGsap } from "@/lib/gsap";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 import { useIsMobile } from "@/hooks/useMediaQuery";
+import SourceAwareImage, { mediaForURL } from "@/components/SourceAwareImage";
+import PhotoAttribution from "@/components/PhotoAttribution";
+import type { GalleryImage } from "@/data/types/gallery";
 
 interface ScrollVideoSectionProps {
   videoSrc: string;
   posterSrc: string;
+  posterMedia?: GalleryImage;
   eyebrow: string;
   title: string;
   description: string;
@@ -20,6 +23,7 @@ interface ScrollVideoSectionProps {
 export default function ScrollVideoSection({
   videoSrc,
   posterSrc,
+  posterMedia,
   eyebrow,
   title,
   description,
@@ -71,7 +75,7 @@ export default function ScrollVideoSection({
     <section ref={sectionRef} className="relative min-h-screen bg-charcoal">
       <div className="relative h-screen w-full overflow-hidden">
         {showPosterOnly ? (
-          <Image src={posterSrc} alt="" fill loading="lazy" className="object-cover" sizes="100vw" />
+          <SourceAwareImage media={posterMedia || mediaForURL(posterSrc, "")} fill loading="lazy" className="object-cover" sizes="100vw" />
         ) : (
           <video
             ref={videoRef}
@@ -83,6 +87,11 @@ export default function ScrollVideoSection({
             className="h-full w-full object-cover"
           />
         )}
+        {posterMedia?.sourceKind === "google_places_live" ? (
+          <div className="absolute bottom-5 right-5 z-20 rounded bg-black/60 px-3 py-2 text-white/75">
+            <PhotoAttribution media={posterMedia} compact />
+          </div>
+        ) : null}
         <div className="absolute inset-0 bg-gradient-to-r from-charcoal/90 via-charcoal/50 to-transparent" />
         <div className="absolute inset-0 flex items-center">
           <div className="mx-auto max-w-6xl px-6">

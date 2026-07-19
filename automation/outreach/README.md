@@ -192,13 +192,27 @@ LEAD_OCR_VERIFICATION_ENABLED=true python verify_leads_from_db.py --force --limi
 | `LEAD_OCR_BATCH_SIZE` | Max restaurants per run (default `50`) |
 | `LEAD_OCR_MAX_ATTEMPTS` | Maximum automatic attempts for one unchanged OCR input (default `3`) |
 | `LEAD_OCR_RETRY_AFTER_HOURS` | Cooldown before retrying a failed OCR attempt (default `24`) |
+| `LEAD_OCR_DAILY_REQUEST_LIMIT` | Shared hard ceiling for scraped-photo and durable-media vision requests; capped at `200` per UTC day |
+| `MEDIA_OCR_BATCH_SIZE` | Owner/licensed uploads checked before each lead batch (default `10`, maximum `50`) |
 | `MENU_OCR_ENABLED` | Reuses existing menu OCR pipeline flags |
 
 OCR refreshes current photo resource names from Place Details immediately
 before analysis; expirable resource names and short-lived Photo Media URLs are
-never retained in durable lead data. A failed unchanged input retries after the
-configured cooldown until the maximum attempt count. After that, inspect the
-record and explicitly requeue it as described in the production runbook.
+never retained in durable lead data. Only a one-way Place-ID/resource-name
+fingerprint is retained so the public resolver can require an exact match and
+fail closed if Google replaces or reorders the resource. A failed unchanged
+input retries after the configured cooldown until the maximum attempt count.
+After that, inspect the record and explicitly requeue it as described in the
+production runbook.
+
+The same worker also claims `restaurant_media_assets` uploads. Owner/licensed
+files remain `draft` until vision classification completes. Non-menu images are
+approved only when the classification is website-safe, with factual caption/alt
+text, tags, quality/hero score, orientation, subject position, and a template
+placement. A detected `menu_document`, low-confidence result, or text-heavy
+unknown is rejected from public use with an admin-visible reason.
+Both flows share the same durable daily request budget and timeout/429 claim
+release behavior.
 
 When a later import changes the OCR image fingerprint, the profile returns to
 `pending`, stale human approvals are cleared, and the automatic draft may be

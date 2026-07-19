@@ -18,6 +18,7 @@ export type ElysianContent = {
     titleLine2: string;
     subtitle: string;
     poster: string;
+    posterMedia?: RestaurantContent["heroMedia"];
     primaryCTA: { label: string; href: string };
     secondaryCTA: { label: string; href: string };
   };
@@ -47,7 +48,7 @@ export type ElysianContent = {
   };
   footer: {
     tagline: string;
-    instaImages: string[];
+    instaImages: RestaurantContent["galleryImages"];
   };
   show: {
     dishes: boolean;
@@ -201,8 +202,10 @@ export function mapElysianContent(restaurant: RestaurantContent): ElysianContent
   const stats = buildStats(restaurant, menuCount);
   const faq = buildFaq(restaurant);
   const aboutImage =
-    restaurant.galleryImages.find((g) => g.type === "ambience")?.url ||
-    restaurant.heroPoster;
+    restaurant.galleryImages.find(
+      (image) => image.type === "ambience" && image.sourceKind !== "google_places_live",
+    )?.url ||
+    (restaurant.heroMedia?.sourceKind !== "google_places_live" ? restaurant.heroPoster : "");
 
   const timeline = restaurant.storySteps.map((step, i) => ({
     year: step.number || String(2010 + i * 5),
@@ -240,6 +243,7 @@ export function mapElysianContent(restaurant: RestaurantContent): ElysianContent
         : restaurant.name,
       subtitle: restaurant.subheadline,
       poster: restaurant.heroPoster,
+      posterMedia: restaurant.heroMedia,
       primaryCTA: restaurant.primaryCTA,
       secondaryCTA: restaurant.secondaryCTA,
     },
@@ -269,7 +273,9 @@ export function mapElysianContent(restaurant: RestaurantContent): ElysianContent
     },
     footer: {
       tagline: restaurant.subheadline,
-      instaImages: restaurant.galleryImages.slice(0, 4).map((g) => g.url),
+      instaImages: restaurant.galleryImages
+        .filter((image) => image.sourceKind !== "google_places_live")
+        .slice(0, 4),
     },
     show: {
       dishes: restaurant.signatureDishes.length > 0,
@@ -280,7 +286,7 @@ export function mapElysianContent(restaurant: RestaurantContent): ElysianContent
       stats: stats.length > 0,
       faq: faq.length > 0,
       map: Boolean(restaurant.coordinates || restaurant.address),
-      insta: restaurant.galleryImages.length > 0,
+      insta: restaurant.galleryImages.some((image) => image.sourceKind !== "google_places_live"),
     },
   };
 }

@@ -1,9 +1,9 @@
 "use client";
 
-import Image from "next/image";
 import GlassCard from "./ui/GlassCard";
 import BlurReveal from "./ui/BlurReveal";
 import type { MenuItem } from "@/data/types/menu";
+import SourceAwareImage, { mediaForURL } from "@/components/SourceAwareImage";
 
 export default function ProductShowcase({ dishes }: { dishes: MenuItem[] }) {
   if (!dishes.length) return null;
@@ -27,9 +27,8 @@ export default function ProductShowcase({ dishes }: { dishes: MenuItem[] }) {
               <GlassCard className="overflow-hidden">
                 {dish.image && (
                   <div className="relative aspect-[4/3] overflow-hidden">
-                    <Image
-                      src={dish.image}
-                      alt={dish.name}
+                    <SourceAwareImage
+                      media={mediaForURL(dish.image, dish.name, "food")}
                       fill
                       className="object-cover transition duration-700 hover:scale-105"
                       sizes="(max-width: 768px) 100vw, 33vw"

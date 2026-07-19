@@ -70,31 +70,27 @@ function pickImageUrl(img: ScrapedImage | string | undefined): string {
   return record.url || record.thumbnail || "";
 }
 
+function isMenuImageRecord(img: ScrapedImage | string | undefined): boolean {
+  const record = pickImageRecord(img);
+  const imageType = (record?.image_type || record?.title || "").toLowerCase();
+  return imageType === "menu_document" || imageType === "menu_list" || imageType === "menu_ocr";
+}
+
 function pickImage(images?: ScrapedImage[]): string {
   if (!images?.length) return "";
-  return pickImageUrl(images[0]);
+  for (const image of images) {
+    if (isMenuImageRecord(image)) continue;
+    const url = pickImageUrl(image);
+    if (url) return url;
+  }
+  return "";
 }
 
 function galleryTypeFromRecord(img: ScrapedImage): GalleryImage["type"] {
   const t = (img.image_type || img.title || "").toLowerCase();
-  if (t === "food_photo" || t === "food") return "food";
-  if (t === "interior" || t === "ambience") return "ambience";
+  if (t === "food_photo" || t === "food" || t === "drink") return "food";
+  if (t === "interior" || t === "ambience" || t === "exterior") return "ambience";
   return "other";
-}
-
-function buildMenuListImages(r: ScrapedRestaurant): import("@/data/types/menuImages").MenuListImage[] {
-  return (r.images?.menu_photos || [])
-    .map((img, i) => {
-      const url = pickImageUrl(img);
-      if (!url) return null;
-      return {
-        url,
-        thumbnail: img.thumbnail || url,
-        alt: `${r.name} menu ${i + 1}`,
-        confidence: img.confidence,
-      };
-    })
-    .filter((item): item is NonNullable<typeof item> => Boolean(item));
 }
 
 function buildGallery(r: ScrapedRestaurant): GalleryImage[] {
@@ -105,7 +101,7 @@ function buildGallery(r: ScrapedRestaurant): GalleryImage[] {
   const galleryItems = (r.images?.gallery || [])
     .map((img, i) => {
       const url = pickImageUrl(img);
-      if (!url || menuPhotoUrls.has(url)) return null;
+      if (!url || menuPhotoUrls.has(url) || isMenuImageRecord(img)) return null;
       return {
         url,
         alt: img.title ? `${r.name} — ${img.title}` : `${r.name} gallery ${i + 1}`,
@@ -157,13 +153,21 @@ function inferTags(r: ScrapedRestaurant, item: ScrapedMenuItem): string[] {
 
 function collectImageUrls(r: ScrapedRestaurant): string[] {
   const urls = new Set<string>();
-  if (r.images?.thumbnail) urls.add(r.images.thumbnail);
+  const menuPhotoURLs = new Set(
+    (r.images?.menu_photos || []).map((image) => pickImageUrl(image)).filter(Boolean),
+  );
+  const add = (url: string) => {
+    if (url && !menuPhotoURLs.has(url) && classifyImage(url) !== "menu_list") {
+      urls.add(url);
+    }
+  };
+  if (r.images?.thumbnail) add(r.images.thumbnail);
   for (const g of r.images?.gallery || []) {
-    if (g.url) urls.add(g.url);
+    if (!isMenuImageRecord(g) && g.url) add(g.url);
   }
   for (const item of r.menu_items || []) {
     const u = pickImage(item.images);
-    if (u) urls.add(u);
+    if (u) add(u);
   }
   return [...urls];
 }
@@ -177,9 +181,12 @@ function heroPoster(r: ScrapedRestaurant): string {
   if (food[0]) return food[0];
   const amb = getImagesByType(r, "ambience");
   if (amb[0]) return amb[0];
-  if (r.images?.thumbnail) return r.images.thumbnail;
-  const gal = r.images?.gallery?.[0]?.url;
-  return gal || "";
+  return collectImageUrls(r)[0] || "";
+}
+
+function websiteMenuItemImage(r: ScrapedRestaurant, item: ScrapedMenuItem): string {
+  const candidate = pickImage(item.images);
+  return candidate && collectImageUrls(r).includes(candidate) ? candidate : "";
 }
 
 function getVideoAssets(poster: string): VideoAssets {
@@ -222,7 +229,7 @@ function buildMenuCategories(r: ScrapedRestaurant): MenuCategory[] {
   for (const item of r.menu_items || []) {
     const cat = normalizeCategory(item.category || "Menu");
     if (!groups.has(cat)) groups.set(cat, []);
-    const photo = pickImage(item.images);
+    const photo = websiteMenuItemImage(r, item);
     groups.get(cat)!.push({
       name: item.name,
       description: item.description || "",
@@ -242,7 +249,7 @@ function buildSignatureDishes(r: ScrapedRestaurant): MenuItem[] {
       name: item.name,
       description: item.description || `${item.name} — a guest favorite from our kitchen.`,
       price: item.price,
-      image: pickImage(item.images) || undefined,
+      image: websiteMenuItemImage(r, item) || undefined,
       tags: inferTags(r, item),
       isChefSpecial: true,
       category: normalizeCategory(item.category || "Menu"),
@@ -347,7 +354,6 @@ export function adaptRestaurant(index: number): RestaurantContent {
     storySteps: buildStorySteps(r, storyImages),
     signatureDishes: buildSignatureDishes(r),
     menuCategories: buildMenuCategories(r),
-    menuListImages: buildMenuListImages(r),
     galleryImages: buildGallery(r),
     reviews: (r.reviews || []).slice(0, 6).map((rev) => ({
       reviewer: rev.reviewer || "Guest",
@@ -380,7 +386,6 @@ export async function loadRestaurantAsync(index: number): Promise<RestaurantCont
 
   return {
     ...base,
-    menuListImages: images.menuListImages.length ? images.menuListImages : base.menuListImages,
     galleryImages: images.galleryImages.length ? images.galleryImages : base.galleryImages,
   };
 }

@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import Image from "next/image";
+import { useEffect, useRef } from "react";
 import { gsap, registerGsap, ScrollTrigger } from "@/lib/gsap";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 import type { RestaurantContent } from "@/data/types/restaurant";
+import type { GalleryImage } from "@/data/types/gallery";
+import SourceAwareImage from "@/components/SourceAwareImage";
+import PhotoAttribution from "@/components/PhotoAttribution";
 
 export default function HeroRestaurantVideo({
   restaurant,
@@ -13,21 +15,7 @@ export default function HeroRestaurantVideo({
 }) {
   const sectionRef = useRef<HTMLElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
   const reduced = usePrefersReducedMotion();
-  const [useVideo, setUseVideo] = useState(false);
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video || reduced) return;
-
-    const tryPlay = () => {
-      video.play().then(() => setUseVideo(true)).catch(() => setUseVideo(false));
-    };
-    video.addEventListener("loadeddata", tryPlay);
-    tryPlay();
-    return () => video.removeEventListener("loadeddata", tryPlay);
-  }, [reduced]);
 
   useEffect(() => {
     if (reduced) return;
@@ -53,38 +41,48 @@ export default function HeroRestaurantVideo({
     return () => ctx.revert();
   }, [reduced]);
 
+  const heroMedia: GalleryImage = restaurant.heroMedia || {
+    url: restaurant.heroPoster,
+    alt: `${restaurant.name} restaurant`,
+    type: "ambience",
+  };
+  const supportingMedia = restaurant.galleryImages
+    .filter((image) => image.url !== heroMedia.url && image.sourceKind !== "google_places_live")
+    .slice(0, 3);
+
   return (
     <section ref={sectionRef} id="hero" className="relative flex min-h-screen items-center justify-center overflow-hidden">
       <div className="absolute inset-0">
-        {useVideo && !reduced ? (
-          <video
-            ref={videoRef}
-            className="h-full w-full object-cover scale-105"
-            src={restaurant.videos.hero.src}
-            poster={restaurant.heroPoster}
-            muted
-            loop
-            playsInline
-            preload="metadata"
-            aria-hidden
-          />
-        ) : (
-          <div className="hero-ken-burns relative h-full w-full">
-            {restaurant.heroPoster && (
-              <Image
-                src={restaurant.heroPoster}
-                alt=""
-                fill
-                priority
-                className="object-cover object-center"
-                sizes="100vw"
-              />
-            )}
-          </div>
-        )}
+        <div className="hero-ken-burns relative h-full w-full">
+          {heroMedia.url ? (
+            <SourceAwareImage
+              media={heroMedia}
+              fill
+              priority
+              className="object-cover object-center"
+              sizes="100vw"
+            />
+          ) : null}
+        </div>
         <div className="absolute inset-0 bg-gradient-to-b from-[#10100e]/92 via-[#10100e]/72 to-[#10100e]" />
         <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-[#10100e] to-transparent" />
       </div>
+
+      {supportingMedia.length ? (
+        <div className="absolute bottom-8 right-6 z-20 hidden gap-2 lg:flex">
+          {supportingMedia.map((image) => (
+            <div key={image.url} className="relative h-20 w-28 overflow-hidden rounded-lg border border-cream/20">
+              <SourceAwareImage media={image} fill className="object-cover" sizes="112px" />
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {heroMedia.sourceKind === "google_places_live" ? (
+        <div className="absolute bottom-8 left-6 z-20 rounded bg-black/55 px-3 py-2 text-cream/70">
+          <PhotoAttribution media={heroMedia} compact />
+        </div>
+      ) : null}
 
       <div ref={contentRef} className="relative z-10 mx-auto max-w-4xl px-6 pt-28 text-center">
         <p className="mb-4 text-xs font-medium uppercase tracking-[0.25em] text-[#b88a44] drop-shadow-md">

@@ -109,9 +109,9 @@ export default function SiteWalkthrough({ templateId }: { templateId: TemplateId
       {
         target: `[data-tour="${TOUR_TEMPLATE_SWITCH}"]`,
         placement: "bottom",
-        eyebrow: "1 / 2 · Other template",
+        eyebrow: "1 / 2 · Website design",
         title: switchCopy.title,
-        body: `Try out our other template. Tap "${switchCopy.cta}" to preview the ${switchCopy.targetLabel} layout instantly.`,
+        body: `Tap "${switchCopy.cta}" to preview the ${switchCopy.targetLabel} layout. The restaurant details and photos stay the same.`,
       },
       {
         target: `[data-tour="${TOUR_VOICE_ASSISTANT}"]`,

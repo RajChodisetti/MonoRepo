@@ -192,8 +192,21 @@ def sync_classified_images(cur, restaurant_id: uuid.UUID, record: dict) -> tuple
     menu_photos = images.get("menu_photos") or []
     gallery = images.get("gallery") or []
 
-    cur.execute("DELETE FROM menu_images WHERE restaurant_id = %s", (restaurant_id,))
-    cur.execute("DELETE FROM gallery_images WHERE restaurant_id = %s", (restaurant_id,))
+    # Replace only OCR-managed rows and only after a replacement set actually
+    # contains stable URLs. Google Places media URLs are intentionally absent;
+    # an empty transient-only result must never erase durable/manual media.
+    menu_has_persistent_urls = any(image_record_url(img) for img in menu_photos)
+    gallery_has_persistent_urls = any(image_record_url(img) for img in gallery)
+    if menu_has_persistent_urls:
+        cur.execute(
+            "DELETE FROM menu_images WHERE restaurant_id = %s AND source = 'menu_ocr'",
+            (restaurant_id,),
+        )
+    if gallery_has_persistent_urls:
+        cur.execute(
+            "DELETE FROM gallery_images WHERE restaurant_id = %s AND source = 'menu_ocr'",
+            (restaurant_id,),
+        )
 
     menu_count = 0
     for i, img in enumerate(menu_photos):
@@ -827,7 +840,20 @@ def fetch_unverified_leads(
               AND rp.raw_public_data IS NOT NULL
               AND rp.raw_public_data <> '{}'::jsonb
               AND NULLIF(BTRIM(r.email), '') IS NOT NULL
-            ORDER BY rp.created_at ASC
+            ORDER BY
+              CASE
+                WHEN EXISTS (
+                  SELECT 1 FROM demo_sites demo
+                  WHERE demo.restaurant_id = rp.restaurant_id
+                    AND demo.status = 'published'
+                ) THEN 0
+                WHEN EXISTS (
+                  SELECT 1 FROM demo_sites demo
+                  WHERE demo.restaurant_id = rp.restaurant_id
+                ) THEN 1
+                ELSE 2
+              END,
+              rp.created_at ASC
             LIMIT %s
             """,
             (max_attempts, retry_after_hours, limit),
@@ -877,7 +903,20 @@ def fetch_unverified_leads(
                   AND rp.raw_public_data IS NOT NULL
                   AND rp.raw_public_data <> '{}'::jsonb
                   AND NULLIF(BTRIM(r.email), '') IS NOT NULL
-                ORDER BY rp.created_at ASC
+                ORDER BY
+                  CASE
+                    WHEN EXISTS (
+                      SELECT 1 FROM demo_sites demo
+                      WHERE demo.restaurant_id = rp.restaurant_id
+                        AND demo.status = 'published'
+                    ) THEN 0
+                    WHEN EXISTS (
+                      SELECT 1 FROM demo_sites demo
+                      WHERE demo.restaurant_id = rp.restaurant_id
+                    ) THEN 1
+                    ELSE 2
+                  END,
+                  rp.created_at ASC
                 LIMIT %s
                 FOR UPDATE OF rp SKIP LOCKED
             )

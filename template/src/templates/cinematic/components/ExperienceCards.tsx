@@ -1,7 +1,7 @@
 "use client";
 
-import Image from "next/image";
 import type { ExperienceCard } from "@/data/types/restaurant";
+import SourceAwareImage, { mediaForURL } from "@/components/SourceAwareImage";
 
 export default function ExperienceCards({ cards }: { cards: ExperienceCard[] }) {
   return (
@@ -16,9 +16,8 @@ export default function ExperienceCards({ cards }: { cards: ExperienceCard[] }) 
               key={card.id}
               className="group relative min-h-[320px] overflow-hidden rounded-xl"
             >
-              <Image
-                src={card.image}
-                alt={card.title}
+              <SourceAwareImage
+                media={mediaForURL(card.image, card.title)}
                 fill
                 loading="lazy"
                 className="object-cover transition duration-700 group-hover:scale-110"

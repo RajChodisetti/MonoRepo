@@ -575,6 +575,112 @@ paths:
         '503':
           description: The server-side Places credential is not configured
 
+  /api/v1/restaurants/{id}/media:
+    parameters:
+      - $ref: '#/components/parameters/restaurantId'
+    post:
+      tags: [Restaurants, Lead Review]
+      summary: Upload owner-granted or licensed website media
+      operationId: uploadRestaurantMedia
+      security:
+        - bearerAuth: []
+      description: |
+        Requires restaurant-admin access. Stores a JPEG, PNG, or GIF in configured
+        S3-compatible storage. The asset remains draft/private until background OCR
+        confirms it is not a menu document. Maximum file size is 15 MB.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, media_type, rights_status]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                media_type:
+                  $ref: '#/components/schemas/WebsiteMediaType'
+                placement_role:
+                  $ref: '#/components/schemas/MediaPlacementRole'
+                rights_status:
+                  type: string
+                  enum: [owner_granted, licensed]
+                caption:
+                  type: string
+                  maxLength: 180
+                alt_text:
+                  type: string
+                  maxLength: 180
+      responses:
+        '201':
+          description: Durable draft asset uploaded and queued for OCR review
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  asset:
+                    $ref: '#/components/schemas/PublicMedia'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          description: Durable media storage is not configured
+
+  /api/v1/restaurants/{id}/media/{assetId}:
+    parameters:
+      - $ref: '#/components/parameters/restaurantId'
+      - name: assetId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    delete:
+      tags: [Restaurants, Lead Review]
+      summary: Hide a durable restaurant media asset
+      operationId: hideRestaurantMedia
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Asset hidden from public website media
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/restaurants/{id}/media/{assetId}/restore:
+    parameters:
+      - $ref: '#/components/parameters/restaurantId'
+      - name: assetId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Restaurants, Lead Review]
+      summary: Restore a hidden durable restaurant media asset
+      operationId: restoreRestaurantMedia
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Asset visibility restored; approval/OCR state remains unchanged
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/restaurants/{id}/generated-site:
     parameters:
       - $ref: '#/components/parameters/restaurantId'
@@ -2266,6 +2372,9 @@ components:
         uri:
           type: string
           format: uri
+        photo_uri:
+          type: string
+          format: uri
 
     GooglePlacePhoto:
       type: object
@@ -2274,6 +2383,9 @@ components:
         url:
           type: string
           format: uri
+        source_index:
+          type: integer
+          minimum: 0
         width_px:
           type: integer
         height_px:
@@ -2282,6 +2394,77 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/GooglePhotoAttribution'
+        google_maps_uri:
+          type: string
+          format: uri
+        flag_content_uri:
+          type: string
+          format: uri
+
+    WebsiteMediaType:
+      type: string
+      enum: [exterior, interior, food, drink, logo, team, event, other]
+
+    MediaPlacementRole:
+      type: string
+      enum: [hero, about, gallery, food_gallery, ambience_gallery, logo]
+
+    PublicMedia:
+      type: object
+      required: [url, source_kind, media_type, unoptimized]
+      properties:
+        id:
+          type: string
+          format: uuid
+        url:
+          type: string
+          format: uri
+        source_kind:
+          type: string
+          enum: [google_places_live, owner_upload, licensed]
+        media_type:
+          $ref: '#/components/schemas/WebsiteMediaType'
+        caption:
+          type: string
+        alt_text:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        quality_score:
+          type: number
+          minimum: 0
+          maximum: 1
+        hero_score:
+          type: number
+          minimum: 0
+          maximum: 1
+        width_px:
+          type: integer
+        height_px:
+          type: integer
+        orientation:
+          type: string
+          enum: [landscape, portrait, square, unknown]
+        subject_position:
+          type: string
+          enum: [left, center, right]
+        placement_role:
+          $ref: '#/components/schemas/MediaPlacementRole'
+        unoptimized:
+          type: boolean
+          description: True for live Google content that must bypass the Next.js image optimizer.
+        author_attributions:
+          type: array
+          items:
+            $ref: '#/components/schemas/GooglePhotoAttribution'
+        google_maps_uri:
+          type: string
+          format: uri
+        flag_content_uri:
+          type: string
+          format: uri
 
     GooglePlacePhotos:
       type: object
@@ -3008,6 +3191,15 @@ components:
           type: string
         ai_receptionist_cta:
           type: string
+        media:
+          type: array
+          description: OCR-approved source-aware website media. Menu documents are excluded.
+          items:
+            $ref: '#/components/schemas/PublicMedia'
+        media_manifest:
+          type: object
+          additionalProperties: true
+          description: Durable media provenance included in the reviewed demo fingerprint.
 
     HealthzResponse:
       type: object

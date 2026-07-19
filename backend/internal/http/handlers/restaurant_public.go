@@ -7,23 +7,27 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/media"
 	repository "github.com/rajchodisetti/restaurant-platform/backend/internal/platform/errors"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/profiles"
 )
 
 type RestaurantPublicHandler struct {
 	profiles   profiles.Repository
+	media      *media.Service
 	writeJSON  func(http.ResponseWriter, int, any)
 	writeError func(http.ResponseWriter, int, string, string)
 }
 
 func NewRestaurantPublicHandler(
 	profilesRepo profiles.Repository,
+	mediaService *media.Service,
 	writeJSON func(http.ResponseWriter, int, any),
 	writeError func(http.ResponseWriter, int, string, string),
 ) *RestaurantPublicHandler {
 	return &RestaurantPublicHandler{
 		profiles:   profilesRepo,
+		media:      mediaService,
 		writeJSON:  writeJSON,
 		writeError: writeError,
 	}
@@ -42,7 +46,10 @@ func (handler *RestaurantPublicHandler) GetSiteImagesByID(w http.ResponseWriter,
 		return
 	}
 
-	handler.writeJSON(w, http.StatusOK, payload)
+	handler.writeJSON(w, http.StatusOK, map[string]any{
+		"restaurant_id":  payload.RestaurantID,
+		"gallery_images": payload.GalleryImages,
+	})
 }
 
 func (handler *RestaurantPublicHandler) GetSiteImagesByPlaceID(w http.ResponseWriter, r *http.Request) {
@@ -58,7 +65,10 @@ func (handler *RestaurantPublicHandler) GetSiteImagesByPlaceID(w http.ResponseWr
 		return
 	}
 
-	handler.writeJSON(w, http.StatusOK, payload)
+	handler.writeJSON(w, http.StatusOK, map[string]any{
+		"restaurant_id":  payload.RestaurantID,
+		"gallery_images": payload.GalleryImages,
+	})
 }
 
 func (handler *RestaurantPublicHandler) ListSiteRestaurants(w http.ResponseWriter, r *http.Request) {
@@ -87,7 +97,7 @@ func (handler *RestaurantPublicHandler) GetSiteContentByIndex(w http.ResponseWri
 		return
 	}
 
-	handler.writeJSON(w, http.StatusOK, payload)
+	handler.writeSiteContent(w, r, payload)
 }
 
 func (handler *RestaurantPublicHandler) GetSiteContentByID(w http.ResponseWriter, r *http.Request) {
@@ -101,7 +111,7 @@ func (handler *RestaurantPublicHandler) GetSiteContentByID(w http.ResponseWriter
 		handler.writeNotFoundOrInternal(w, err)
 		return
 	}
-	handler.writeJSON(w, http.StatusOK, payload)
+	handler.writeSiteContent(w, r, payload)
 }
 
 func (handler *RestaurantPublicHandler) GetSiteContentByPlaceID(w http.ResponseWriter, r *http.Request) {
@@ -117,7 +127,26 @@ func (handler *RestaurantPublicHandler) GetSiteContentByPlaceID(w http.ResponseW
 		return
 	}
 
-	handler.writeJSON(w, http.StatusOK, payload)
+	handler.writeSiteContent(w, r, payload)
+}
+
+func (handler *RestaurantPublicHandler) writeSiteContent(
+	w http.ResponseWriter,
+	r *http.Request,
+	payload profiles.SiteContent,
+) {
+	w.Header().Set("Cache-Control", "no-store, max-age=0")
+	mediaItems := []media.PublicMedia{}
+	if handler.media != nil && payload.RestaurantID != uuid.Nil {
+		mediaItems = handler.media.PublicForRestaurant(r.Context(), payload.RestaurantID, 10)
+	}
+	handler.writeJSON(w, http.StatusOK, struct {
+		profiles.SiteContent
+		Media []media.PublicMedia `json:"media"`
+	}{
+		SiteContent: payload,
+		Media:       mediaItems,
+	})
 }
 
 func (handler *RestaurantPublicHandler) writeNotFoundOrInternal(w http.ResponseWriter, err error) {

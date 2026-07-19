@@ -797,11 +797,11 @@ _Last updated: 2026-07-19_
 
 ```text
 Root Go module with backend under backend/.
-Domain packages include internal/restaurants, demos, auth, campaigns, outreach, scrapejobs, leadprep, and leadreview.
+Domain packages include internal/restaurants, demos, auth, campaigns, outreach, scrapejobs, leadprep, leadreview, and media; providers include Places and S3-compatible durable object storage.
 Automation includes durable PostgreSQL-backed Python city scrape and background email-only OCR workers, plus automation/outreach/scrape_ledger.py and daily_pipeline.py/identity.py; migration 000027 backs the scrape ledger and migration 000030 backs the OCR daily request budget.
 HTTP layer: internal/http with handlers and middleware.
 Platform: internal/platform/{config,db,logger,errors,metadata,migrations,telemetry}.
-SQL migrations: backend/migrations, including durable scrape/OCR/outreach workflow migrations through 000030; all are deployed. Integration test slot: backend/tests.
+SQL migrations: backend/migrations, including durable scrape/OCR/outreach workflow migrations through deployed 000030 plus local unreleased restaurant-media migration 000031. Integration test slot: backend/tests.
 Frontend apps: tuvi-website/app canonical Next.js corporate site, apps/web internal admin portal (Next.js, port 3002, BFF-proxied to the main API — no longer a placeholder), and apps/restaurant-services-catalog Vite restaurant-services catalog.
 Phase 1 docs: docs/phase1/PHASE1_IMPLEMENTATION_GUIDE.md and PHASE1_TECHNICAL_BACKLOG.md.
 Phase 2 docs: docs/phase2/ (placeholders). ADRs: docs/adr/.
@@ -818,6 +818,7 @@ Repository layout now matches docs/phase1/PHASE1_IMPLEMENTATION_GUIDE.md section
 Production release caffcfb and migrations 000001-000030 are deployed. Gmail-only env-driven account health, the persisted Outreach UI job toggle, paced 40/account delivery, Tuvi-presentation plus three personalized-template links, UUID previews, engagement/transcript evidence, contact/Apollo visibility, OCR filtering, and secured voice reads are live.
 Three configured Gmail OAuth mailboxes passed their first real-message provider health check. The persisted restaurant email job remains disabled; no bulk outreach job or restaurant delivery attempt was created during deployment.
 The background OCR worker is enabled for canonical-email rows only. PostgreSQL enforces a global 200 vision-request UTC-day ceiling; provider SDK retries are disabled, and timeout/429 claims return to pending without consuming an OCR attempt. At deployment verification it had used 17/200 requests, verified one additional profile, held 49 email-equipped running claims, and had zero email-less running claims.
+Local unreleased work adds migration 000031 and a hybrid media pipeline: fresh attributed Google Places photos remain live-only and require an exact one-way OCR resource-fingerprint match, owner/licensed media uses S3-compatible storage, OCR enriches placement metadata, and menu documents/unmatched images fail closed on personalized websites. Production is unchanged pending storage configuration and explicit migration/deployment approval.
 ```
 
 ## Recent Agent Updates
@@ -825,6 +826,7 @@ The background OCR worker is enabled for canonical-email rows only. PostgreSQL e
 _Last updated: 2026-07-19_
 
 ```text
+2026-07-19 — Full-Stack/Backend/Frontend/AI-Workflow/Security/Test/Documentation — Locally implemented unreleased migration 000031 and hybrid website media: live attributed/non-cached Google resolution, durable S3-compatible owner/licensed assets, non-destructive imports, OCR metadata/template placement, admin upload/status controls, and menu-document exclusion at every public boundary. 165 Go tests and both Node 22 production builds pass; production remains caffcfb/000030 pending storage configuration and approval.
 2026-07-19 — Full-Stack/Backend/Frontend/AI-Workflow/Security/Test/DevOps/Documentation — Pushed and deployed caffcfb with Gmail health/outreach/admin engagement plus a background email-only OCR worker, durable 200/day global vision budget, timeout/429 claim release, and the `/admin` scrape-detail redirect fix. Migrations 000015-000030 were applied; 3/3 Gmail checks are healthy/provider-accepted, restaurant outreach remains off with zero recent attempts, and OCR was running at 17/200 with no email-less claims.
 2026-07-18 — Full-Stack/Backend/Frontend/Security/Test/Documentation — Reconciled the latest merged GitHub state and locally added Gmail-only env-driven credentials/health, a persisted UI outreach switch, presentation plus personalized tracked links, admin and outreach template/foreground-time/transcript evidence, address/phone/Apollo diagnostics, automatic click interest, OCR filtering, and authentication for existing voice reads. Production data shows 708 restaurants, 589 missing email, 511 Apollo `no_candidate`, 78 `skipped_no_domain`, and 119 successful enrichments; no deployment or real email occurred because production has zero Gmail OAuth account records.
 2026-07-17 — AI Workflow/Backend/Frontend/Security/Test/Cost-Eval/DevOps — Benchmarked four low-cost VLM routes, selected Gemma 3 4B via DeepInfra, deployed fd2cc94/migration 000028, and changed OCR verification to require every scraped photo. A one-row production pilot completed 10/10 photos in 51 seconds for about $0.00041; OCR remains disabled and unscheduled.
@@ -854,6 +856,7 @@ _Last updated: 2026-07-19_
 - Implemented demo links use per-demo random opaque tokens, bcrypt hashes, expiry, and server-side payloads; see ADR `2026-07-14-token-gated-demo-access.md` (core shorthand above remains unchanged).
 - City acquisition is Google Places first with Apollo used only for missing owner/work-email enrichment; one persisted 500-call window resumes after 24 hours.
 - Durable OCR uses `google/gemma-3-4b-it:deepinfra`; only canonical-email rows are claimed, the global vision budget is capped at 200 requests per UTC day in PostgreSQL, and timeout/429 claims return to pending without consuming an attempt. `verified` requires every discovered scraped photo to resolve and return a successful structured result. Verification creates drafts only; profile approval, demo publication, campaign approval, and bulk-start remain separate administrator gates.
+- Personalized-site media uses a hybrid policy: Google Places photos are resolved live with attribution, no application/optimizer caching, and an exact one-way OCR resource-fingerprint match, while only owner-granted or separately licensed assets may be copied into S3-compatible durable storage. Menu documents and unmatched photos are never public; OCR metadata controls hero/gallery placement. See ADR `2026-07-19-hybrid-restaurant-media.md`.
 - Restaurant outreach uses Google Workspace Gmail only, loaded from an env JSON account list with one OAuth refresh token per mailbox. PostgreSQL backs the admin UI job toggle, 40/account cycles, durable eight-hour pacing, 24-hour cooldowns, leases, at-most-once ambiguity handling, and daily real-message health evidence; SMTP and Google API-key mailbox auth are rejected. See ADR `2026-07-18-gmail-outreach-and-health.md`.
 - AI receptionist is inbound-only for MVP and must disclose AI identity.
 - Phase 2 agents start approval-gated and auditable.

@@ -146,6 +146,8 @@ type StorageConfig struct {
 	Bucket          string
 	Region          string
 	Endpoint        string
+	PublicBaseURL   string
+	UsePathStyle    bool
 	AccessKeyID     string
 	SecretAccessKey string
 }
@@ -262,6 +264,8 @@ func Load() (Config, error) {
 			Bucket:          parser.string("STORAGE_BUCKET", ""),
 			Region:          parser.string("STORAGE_REGION", ""),
 			Endpoint:        parser.string("STORAGE_ENDPOINT", ""),
+			PublicBaseURL:   parser.string("STORAGE_PUBLIC_BASE_URL", ""),
+			UsePathStyle:    parser.bool("STORAGE_USE_PATH_STYLE", false),
 			AccessKeyID:     parser.string("STORAGE_ACCESS_KEY_ID", ""),
 			SecretAccessKey: parser.string("STORAGE_SECRET_ACCESS_KEY", ""),
 		},
@@ -600,6 +604,9 @@ func (c Config) validateProviders() []error {
 	}
 
 	if providerEnabled(c.Storage.Provider) {
+		if c.Storage.Provider != "s3" {
+			errs = append(errs, fmt.Errorf("STORAGE_PROVIDER must be s3 or disabled"))
+		}
 		if strings.TrimSpace(c.Storage.Bucket) == "" {
 			errs = append(errs, fmt.Errorf("STORAGE_BUCKET is required when STORAGE_PROVIDER is enabled"))
 		}
@@ -611,6 +618,12 @@ func (c Config) validateProviders() []error {
 		}
 		if strings.TrimSpace(c.Storage.Region) == "" && strings.TrimSpace(c.Storage.Endpoint) == "" {
 			errs = append(errs, fmt.Errorf("STORAGE_REGION or STORAGE_ENDPOINT is required when STORAGE_PROVIDER is enabled"))
+		}
+		publicBase, err := url.Parse(strings.TrimSpace(c.Storage.PublicBaseURL))
+		if err != nil || publicBase.Scheme == "" || publicBase.Host == "" || publicBase.RawQuery != "" || publicBase.Fragment != "" {
+			errs = append(errs, fmt.Errorf("STORAGE_PUBLIC_BASE_URL must be an absolute URL when STORAGE_PROVIDER is enabled"))
+		} else if c.App.Env == EnvProduction && publicBase.Scheme != "https" {
+			errs = append(errs, fmt.Errorf("STORAGE_PUBLIC_BASE_URL must use https in production"))
 		}
 	}
 

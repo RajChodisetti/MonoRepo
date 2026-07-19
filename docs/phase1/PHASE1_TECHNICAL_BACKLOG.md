@@ -271,6 +271,16 @@ Every ticket must satisfy these unless explicitly not applicable:
 - Template has hero, menu, about, hours, location, reservation form, CTA sections.
 - Template is mobile responsive.
 - Template renders dynamic payload.
+- Source-aware media uses live, attributed, no-store Google Places photos for
+  reviewed prospect demos and stable object storage for owner/licensed assets.
+- Live Google photos require an exact one-way OCR resource-fingerprint match;
+  positional-only, unmatched, or unclassified photos fail closed.
+- Menu-document images remain admin-only and cannot render in heroes,
+  galleries, menu cards, or footer mosaics.
+- OCR metadata selects hero/placement and gallery categories without inventing
+  restaurant or dish claims.
+- On mobile, the template-preview control identifies the current and next design,
+  explains that restaurant content remains unchanged, and preserves the full demo URL context.
 - Template has clear “Make this live” or “Book a call” CTA.
 - Empty optional sections degrade gracefully.
 
