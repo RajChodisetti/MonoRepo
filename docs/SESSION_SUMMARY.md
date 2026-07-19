@@ -1,7 +1,6 @@
 # Session Summary
 
-Release `cbc2eb8` is pushed to `master` and deployed on the VM at `/opt/tuvi/releases/monorepo-cbc2eb8`; `/opt/tuvi/MonoRepo` points there and rollback points to `6c21c15`.
-Migration `000032` is applied on the active `monorepo` database: schema is 32, `demo_ready=22`, `lead=922`, and no `lead` rows still have demo records.
-UI/UX Pro Max for Codex was installed with `uipro init --ai codex` under `.codex/skills/ui-ux-pro-max`; local and VM smoke checks passed through `python3`.
-All Tuvi containers are running with zero restarts; API/admin/website/demo/voice HTTPS checks return 200, outreach remains disabled, and active bulk-send jobs are zero.
-Production OCR profile counts are currently `pending=940`, `failed=4`, `verified=0`, so OCR verified-only will stay empty until OCR produces new verified rows.
+Italian Villa experimental `template=4` is live for personalized restaurant demos, payload-driven through the existing lead/demo site contract with safe media, reservations, template switching, and the floating voice-agent button.
+The admin restaurant Demo tab now lists “Italian Villa experimental” under Experimental templates, and demo engagement analytics accepts `template_id=4` via migration `000033`.
+The VM is running app release `5ffddf2` at `/opt/tuvi/releases/monorepo-5ffddf2`; rollback points to `/opt/tuvi/releases/monorepo-3b0c246`, and the pre-migration backup is `/opt/tuvi/backups/pre-italian-template-3b0c246-20260719-185708.sql.gz`.
+Local TypeScript, admin ESLint, Go tests, VM Docker builds, production HTTPS smokes, and zero-restart container checks passed; restaurants without safe verified media still render without image-heavy sections by design.

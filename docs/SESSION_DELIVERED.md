@@ -2285,3 +2285,51 @@ empty until new rows reach `ocr_status=verified`.
 **Checks Run:** Local `go test ./backend/...` passed with 167 tests in 44
 packages, `go vet ./backend/...` passed, staged whitespace checks passed, and
 UIPro local/VM smoke checks passed.
+
+## 2026-07-19 — Italian Villa Experimental Restaurant Template
+
+**Role:** Frontend, Backend, Test, DevOps, and Documentation Agent
+
+**Delivered:** Added a payload-driven `template=4` personalized website for
+Italian-focused restaurant demos. The new Italian Villa template uses the
+existing restaurant payload contract, safe source-aware media loader, Google
+photo attribution, reservation availability and request flow, generated menu
+sections, reviews, contact details, hours, template switching, and the existing
+floating voice-agent widget. UI/UX Pro Max was used for the premium restaurant
+design research pass, with emphasis on high-quality photography, restrained
+luxury typography, mobile-first booking, trust cues, and a fast path from visual
+appeal to reservation intent.
+
+The admin restaurant Demo tab now separates stable generated-site templates
+from an **Experimental templates** section and exposes “Italian Villa
+experimental” for each restaurant-generated payload. Demo engagement analytics
+now accepts `template_id=4`, and migration `000033` updates the production check
+constraint accordingly.
+
+**Production Deployment:** Commits `3b0c246` and `5ffddf2` were pushed to
+`master`; the VM is running the app code from
+`/opt/tuvi/releases/monorepo-5ffddf2` with `/opt/tuvi/previous-release-path`
+pointing to `/opt/tuvi/releases/monorepo-3b0c246`. A pre-migration backup was
+created at
+`/opt/tuvi/backups/pre-italian-template-3b0c246-20260719-185708.sql.gz`
+before applying migration `000033`; the active `monorepo` database now reports
+schema version 33.
+
+**Checks Run:** UIPro design-system search passed locally. Local checks passed:
+template TypeScript, admin TypeScript, admin ESLint, `go test ./backend/...`
+with 167 tests in 44 packages, and `git diff --check`. VM Docker builds passed
+for migrate, API, template, and admin-web at `3b0c246`; the final template image
+build passed at `5ffddf2`. Production smoke checks returned HTTP 200 for the
+Italian demo URL, admin login, public restaurants API, and voice readiness. All
+Tuvi containers were running with zero restarts after deployment.
+
+**Business Value / Plan Fit:** Sales demos now have an Italian-cuisine-specific
+premium website option that can be opened directly from restaurant leads without
+hand-building content. This expands the Phase 1 personalized demo library while
+preserving existing media safety, reservation, voice, and engagement contracts.
+
+**Risks / Follow-ups:** The template intentionally uses the existing fail-closed
+media pipeline. Restaurants without verified safe media still render the
+premium layout and copy, but image-heavy sections appear only when the payload
+contains safe media. Owner/licensed uploads remain dependent on the existing
+future bucket/CDN configuration.
