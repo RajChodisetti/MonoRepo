@@ -138,7 +138,11 @@ func (handler *RestaurantPublicHandler) writeSiteContent(
 	w.Header().Set("Cache-Control", "no-store, max-age=0")
 	mediaItems := []media.PublicMedia{}
 	if handler.media != nil && payload.RestaurantID != uuid.Nil {
-		mediaItems = handler.media.PublicForRestaurant(r.Context(), payload.RestaurantID, 10)
+		if r.URL.Query().Get("preview_media") == "google_live" {
+			mediaItems = handler.media.PreviewForRestaurant(r.Context(), payload.RestaurantID, 10)
+		} else {
+			mediaItems = handler.media.PublicForRestaurant(r.Context(), payload.RestaurantID, 10)
+		}
 	}
 	handler.writeJSON(w, http.StatusOK, struct {
 		profiles.SiteContent

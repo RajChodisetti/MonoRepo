@@ -109,14 +109,6 @@ func (service *Service) PublicForRestaurant(
 		if !IsWebsiteMediaType(mediaType) {
 			mediaType = "other"
 		}
-		attributions := make([]Attribution, 0, len(photo.AuthorAttributions))
-		for _, attribution := range photo.AuthorAttributions {
-			attributions = append(attributions, Attribution{
-				DisplayName: attribution.DisplayName,
-				URI:         attribution.URI,
-				PhotoURI:    attribution.PhotoURI,
-			})
-		}
 		live = append(live, PublicMedia{
 			URL:                photo.URL,
 			SourceKind:         SourceGoogleLive,
@@ -126,7 +118,7 @@ func (service *Service) PublicForRestaurant(
 			HeightPx:           photo.HeightPx,
 			PlacementRole:      livePlacement(mediaType),
 			Unoptimized:        true,
-			AuthorAttributions: attributions,
+			AuthorAttributions: googleAttributions(photo.AuthorAttributions),
 			GoogleMapsURI:      photo.GoogleMapsURI,
 			FlagContentURI:     photo.FlagContentURI,
 		})
@@ -139,6 +131,62 @@ func (service *Service) PublicForRestaurant(
 			break
 		}
 		items = append(items, item)
+	}
+	return items
+}
+
+// PreviewForRestaurant is for admin-opened generated-site previews. It keeps
+// reviewed public media first, then falls back to attributed, uncached live
+// Google photos so early sales previews are not visually empty before OCR
+// finishes.
+func (service *Service) PreviewForRestaurant(
+	ctx context.Context,
+	restaurantID uuid.UUID,
+	limit int,
+) []PublicMedia {
+	items := service.PublicForRestaurant(ctx, restaurantID, limit)
+	if len(items) > 0 || service == nil || service.profiles == nil || service.photos == nil {
+		return items
+	}
+	if limit < 1 {
+		limit = 6
+	}
+	placeID, err := service.profiles.GetGooglePlaceID(ctx, restaurantID)
+	if err != nil || strings.TrimSpace(placeID) == "" {
+		return items
+	}
+	resolved, err, _ := service.photoCalls.Do(restaurantID.String(), func() (any, error) {
+		return service.photos.ListPhotoURLs(ctx, placeID, 10)
+	})
+	if err != nil {
+		service.log.WarnContext(ctx, "google_places_preview_media_unavailable", "restaurant_id", restaurantID, "error", err)
+		return items
+	}
+	photos, ok := resolved.([]placesprovider.Photo)
+	if !ok {
+		service.log.WarnContext(ctx, "google_places_preview_media_invalid", "restaurant_id", restaurantID)
+		return items
+	}
+	for _, photo := range photos {
+		if len(items) >= limit {
+			break
+		}
+		if photo.WidthPx > 0 && photo.HeightPx > 0 && photo.HeightPx > int(float64(photo.WidthPx)*1.35) {
+			continue
+		}
+		items = append(items, PublicMedia{
+			URL:                photo.URL,
+			SourceKind:         SourceGoogleLive,
+			MediaType:          "other",
+			AltText:            "Restaurant photo from Google Maps",
+			WidthPx:            photo.WidthPx,
+			HeightPx:           photo.HeightPx,
+			PlacementRole:      "gallery",
+			Unoptimized:        true,
+			AuthorAttributions: googleAttributions(photo.AuthorAttributions),
+			GoogleMapsURI:      photo.GoogleMapsURI,
+			FlagContentURI:     photo.FlagContentURI,
+		})
 	}
 	return items
 }
@@ -295,6 +343,18 @@ func decodeTags(raw json.RawMessage) []string {
 		_ = json.Unmarshal(raw, &tags)
 	}
 	return tags
+}
+
+func googleAttributions(source []placesprovider.Attribution) []Attribution {
+	attributions := make([]Attribution, 0, len(source))
+	for _, attribution := range source {
+		attributions = append(attributions, Attribution{
+			DisplayName: attribution.DisplayName,
+			URI:         attribution.URI,
+			PhotoURI:    attribution.PhotoURI,
+		})
+	}
+	return attributions
 }
 
 func normalizeGoogleMediaType(value string) string {

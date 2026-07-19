@@ -487,8 +487,9 @@ export async function fetchSiteRestaurantByID(restaurantID: string): Promise<Res
   const base = apiBase();
   if (!base || !/^[0-9a-f-]{36}$/i.test(restaurantID)) return null;
   try {
+    const query = new URLSearchParams({ preview_media: "google_live" });
     const res = await fetch(
-      `${base}/api/public/v1/site/restaurants/by-id/${encodeURIComponent(restaurantID)}`,
+      `${base}/api/public/v1/site/restaurants/by-id/${encodeURIComponent(restaurantID)}?${query.toString()}`,
       { cache: "no-store" },
     );
     if (!res.ok) return null;

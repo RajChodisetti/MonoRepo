@@ -95,3 +95,50 @@ func TestPublicOwnedAssetsSkipsInvalidRowsWithoutDroppingLaterAssets(t *testing.
 		t.Fatalf("items = %#v, want later valid owned asset", items)
 	}
 }
+
+func TestPreviewForRestaurantFallsBackToLiveGooglePhotos(t *testing.T) {
+	restaurantID := uuid.New()
+	service := NewService(
+		repositoryStub{},
+		profilesStub{placeID: "place-1"},
+		photosStub{photos: []placesprovider.Photo{
+			{
+				URL:           "https://lh3.googleusercontent.com/photo",
+				WidthPx:       1200,
+				HeightPx:      800,
+				GoogleMapsURI: "https://maps.google.com/place/1",
+				AuthorAttributions: []placesprovider.Attribution{
+					{DisplayName: "Ava", URI: "https://maps.google.com/contrib/ava"},
+				},
+			},
+		}},
+		objectsStub{},
+		slog.Default(),
+	)
+
+	items := service.PreviewForRestaurant(context.Background(), restaurantID, 6)
+	if len(items) != 1 {
+		t.Fatalf("items = %#v, want one live preview photo", items)
+	}
+	if items[0].SourceKind != SourceGoogleLive || !items[0].Unoptimized || len(items[0].AuthorAttributions) != 1 {
+		t.Fatalf("item = %#v, want attributed live Google preview media", items[0])
+	}
+}
+
+func TestPreviewForRestaurantKeepsApprovedMediaWhenAvailable(t *testing.T) {
+	validID := uuid.New()
+	service := NewService(
+		repositoryStub{assets: []Asset{
+			{ID: validID, StorageKey: "room.jpg", MediaType: "interior", ApprovalStatus: "approved"},
+		}},
+		profilesStub{placeID: "place-1"},
+		photosStub{photos: []placesprovider.Photo{{URL: "https://lh3.googleusercontent.com/photo"}}},
+		objectsStub{},
+		slog.Default(),
+	)
+
+	items := service.PreviewForRestaurant(context.Background(), uuid.New(), 6)
+	if len(items) != 1 || items[0].ID == nil || *items[0].ID != validID {
+		t.Fatalf("items = %#v, want approved owned media before preview fallback", items)
+	}
+}
