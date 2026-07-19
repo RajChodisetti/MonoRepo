@@ -1,6 +1,6 @@
 # Session Summary
 
-**Current delivered state (2026-07-18):** The local worktree has Gmail OAuth account health, a persisted Outreach UI job toggle, emails with the Tuvi presentation plus three tracked personalized templates, admin-preview/template/foreground-time evidence, transcripts, address/phone visibility, Apollo diagnostics, and OCR filtering.
-**Business value:** This closes the Phase 1 loop from sender readiness and admin-authorized outreach through confirmed contact, tracked interest, and template-specific restaurant engagement while preserving review gates.
-**Verification:** All backend tests and Go vet pass; TypeScript checks, the admin lint, clean Node 22 production builds, OpenAPI validation, and diff checks pass. The template app has no ESLint 9 configuration, an existing tooling gap.
-**Operational state:** Nothing was deployed, migrated, committed, pushed, or emailed. Migrations `000024`/`000029` and per-mailbox Gmail OAuth refresh tokens are required; the pasted Google API keys were not stored or used and must be rotated.
+**Current delivered state (2026-07-19):** Release `caffcfb` is on `master` and live with Gmail sender health, the controlled Outreach UI workflow, tracked restaurant engagement/templates, the scrape-detail redirect fix, and background email-only OCR capped at 200 provider requests per UTC day.
+**Production evidence:** Migrations through `000030` are applied; 3/3 Gmail health checks are healthy/provider-accepted, restaurant outreach remains off with zero recent delivery attempts, and OCR was running at 17/200 with zero email-less claims.
+**Verification:** Backend tests/vet, focused OCR tests, Python compilation, admin lint/TypeScript, Compose validation, secret scans, production image builds, auth routing, and public service smokes pass; two broader legacy-ingestion tests require the stopped local PostgreSQL tunnel.
+**Safety:** Credentials remain only in protected ignored/VM environment files. Gmail health does not prove inbox placement, and real restaurant outreach still requires an explicit reviewed send window through the disabled UI job control.

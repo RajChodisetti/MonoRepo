@@ -1995,3 +1995,84 @@ exposed, were not stored or tested, and cannot authorize mailbox sending; they m
 be revoked/rotated. Each Gmail mailbox needs offline OAuth consent and a refresh
 token with `gmail.send` permission. Daily health status proves Gmail API acceptance,
 not inbox delivery.
+
+## 2026-07-19 — Gmail Health, Admin Engagement, and Budgeted Background OCR Deployment
+
+**Role:** Full-Stack, Backend, Frontend, AI Workflow, Security, Test, DevOps,
+and Documentation Agent
+
+**Delivered:** Pushed `e6e7950` and `caffcfb` directly to `master`, with
+`caffcfb` as the deployed release. The Gmail-only outreach account pool, sender
+health ledger/UI, persisted email-job switch, paced delivery workflow, three
+restaurant-specific template links, Tuvi service presentation, UUID-backed
+previews, engagement/time/transcript evidence, contact/Apollo/OCR visibility,
+and secured voice reads from the prior local session are now live. The ignored
+local Gmail JSON was normalized to one dotenv-safe line, validated as three
+complete unique accounts, transferred through a mode-0600 temporary payload,
+and written only to the protected VM stack environment. No credential value was
+printed or committed.
+
+Added migration `000030` and a long-running `ocr-worker`. It claims only
+restaurants whose canonical email is nonblank and atomically reserves every
+vision-provider request in `ocr_daily_request_usage`. The global limit is hard
+capped at 200 requests per UTC day across worker restarts. OpenAI-compatible and
+Google GenAI automatic retries are disabled, provider/image calls receive an
+explicit timeout, and timeout/429/temporary failures release the current and
+unstarted claims to `pending` without consuming an OCR attempt. Ambiguous timed-
+out provider requests still consume one budget reservation. The old one-shot
+`ocr-job` remains available for diagnosis, and no competing VM OCR cron exists.
+
+Fixed the scrape-job trigger redirect to include the deployed `/admin` base path.
+Direct local and public requests to `/admin/scrape-jobs/<id>` now reach the admin
+application and return the expected authentication redirect instead of a 404.
+
+**Production Deployment:** The live database was at migration `000014` when the
+rollout began; pending migrations applied in order through `000029`, then
+`000030` applied after the OCR changes. Restaurant outreach remained seeded off
+throughout. A validated backup of the real `monorepo` database was written to
+`/opt/tuvi/backups/monorepo-pre-caffcfb-20260719T092320Z.dump`; the OCR environment
+backup is `/opt/tuvi/backups/ingestion.env.pre-caffcfb-20260719T092320Z`, and the
+pre-Gmail stack configuration backup is
+`/opt/tuvi/backups/stack.env.pre-e6e7950-20260719T090404Z`. Prior live images were
+tagged `rollback-fd2cc94`. The exact release is
+`/opt/tuvi/releases/monorepo-caffcfb`, now targeted by `/opt/tuvi/MonoRepo`.
+
+API, Go worker, admin web, template, voice agent, and OCR worker images built and
+started successfully. API auth gating returned 401 without a JWT as expected;
+admin login, template, and voice returned HTTP 200. Containers reported zero
+restarts at verification.
+
+**Live Verification:** All three configured Gmail accounts registered, ran their
+first real-message health check, and stored `healthy` with a provider message ID;
+zero failed. This proves Gmail API acceptance, not inbox placement. The persisted
+restaurant email job is `false`, active `outreach.bulk_send` jobs are zero, and
+restaurant delivery attempts created in the deployment window are zero.
+
+The OCR background worker started with 119 email-equipped candidates. At the
+verification snapshot it had reserved 17/200 daily requests, moved one additional
+profile to `verified`, held 49 email-equipped running claims, and had zero
+email-less running claims. The worker and budget continue in the background.
+
+**Checks Run:** `go test ./backend/...` — 159 pass in 43 packages; `go vet
+./backend/...` — pass; admin `npm run lint` and `npx tsc --noEmit --incremental
+false` — pass; focused OCR/unit suite — 20 pass; Python `py_compile` for all changed
+OCR modules — pass; all three configured provider clients accept the bounded
+timeout/no-retry construction; Compose VM config validation — pass; `git diff
+--check` and staged secret scans — pass. The broader outreach discovery ran 40
+tests with 38 pass and two pre-existing legacy-ingestion errors because the
+workstation PostgreSQL tunnel at `127.0.0.1:15432` was not running. Production
+Node 22/Docker builds passed for admin, template, voice, API, worker, migrate, and
+OCR worker. Context7 current Google GenAI and OpenAI Python documentation was used
+to verify timeout units and retry controls.
+
+**Business Value / Plan Fit:** Sender readiness, controlled outreach, tracked
+restaurant engagement, valid admin navigation, and continuously progressing OCR
+are now operational while preserving the Phase 1 human approval gate. Scarce OCR
+capacity is spent only on leads that can actually receive outreach and cannot
+exceed the provider's daily allowance.
+
+**Risks / Follow-ups:** Gmail health proves provider acceptance only; inspect the
+configured internal recipient inbox for placement. OCR will stop reserving calls
+at 200/200 and resume after the UTC date changes. Keep the Outreach UI email job
+off until profiles, demos, campaigns, recipients, and opt-out content have been
+reviewed for a real send window.
