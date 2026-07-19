@@ -108,7 +108,7 @@ func (service *Service) Prepare(ctx context.Context, restaurantID uuid.UUID) (Re
 				existingDemoOCRFingerprint != profile.OCRFingerprint ||
 				existingDemoProfileFingerprint != profileFingerprint)
 		if !refreshExistingDraft {
-			if err := markRestaurantDemoReady(ctx, tx, restaurantID); err != nil {
+			if err := syncRestaurantDemoReadyStatus(ctx, tx, restaurantID); err != nil {
 				return Result{}, err
 			}
 			if err := tx.Commit(ctx); err != nil {
@@ -294,7 +294,7 @@ func (service *Service) Prepare(ctx context.Context, restaurantID uuid.UUID) (Re
 		}
 	}
 
-	if err := markRestaurantDemoReady(ctx, tx, restaurantID); err != nil {
+	if err := syncRestaurantDemoReadyStatus(ctx, tx, restaurantID); err != nil {
 		return Result{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -308,18 +308,32 @@ func (service *Service) Prepare(ctx context.Context, restaurantID uuid.UUID) (Re
 	}, nil
 }
 
-func markRestaurantDemoReady(ctx context.Context, tx pgx.Tx, restaurantID uuid.UUID) error {
+func syncRestaurantDemoReadyStatus(ctx context.Context, tx pgx.Tx, restaurantID uuid.UUID) error {
 	if _, err := tx.Exec(ctx, `
-		UPDATE restaurants
-		SET status = $2,
+		WITH eligibility AS (
+			SELECT r.id,
+			       NULLIF(BTRIM(r.email), '') IS NOT NULL
+			       AND EXISTS (
+			         SELECT 1
+			         FROM restaurant_profiles rp
+			         WHERE rp.restaurant_id = r.id
+			           AND rp.ocr_status = 'verified'
+			       ) AS eligible
+			FROM restaurants r
+			WHERE r.id = $1
+		)
+		UPDATE restaurants r
+		SET status = CASE WHEN eligibility.eligible THEN $2 ELSE $3 END,
 		    updated_at = now()
-		WHERE id = $1
-		  AND status = $3`,
+		FROM eligibility
+		WHERE r.id = eligibility.id
+		  AND r.status IN ($2, $3)
+		  AND r.status <> CASE WHEN eligibility.eligible THEN $2 ELSE $3 END`,
 		restaurantID,
 		restaurants.StatusDemoReady,
 		restaurants.StatusLead,
 	); err != nil {
-		return fmt.Errorf("mark restaurant demo ready: %w", err)
+		return fmt.Errorf("sync restaurant demo-ready status: %w", err)
 	}
 	return nil
 }
@@ -341,6 +355,7 @@ func loadVerifiedProfile(ctx context.Context, tx pgx.Tx, restaurantID uuid.UUID)
 		SELECT name
 		FROM restaurants
 		WHERE id = $1
+		  AND NULLIF(BTRIM(email), '') IS NOT NULL
 		FOR SHARE`, restaurantID).Scan(&profile.Name)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return verifiedProfile{}, ErrLeadNotOCRVerified

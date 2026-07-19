@@ -63,6 +63,37 @@ func NewPostgres(pool *pgxpool.Pool) *Postgres {
 	return &Postgres{pool: pool}
 }
 
+func syncDemoReadyStatus(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
+	_, err := tx.Exec(ctx, `
+		WITH eligibility AS (
+			SELECT r.id,
+			       NULLIF(BTRIM(r.email), '') IS NOT NULL
+			       AND EXISTS (
+			         SELECT 1
+			         FROM restaurant_profiles rp
+			         WHERE rp.restaurant_id = r.id
+			           AND rp.ocr_status = 'verified'
+			       ) AS eligible
+			FROM restaurants r
+			WHERE r.id = $1
+		)
+		UPDATE restaurants r
+		SET status = CASE WHEN eligibility.eligible THEN $2 ELSE $3 END,
+		    updated_at = now()
+		FROM eligibility
+		WHERE r.id = eligibility.id
+		  AND r.status IN ($2, $3)
+		  AND r.status <> CASE WHEN eligibility.eligible THEN $2 ELSE $3 END`,
+		id,
+		StatusDemoReady,
+		StatusLead,
+	)
+	if err != nil {
+		return fmt.Errorf("sync demo-ready status: %w", err)
+	}
+	return nil
+}
+
 func scanRestaurant(scanner interface {
 	Scan(dest ...any) error
 }) (Restaurant, error) {
@@ -303,8 +334,10 @@ func (repo *Postgres) Update(ctx context.Context, id uuid.UUID, input UpdateInpu
 			         lead_artifact_current_profile_fingerprint(rp.restaurant_id),
 			       3
 			FROM restaurant_profiles rp
+			JOIN restaurants r ON r.id = rp.restaurant_id
 			WHERE rp.restaurant_id = $1
 			  AND rp.ocr_status = 'verified'
+			  AND NULLIF(BTRIM(r.email), '') IS NOT NULL
 			  AND lead_artifact_current_profile_fingerprint(rp.restaurant_id) IS NOT NULL
 			ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL
 			DO UPDATE SET
@@ -315,6 +348,16 @@ func (repo *Postgres) Update(ctx context.Context, id uuid.UUID, input UpdateInpu
 			WHERE job_runs.job_type = 'lead.prepare'
 			  AND job_runs.status IN ('completed', 'failed')`, id); err != nil {
 			return Restaurant{}, fmt.Errorf("enqueue lead preparation after identity update: %w", err)
+		}
+	}
+
+	if input.Email != nil || identityChanged {
+		if err := syncDemoReadyStatus(ctx, tx, id); err != nil {
+			return Restaurant{}, err
+		}
+		record, err = scanRestaurant(tx.QueryRow(ctx, `SELECT`+restaurantSelectColumns+` FROM restaurants WHERE id = $1`, id))
+		if err != nil {
+			return Restaurant{}, fmt.Errorf("reload restaurant after demo-ready sync: %w", err)
 		}
 	}
 
@@ -330,18 +373,41 @@ func (repo *Postgres) UpdateStatus(ctx context.Context, id uuid.UUID, status str
 		return Restaurant{}, fmt.Errorf("database pool is not configured")
 	}
 
+	tx, err := repo.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return Restaurant{}, fmt.Errorf("begin restaurant status update: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := platformdb.LockRestaurantWorkflow(ctx, tx, id); err != nil {
+		return Restaurant{}, err
+	}
+
 	const query = `
 		UPDATE restaurants
 		SET status = $2, updated_at = now()
 		WHERE id = $1
 		RETURNING` + restaurantSelectColumns
 
-	record, err := scanRestaurant(repo.pool.QueryRow(ctx, query, id, status))
+	record, err := scanRestaurant(tx.QueryRow(ctx, query, id, status))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Restaurant{}, repository.ErrNotFound
 	}
 	if err != nil {
 		return Restaurant{}, fmt.Errorf("update restaurant status: %w", err)
+	}
+
+	if status == StatusLead || status == StatusDemoReady {
+		if err := syncDemoReadyStatus(ctx, tx, id); err != nil {
+			return Restaurant{}, err
+		}
+		record, err = scanRestaurant(tx.QueryRow(ctx, `SELECT`+restaurantSelectColumns+` FROM restaurants WHERE id = $1`, id))
+		if err != nil {
+			return Restaurant{}, fmt.Errorf("reload restaurant after demo-ready sync: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return Restaurant{}, fmt.Errorf("commit restaurant status update: %w", err)
 	}
 
 	return record, nil

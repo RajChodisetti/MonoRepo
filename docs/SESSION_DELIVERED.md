@@ -2401,3 +2401,45 @@ PostgreSQL-enforced 200/200 daily request ceiling until the UTC reset, after
 which reviewed public media can be rebuilt through the normal fingerprinted
 path. The production storage provider is still disabled, so owner/licensed
 uploads remain pending bucket/CDN configuration.
+
+## 2026-07-19 — Demo-Ready OCR and Email Gate (Local)
+
+**Role:** Backend, Test, and Documentation Agent
+
+**Delivered:** Changed `demo_ready` to mean the restaurant is a lead with both
+verified OCR and a nonblank contact email. Manual demo-site creation no longer
+promotes a lead to `demo_ready`. Automatic lead preparation now requires a
+verified profile and an email before creating/refreshing artifacts or syncing
+the lifecycle state. Restaurant email/status edits in Go and OCR/import status
+changes in Python now resynchronize only `lead` and `demo_ready` rows from the
+same criteria, preserving later statuses such as `emailed`, `interested`,
+`client`, `lost`, and `archived`.
+
+Added migration `000036_demo_ready_requires_ocr_email`, which moves stale
+`demo_ready` rows back to `lead` when OCR is not verified or email is missing,
+then promotes eligible `lead` rows to `demo_ready`.
+
+**Production Diagnosis:** Read-only live SQL against the VM showed schema
+`000035`, OCR counts `pending=940` with `154` email-equipped rows, `failed=4`
+with no email-equipped rows, and `verified=0`. The live database also had
+`demo_ready=22`, but `eligible=0` under the new verified-OCR-plus-email rule.
+The OCR worker logs still show `OCR daily request budget exhausted (200/200)`
+for the `2026-07-19` UTC budget row. Therefore the admin OCR `Verified only`
+filter is returning an empty list because production currently has zero
+`ocr_status='verified'` restaurant profiles, not because the frontend or API
+filter parameter is malformed.
+
+**Checks Run:** Targeted Go tests for demos, restaurants, and restaurant HTTP
+handlers passed with 58 tests. Full `go test ./backend/...` passed with 169
+tests across 44 packages. `go vet ./backend/...` passed. Focused Python OCR
+tests passed with 14 tests. `git diff --check` passed.
+
+**Business Value / Plan Fit:** The restaurant list status now matches the
+Phase 1 lead-to-demo workflow boundary: a lead appears ready for demo/outreach
+review only after OCR has verified the restaurant media/profile input and a
+contact email exists.
+
+**Risks / Follow-ups:** This change is local and not deployed. Applying it to
+production requires the normal deployment and migration approval. Once deployed,
+the current 22 stale production `demo_ready` rows will return to `lead` unless
+new OCR verification completes before migration `000036` runs.

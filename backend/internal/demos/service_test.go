@@ -81,7 +81,7 @@ func TestCreateDemoSiteRequiresInternalAdmin(t *testing.T) {
 	}
 }
 
-func TestCreateDemoSiteBuildsRestaurantSpecificPayload(t *testing.T) {
+func TestCreateDemoSiteBuildsRestaurantSpecificPayloadWithoutChangingLifecycle(t *testing.T) {
 	restaurantID := uuid.New()
 	payload := json.RawMessage(`{"restaurant_name":"Real Restaurant","cuisine":"Indian"}`)
 	demosRepo := &Mock{PublicPayloads: map[uuid.UUID]json.RawMessage{restaurantID: payload}}
@@ -112,7 +112,7 @@ func TestCreateDemoSiteBuildsRestaurantSpecificPayload(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetByID() error = %v", err)
 	}
-	if restaurant.Status != restaurants.StatusDemoReady {
-		t.Fatalf("restaurant status = %q, want %q", restaurant.Status, restaurants.StatusDemoReady)
+	if restaurant.Status != restaurants.StatusLead {
+		t.Fatalf("restaurant status = %q, want %q", restaurant.Status, restaurants.StatusLead)
 	}
 }

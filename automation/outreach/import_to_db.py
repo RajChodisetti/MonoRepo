@@ -658,6 +658,7 @@ def mark_ocr_status(
     )
     if cur.rowcount != 1:
         raise StaleOCRClaim("OCR claim or input fingerprint is no longer current")
+    sync_demo_ready_status(cur, restaurant_id)
 
 
 def mark_ocr_verified(
@@ -728,6 +729,7 @@ def release_ocr_claim(
     )
     if cur.rowcount != 1:
         raise StaleOCRClaim("OCR claim or input fingerprint is no longer current")
+    sync_demo_ready_status(cur, restaurant_id)
 
 
 def append_ocr_verification_error(cur, restaurant_id: uuid.UUID, message: str) -> None:
@@ -743,6 +745,33 @@ def append_ocr_verification_error(cur, restaurant_id: uuid.UUID, message: str) -
     )
 
 
+def sync_demo_ready_status(cur, restaurant_id: uuid.UUID) -> None:
+    cur.execute(
+        """
+        WITH eligibility AS (
+            SELECT r.id,
+                   NULLIF(BTRIM(r.email), '') IS NOT NULL
+                   AND EXISTS (
+                     SELECT 1
+                     FROM restaurant_profiles rp
+                     WHERE rp.restaurant_id = r.id
+                       AND rp.ocr_status = 'verified'
+                   ) AS eligible
+            FROM restaurants r
+            WHERE r.id = %s
+        )
+        UPDATE restaurants r
+        SET status = CASE WHEN eligibility.eligible THEN 'demo_ready' ELSE 'lead' END,
+            updated_at = now()
+        FROM eligibility
+        WHERE r.id = eligibility.id
+          AND r.status IN ('lead', 'demo_ready')
+          AND r.status <> CASE WHEN eligibility.eligible THEN 'demo_ready' ELSE 'lead' END
+        """,
+        (restaurant_id,),
+    )
+
+
 def _enqueue_current_verified_preparation(
     cur,
     restaurant_id: uuid.UUID,
@@ -750,12 +779,14 @@ def _enqueue_current_verified_preparation(
 ) -> bool:
     cur.execute(
         """
-        SELECT ocr_input_fingerprint,
-               lead_artifact_current_profile_fingerprint(restaurant_id)
-        FROM restaurant_profiles
-        WHERE restaurant_id = %s
-          AND ocr_status = 'verified'
-          AND (%s IS NULL OR ocr_input_fingerprint = %s)
+        SELECT rp.ocr_input_fingerprint,
+               lead_artifact_current_profile_fingerprint(rp.restaurant_id)
+        FROM restaurant_profiles rp
+        JOIN restaurants r ON r.id = rp.restaurant_id
+        WHERE rp.restaurant_id = %s
+          AND rp.ocr_status = 'verified'
+          AND NULLIF(BTRIM(r.email), '') IS NOT NULL
+          AND (%s IS NULL OR rp.ocr_input_fingerprint = %s)
         """,
         (restaurant_id, expected_fingerprint, expected_fingerprint),
     )
@@ -1265,6 +1296,8 @@ def upsert_restaurant_record(cur, record: dict, source_file: str) -> tuple[uuid.
         or existing_profile_fingerprint != current_profile_fingerprint
     ):
         _invalidate_review_for_artifact_source_change(cur, restaurant_id)
+
+    sync_demo_ready_status(cur, restaurant_id)
 
     return restaurant_id, False
 

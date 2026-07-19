@@ -136,8 +136,7 @@ func (service *Service) CreateDemoSite(ctx context.Context, principal auth.Princ
 	if !auth.IsInternalAdmin(principal.Role) {
 		return CreateDemoResult{}, restaurants.ErrForbidden
 	}
-	currentRestaurant, err := service.access.GetRestaurant(ctx, principal, restaurantID)
-	if err != nil {
+	if _, err := service.access.GetRestaurant(ctx, principal, restaurantID); err != nil {
 		return CreateDemoResult{}, err
 	}
 
@@ -191,11 +190,6 @@ func (service *Service) CreateDemoSite(ctx context.Context, principal auth.Princ
 	})
 	if err != nil {
 		return CreateDemoResult{}, err
-	}
-	if currentRestaurant.Status == restaurants.StatusLead {
-		if _, err := service.access.UpdateRestaurantStatus(ctx, principal, restaurantID, restaurants.StatusDemoReady); err != nil {
-			return CreateDemoResult{}, fmt.Errorf("mark restaurant demo ready: %w", err)
-		}
 	}
 
 	return CreateDemoResult{
