@@ -1,17 +1,16 @@
-export type TemplateId = "1" | "2" | "3" | "4";
+export type TemplateId = "1" | "2" | "3";
 
-const TEMPLATE_CYCLE: TemplateId[] = ["1", "2", "3", "4"];
+const TEMPLATE_CYCLE: TemplateId[] = ["1", "2", "3"];
 
 export function getActiveTemplate(): TemplateId {
   const raw = process.env.TEMPLATE ?? "1";
   if (raw === "2") return "2";
   if (raw === "3") return "3";
-  if (raw === "4") return "4";
   return "1";
 }
 
 export function parseTemplateId(value?: string | null): TemplateId | null {
-  if (value === "1" || value === "2" || value === "3" || value === "4") return value;
+  if (value === "1" || value === "2" || value === "3") return value;
   return null;
 }
 
@@ -32,7 +31,6 @@ export function getOtherTemplate(id: TemplateId): TemplateId {
 export function getTemplateLabel(id: TemplateId): string {
   if (id === "2") return "Aurora";
   if (id === "3") return "Elysian";
-  if (id === "4") return "Italian Villa";
   return "Cinematic";
 }
 
@@ -69,9 +67,9 @@ export function getTemplateSwitchCopy(current: TemplateId) {
     return {
       ...shared,
       eyebrow: "Same restaurant, new look",
-      title: "Preview the Italian Villa design",
+      title: "Preview the Cinematic design",
       description:
-        "Keep the same restaurant details and photos in an Italian cuisine-first editorial design.",
+        "Keep the same restaurant details and photos in a warm editorial design with elegant typography.",
       cta: `Preview ${targetLabel}`,
     };
   }

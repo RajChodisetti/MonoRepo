@@ -6,6 +6,7 @@ import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import type { StoryStep } from "@/data/types/restaurant";
 import SourceAwareImage, { mediaForURL } from "@/components/SourceAwareImage";
+import PhotoAttribution from "@/components/PhotoAttribution";
 
 export default function RestaurantStorySection({
   steps,
@@ -56,22 +57,30 @@ export default function RestaurantStorySection({
     <section ref={sectionRef} id="story" className="relative bg-charcoal py-24 md:py-0">
       <div ref={pinRef} className="mx-auto grid min-h-screen max-w-6xl grid-cols-1 items-center gap-12 px-6 md:grid-cols-2 md:py-24">
         <div className="relative aspect-[4/5] overflow-hidden rounded-xl">
-          {steps.map((step, i) => (
-            <div
-              key={step.number}
-              className={`absolute inset-0 transition-all duration-700 ${
-                i === active ? "opacity-100 scale-100" : "opacity-0 scale-105"
-              }`}
-            >
-              <SourceAwareImage
-                media={mediaForURL(step.image, step.title)}
-                fill
-                loading="lazy"
-                className="object-cover"
-                sizes="(max-width: 768px) 100vw, 50vw"
-              />
-            </div>
-          ))}
+          {steps.map((step, i) => {
+            const media = step.imageMedia || mediaForURL(step.image, step.title);
+            return (
+              <div
+                key={step.number}
+                className={`absolute inset-0 transition-all duration-700 ${
+                  i === active ? "opacity-100 scale-100" : "opacity-0 scale-105"
+                }`}
+              >
+                <SourceAwareImage
+                  media={media}
+                  fill
+                  loading="lazy"
+                  className="object-cover"
+                  sizes="(max-width: 768px) 100vw, 50vw"
+                />
+                {media.sourceKind === "google_places_live" ? (
+                  <div className="absolute inset-x-3 bottom-3 z-10 rounded bg-black/65 px-2 py-1 text-white/80">
+                    <PhotoAttribution media={media} compact />
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
         </div>
 
         <div className="space-y-8">

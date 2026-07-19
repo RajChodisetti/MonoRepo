@@ -7,7 +7,6 @@ Premium Next.js templates sharing the same restaurant payload, switched via `TEM
 | `1` (default) | **Cinematic** | Warm charcoal/brass, scroll-video storytelling |
 | `2` | **Aurora** | Futuristic navy/purple, glassmorphism, SaaS-tech motion |
 | `3` | **Elysian** | Premium black/gold reservation-led dining |
-| `4` | **Italian Villa** | Experimental Italian cuisine template with editorial menu, gallery, reservations, and voice CTA |
 
 ## Quick start
 
@@ -24,10 +23,10 @@ npm run dev:aurora
 # or: TEMPLATE=2 npm run dev
 # http://localhost:3000/?id=0
 
-# Template 4 — Italian Villa
-npm run dev:italian
-# or: TEMPLATE=4 npm run dev
-# http://localhost:3000/?id=0&template=4
+# Template 3 — Elysian
+npm run dev:elysian
+# or: TEMPLATE=3 npm run dev
+# http://localhost:3000/?id=0&template=3
 ```
 
 ## Environment
@@ -35,7 +34,7 @@ npm run dev:italian
 Set in **MonoRepo root** `.env` and/or **`template/.env.local`**:
 
 ```bash
-# 1 = Cinematic, 2 = Aurora, 3 = Elysian, 4 = Italian Villa
+# 1 = Cinematic, 2 = Aurora, 3 = Elysian
 TEMPLATE=1
 ```
 
@@ -74,7 +73,6 @@ template/
       cinematic/            # Template 1
       aurora/               # Template 2
       elysian/              # Template 3
-      italian/              # Template 4
   legacy/                   # Original static HTML template
 ```
 
@@ -85,7 +83,6 @@ npm run build              # uses TEMPLATE from env (default 1)
 npm run build:cinematic    # TEMPLATE=1
 npm run build:aurora       # TEMPLATE=2
 npm run build:elysian      # TEMPLATE=3
-npm run build:italian      # TEMPLATE=4
 ```
 
 ## Legacy static template

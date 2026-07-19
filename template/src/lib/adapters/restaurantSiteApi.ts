@@ -261,7 +261,7 @@ function buildSignatureDishes(data: ApiSiteContent): MenuItem[] {
   return [...matchedMenuItems, ...foodMedia];
 }
 
-function buildStorySteps(data: ApiSiteContent, images: string[], fallbackPoster: string): StoryStep[] {
+function buildStorySteps(data: ApiSiteContent, images: GalleryImage[], fallbackMedia?: GalleryImage): StoryStep[] {
   const cuisine = primaryCuisine(data.cuisines).toLowerCase();
   const city = data.city || "town";
   const titles = [
@@ -271,7 +271,6 @@ function buildStorySteps(data: ApiSiteContent, images: string[], fallbackPoster:
     "A room designed for conversation",
     "Hospitality that feels personal",
   ];
-  const poster = fallbackPoster;
   const descriptions = [
     `Our kitchen at ${data.name} draws on ${cuisine} heritage and the spirit of ${city}.`,
     "Every plate is prepared with care, technique, and warmth.",
@@ -279,30 +278,34 @@ function buildStorySteps(data: ApiSiteContent, images: string[], fallbackPoster:
     "From intimate tables to celebratory evenings, the dining room invites you to slow down.",
     data.rating ? `Rated ${data.rating} stars — we welcome every guest like family.` : "We welcome every guest like family.",
   ];
-  const imgs = images.length ? images : poster ? [poster] : [""];
+  const media = images.length ? images : fallbackMedia ? [fallbackMedia] : [];
   return titles.map((title, i) => ({
     number: String(i + 1).padStart(2, "0"),
     title,
     description: descriptions[i],
-    image: imgs[i % imgs.length],
+    image: media.length ? media[i % media.length].url : "",
+    imageMedia: media.length ? media[i % media.length] : undefined,
   }));
 }
 
-function buildExperienceCards(data: ApiSiteContent, poster: string): ExperienceCard[] {
+function buildExperienceCards(data: ApiSiteContent, media?: GalleryImage): ExperienceCard[] {
   const phone = data.phone?.replace(/\s/g, "") || "";
+  const image = media?.url || "";
   const cards: ExperienceCard[] = [
     {
       id: "dine-in",
       title: "Dine In",
       description: "Reserve a table for dinner, drinks, and celebrations.",
-      image: poster,
+      image,
+      imageMedia: media,
       cta: { label: "Reserve a Table", href: phone ? `tel:${phone}` : "#reserve" },
     },
     {
       id: "catering",
       title: "Catering",
       description: "Office lunches, parties, weddings, and private events.",
-      image: poster,
+      image,
+      imageMedia: media,
       cta: { label: "Contact Us", href: "#contact" },
     },
   ];
@@ -311,7 +314,8 @@ function buildExperienceCards(data: ApiSiteContent, poster: string): ExperienceC
       id: "order",
       title: "Order Online",
       description: "Your favorite dishes ready for pickup or delivery.",
-      image: poster,
+      image,
+      imageMedia: media,
       cta: { label: "Order Now", href: data.website },
     });
   }
@@ -327,11 +331,8 @@ export function adaptSiteContent(data: ApiSiteContent): RestaurantContent {
   const poster = heroPoster(data);
   const gallery = buildGalleryImages(data);
   const selectedHeroMedia = selectHeroMedia(data) || gallery[0];
-  const durableGallery = gallery.filter((image) => image.sourceKind !== "google_places_live");
-  const durablePoster = selectedHeroMedia?.sourceKind === "google_places_live"
-    ? durableGallery[0]?.url || ""
-    : poster;
-  const storyImages = durableGallery.filter((g) => g.type !== "other").map((g) => g.url).slice(0, 5);
+  const visualMedia = gallery.filter((g) => g.type !== "other").slice(0, 5);
+  const storyMedia = visualMedia.length ? visualMedia : gallery.slice(0, 5);
   const phone = data.phone || "";
 
   return {
@@ -370,7 +371,7 @@ export function adaptSiteContent(data: ApiSiteContent): RestaurantContent {
     heroPoster: poster,
     heroMedia: selectedHeroMedia,
     videos: getVideoAssets(poster),
-    storySteps: buildStorySteps(data, storyImages, durablePoster),
+    storySteps: buildStorySteps(data, storyMedia, selectedHeroMedia),
     signatureDishes: buildSignatureDishes(data),
     menuCategories: buildMenuCategories(data),
     galleryImages: gallery,
@@ -380,7 +381,7 @@ export function adaptSiteContent(data: ApiSiteContent): RestaurantContent {
       stars: rev.stars || 5,
       date: rev.date,
     })),
-    experienceCards: buildExperienceCards(data, durablePoster),
+    experienceCards: buildExperienceCards(data, selectedHeroMedia || gallery[0]),
   };
 }
 

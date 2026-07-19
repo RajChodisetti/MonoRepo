@@ -10,6 +10,7 @@ export interface StoryStep {
   title: string;
   description: string;
   image: string;
+  imageMedia?: import("./gallery").GalleryImage;
 }
 
 export interface VideoAssets {
@@ -23,6 +24,7 @@ export interface ExperienceCard {
   title: string;
   description: string;
   image: string;
+  imageMedia?: import("./gallery").GalleryImage;
   cta: CTA;
 }
 

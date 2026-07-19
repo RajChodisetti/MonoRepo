@@ -1,5 +1,6 @@
 import type { MenuItem } from "@/data/types/menu";
 import type { RestaurantContent } from "@/data/types/restaurant";
+import type { GalleryImage } from "@/data/types/gallery";
 
 export type ElysianMenuItem = {
   name: string;
@@ -24,6 +25,7 @@ export type ElysianContent = {
   };
   about: {
     image: string;
+    imageMedia?: GalleryImage;
     badgeYears: string;
     badgeLabel: string;
     paragraphs: string[];
@@ -201,11 +203,10 @@ export function mapElysianContent(restaurant: RestaurantContent): ElysianContent
   const menuCount = menuItems.length;
   const stats = buildStats(restaurant, menuCount);
   const faq = buildFaq(restaurant);
-  const aboutImage =
-    restaurant.galleryImages.find(
-      (image) => image.type === "ambience" && image.sourceKind !== "google_places_live",
-    )?.url ||
-    (restaurant.heroMedia?.sourceKind !== "google_places_live" ? restaurant.heroPoster : "");
+  const aboutMedia =
+    restaurant.galleryImages.find((image) => image.type === "ambience") ||
+    restaurant.heroMedia ||
+    restaurant.galleryImages[0];
 
   const timeline = restaurant.storySteps.map((step, i) => ({
     year: step.number || String(2010 + i * 5),
@@ -248,7 +249,8 @@ export function mapElysianContent(restaurant: RestaurantContent): ElysianContent
       secondaryCTA: restaurant.secondaryCTA,
     },
     about: {
-      image: aboutImage,
+      image: aboutMedia?.url || restaurant.heroPoster,
+      imageMedia: aboutMedia,
       badgeYears: restaurant.reviewsCount ? String(Math.min(99, Math.floor(restaurant.reviewsCount / 100) + 1)) : "1",
       badgeLabel: "Years of<br>Culinary Mastery",
       paragraphs,
@@ -273,9 +275,7 @@ export function mapElysianContent(restaurant: RestaurantContent): ElysianContent
     },
     footer: {
       tagline: restaurant.subheadline,
-      instaImages: restaurant.galleryImages
-        .filter((image) => image.sourceKind !== "google_places_live")
-        .slice(0, 4),
+      instaImages: restaurant.galleryImages.slice(0, 4),
     },
     show: {
       dishes: restaurant.signatureDishes.length > 0,
@@ -286,7 +286,7 @@ export function mapElysianContent(restaurant: RestaurantContent): ElysianContent
       stats: stats.length > 0,
       faq: faq.length > 0,
       map: Boolean(restaurant.coordinates || restaurant.address),
-      insta: restaurant.galleryImages.some((image) => image.sourceKind !== "google_places_live"),
+      insta: restaurant.galleryImages.length > 0,
     },
   };
 }

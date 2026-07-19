@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { ElysianContent } from "../lib/mapContent";
 import ElysianImage from "./ElysianImage";
+import PhotoAttribution from "@/components/PhotoAttribution";
 
 export default function ElysianFooter({
   name,
@@ -58,15 +59,21 @@ export default function ElysianFooter({
             <h4>Gallery</h4>
             <div className="insta-grid">
               {footer.instaImages.map((image, i) => (
-                <ElysianImage
-                  key={image.url + i}
-                  src={image.url}
-                  alt={image.alt || `${name} gallery ${i + 1}`}
-                  media={image}
-                  width={300}
-                  height={300}
-                  sizes="150px"
-                />
+                <div key={image.url + i} className="relative overflow-hidden">
+                  <ElysianImage
+                    src={image.url}
+                    alt={image.alt || `${name} gallery ${i + 1}`}
+                    media={image}
+                    width={300}
+                    height={300}
+                    sizes="150px"
+                  />
+                  {image.sourceKind === "google_places_live" ? (
+                    <div className="absolute inset-x-1 bottom-1 z-10 rounded bg-black/70 px-1.5 py-1 text-white/80">
+                      <PhotoAttribution media={image} compact />
+                    </div>
+                  ) : null}
+                </div>
               ))}
             </div>
           </div>

@@ -102,7 +102,6 @@ function CloseIcon() {
 export default function SiteWalkthrough({ templateId }: { templateId: TemplateId }) {
   const isAurora = templateId === "2";
   const isElysian = templateId === "3";
-  const isItalian = templateId === "4";
   const switchCopy = getTemplateSwitchCopy(templateId);
 
   const steps = useMemo<Step[]>(
@@ -207,51 +206,37 @@ export default function SiteWalkthrough({ templateId }: { templateId: TemplateId
     ? "border border-[rgba(212,175,55,0.25)] bg-[#050505]/98 text-[#F8F8F8] shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
     : isAurora
       ? "border border-white/20 bg-[#09090B]/98 text-white shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
-      : isItalian
-        ? "border border-[#c69a48]/30 bg-[#16130f]/98 text-[#fffaf2] shadow-[0_24px_80px_rgba(0,0,0,0.5)]"
-        : "border border-[#e8e0d4]/25 bg-[#1a1614]/98 text-[#f7f0e6] shadow-[0_24px_80px_rgba(0,0,0,0.5)]";
+      : "border border-[#e8e0d4]/25 bg-[#1a1614]/98 text-[#f7f0e6] shadow-[0_24px_80px_rgba(0,0,0,0.5)]";
 
   const eyebrowClass = isElysian
     ? "text-[#D4AF37]"
     : isAurora
       ? "text-cyan-300"
-      : isItalian
-        ? "text-[#c69a48]"
-        : "text-[#b88a44]";
+      : "text-[#b88a44]";
   const bodyClass = isElysian
     ? "text-[#A9A9A9]"
     : isAurora
       ? "text-white/65"
-      : isItalian
-        ? "text-[#cfc4b4]"
-        : "text-[#a89f96]";
+      : "text-[#a89f96]";
   const primaryBtn = isElysian
     ? "bg-gradient-to-r from-[#e9d38b] via-[#D4AF37] to-[#a9822a] text-[#0a0a0a] hover:opacity-90"
     : isAurora
       ? "bg-gradient-to-r from-violet-600 to-cyan-500 text-white hover:from-violet-500 hover:to-cyan-400"
-      : isItalian
-        ? "bg-[#b02a1f] text-white hover:bg-[#c83a2e]"
-        : "bg-[#b88a44] text-[#1a1614] hover:bg-[#c99a54]";
+      : "bg-[#b88a44] text-[#1a1614] hover:bg-[#c99a54]";
   const ghostBtn = isElysian
     ? "text-[#A9A9A9] hover:text-[#D4AF37]"
     : isAurora
       ? "text-white/55 hover:text-white"
-      : isItalian
-        ? "text-[#cfc4b4] hover:text-[#fffaf2]"
-        : "text-[#a89f96] hover:text-[#f7f0e6]";
+      : "text-[#a89f96] hover:text-[#f7f0e6]";
 
   const arrowClass =
     step.placement === "bottom"
       ? isAurora
         ? "bottom-full border-b-[#09090B]/98 border-l-transparent border-r-transparent border-t-transparent"
-        : isItalian
-          ? "bottom-full border-b-[#16130f]/98 border-l-transparent border-r-transparent border-t-transparent"
-          : "bottom-full border-b-[#1a1614]/98 border-l-transparent border-r-transparent border-t-transparent"
+        : "bottom-full border-b-[#1a1614]/98 border-l-transparent border-r-transparent border-t-transparent"
       : isAurora
         ? "top-full border-t-[#09090B]/98 border-l-transparent border-r-transparent border-b-transparent"
-        : isItalian
-          ? "top-full border-t-[#16130f]/98 border-l-transparent border-r-transparent border-b-transparent"
-          : "top-full border-t-[#1a1614]/98 border-l-transparent border-r-transparent border-b-transparent";
+        : "top-full border-t-[#1a1614]/98 border-l-transparent border-r-transparent border-b-transparent";
 
   const arrowLeft =
     targetRect && tooltipStyle.left != null && typeof tooltipStyle.width === "number"

@@ -1,5 +1,6 @@
 import type { ElysianContent } from "../lib/mapContent";
 import ElysianImage from "./ElysianImage";
+import PhotoAttribution from "@/components/PhotoAttribution";
 
 export default function ElysianAbout({ about }: { about: ElysianContent["about"] }) {
   return (
@@ -10,10 +11,16 @@ export default function ElysianAbout({ about }: { about: ElysianContent["about"]
             <ElysianImage
               src={about.image}
               alt="Restaurant interior"
+              media={about.imageMedia}
               fill
               className="about-photo"
               sizes="(max-width: 768px) 100vw, 50vw"
             />
+          ) : null}
+          {about.imageMedia?.sourceKind === "google_places_live" ? (
+            <div className="absolute inset-x-4 bottom-4 z-10 rounded bg-black/65 px-3 py-2 text-white/80">
+              <PhotoAttribution media={about.imageMedia} compact />
+            </div>
           ) : null}
           <div className="about-image-frame" />
           <div className="about-badge">

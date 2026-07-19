@@ -10,14 +10,13 @@ import {
 } from "@/lib/templateConfig";
 import { TOUR_TEMPLATE_SWITCH } from "@/lib/tourTargets";
 
-type TemplateVariant = "aurora" | "cinematic" | "elysian" | "italian";
+type TemplateVariant = "aurora" | "cinematic" | "elysian";
 type TemplateSwitchMode = "desktop" | "mobile";
 
 const CURRENT_BY_VARIANT: Record<TemplateVariant, TemplateId> = {
   aurora: "2",
   cinematic: "1",
   elysian: "3",
-  italian: "4",
 };
 
 function ArrowIcon() {
@@ -59,17 +58,13 @@ export default function TemplateSwitchButton({
         ? "border-cyan-300/30 bg-cyan-300/[0.06] text-white shadow-[0_12px_36px_rgba(34,211,238,0.08)]"
         : variant === "elysian"
           ? "border-[rgba(212,175,55,0.35)] bg-[rgba(212,175,55,0.07)] text-[#F8F8F8] shadow-[0_12px_36px_rgba(212,175,55,0.08)]"
-          : variant === "italian"
-            ? "border-[#c69a48]/35 bg-[#fffaf2]/10 text-[#fffaf2] shadow-[0_12px_36px_rgba(176,42,31,0.1)]"
-            : "border-[#b88a44]/40 bg-[#b88a44]/10 text-[#f7f0e6] shadow-[0_12px_36px_rgba(184,138,68,0.08)]";
+          : "border-[#b88a44]/40 bg-[#b88a44]/10 text-[#f7f0e6] shadow-[0_12px_36px_rgba(184,138,68,0.08)]";
     const accentClass =
       variant === "aurora"
         ? "text-cyan-300"
         : variant === "elysian"
           ? "text-[#D4AF37]"
-          : variant === "italian"
-            ? "text-[#c69a48]"
-            : "text-[#d3a45d]";
+          : "text-[#d3a45d]";
 
     return (
       <button
@@ -114,9 +109,7 @@ export default function TemplateSwitchButton({
       ? "rounded-lg border border-white/15 px-4 py-2 text-xs font-medium text-white/75 transition hover:border-cyan-400/40 hover:bg-white/5 hover:text-cyan-300"
       : variant === "elysian"
         ? "hidden rounded-lg border border-[rgba(212,175,55,0.35)] px-4 py-2 text-xs font-medium text-[#D4AF37] transition hover:border-[#D4AF37] hover:bg-[rgba(212,175,55,0.08)] min-[901px]:inline-flex"
-        : variant === "italian"
-          ? "rounded-lg border border-[#fffaf2]/20 px-4 py-2 text-xs font-bold text-[#fffaf2]/78 transition hover:border-[#c69a48] hover:bg-[#fffaf2]/10 hover:text-white"
-          : "rounded border border-[#e8e0d4]/25 px-4 py-2 text-[11px] font-medium uppercase tracking-[0.1em] text-[#d4c4b0] transition hover:border-[#b88a44]/50 hover:bg-[#b88a44]/10 hover:text-[#b88a44]";
+        : "rounded border border-[#e8e0d4]/25 px-4 py-2 text-[11px] font-medium uppercase tracking-[0.1em] text-[#d4c4b0] transition hover:border-[#b88a44]/50 hover:bg-[#b88a44]/10 hover:text-[#b88a44]";
 
   return (
     <button

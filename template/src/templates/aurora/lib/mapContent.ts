@@ -82,7 +82,7 @@ export function mapAuroraContent(restaurant: RestaurantContent): AuroraContent {
       poster: restaurant.heroPoster,
       posterMedia: restaurant.heroMedia,
       supportingMedia: restaurant.galleryImages
-        .filter((image) => image.url !== restaurant.heroPoster && image.sourceKind !== "google_places_live")
+        .filter((image) => image.url !== restaurant.heroPoster)
         .slice(0, 2),
       rating: restaurant.rating,
       reviewsCount: restaurant.reviewsCount,

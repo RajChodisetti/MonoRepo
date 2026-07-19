@@ -134,51 +134,40 @@ export default function VoiceAssistantWidget({
 
   const isAurora = templateId === "2";
   const isElysian = templateId === "3";
-  const isItalian = templateId === "4";
 
   const panelClass = isElysian
     ? "border border-[rgba(212,175,55,0.25)] bg-[#050505]/95 text-[#F8F8F8] shadow-[0_20px_60px_rgba(0,0,0,0.55)] backdrop-blur-xl"
     : isAurora
       ? "border border-white/15 bg-[#09090B]/95 text-white shadow-[0_20px_60px_rgba(0,0,0,0.55)] backdrop-blur-xl"
-      : isItalian
-        ? "border border-[#c69a48]/30 bg-[#16130f]/95 text-[#fffaf2] shadow-[0_20px_60px_rgba(0,0,0,0.48)] backdrop-blur-xl"
-        : "border border-[#e8e0d4]/20 bg-[#1a1614]/95 text-[#f7f0e6] shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-xl";
+      : "border border-[#e8e0d4]/20 bg-[#1a1614]/95 text-[#f7f0e6] shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-xl";
 
   const accentClass = isElysian
     ? "text-[#D4AF37]"
     : isAurora
       ? "text-cyan-300"
-      : isItalian
-        ? "text-[#c69a48]"
-        : "text-[#d4a853]";
+      : "text-[#d4a853]";
   const dimClass = isElysian
     ? "text-[#A9A9A9]"
     : isAurora
       ? "text-white/55"
-      : isItalian
-        ? "text-[#cfc4b4]"
-        : "text-[#a89f96]";
+      : "text-[#a89f96]";
   const primaryBtnClass = isElysian
     ? "bg-gradient-to-r from-[#e9d38b] via-[#D4AF37] to-[#a9822a] text-[#0a0a0a] hover:opacity-90"
     : isAurora
       ? "bg-gradient-to-r from-violet-600 to-cyan-500 text-white hover:opacity-90"
-      : isItalian
-        ? "bg-[#b02a1f] text-white hover:bg-[#c83a2e]"
-        : "bg-gradient-to-r from-[#9a6f2e] to-[#d4a853] text-[#1a1614] hover:opacity-90";
+      : "bg-gradient-to-r from-[#9a6f2e] to-[#d4a853] text-[#1a1614] hover:opacity-90";
   const ghostBtnClass = isElysian
     ? "border border-[rgba(255,255,255,0.15)] bg-white/5 text-[#F8F8F8] hover:border-[#D4AF37]/50 hover:text-[#D4AF37]"
     : isAurora
       ? "border border-white/15 bg-white/5 text-white hover:border-cyan-400/40 hover:text-cyan-300"
-      : isItalian
-        ? "border border-[#fffaf2]/15 bg-white/5 text-[#fffaf2] hover:border-[#c69a48]/60 hover:text-[#c69a48]"
-        : "border border-[#e8e0d4]/20 bg-white/5 text-[#f7f0e6] hover:border-[#d4a853]/40 hover:text-[#d4a853]";
+      : "border border-[#e8e0d4]/20 bg-white/5 text-[#f7f0e6] hover:border-[#d4a853]/40 hover:text-[#d4a853]";
   const errorClass = isElysian
     ? "border border-red-400/40 bg-red-500/15 text-red-100"
     : isAurora
       ? "border border-red-400/40 bg-red-500/15 text-red-100"
       : "border border-red-400/35 bg-red-950/50 text-red-100";
   const fabPositionClass =
-    isElysian || isItalian ? "bottom-24 right-6 md:bottom-24" : "bottom-20 right-4 md:bottom-6 md:right-6";
+    isElysian ? "bottom-24 right-6 md:bottom-24" : "bottom-20 right-4 md:bottom-6 md:right-6";
 
   useEffect(() => {
     if (!open) {
@@ -380,7 +369,7 @@ export default function VoiceAssistantWidget({
                 </div>
                 <RequestCallbackForm
                   compact
-                  isAurora={isAurora || isElysian || isItalian}
+                  isAurora={isAurora || isElysian}
                   restaurantIndex={restaurantIndex}
                   restaurantName={restaurantName}
                   restaurantPhone={restaurantPhone}

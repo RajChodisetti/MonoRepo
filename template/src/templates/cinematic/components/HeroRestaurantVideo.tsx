@@ -47,7 +47,7 @@ export default function HeroRestaurantVideo({
     type: "ambience",
   };
   const supportingMedia = restaurant.galleryImages
-    .filter((image) => image.url !== heroMedia.url && image.sourceKind !== "google_places_live")
+    .filter((image) => image.url !== heroMedia.url)
     .slice(0, 3);
 
   return (
