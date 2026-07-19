@@ -2249,3 +2249,39 @@ Phase 1 lead → demo → outreach workflow.
 **Risks / Follow-ups:** The ignored local database tunnel at `127.0.0.1:15432`
 was unavailable, so migration `000032` was not applied locally. Production or
 staging deployment requires the normal migration approval gate.
+
+## 2026-07-19 — Demo-Ready Filter Deployment and UIPro Codex Skill
+
+**Role:** Backend, DevOps, Test, and Documentation Agent
+
+**Delivered:** Installed UI/UX Pro Max for Codex in the monorepo with
+`uipro init --ai codex`; the generated skill bundle lives under
+`.codex/skills/ui-ux-pro-max`, with Python bytecode ignored and excluded.
+Committed and pushed `cbc2eb8` to `master`, then deployed it to the VM as
+`/opt/tuvi/releases/monorepo-cbc2eb8`. The `/opt/tuvi/MonoRepo` symlink now
+points to `cbc2eb8`, and `/opt/tuvi/previous-release-path` points to the prior
+`6c21c15` release.
+
+**Production Migration:** A gzip-validated backup was saved at
+`/opt/tuvi/backups/monorepo-pre-cbc2eb8-20260719T181834Z.dump.gz` before
+migration. Migration `000032` applied successfully to the active `monorepo`
+database. Before the migration, schema was 31 and 22 `lead` restaurants already
+had draft/published demo records. After the migration, schema is 32,
+`demo_ready=22`, `lead=922`, and zero `lead` rows still have a demo record.
+
+**Live Verification:** Rebuilt backend/migrate images from `cbc2eb8` and
+force-recreated only API and worker. All Tuvi containers are running with zero
+restarts. API, admin login, corporate website, demo template, and voice readiness
+all return HTTP 200. API, worker, OCR worker, and scrape-worker logs show no
+panic/fatal/traceback/error lines in the checked tails. The UIPro search script
+runs on the VM through `python3`.
+
+**Safety State:** The Outreach UI email job remains disabled, active
+`outreach.bulk_send` jobs are zero, and today's OCR budget remains 200/200.
+Production currently has `restaurant_profiles` counts `pending=940`,
+`failed=4`, and `verified=0`; the OCR verified-only list filter will remain
+empty until new rows reach `ocr_status=verified`.
+
+**Checks Run:** Local `go test ./backend/...` passed with 167 tests in 44
+packages, `go vet ./backend/...` passed, staged whitespace checks passed, and
+UIPro local/VM smoke checks passed.
