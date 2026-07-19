@@ -53,6 +53,7 @@ func (handler *RestaurantSiteAdminHandler) Get(w http.ResponseWriter, r *http.Re
 		{"id": "1", "name": "Cinematic", "url": generatedSiteURL(handler.publicWebURL, summary.ID.String(), summary.Index, "1")},
 		{"id": "2", "name": "Aurora", "url": generatedSiteURL(handler.publicWebURL, summary.ID.String(), summary.Index, "2")},
 		{"id": "3", "name": "Elysian reservations", "url": generatedSiteURL(handler.publicWebURL, summary.ID.String(), summary.Index, "3")},
+		{"id": "4", "name": "Italian Villa experimental", "url": generatedSiteURL(handler.publicWebURL, summary.ID.String(), summary.Index, "4")},
 	}
 	handler.writeJSON(w, http.StatusOK, map[string]any{
 		"restaurant_id":   summary.ID,

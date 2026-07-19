@@ -31,6 +31,7 @@ function formatDuration(seconds: number) {
 function templateName(templateID: DemoSession["template_id"]) {
   if (templateID === "2") return "Aurora";
   if (templateID === "3") return "Elysian";
+  if (templateID === "4") return "Italian Villa";
   return "Cinematic";
 }
 
@@ -96,6 +97,8 @@ function RestaurantDetailInner() {
   const [members, setMembers] = useState<Member[]>([]);
   const [memberUserId, setMemberUserId] = useState("");
   const [memberRole, setMemberRole] = useState("owner");
+  const stableTemplates = generatedSite?.templates.filter((template) => template.id !== "4") || [];
+  const experimentalTemplates = generatedSite?.templates.filter((template) => template.id === "4") || [];
 
   const loadRestaurant = useCallback(async () => {
     const data = await adminFetch<Restaurant>(`restaurants/${id}`);
@@ -767,18 +770,40 @@ function RestaurantDetailInner() {
                   Generator index: {generatedSite.site_index} · Google Place ID:{" "}
                   <code>{generatedSite.google_place_id}</code>
                 </div>
-                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                  {generatedSite.templates.map((template) => (
-                    <button
-                      className="btn btn-primary"
-                      type="button"
-                      onClick={() => viewPersonalizedWebsite(template)}
-                      disabled={busy}
-                      key={template.id}
-                    >
-                      View {template.name} personalized website
-                    </button>
-                  ))}
+                <div style={{ display: "grid", gap: "0.75rem" }}>
+                  <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                    {stableTemplates.map((template) => (
+                      <button
+                        className="btn btn-primary"
+                        type="button"
+                        onClick={() => viewPersonalizedWebsite(template)}
+                        disabled={busy}
+                        key={template.id}
+                      >
+                        View {template.name} personalized website
+                      </button>
+                    ))}
+                  </div>
+                  {experimentalTemplates.length > 0 ? (
+                    <div style={{ display: "grid", gap: "0.45rem" }}>
+                      <div style={{ color: "var(--muted)", fontSize: "0.78rem", fontWeight: 700 }}>
+                        Experimental templates
+                      </div>
+                      <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                        {experimentalTemplates.map((template) => (
+                          <button
+                            className="btn btn-secondary"
+                            type="button"
+                            onClick={() => viewPersonalizedWebsite(template)}
+                            disabled={busy}
+                            key={template.id}
+                          >
+                            View {template.name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               </>
             ) : !generatedSiteError ? (
@@ -791,7 +816,7 @@ function RestaurantDetailInner() {
             <ol style={{ margin: 0, paddingLeft: "1.2rem", color: "var(--muted)", lineHeight: 1.65 }}>
               <li>
                 <strong style={{ color: "var(--ink)" }}>View personalized website</strong> opens the
-                selected Cinematic, Aurora, or Elysian restaurant website and starts an admin-preview session clock.
+                selected Cinematic, Aurora, Elysian, or experimental Italian Villa restaurant website and starts an admin-preview session clock.
               </li>
               <li>
                 <strong style={{ color: "var(--ink)" }}>Inspect payload</strong> shows the exact

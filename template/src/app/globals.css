@@ -17,6 +17,12 @@
     color: #f8fafc;
     font-family: var(--font-aurora-body), system-ui, sans-serif;
   }
+
+  [data-template="4"] body {
+    background: #f8f6f0;
+    color: #171310;
+    font-family: var(--font-italian-body), system-ui, sans-serif;
+  }
 }
 
 @layer components {

@@ -161,7 +161,7 @@ export type DemoSession = {
   id: string;
   demo_site_id?: string;
   restaurant_id: string;
-  template_id: "1" | "2" | "3";
+  template_id: "1" | "2" | "3" | "4";
   started_at: string;
   last_seen_at: string;
   ended_at?: string;

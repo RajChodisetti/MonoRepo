@@ -19,7 +19,7 @@ export default function DemoEngagementTracker({
 }: {
   slug?: string;
   demoToken?: string;
-  templateID: "1" | "2" | "3";
+  templateID: "1" | "2" | "3" | "4";
 }) {
   const sessionRef = useRef<SessionCapability | null>(null);
   const activeSecondsRef = useRef(0);
