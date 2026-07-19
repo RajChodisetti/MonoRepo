@@ -2333,3 +2333,71 @@ media pipeline. Restaurants without verified safe media still render the
 premium layout and copy, but image-heavy sections appear only when the payload
 contains safe media. Owner/licensed uploads remain dependent on the existing
 future bucket/CDN configuration.
+
+## 2026-07-19 — Italian Template Removal and Generated Preview Photo Repair
+
+**Role:** Frontend, Backend, Test, DevOps, and Documentation Agent
+
+**Delivered:** Removed the rejected Italian Villa experimental template from the
+personalized demo app, admin restaurant Demo tab, engagement tracking, template
+switcher, voice-widget variants, package scripts, and public template registry.
+The generated-site template set is back to Cinematic, Aurora, and Elysian only.
+Migration `000034` maps any existing `template_id='4'` demo-session analytics
+rows to Elysian (`3`) and restores the database check constraint to
+`template_id IN ('1', '2', '3')`.
+
+Fixed generated lead preview photos. The immediate production issue was that
+reviewed public media was empty: no durable media rows existed, and the older
+Google OCR classifications lacked exact source fingerprints/public eligibility,
+so the strict public path correctly returned no photos. Migration `000035`
+returned those fingerprint-less Google classifications to pending, and the
+rebuilt OCR worker will refresh them after the UTC daily budget resets.
+
+To unblock admin-opened generated previews now, the by-restaurant public site
+endpoint supports `preview_media=google_live`. That flag is used by the template
+app's UUID preview adapter only, and only when reviewed media is empty. It
+resolves fresh Google Places photos live, returns attribution/report metadata,
+sets `unoptimized=true`, and keeps provider URLs uncached. All three production
+templates now preserve the full media object for story, timeline, experience,
+about, and footer placements so live Google images and attribution render
+instead of being filtered out.
+
+**Production Deployment:** Pushed and deployed removal commit `b2a2f83`, then
+deployed photo-repair commit `88b58eb` as the active VM runtime release at
+`/opt/tuvi/releases/monorepo-88b58eb`. The rollback pointer is
+`/opt/tuvi/releases/monorepo-b2a2f83`. A gzip-validated pre-migration backup was
+saved at `/opt/tuvi/backups/pre-remove-italian-b2a2f83-20260719-193900.sql.gz`.
+The active database schema is `000035`.
+
+**Live Verification:** Production `demo_sessions` now only contain template IDs
+`1` and `2`, and the live constraint permits only `1`, `2`, and `3`. A generated
+preview for restaurant `020ca56c-4f99-4d1a-b449-2b0d7aaab792` returned ten
+`google_places_live` media objects with URLs and attribution, and the rendered
+Cinematic preview HTML contained `lh3.googleusercontent.com` plus Google Maps
+attribution. `?template=4` no longer renders Italian Villa content and falls
+back to the default template. Public template variants 1/2/3, admin login, the
+public restaurant API, and voice health all returned HTTP 200. API, admin,
+template, OCR worker, worker, scrape worker, voice, Postgres, Redis, corporate
+site, and catalog containers were running with zero restarts and no recent
+panic/fatal/traceback/error log lines in the checked tails.
+
+**Checks Run:** Template TypeScript passed; admin TypeScript and ESLint passed;
+`go test ./backend/...` passed with 169 tests across 44 packages; focused Python
+outreach/OCR unit tests passed with 10 tests; `git diff --check` passed. VM
+Docker builds passed for migrate, API, admin-web, template, and OCR worker while
+removing the template; the final API and template image rebuilds passed for
+`88b58eb`.
+
+**Business Value / Plan Fit:** The low-quality experimental design was removed
+quickly from the sales surface, while generated previews from the lead table now
+show real, attributed restaurant imagery immediately. Published/token-gated
+demos still use the stricter reviewed-media path, preserving the Phase 1
+media-safety policy.
+
+**Risks / Follow-ups:** The preview fallback makes live Places media requests for
+admin-opened generated previews before OCR classification is complete; it does
+not copy, cache, or publish those URLs. The OCR worker remains at the
+PostgreSQL-enforced 200/200 daily request ceiling until the UTC reset, after
+which reviewed public media can be rebuilt through the normal fingerprinted
+path. The production storage provider is still disabled, so owner/licensed
+uploads remain pending bucket/CDN configuration.

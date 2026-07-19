@@ -32,6 +32,12 @@ Use two source-aware media paths:
    worker classifies them. Approved assets use stable public URLs and normal
    Next.js optimization.
 
+Admin-opened generated-site previews may request `preview_media=google_live`.
+This is a no-store, attributed, live-only fallback used only when reviewed media
+is empty, so lead-table previews can show current restaurant photos before the
+OCR budget catches up. Published and token-gated demos continue to use the
+reviewed public-media path.
+
 OCR stores a one-way SHA-256 fingerprint derived from the Place ID and the
 in-memory photo resource name. Freshly resolved Google photos must match that
 fingerprint exactly; the resource name itself is never persisted or exposed.
@@ -65,6 +71,8 @@ are never used for heroes, galleries, dish cards, or footer mosaics.
 
 - Prospect demos regain photos after an exact OCR resource match exists, without
   storing temporary Google identifiers, resource names, URLs, or bytes.
+- Lead-table generated previews can display attributed live Google photos before
+  reviewed OCR media exists, at the cost of live Places media requests.
 - Published sites can move toward durable owner/licensed media while retaining a
   compliant live fallback for reviewed demos.
 - Object storage must expose uploaded objects through the configured HTTPS CDN
