@@ -12,6 +12,64 @@ Each entry should explain:
 - how the work fits with the rest of the Phase 1 or Phase 2 plan;
 - risks, gaps, or follow-ups.
 
+## 2026-07-19 — Manual Outreach Send Bypass and Two-Link Email Template
+
+**Role:** Backend, Frontend-adjacent, Security, Test, DevOps, and Documentation
+Agent
+
+**Delivered:** Updated internal-admin selective/manual outreach sends from the
+restaurant list and restaurant detail page so they no longer depend on the bulk
+email-job flag or the generic `EMAIL_DISABLE_SENDING` adapter flag. Manual sends
+now prefer the configured Gmail outreach account pool directly when it exists,
+falling back to the generic provider only when no pool is configured. Contact
+email, opt-out suppression, latest campaign draft, provider configuration, and
+internal-admin checks still apply. Provider-skipped or redirected deliveries no
+longer mark the restaurant contacted/emailed.
+
+Simplified newly generated outreach emails to two promotional links: a tracked
+“Personalized demo websites” link and a direct Tuvi `/services/restaurants`
+link labeled “Services catalog.” Duplicate demo CTAs and the old separate
+Cinematic/Aurora/Elysian sales links were removed from the generated HTML/text
+templates. Legacy `{{TEMPLATE_1_URL}}` through `{{TEMPLATE_3_URL}}` placeholders
+remain supported by tracking injection for older drafts. The required
+unsubscribe link remains in the footer.
+
+**Checks Run:** `go test ./backend/internal/campaigns ./backend/internal/outreach ./backend/internal/http/handlers ./backend/internal/providers/email`,
+`go test ./backend/...`, `go build ./backend/...`,
+`npm --prefix apps/web run lint`, `npx tsc --noEmit --incremental false` from
+`apps/web`, `npx -p node@22 -c 'node -v && npm run build'` from `apps/web`,
+`make openapi`, and `git diff --check` passed. OpenAPI validation retained the
+same three pre-existing warnings for non-2xx/4xx tracking responses and one
+unused component.
+
+**Production Deployment:** Commit `778c0fe` was pushed to `master` and deployed
+from a `git archive` release at `/opt/tuvi/releases/monorepo-778c0fe`.
+`/opt/tuvi/previous-release-path` points to
+`/opt/tuvi/releases/monorepo-e4d6801` for rollback. The VM rebuilt `migrate`,
+`api`, and `admin-web`; `migration up complete` ran with no new schema
+migration; `tuvi-api-1` and `tuvi-admin-web-1` were recreated. API, admin-web,
+worker, OCR worker, and scrape worker showed zero restarts after deployment.
+
+**Production Smokes:** `https://api.tuvisolutions.com/admin/login` returned 200;
+`https://api.tuvisolutions.com/admin/developer` redirected unauthenticated
+traffic to `/admin/login?next=%2Fdeveloper`;
+`https://api.tuvisolutions.com/api/v1/developer/schema` returned 401 without a
+token; `https://api.tuvisolutions.com/api/public/v1/site/restaurants` returned
+200; and `https://demo.tuvisolutions.com/` returned 200. Container-local
+`/healthz` and `/readyz` returned 401 as expected because health routes are
+developer-token protected. Recent API and admin-web log checks showed no
+panic/fatal/traceback/error lines. No real email was sent during verification.
+
+**Business Value / Plan Fit:** Lets Raj manually contact selected restaurants
+without starting or enabling the bulk outreach job, while keeping opt-out and
+admin-gated controls. The email copy now pushes exactly the two intended sales
+destinations for Phase 1: the personalized demo and the services catalog.
+
+**Risks / Follow-ups:** Manual selective sends bypass the durable bulk pacing
+ledger by design and are bounded only by the admin confirmation flow plus the
+25-restaurant synchronous batch limit. Keep using the persisted email-job toggle
+only for automated bulk outreach.
+
 ## 2026-07-19 — Internal Developer SQL Console
 
 **Role:** Backend, Frontend, Security, Test, DevOps, and Documentation Agent
