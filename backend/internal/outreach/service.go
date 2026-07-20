@@ -497,10 +497,6 @@ func (service *Service) sendLead(ctx context.Context, lead EligibleLead, bulkJob
 	return true, nil
 }
 
-func (service *Service) emailSendingEnabled() bool {
-	return !service.emailCfg.DisableSending
-}
-
 // latestCampaignContent returns the most recently created campaign for a
 // restaurant (any status), which carries the subject/HTML/text rendered at
 // draft/regenerate time. Ad hoc send/preview deliberately does not require
@@ -546,17 +542,15 @@ func (service *Service) PreviewAdHoc(ctx context.Context, principal auth.Princip
 }
 
 // SendAdHoc sends the latest campaign draft's rendered content to a single
-// restaurant immediately, outside the quota-managed bulk pipeline. It still
-// enforces the global sending kill switch and the opt-out suppression list —
-// those are compliance requirements, not internal review-workflow gates.
+// restaurant immediately, outside the quota-managed bulk pipeline. It ignores
+// the generic EMAIL_DISABLE_SENDING flag and the bulk email-job control, but
+// still requires an internal admin, a configured sender, a valid contact email,
+// and an unsuppressed recipient.
 func (service *Service) SendAdHoc(ctx context.Context, principal auth.Principal, restaurantID uuid.UUID) (AdHocSendResult, error) {
 	if !auth.IsInternalAdmin(principal.Role) {
 		return AdHocSendResult{RestaurantID: restaurantID}, restaurants.ErrForbidden
 	}
-	if !service.emailSendingEnabled() {
-		return AdHocSendResult{RestaurantID: restaurantID}, ErrSendingDisabled
-	}
-	if service.emailProvider == nil {
+	if service.emailPool == nil && service.emailProvider == nil {
 		return AdHocSendResult{RestaurantID: restaurantID}, ErrNotConfigured
 	}
 
@@ -582,7 +576,7 @@ func (service *Service) SendAdHoc(ctx context.Context, principal auth.Principal,
 		return AdHocSendResult{RestaurantID: restaurantID}, err
 	}
 
-	_, err = service.emailProvider.Send(ctx, emailprovider.SendRequest{
+	sendRequest := emailprovider.SendRequest{
 		To:       email,
 		Subject:  campaign.Subject,
 		HTMLBody: campaign.BodyHTML,
@@ -592,9 +586,18 @@ func (service *Service) SendAdHoc(ctx context.Context, principal auth.Principal,
 			"campaign_id":   campaign.ID.String(),
 			"send_type":     "adhoc",
 		},
-	})
+	}
+	var result emailprovider.SendResult
+	if service.emailPool != nil {
+		result, err = service.emailPool.SendDirect(ctx, sendRequest)
+	} else {
+		result, err = service.emailProvider.Send(ctx, sendRequest)
+	}
 	if err != nil {
 		return AdHocSendResult{RestaurantID: restaurantID}, fmt.Errorf("send ad hoc email: %w", err)
+	}
+	if result.Skipped || result.RedirectedTo != "" {
+		return AdHocSendResult{RestaurantID: restaurantID}, ErrDeliverySkipped
 	}
 
 	if err := service.repo.RecordAdHocEmailSent(ctx, restaurantID, email); err != nil {

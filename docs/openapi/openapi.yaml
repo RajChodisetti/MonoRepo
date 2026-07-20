@@ -1246,7 +1246,7 @@ paths:
         - contact email present and not suppressed
 
         The bulk job does not create or approve campaigns. It sends the already-approved
-        sales outreach email (Tuvi presentation + three tracked personalized websites), rotating configured
+        sales outreach email (one personalized demo websites link plus one Services catalog link), rotating configured
         Google Workspace Gmail API accounts (`OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON`).
         PostgreSQL atomically enforces
         `OUTREACH_EMAILS_PER_ACCOUNT` (default 40) delivery claims per account, assigns a
@@ -3189,7 +3189,7 @@ components:
           type: string
         body_html:
           type: string
-          description: Draft HTML whose `{{CLICK_URL}}`, optional `{{TEMPLATE_1_URL}}`–`{{TEMPLATE_3_URL}}`, and `{{UNSUBSCRIBE_URL}}` placeholders are replaced at send time.
+          description: Draft HTML whose `{{CLICK_URL}}` personalized-demo placeholder and `{{UNSUBSCRIBE_URL}}` placeholder are replaced at send time. Legacy `{{TEMPLATE_1_URL}}`–`{{TEMPLATE_3_URL}}` placeholders are still accepted when older drafts are sent.
         body_text:
           type: string
         approved_at:

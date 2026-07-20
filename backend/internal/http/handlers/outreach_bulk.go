@@ -217,6 +217,8 @@ func (handler *OutreachBulkHandler) writeAdHocError(w http.ResponseWriter, err e
 		handler.writeError(w, http.StatusBadRequest, "email_suppressed", "This recipient has opted out of outreach email.")
 	case errors.Is(err, outreach.ErrNoCampaignDraft):
 		handler.writeError(w, http.StatusBadRequest, "no_campaign_draft", "No campaign draft exists yet for this restaurant. Create one from the Campaign tab first.")
+	case errors.Is(err, outreach.ErrDeliverySkipped):
+		handler.writeError(w, http.StatusServiceUnavailable, "adhoc_delivery_skipped", "Email provider skipped or redirected the delivery; the restaurant was not marked contacted.")
 	default:
 		handler.writeError(w, http.StatusInternalServerError, "adhoc_send_failed", err.Error())
 	}

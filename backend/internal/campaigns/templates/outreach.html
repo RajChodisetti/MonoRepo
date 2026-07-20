@@ -36,8 +36,7 @@
               </p>
               <p style="margin:12px 0 0;font-size:15px;line-height:1.55;color:#374151;">
                 <strong style="color:#111111;">Tuvi Solutions</strong> builds restaurant tools to help with that — and we've already created a
-                <a href="__CLICK_URL__" style="color:#111111;font-weight:700;text-decoration:underline;">live website preview for {{.RestaurantName}}</a>
-                plus a reservation-request form and details on our AI receptionist.
+                live website preview for <strong style="color:#111111;">{{.RestaurantName}}</strong>, plus a reservation-request form and details on our AI receptionist.
               </p>
             </td>
           </tr>
@@ -45,7 +44,7 @@
           <!-- Clickable services -->
           <tr>
             <td style="padding:16px 24px 8px;">
-              <p style="margin:0 0 10px;font-size:11px;letter-spacing:0.14em;font-weight:700;color:#6b7280;text-transform:uppercase;">Choose a personalized website</p>
+              <p style="margin:0 0 10px;font-size:11px;letter-spacing:0.14em;font-weight:700;color:#6b7280;text-transform:uppercase;">Links for {{.RestaurantName}}</p>
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #e6e8ec;border-radius:12px;overflow:hidden;">
                 {{range $i, $svc := .Services}}
                 <tr>
@@ -61,18 +60,9 @@
             </td>
           </tr>
 
-          <!-- Primary CTA -->
-          <tr>
-            <td align="center" style="padding:20px 24px 8px;">
-              <a href="__CLICK_URL__" style="display:inline-block;background:#d4a853;color:#111111;text-decoration:none;font-weight:700;font-size:14px;padding:13px 28px;border-radius:10px;">
-                Open {{.RestaurantName}} demo
-              </a>
-            </td>
-          </tr>
-
           <!-- Close + footer -->
           <tr>
-            <td style="padding:16px 24px 28px;">
+            <td style="padding:20px 24px 28px;">
               <p style="margin:0;font-size:13px;line-height:1.55;color:#5b6470;">
                 Reply anytime — happy to walk you through it in 10 minutes.
               </p>

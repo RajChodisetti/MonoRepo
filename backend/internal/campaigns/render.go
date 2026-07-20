@@ -63,23 +63,13 @@ func buildOutreachEmailData(restaurantName string, links OutreachLinkConfig) Out
 	// braces; injectOutreachPlaceholders rewrites it after render.
 	services := []OutreachServiceLink{
 		{
-			Title:       "Cinematic personalized website",
-			Description: "A bold, story-led website built from your restaurant details",
-			URL:         htmltemplate.URL("__TEMPLATE_1_URL__"),
+			Title:       "Personalized demo websites",
+			Description: "Open the live restaurant-specific website preview we prepared",
+			URL:         htmltemplate.URL("__CLICK_URL__"),
 		},
 		{
-			Title:       "Aurora personalized website",
-			Description: "A warm, modern alternative using the same restaurant content",
-			URL:         htmltemplate.URL("__TEMPLATE_2_URL__"),
-		},
-		{
-			Title:       "Elysian personalized website",
-			Description: "A polished reservation-focused experience for your guests",
-			URL:         htmltemplate.URL("__TEMPLATE_3_URL__"),
-		},
-		{
-			Title:       "Tuvi restaurant services presentation",
-			Description: "See the complete AI receptionist, website, reservation, and growth offering",
+			Title:       "Services catalog",
+			Description: "Explore Tuvi's restaurant services, including websites, AI receptionist, reservations, and growth tools",
 			URL:         htmltemplate.URL(presentationURL),
 		},
 	}

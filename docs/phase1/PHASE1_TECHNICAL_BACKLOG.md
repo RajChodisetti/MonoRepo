@@ -396,7 +396,7 @@ Every ticket must satisfy these unless explicitly not applicable:
 
 - Draft includes restaurant name.
 - Draft includes demo link.
-- Draft includes the Tuvi restaurant-services presentation plus tracked Cinematic, Aurora, and Elysian personalized website links.
+- Draft includes one personalized demo websites link and one Tuvi `/services/restaurants` link labeled “Services catalog.”
 - Draft includes one clear CTA.
 - Draft includes opt-out text.
 - Draft can be reviewed before sending.

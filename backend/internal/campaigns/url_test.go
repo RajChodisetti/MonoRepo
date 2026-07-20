@@ -29,32 +29,43 @@ func TestRenderOutreachEmail(t *testing.T) {
 	}
 	for _, token := range []string{
 		"{{CLICK_URL}}",
-		"{{TEMPLATE_1_URL}}",
-		"{{TEMPLATE_2_URL}}",
-		"{{TEMPLATE_3_URL}}",
 		"{{UNSUBSCRIBE_URL}}",
-		"Cinematic personalized website",
-		"Aurora personalized website",
-		"Elysian personalized website",
-		"Tuvi restaurant services presentation",
+		"Personalized demo websites",
+		"Services catalog",
 		"http://localhost:5500",
-		"live website preview for Spice Garden",
-		"Open Spice Garden demo",
+		"live website preview for",
 	} {
 		if !strings.Contains(draft.BodyHTML, token) {
 			t.Fatalf("body_html missing %q", token)
 		}
 	}
+	for _, token := range []string{
+		"{{TEMPLATE_1_URL}}",
+		"{{TEMPLATE_2_URL}}",
+		"{{TEMPLATE_3_URL}}",
+		"Cinematic personalized website",
+		"Aurora personalized website",
+		"Elysian personalized website",
+		"Tuvi restaurant services presentation",
+		"Open Spice Garden demo",
+	} {
+		if strings.Contains(draft.BodyHTML, token) {
+			t.Fatalf("body_html should not include %q", token)
+		}
+	}
 	if strings.Contains(draft.BodyHTML, "%7b") {
 		t.Fatal("body_html has URL-escaped CLICK_URL braces")
+	}
+	if count := strings.Count(draft.BodyHTML, "{{CLICK_URL}}"); count != 1 {
+		t.Fatalf("body_html has %d personalized demo links, want 1", count)
 	}
 	for _, banned := range []string{"We already built a preview"} {
 		if strings.Contains(draft.BodyHTML, banned) {
 			t.Fatalf("body_html should not contain %q", banned)
 		}
 	}
-	if !strings.Contains(draft.BodyText, "Tuvi restaurant services presentation") {
-		t.Fatal("body_text missing presentation link")
+	if !strings.Contains(draft.BodyText, "Services catalog") {
+		t.Fatal("body_text missing Services catalog link")
 	}
 }
 

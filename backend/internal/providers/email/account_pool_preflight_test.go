@@ -92,6 +92,39 @@ func TestDurableAccountPoolValidatesBeforeClaim(t *testing.T) {
 	}
 }
 
+func TestDurableAccountPoolSendDirectSkipsQuotaClaim(t *testing.T) {
+	quota := &preflightQuotaStore{}
+	provider := &preflightProvider{}
+	pool, err := newPersistentAccountPool(
+		[]accountProvider{{key: "account-1", provider: provider}},
+		40,
+		40,
+		24*time.Hour,
+		quota,
+	)
+	if err != nil {
+		t.Fatalf("newPersistentAccountPool() error = %v", err)
+	}
+
+	result, err := pool.SendDirect(context.Background(), SendRequest{
+		To:       "owner@example.com",
+		Subject:  "Manual send",
+		TextBody: "hello",
+	})
+	if err != nil {
+		t.Fatalf("SendDirect() error = %v, want nil", err)
+	}
+	if result.QuotaManaged {
+		t.Fatal("SendDirect() result was quota managed")
+	}
+	if quota.claims != 0 {
+		t.Fatalf("quota claims = %d, want 0", quota.claims)
+	}
+	if provider.sends != 1 {
+		t.Fatalf("provider sends = %d, want 1", provider.sends)
+	}
+}
+
 func TestPersistentAccountPoolRegistersDurablePacingPolicy(t *testing.T) {
 	t.Parallel()
 

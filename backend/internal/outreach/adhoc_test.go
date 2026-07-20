@@ -35,8 +35,9 @@ func (repo *suppressibleMockRepo) RecordAdHocEmailSent(ctx context.Context, rest
 }
 
 type recordingEmailProvider struct {
-	sent []emailprovider.SendRequest
-	err  error
+	sent   []emailprovider.SendRequest
+	result emailprovider.SendResult
+	err    error
 }
 
 func (provider *recordingEmailProvider) Send(ctx context.Context, req emailprovider.SendRequest) (emailprovider.SendResult, error) {
@@ -44,10 +45,13 @@ func (provider *recordingEmailProvider) Send(ctx context.Context, req emailprovi
 		return emailprovider.SendResult{}, provider.err
 	}
 	provider.sent = append(provider.sent, req)
+	if provider.result.ProviderMessageID != "" || provider.result.Skipped || provider.result.RedirectedTo != "" {
+		return provider.result, nil
+	}
 	return emailprovider.SendResult{ProviderMessageID: "mock-adhoc"}, nil
 }
 
-func newAdHocTestService(t *testing.T, repo *suppressibleMockRepo, restaurantID uuid.UUID, email string, campaign *campaigns.Campaign, emailProvider emailprovider.Provider, disableSending bool) *outreach.Service {
+func newAdHocTestService(t *testing.T, repo *suppressibleMockRepo, restaurantID uuid.UUID, email string, campaign *campaigns.Campaign, emailProvider emailprovider.Provider, disableSending bool, emailPools ...*emailprovider.AccountPool) *outreach.Service {
 	t.Helper()
 
 	restaurantsMock := &restaurants.Mock{Restaurants: map[uuid.UUID]restaurants.Restaurant{
@@ -64,6 +68,11 @@ func newAdHocTestService(t *testing.T, repo *suppressibleMockRepo, restaurantID 
 		PublicWebURL:  "https://example.com",
 	})
 
+	var emailPool *emailprovider.AccountPool
+	if len(emailPools) > 0 {
+		emailPool = emailPools[0]
+	}
+
 	return outreach.NewService(
 		repo,
 		nil,
@@ -71,7 +80,7 @@ func newAdHocTestService(t *testing.T, repo *suppressibleMockRepo, restaurantID 
 		campaignService,
 		accessService,
 		outreach.DemoTokenResolver{},
-		nil,
+		emailPool,
 		emailProvider,
 		config.EmailConfig{Provider: "zoho", DisableSending: disableSending},
 		config.OutreachConfig{BulkMax: 150},
@@ -84,18 +93,49 @@ func adminPrincipal() auth.Principal {
 	return auth.Principal{Role: auth.RoleInternalAdmin, UserID: uuid.New()}
 }
 
-func TestSendAdHocRejectsWhenSendingDisabled(t *testing.T) {
+func TestSendAdHocSendsWhenGenericSendingDisabled(t *testing.T) {
 	restaurantID := uuid.New()
 	repo := &suppressibleMockRepo{}
 	provider := &recordingEmailProvider{}
-	service := newAdHocTestService(t, repo, restaurantID, "owner@example.com", nil, provider, true)
+	campaign := &campaigns.Campaign{ID: uuid.New(), RestaurantID: restaurantID, Subject: "Hi", BodyHTML: "<p>hi</p>", BodyText: "hi"}
+	service := newAdHocTestService(t, repo, restaurantID, "owner@example.com", campaign, provider, true)
 
-	_, err := service.SendAdHoc(context.Background(), adminPrincipal(), restaurantID)
-	if !errors.Is(err, outreach.ErrSendingDisabled) {
-		t.Fatalf("SendAdHoc() error = %v, want ErrSendingDisabled", err)
+	result, err := service.SendAdHoc(context.Background(), adminPrincipal(), restaurantID)
+	if err != nil {
+		t.Fatalf("SendAdHoc() error = %v, want nil", err)
 	}
-	if len(provider.sent) != 0 {
-		t.Fatalf("expected no send attempt, got %d", len(provider.sent))
+	if !result.Sent {
+		t.Fatalf("result.Sent = false, want true")
+	}
+	if len(provider.sent) != 1 {
+		t.Fatalf("expected one send attempt, got %d", len(provider.sent))
+	}
+}
+
+func TestSendAdHocPrefersOutreachPoolWhenConfigured(t *testing.T) {
+	restaurantID := uuid.New()
+	repo := &suppressibleMockRepo{}
+	genericProvider := &recordingEmailProvider{}
+	outreachProvider := &recordingEmailProvider{}
+	pool, err := emailprovider.NewAccountPool([]emailprovider.Provider{outreachProvider}, 25, 25)
+	if err != nil {
+		t.Fatalf("NewAccountPool() error = %v", err)
+	}
+	campaign := &campaigns.Campaign{ID: uuid.New(), RestaurantID: restaurantID, Subject: "Hi", BodyHTML: "<p>hi</p>", BodyText: "hi"}
+	service := newAdHocTestService(t, repo, restaurantID, "owner@example.com", campaign, genericProvider, true, pool)
+
+	result, err := service.SendAdHoc(context.Background(), adminPrincipal(), restaurantID)
+	if err != nil {
+		t.Fatalf("SendAdHoc() error = %v, want nil", err)
+	}
+	if !result.Sent {
+		t.Fatalf("result.Sent = false, want true")
+	}
+	if len(outreachProvider.sent) != 1 {
+		t.Fatalf("outreachProvider.sent = %d, want 1", len(outreachProvider.sent))
+	}
+	if len(genericProvider.sent) != 0 {
+		t.Fatalf("genericProvider.sent = %d, want 0", len(genericProvider.sent))
 	}
 }
 
@@ -149,6 +189,25 @@ func TestSendAdHocSendsAndRecords(t *testing.T) {
 	}
 	if len(repo.recorded) != 1 || repo.recorded[0] != restaurantID {
 		t.Fatalf("repo.recorded = %v, want [%v]", repo.recorded, restaurantID)
+	}
+}
+
+func TestSendAdHocDoesNotRecordSkippedDelivery(t *testing.T) {
+	restaurantID := uuid.New()
+	repo := &suppressibleMockRepo{}
+	provider := &recordingEmailProvider{result: emailprovider.SendResult{Skipped: true}}
+	campaign := &campaigns.Campaign{
+		ID: uuid.New(), RestaurantID: restaurantID,
+		Subject: "Hello Test Cafe", BodyHTML: "<p>hello</p>", BodyText: "hello",
+	}
+	service := newAdHocTestService(t, repo, restaurantID, "owner@example.com", campaign, provider, false)
+
+	_, err := service.SendAdHoc(context.Background(), adminPrincipal(), restaurantID)
+	if !errors.Is(err, outreach.ErrDeliverySkipped) {
+		t.Fatalf("SendAdHoc() error = %v, want ErrDeliverySkipped", err)
+	}
+	if len(repo.recorded) != 0 {
+		t.Fatalf("repo.recorded = %v, want no contacted record", repo.recorded)
 	}
 }
 

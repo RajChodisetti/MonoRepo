@@ -30,8 +30,13 @@ POST city scrape job
 ```
 
 Creating a scrape job, running OCR, or preparing drafts does not send email.
-Real email still requires all three record approvals and an internal
-administrator enabling the persisted email job from the Outreach UI.
+Bulk outreach still requires all three record approvals and an internal
+administrator enabling the persisted email job from the Outreach UI. Internal
+administrators can also send bounded selective/manual emails from the restaurant
+list or a restaurant detail page; those ad hoc sends bypass the bulk email-job
+flag and the generic `EMAIL_DISABLE_SENDING` adapter flag, but still require a
+configured Gmail outreach sender, a contact email, and a recipient that has not
+opted out.
 
 ## Required deployment order
 
@@ -622,31 +627,25 @@ A live demo for <Restaurant Name> — AI receptionist, website & more
 
 The invite says that missed calls and outdated websites can make it harder for
 guests to request a table, says a live preview plus a reservation-request form
-has already been prepared, and presents:
+has already been prepared, and presents two promotional links:
 
-- AI Voice Receptionist — “24/7 calls, reservation requests & callbacks” —
-  `https://tuvisolutions.com/services/restaurants`;
-- Presentation Websites — “Modern sites from your real menu & photos” —
-  `https://tuvisolutions.com/services/restaurants`;
-- Reservation Requests — “Guests submit table requests on your demo site” —
-  its own tracked token-gated template-3 demo link;
-- Custom Apps — “QR ordering, loyalty & more” —
-  `https://tuvisolutions.com`.
+- Personalized demo websites — the tracked token-gated demo link;
+- Services catalog — `https://tuvisolutions.com/services/restaurants`.
 
 The closing invitation is: “Reply anytime — happy to walk you through it in 10
 minutes.”
 
-The primary “Open <Restaurant Name> demo” CTA uses an API click-tracking URL on
+The “Personalized demo websites” link uses an API click-tracking URL on
 `https://api.tuvisolutions.com/t/click/<token>`, which redirects to the
 restaurant preview on `https://demo.tuvisolutions.com` with a demo slug
 and token plus `template=1`. That page fetches
 `/api/public/v1/demo/<slug>?token=<token>` with
 `no-store`; it never falls back to the ungated public restaurant-index API.
-The Reservation Requests service entry receives a separate click token whose
-target adds `template=3`. The token-gated payload supplies a server-derived
-restaurant UUID (never a mutable payload-provided ID), so that template can
-submit a `pending` reservation request for the correct restaurant.
-The current outreach template does not render a template-2 link.
+The token-gated payload supplies a server-derived restaurant UUID (never a
+mutable payload-provided ID), so the demo can submit a `pending` reservation
+request for the correct restaurant. Newly generated outreach drafts do not
+render template-specific links; legacy drafts with `{{TEMPLATE_1_URL}}`,
+`{{TEMPLATE_2_URL}}`, or `{{TEMPLATE_3_URL}}` remain supported at send time.
 Click and open tracking tokens expire 30 days after creation or at the demo's
 earlier expiry, whichever comes first. Unsubscribe tokens intentionally remain
 valid so an older email retains a working opt-out. Each new tracking/delivery row
@@ -660,8 +659,8 @@ historical provider records when available.
 does not extend an emailed click/open URL past that 30-day cap.
 The legacy index-based voice widget is intentionally not mounted on token-gated
 previews until it supports a stable token-scoped restaurant identity; the AI
-service link instead opens the presentation page above. Unpublishing or
-expiring the demo therefore revokes the emailed preview. The footer includes
+services catalog link instead opens the Tuvi services page above. Unpublishing
+or expiring the demo therefore revokes the emailed preview. The footer includes
 `https://api.tuvisolutions.com/t/unsubscribe/<token>`. When enabled, a 1x1 open
 tracking image uses `https://api.tuvisolutions.com/t/open/<token>`.
 
