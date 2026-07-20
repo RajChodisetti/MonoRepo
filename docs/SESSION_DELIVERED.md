@@ -12,6 +12,66 @@ Each entry should explain:
 - how the work fits with the rest of the Phase 1 or Phase 2 plan;
 - risks, gaps, or follow-ups.
 
+## 2026-07-19 — Internal Developer SQL Console
+
+**Role:** Backend, Frontend, Security, Test, DevOps, and Documentation Agent
+
+**Delivered:** Added a new internal admin **Developer** tab at
+`/admin/developer`. It includes a read-only PostgreSQL SQL runner, result table,
+schema browser, and saved query shortcuts for menu popularity, stored row
+counts, and recent restaurants. The default menu query counts how many distinct
+restaurants offer each normalized menu item by joining `menu_items`, `menus`,
+and `restaurants`. Added protected Go endpoints:
+`GET /api/v1/developer/schema` and `POST /api/v1/developer/sql`, both requiring
+`internal_admin`. The SQL endpoint accepts one `SELECT`, `WITH`, `SHOW`, or
+`EXPLAIN` statement, executes inside a PostgreSQL read-only transaction, applies
+an 8-second statement timeout, and caps returned rows at 200.
+
+**Storage Answer:** The platform does store restaurants and menu tables in
+PostgreSQL. Production live-database read-only counts after deployment showed:
+944 `restaurants`, 944 `menus`, 47 `menu_items`, and 47 distinct normalized menu
+item names. The current menu item data is sparse: the top ten sampled item names
+were each present at one restaurant.
+
+**Checks Run:** `go test ./backend/internal/developer`,
+`go test ./backend/internal/http/test`,
+`go test ./backend/internal/http/handlers ./backend/internal/developer ./backend/internal/http/test`,
+`go test ./backend/...`, `go build ./...`, `go vet ./...`,
+`npm --prefix apps/web run lint`, `npx tsc --noEmit --incremental false` from
+`apps/web`, `npx -p node@22 -c 'node -v && npm run build'` from `apps/web`,
+`make openapi`, and `git diff --check` all passed. The first local
+`npm run build` under host Node v23 failed with a webpack JSON parsing error
+from a generated `.next` cache; after moving that generated cache aside, the
+Node 22 production build passed and rendered `/developer`.
+
+**Production Deployment:** Commit `e4d6801` was pushed to `master` and deployed
+from a `git archive` release at `/opt/tuvi/releases/monorepo-e4d6801`.
+`/opt/tuvi/previous-release-path` points to
+`/opt/tuvi/releases/monorepo-88b58eb` for rollback. The VM rebuilt `migrate`,
+`api`, and `admin-web`; `migration up complete` ran with no new schema
+migration; `tuvi-api-1` and `tuvi-admin-web-1` were recreated. Both containers
+showed zero restarts after deployment.
+
+**Production Smokes:** `https://api.tuvisolutions.com/admin/developer`
+redirected unauthenticated traffic to `/admin/login?next=%2Fdeveloper`;
+`https://api.tuvisolutions.com/admin/login` returned 200;
+`https://api.tuvisolutions.com/api/v1/developer/schema` returned 401 without a
+token; and `https://api.tuvisolutions.com/api/public/v1/site/restaurants`
+returned 200. VM logs showed the admin-web server ready and the Go API connected
+to the database and serving requests. An authenticated Developer schema/query
+smoke was not run because no production admin credentials were read or printed.
+
+**Business Value / Plan Fit:** Gives the internal operator a fast, protected
+way to inspect schema and answer sales/data questions such as menu-item
+coverage without SSH or psql. This supports Phase 1 dashboard/QA operations
+while preserving the production safety rule that browser-based SQL is
+read-only.
+
+**Risks / Follow-ups:** Internal admins can now read database rows through the
+admin UI, so account access should remain tightly controlled. The console is
+intentionally not a write console; destructive or mutating SQL still requires
+server/DB administration outside the browser.
+
 ## 2026-07-17 — Low-Cost OCR Selection and Full-Photo Verification
 
 **Role:** AI Workflow, Backend, Frontend, Security, Test, Cost/Eval, and DevOps

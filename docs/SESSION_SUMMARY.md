@@ -1,6 +1,6 @@
 # Session Summary
 
-The VM runtime is `88b58eb` at `/opt/tuvi/releases/monorepo-88b58eb`; rollback points to `/opt/tuvi/releases/monorepo-b2a2f83`, schema is `000035`, and the pre-removal backup is `/opt/tuvi/backups/pre-remove-italian-b2a2f83-20260719-193900.sql.gz`.
-The rejected Italian Villa experimental template was removed from the template app, admin Demo tab, engagement contract, and database template constraint; generated sites now expose only templates 1/2/3.
-Generated lead previews now request `preview_media=google_live` and render fresh attributed Google photos when reviewed media is empty; a production preview for The Shed returned ten media objects and rendered Google image URLs plus attribution.
-Template/admin TypeScript, admin ESLint, Go tests, focused Python OCR/outreach tests, VM builds, HTTPS smokes, and zero-restart container checks passed. OCR remains at the 200/200 daily budget ceiling until the UTC reset.
+Production runtime is `e4d6801` at `/opt/tuvi/releases/monorepo-e4d6801`; rollback points to `/opt/tuvi/releases/monorepo-88b58eb`, and schema remains at `000035` with no new migration.
+The admin portal now has `/admin/developer`, a protected internal-admin Developer tab with a read-only SQL runner, 200-row capped results, schema table/column browser, and menu-item popularity shortcuts.
+Restaurants and menus are stored in PostgreSQL: live counts after deployment showed 944 restaurants, 944 menus, 47 menu item rows, and 47 distinct normalized menu item names.
+Backend tests/build/vet, admin lint/TypeScript, Node 22 admin production build, OpenAPI validation, VM image builds, deployment, and HTTPS protection smokes passed; Docker was unavailable locally, so the production-equivalent Docker build was verified on the VM.
