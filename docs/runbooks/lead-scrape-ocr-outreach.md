@@ -643,9 +643,11 @@ and token plus `template=1`. That page fetches
 `no-store`; it never falls back to the ungated public restaurant-index API.
 The token-gated payload supplies a server-derived restaurant UUID (never a
 mutable payload-provided ID), so the demo can submit a `pending` reservation
-request for the correct restaurant. Newly generated outreach drafts do not
-render template-specific links; legacy drafts with `{{TEMPLATE_1_URL}}`,
-`{{TEMPLATE_2_URL}}`, or `{{TEMPLATE_3_URL}}` remain supported at send time.
+request for the correct restaurant. Current outreach preview/send paths
+canonicalize the stored campaign into exactly three email anchors: Personalized
+demo websites, Services catalog, and Unsubscribe. Migration `000036` rewrites
+unsent draft/approved rows that still contain the old template-specific
+placeholders, template-option labels, or duplicated demo buttons.
 Click and open tracking tokens expire 30 days after creation or at the demo's
 earlier expiry, whichever comes first. Unsubscribe tokens intentionally remain
 valid so an older email retains a working opt-out. Each new tracking/delivery row

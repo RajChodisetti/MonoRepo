@@ -59,6 +59,9 @@ func TestRenderOutreachEmail(t *testing.T) {
 	if count := strings.Count(draft.BodyHTML, "{{CLICK_URL}}"); count != 1 {
 		t.Fatalf("body_html has %d personalized demo links, want 1", count)
 	}
+	if count := strings.Count(draft.BodyHTML, "href="); count != 3 {
+		t.Fatalf("body_html has %d links, want exactly 3", count)
+	}
 	for _, banned := range []string{"We already built a preview"} {
 		if strings.Contains(draft.BodyHTML, banned) {
 			t.Fatalf("body_html should not contain %q", banned)

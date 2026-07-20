@@ -67,6 +67,9 @@ func TestBuildDraftIncludesPlaceholders(t *testing.T) {
 	if count := strings.Count(draft.BodyHTML, "https://tuvisolutions.com/services/restaurants"); count != 1 {
 		t.Fatalf("body_html has %d Services catalog links, want 1", count)
 	}
+	if count := strings.Count(draft.BodyHTML, "href="); count != 3 {
+		t.Fatalf("body_html has %d links, want exactly 3", count)
+	}
 }
 
 func TestInjectTrackingReplacesPlaceholders(t *testing.T) {

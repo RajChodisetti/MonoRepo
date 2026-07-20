@@ -381,11 +381,11 @@ func (service *Service) sendLead(ctx context.Context, lead EligibleLead, bulkJob
 		return false, fmt.Errorf("build tracking urls: %w", err)
 	}
 
-	draft := campaigns.InjectTracking(campaigns.DraftContent{
-		Subject:  campaign.Subject,
-		BodyHTML: campaign.BodyHTML,
-		BodyText: campaign.BodyText,
-	}, trackingURLs, service.emailCfg.OpenTrackingEnabled)
+	content, err := service.campaignService.BuildCurrentOutreachDraft(sendCtx.RestaurantName)
+	if err != nil {
+		return false, fmt.Errorf("render current outreach email: %w", err)
+	}
+	draft := campaigns.InjectTracking(content, trackingURLs, service.emailCfg.OpenTrackingEnabled)
 	if err := campaigns.ValidateRenderedEmail(draft, service.emailCfg.RequireHTTPSLinks, service.emailCfg.AllowedLinkHosts...); err != nil {
 		return false, fmt.Errorf("validate rendered outreach email: %w", err)
 	}
@@ -498,11 +498,9 @@ func (service *Service) sendLead(ctx context.Context, lead EligibleLead, bulkJob
 }
 
 // latestCampaignContent returns the most recently created campaign for a
-// restaurant (any status), which carries the subject/HTML/text rendered at
-// draft/regenerate time. Ad hoc send/preview deliberately does not require
-// approval/publish/OCR gates, but it still needs real rendered content to
-// send, so it reuses whatever draft already exists rather than rendering ad
-// hoc content outside the audited draft lifecycle.
+// restaurant (any status). The campaign record still carries the demo token
+// and audit identity, but list/Get canonicalize outreach copy so ad hoc
+// preview/send uses the current three-link template instead of stale HTML.
 func (service *Service) latestCampaignContent(ctx context.Context, principal auth.Principal, restaurantID uuid.UUID) (campaigns.Campaign, error) {
 	records, err := service.campaignService.ListByRestaurant(ctx, principal, restaurantID)
 	if err != nil {
@@ -530,14 +528,23 @@ func (service *Service) PreviewAdHoc(ctx context.Context, principal auth.Princip
 	if err != nil {
 		return AdHocPreview{}, err
 	}
+	previewURLs, err := service.campaignService.BuildAdHocPreviewURLs(ctx, campaign)
+	if err != nil {
+		return AdHocPreview{}, fmt.Errorf("%w: %v", ErrDemoLinkInvalid, err)
+	}
+	draft := campaigns.InjectTracking(campaigns.DraftContent{
+		Subject:  campaign.Subject,
+		BodyHTML: campaign.BodyHTML,
+		BodyText: campaign.BodyText,
+	}, previewURLs, false)
 
 	return AdHocPreview{
 		RestaurantID:   restaurantID,
 		RestaurantName: restaurant.Name,
 		RecipientEmail: restaurant.Email,
-		Subject:        campaign.Subject,
-		BodyHTML:       campaign.BodyHTML,
-		BodyText:       campaign.BodyText,
+		Subject:        draft.Subject,
+		BodyHTML:       draft.BodyHTML,
+		BodyText:       draft.BodyText,
 	}, nil
 }
 
@@ -575,12 +582,24 @@ func (service *Service) SendAdHoc(ctx context.Context, principal auth.Principal,
 	if err != nil {
 		return AdHocSendResult{RestaurantID: restaurantID}, err
 	}
+	trackingURLs, err := service.campaignService.BuildAdHocTrackingURLs(ctx, campaign, email)
+	if err != nil {
+		return AdHocSendResult{RestaurantID: restaurantID}, fmt.Errorf("%w: %v", ErrDemoLinkInvalid, err)
+	}
+	draft := campaigns.InjectTracking(campaigns.DraftContent{
+		Subject:  campaign.Subject,
+		BodyHTML: campaign.BodyHTML,
+		BodyText: campaign.BodyText,
+	}, trackingURLs, service.emailCfg.OpenTrackingEnabled)
+	if err := campaigns.ValidateRenderedEmail(draft, service.emailCfg.RequireHTTPSLinks, service.emailCfg.AllowedLinkHosts...); err != nil {
+		return AdHocSendResult{RestaurantID: restaurantID}, fmt.Errorf("validate rendered ad hoc email: %w", err)
+	}
 
 	sendRequest := emailprovider.SendRequest{
 		To:       email,
-		Subject:  campaign.Subject,
-		HTMLBody: campaign.BodyHTML,
-		TextBody: campaign.BodyText,
+		Subject:  draft.Subject,
+		HTMLBody: draft.BodyHTML,
+		TextBody: draft.BodyText,
 		Metadata: map[string]string{
 			"restaurant_id": restaurantID.String(),
 			"campaign_id":   campaign.ID.String(),

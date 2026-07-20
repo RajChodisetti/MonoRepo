@@ -3189,7 +3189,12 @@ components:
           type: string
         body_html:
           type: string
-          description: Draft HTML whose `{{CLICK_URL}}` personalized-demo placeholder and `{{UNSUBSCRIBE_URL}}` placeholder are replaced at send time. Legacy `{{TEMPLATE_1_URL}}`–`{{TEMPLATE_3_URL}}` placeholders are still accepted when older drafts are sent.
+          description: >
+            Current outreach HTML is canonicalized before preview/send to three
+            anchors only: `{{CLICK_URL}}` personalized-demo placeholder, the
+            Tuvi services catalog URL, and `{{UNSUBSCRIBE_URL}}` opt-out
+            placeholder. Template-specific placeholders are not generated for
+            current sends.
         body_text:
           type: string
         approved_at:

@@ -42,13 +42,18 @@ func BuildDraft(input DraftInput) DraftContent {
 		if name == "" {
 			name = "your restaurant"
 		}
+		presentationURL := strings.TrimSpace(input.PresentationSiteURL)
+		if presentationURL == "" {
+			presentationURL = defaultPresentationURL
+		}
 		return DraftContent{
 			Subject: outreachSubject(name),
 			BodyHTML: fmt.Sprintf(
-				`<p>A live demo for %s. <a href="{{CLICK_URL}}">View the demo</a>.</p><p><a href="{{UNSUBSCRIBE_URL}}">Unsubscribe</a>.</p>`,
+				`<p>A live demo for %s.</p><ul><li><a href="{{CLICK_URL}}">Personalized demo websites</a></li><li><a href="%s">Services catalog</a></li></ul><p><a href="{{UNSUBSCRIBE_URL}}">Unsubscribe</a>.</p>`,
 				html.EscapeString(name),
+				html.EscapeString(presentationURL),
 			),
-			BodyText: fmt.Sprintf("View your demo: {{CLICK_URL}}\nUnsubscribe: {{UNSUBSCRIBE_URL}}\n"),
+			BodyText: fmt.Sprintf("Personalized demo websites: {{CLICK_URL}}\nServices catalog: %s\nUnsubscribe: {{UNSUBSCRIBE_URL}}\n", presentationURL),
 		}
 	}
 	return draft

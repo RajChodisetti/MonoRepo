@@ -26,6 +26,7 @@ var (
 	ErrEmailSuppressed = errors.New("recipient has opted out of outreach email")
 	ErrNoCampaignDraft = errors.New("no campaign draft exists yet for this restaurant")
 	ErrDeliverySkipped = errors.New("email delivery was skipped")
+	ErrDemoLinkInvalid = errors.New("demo link is not published or is no longer valid")
 )
 
 // AdHocSendResult is the per-restaurant outcome of an ad hoc (non-bulk) send.
