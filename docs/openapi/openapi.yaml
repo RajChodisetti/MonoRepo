@@ -69,6 +69,8 @@ tags:
     description: Public signup/login and session identity
   - name: Admin
     description: Internal admin profile
+  - name: Developer
+    description: Internal-admin database inspection tools
   - name: User
     description: Restaurant owner and developer profile
   - name: Restaurants
@@ -1393,6 +1395,79 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '503':
           description: Gmail health service is not configured
+
+  /api/v1/developer/schema:
+    get:
+      tags: [Developer]
+      summary: List public PostgreSQL tables and columns
+      operationId: developerSchema
+      security:
+        - bearerAuth: []
+      description: Requires role `internal_admin`. Returns table and column metadata from `information_schema`.
+      responses:
+        '200':
+          description: Public schema tables and columns
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeveloperSchemaResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          description: Database not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/developer/sql:
+    post:
+      tags: [Developer]
+      summary: Execute a read-only SQL query
+      operationId: developerExecuteSQL
+      security:
+        - bearerAuth: []
+      description: |
+        Requires role `internal_admin`. Executes one read-only `SELECT`, `WITH`, `SHOW`,
+        or `EXPLAIN` statement inside a PostgreSQL read-only transaction with a short
+        statement timeout and a 200-row response cap.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeveloperSQLRequest'
+            example:
+              query: |
+                SELECT
+                  lower(trim(mi.name)) AS item_name,
+                  count(DISTINCT m.restaurant_id) AS restaurant_count
+                FROM menu_items mi
+                JOIN menus m ON m.id = mi.menu_id
+                GROUP BY lower(trim(mi.name))
+                ORDER BY restaurant_count DESC
+                LIMIT 100
+      responses:
+        '200':
+          description: Query result rows
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeveloperQueryResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          description: Database not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /api/v1/campaigns/{id}/stop:
     parameters:
@@ -2946,6 +3021,87 @@ components:
         provider_message_id:
           type: string
         last_error:
+          type: string
+
+    DeveloperSchemaResponse:
+      type: object
+      required: [tables]
+      properties:
+        tables:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeveloperSchemaTable'
+
+    DeveloperSchemaTable:
+      type: object
+      required: [name, type, columns]
+      properties:
+        name:
+          type: string
+          example: menu_items
+        type:
+          type: string
+          example: BASE TABLE
+        columns:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeveloperSchemaColumn'
+
+    DeveloperSchemaColumn:
+      type: object
+      required: [name, data_type, database_type, is_nullable, ordinal_position]
+      properties:
+        name:
+          type: string
+          example: name
+        data_type:
+          type: string
+          example: text
+        database_type:
+          type: string
+          example: text
+        is_nullable:
+          type: boolean
+        column_default:
+          type: string
+        ordinal_position:
+          type: integer
+
+    DeveloperSQLRequest:
+      type: object
+      required: [query]
+      properties:
+        query:
+          type: string
+          description: One read-only SELECT, WITH, SHOW, or EXPLAIN statement.
+
+    DeveloperQueryResult:
+      type: object
+      required: [columns, rows, row_count, truncated, elapsed_ms, max_rows]
+      properties:
+        columns:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeveloperQueryColumn'
+        rows:
+          type: array
+          items:
+            type: array
+            items: {}
+        row_count:
+          type: integer
+        truncated:
+          type: boolean
+        elapsed_ms:
+          type: integer
+        max_rows:
+          type: integer
+
+    DeveloperQueryColumn:
+      type: object
+      required: [name]
+      properties:
+        name:
           type: string
 
     DemoSessionCapability:

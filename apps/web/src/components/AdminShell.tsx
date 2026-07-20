@@ -10,6 +10,7 @@ const NAV = [
   { href: "/scrape-jobs", label: "Scrape jobs" },
   { href: "/restaurants", label: "Restaurants" },
   { href: "/outreach", label: "Outreach" },
+  { href: "/developer", label: "Developer" },
 ];
 
 export function AdminShell({ children }: { children: React.ReactNode }) {

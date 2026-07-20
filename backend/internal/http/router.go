@@ -12,6 +12,7 @@ import (
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/campaigns"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/consultations"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/demos"
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/developer"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/http/handlers"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/jobs"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/leadreview"
@@ -134,6 +135,11 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	reservationService := reservations.NewService(dataStore.Reservations)
 	reservationPublicHandler := handlers.NewReservationPublicHandler(reservationService, writeJSON, writeError)
 	companyConsultationHandler := handlers.NewCompanyConsultationHandler(consultationService, writeJSON)
+	developerHandler := handlers.NewDeveloperHandler(
+		developer.NewService(dataStore.Pool()),
+		writeJSON,
+		writeError,
+	)
 
 	mux.HandleFunc("POST /api/v1/auth/signup", authHandler.Signup)
 	mux.HandleFunc("POST /api/v1/auth/login", authHandler.Login)
@@ -191,6 +197,8 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	mux.Handle("PATCH /api/v1/outreach/email-job", protectInternalAdmin(http.HandlerFunc(outreachBulkHandler.SetEmailJob)))
 	mux.Handle("GET /api/v1/outreach/bulk-send/status", protectInternalAdmin(http.HandlerFunc(outreachBulkHandler.Status)))
 	mux.Handle("GET /api/v1/outreach/email-accounts/health", protectInternalAdmin(http.HandlerFunc(emailHealthHandler.Status)))
+	mux.Handle("GET /api/v1/developer/schema", protectInternalAdmin(http.HandlerFunc(developerHandler.Schema)))
+	mux.Handle("POST /api/v1/developer/sql", protectInternalAdmin(http.HandlerFunc(developerHandler.ExecuteSQL)))
 	mux.Handle("POST /api/v1/scrape-jobs", protectInternalAdmin(http.HandlerFunc(scrapeJobHandler.Trigger)))
 	mux.Handle("GET /api/v1/scrape-jobs", protectInternalAdmin(http.HandlerFunc(scrapeJobHandler.List)))
 	mux.Handle("GET /api/v1/scrape-jobs/{id}", protectInternalAdmin(http.HandlerFunc(scrapeJobHandler.Get)))
