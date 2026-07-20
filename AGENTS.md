@@ -793,7 +793,7 @@ Rules:
 
 ## Current Repo Shape
 
-_Last updated: 2026-07-19_
+_Last updated: 2026-07-20_
 
 ```text
 Root Go module with backend under backend/.
@@ -801,7 +801,7 @@ Domain packages include internal/restaurants, demos, auth, campaigns, outreach, 
 Automation includes durable PostgreSQL-backed Python city scrape and background email-only OCR workers, plus automation/outreach/scrape_ledger.py and daily_pipeline.py/identity.py; migration 000027 backs the scrape ledger and migration 000030 backs the OCR daily request budget.
 HTTP layer: internal/http with handlers and middleware; backend/internal/developer backs the protected read-only SQL/schema console.
 Platform: internal/platform/{config,db,logger,errors,metadata,migrations,telemetry}.
-SQL migrations: backend/migrations, including durable scrape/OCR/outreach workflow, restaurant-media, demo-ready backfill, template-removal, and OCR-reset migrations through deployed 000035. Integration test slot: backend/tests.
+SQL migrations: backend/migrations, including durable scrape/OCR/outreach workflow, restaurant-media, demo-ready backfill, template-removal, OCR-reset, and outreach ghost-link cleanup migrations through deployed 000036. Integration test slot: backend/tests.
 Frontend apps: tuvi-website/app canonical Next.js corporate site, apps/web internal admin portal (Next.js, port 3002, BFF-proxied to the main API — no longer a placeholder), apps/restaurant-services-catalog Vite restaurant-services catalog, and template/ personalized demo sites with three active templates.
 Codex project skills: .codex/skills/ui-ux-pro-max from `uipro init --ai codex`.
 Phase 1 docs: docs/phase1/PHASE1_IMPLEMENTATION_GUIDE.md and PHASE1_TECHNICAL_BACKLOG.md.
@@ -811,12 +811,12 @@ Session docs: docs/SESSION_DELIVERED.md and docs/SESSION_SUMMARY.md.
 
 ## Current Implementation State
 
-_Last updated: 2026-07-19_
+_Last updated: 2026-07-20_
 
 ```text
 P1-E01 foundation, P1-008 auth, P1-009 restaurant access, and P1-010 restaurant CRUD are implemented.
 Repository layout now matches docs/phase1/PHASE1_IMPLEMENTATION_GUIDE.md section 5 (domain packages).
-Production app release 778c0fe and migrations 000001-000035 are deployed. Gmail-only env-driven account health, the persisted Outreach UI job toggle, paced 40/account bulk delivery, manual selective outreach sends that bypass the bulk job/global generic-email flag, two-link outreach drafts (`Personalized demo websites` plus `Services catalog`), UUID previews with live Google preview fallback, engagement/transcript evidence, contact/Apollo visibility, OCR filtering, secured voice reads, hybrid public media, the clarified mobile template switcher, demo-ready lifecycle backfill, and the internal-admin Developer SQL/schema console are live.
+Production app release 91fc93a and migrations 000001-000036 are deployed. Gmail-only env-driven account health, the persisted Outreach UI job toggle, paced 40/account bulk delivery, manual selective outreach sends that bypass the bulk job/global generic-email flag, current three-anchor outreach preview/send (`Personalized demo websites`, `Services catalog`, and unsubscribe), UUID previews with live Google preview fallback, engagement/transcript evidence, contact/Apollo visibility, OCR filtering, secured voice reads, hybrid public media, the clarified mobile template switcher, demo-ready lifecycle backfill, and the internal-admin Developer SQL/schema console are live.
 Three configured Gmail OAuth mailboxes passed their first real-message provider health check. The persisted restaurant email job remains disabled; no bulk outreach job or restaurant delivery attempt was created during deployment.
 The background OCR worker is enabled for canonical-email rows only. PostgreSQL enforces a global 200 vision-request UTC-day ceiling; provider SDK retries are disabled, and timeout/429 claims return to pending without consuming an attempt. Migration 000031 returned 21 legacy fingerprint-less verified profiles to pending; migration 000035 reset fingerprint-less Google OCR classifications for a safe refresh. At deployment verification for 88b58eb, OCR budget was 200/200 and the worker was waiting for the UTC reset.
 The deployed hybrid media pipeline resolves fresh attributed Google Places photos live and requires an exact one-way OCR resource-fingerprint match; owner/licensed media can use S3-compatible storage, OCR enriches placement metadata, and menu documents/unmatched images fail closed on personalized websites. Admin-opened generated UUID previews may request a no-store live Google fallback when reviewed media is empty. The production storage provider remains disabled until a bucket/CDN is provisioned, which affects owner uploads but not the live Google resolver.
@@ -825,9 +825,10 @@ Migration 000032 moved 22 existing `lead` restaurants with draft/published demo 
 
 ## Recent Agent Updates
 
-_Last updated: 2026-07-19_
+_Last updated: 2026-07-20_
 
 ```text
+2026-07-20 — Backend/Security/Test/DevOps/Documentation — Pushed and deployed 91fc93a/migration 000036 to remove outreach ghost links/buttons from current preview/send and unsent stored drafts. Bulk and ad hoc sends now render current three-anchor copy before tracking injection, old template-specific tracking tokens are no longer generated for current sends, production has zero draft/approved outreach rows with legacy template labels/placeholders or non-three-link HTML, Hotel520's token-gated demo preview returned 200, runtime is `/opt/tuvi/releases/monorepo-91fc93a`, rollback is `/opt/tuvi/releases/monorepo-778c0fe`, API/admin-web logs are clean, and no real email was sent.
 2026-07-19 — Backend/Frontend-adjacent/Security/Test/DevOps/Documentation — Pushed and deployed 778c0fe to let internal-admin manual/selective sends from restaurant list/detail bypass the bulk email-job flag and generic `EMAIL_DISABLE_SENDING` while retaining sender, contact email, campaign draft, suppression, and admin checks. New outreach drafts now render only two promotional links: `Personalized demo websites` and `Services catalog`; production smokes returned 200/307/401 as expected with zero API/admin-web restarts, and no real email was sent during verification.
 2026-07-19 — Backend/Frontend/Security/Test/DevOps/Documentation — Pushed and deployed e4d6801 from a clean origin/master release to add `/admin/developer`, a protected internal-admin read-only SQL console and schema browser with menu-item popularity shortcuts. Production smokes returned 307-to-login for `/admin/developer`, 401 for unauthenticated `/api/v1/developer/schema`, 200 for `/admin/login` and public restaurants, zero restarts on API/admin-web, and live DB counts showed 944 restaurants, 944 menus, and 47 menu item rows.
 2026-07-19 — Frontend/Backend/Test/DevOps/Documentation — Pushed and deployed 88b58eb/migrations 000034-000035 to remove the rejected Italian Villa template and repair generated-preview photos. Template 4 is gone from app/admin/engagement constraints, generated UUID previews can request attributed live Google photos when reviewed media is empty, a live preview returned 10 Google media objects, production smokes returned 200, all Tuvi containers have zero restarts, and rollback points to `/opt/tuvi/releases/monorepo-b2a2f83`.

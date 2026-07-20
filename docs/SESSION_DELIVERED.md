@@ -12,6 +12,66 @@ Each entry should explain:
 - how the work fits with the rest of the Phase 1 or Phase 2 plan;
 - risks, gaps, or follow-ups.
 
+## 2026-07-20 — Outreach Email Ghost-Link Cleanup
+
+**Role:** Backend, Security, Test, DevOps, and Documentation Agent
+
+**Delivered:** Fixed the outreach email preview/send workflow so stale stored
+campaign HTML can no longer display or send broken template-option links,
+duplicated demo buttons, or unresolved placeholders. Campaign list/detail reads
+now canonicalize outreach copy to the current template before admin display.
+Bulk outreach, ad hoc preview, and ad hoc send paths render the current template
+at execution time and inject only the live personalized demo URL, the direct
+Tuvi services catalog URL, and the opt-out URL. Ad hoc/manual sends still bypass
+the bulk job flag and generic email-disable flag, but now refuse to send if the
+campaign's published token-gated demo target is missing, expired, or token
+invalid.
+
+Added migration `000036_rewrite_outreach_three_link_template` to rewrite
+unsent draft/approved campaign rows that contained old Cinematic/Aurora/Elysian
+template options, duplicated "Open demo" buttons, or legacy template
+placeholders. Updated outreach/OpenAPI docs to describe the three-anchor
+template workflow and removed docs that said template-specific links remain a
+current send behavior.
+
+**Checks Run:** `go test ./backend/internal/campaigns ./backend/internal/outreach ./backend/internal/http/handlers ./backend/internal/providers/email`,
+`go test ./backend/...`, `go build ./backend/...`,
+`npm --prefix apps/web run lint`, `npx tsc --noEmit --incremental false` from
+`apps/web`, `npx -p node@22 -c 'node -v && npm run build'` from `apps/web`,
+`make openapi`, and `git diff --check` passed. OpenAPI validation retained the
+same three pre-existing warnings for tracking responses and one unused
+component.
+
+**Production Deployment:** Commit `91fc93a` was pushed to `master` and deployed
+from `/opt/tuvi/releases/monorepo-91fc93a`. Rollback points to
+`/opt/tuvi/releases/monorepo-778c0fe`. The VM rebuilt `migrate`, `api`, and
+`admin-web`; `migration up complete` applied migration `000036`, and
+`schema_migrations` in the `monorepo` database reports `36` rows with max
+version `36`.
+
+**Production Smokes:** `https://api.tuvisolutions.com/admin/login` returned
+200; `/admin/developer` and `/admin/outreach` redirected unauthenticated users
+to login with 307; unauthenticated `/api/v1/developer/schema` returned 401;
+`/api/public/v1/site/restaurants`, `https://demo.tuvisolutions.com/`, and
+`https://tuvisolutions.com/services/restaurants` returned 200. API/admin-web,
+worker, OCR worker, and scrape worker showed zero restarts after deployment, and
+recent API/admin-web logs showed no panic/fatal/traceback/error lines. Read-only
+production DB checks showed zero draft/approved outreach rows with old template
+labels/placeholders or "live website preview" anchors, zero draft/approved
+outreach rows with any HTML link count other than three, and Hotel520's
+token-gated demo preview returned 200 without printing the token. No real email
+was sent during verification.
+
+**Business Value / Plan Fit:** Repairs the Phase 1 lead-to-demo outreach loop
+so prospects receive only working, intentional destinations: personalized demo
+website, services catalog, and unsubscribe. Removes the broken multi-template
+email choice flow while preserving tracked demo analytics and opt-out safety.
+
+**Risks / Follow-ups:** Older emails already delivered to inboxes still contain
+whatever links existed at send time. New previews/sends and unsent stored rows
+are cleaned. Keep requiring a published, non-expired demo before manual sends so
+admins do not send another broken demo link.
+
 ## 2026-07-19 — Manual Outreach Send Bypass and Two-Link Email Template
 
 **Role:** Backend, Frontend-adjacent, Security, Test, DevOps, and Documentation
