@@ -60,13 +60,15 @@ func (provider *zohoProvider) Send(ctx context.Context, req SendRequest) (SendRe
 		fromAddress = strings.TrimSpace(provider.email.FromAddress)
 	}
 
+	// Zoho "Send an Email" accepts from/to/subject/content(/mailFormat).
+	// `action` is only valid on reply endpoints; including it here returns
+	// 400 PATTERN_NOT_MATCHED / Invalid Input.
 	payload := map[string]string{
 		"fromAddress": fromAddress,
 		"toAddress":   to,
 		"subject":     strings.TrimSpace(req.Subject),
 		"content":     content,
 		"mailFormat":  mailFormat,
-		"action":      "sendMessage",
 	}
 
 	body, err := json.Marshal(payload)

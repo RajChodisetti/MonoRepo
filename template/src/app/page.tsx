@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import CinematicTemplate from "@/templates/cinematic/CinematicTemplate";
 import AuroraTemplate from "@/templates/aurora/AuroraTemplate";
 import ElysianTemplate from "@/templates/elysian/ElysianTemplate";
+import FoodieTemplate from "@/templates/foodie/FoodieTemplate";
 import {
   loadRestaurant,
   loadRestaurantFromApiOnly,
@@ -13,6 +14,7 @@ import { resolveTemplate } from "@/lib/templateConfig";
 import { buildMetadata as buildCinematicMetadata } from "@/templates/cinematic/seo";
 import { buildAuroraMetadata } from "@/templates/aurora/seo";
 import { buildElysianMetadata, buildElysianJsonLd } from "@/templates/elysian/seo";
+import { buildFoodieMetadata } from "@/templates/foodie/seo";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -40,6 +42,9 @@ export async function generateMetadata({ searchParams }: PageProps): Promise<Met
   const index = parseRestaurantIndex(params.id);
   const template = resolveTemplate(params.template);
 
+  // Foodie is a static template (no restaurant data yet).
+  if (template === "4") return buildFoodieMetadata();
+
   try {
     const restaurant = await loadForTemplate(index, template, params.slug, params.token);
     if (template === "3") return buildElysianMetadata(restaurant);
@@ -54,6 +59,11 @@ export default async function HomePage({ searchParams }: PageProps) {
   const params = await searchParams;
   const index = parseRestaurantIndex(params.id);
   const template = resolveTemplate(params.template);
+
+  // Foodie is a static landing template — render directly without loading data.
+  if (template === "4") {
+    return <FoodieTemplate />;
+  }
 
   try {
     const restaurant = await loadForTemplate(index, template, params.slug, params.token);

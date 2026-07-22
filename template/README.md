@@ -6,6 +6,8 @@ Two premium Next.js templates sharing the same restaurant JSON data, switched vi
 |------------|------|-------|
 | `1` (default) | **Cinematic** | Warm charcoal/brass, scroll-video storytelling |
 | `2` | **Aurora** | Futuristic navy/purple, glassmorphism, SaaS-tech motion |
+| `3` | **Elysian** | Ultra-premium gold/black fine dining |
+| `4` | **Foodie** | Bright cream/orange casual dining — static landing page (data wiring pending) |
 
 ## Quick start
 
@@ -21,7 +23,17 @@ npm run dev
 npm run dev:aurora
 # or: TEMPLATE=2 npm run dev
 # http://localhost:3000/?id=0
+
+# Template 4 — Foodie (static landing, no ?id needed)
+npm run dev:foodie
+# or: TEMPLATE=4 npm run dev
+# http://localhost:3000/
 ```
+
+**Foodie** is a static landing-page template (nav + hero only). Content lives in
+`src/templates/foodie/lib/foodieContent.ts` and images in `public/foodie/`. When
+ready for live data, add a `mapFoodieContent(restaurant)` adapter and load it in
+`src/app/page.tsx` like the other templates — no component changes required.
 
 ## Environment
 
