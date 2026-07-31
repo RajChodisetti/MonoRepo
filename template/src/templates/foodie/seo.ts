@@ -1,17 +1,21 @@
 import type { Metadata } from "next";
-import { foodieContent } from "./lib/foodieContent";
+import type { RestaurantContent } from "@/data/types/restaurant";
 
-export function buildFoodieMetadata(): Metadata {
-  const { brand, hero } = foodieContent;
-  const title = `${brand.name} Restaurant — Enjoy The Food`;
+export function buildFoodieMetadata(restaurant: RestaurantContent): Metadata {
+  const title = `${restaurant.name} | ${restaurant.cuisine || "Restaurant"} · Foodie`;
+  const description =
+    restaurant.subheadline ||
+    restaurant.tagline ||
+    `Visit ${restaurant.name} — fresh dining in ${restaurant.city || restaurant.locationLabel || "your city"}.`;
 
   return {
     title,
-    description: hero.description,
+    description,
     openGraph: {
       title,
-      description: hero.description,
-      images: [{ url: hero.plate }],
+      description,
+      images: restaurant.heroPoster ? [{ url: restaurant.heroPoster }] : [{ url: "/foodie/hero-salad.png" }],
+      type: "website",
     },
   };
 }

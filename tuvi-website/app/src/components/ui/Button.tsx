@@ -19,7 +19,7 @@ export default function Button({
     "inline-flex cursor-pointer items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-semibold transition-colors duration-200";
   const styles =
     variant === "primary"
-      ? "bg-ink text-[#fffef8] shadow-[0_12px_32px_-14px_rgba(15,39,31,0.7)] hover:bg-primary"
+      ? "bg-ink text-bg shadow-[0_12px_32px_-14px_rgba(15,39,31,0.7)] hover:bg-primary hover:text-white"
       : "border border-border bg-bg-elevated text-ink hover:border-primary hover:bg-surface";
 
   const classes = `${base} ${styles} ${className}`;

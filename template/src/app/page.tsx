@@ -25,7 +25,7 @@ interface PageProps {
 
 async function loadForTemplate(
   index: number,
-  template: "1" | "2" | "3",
+  template: "1" | "2" | "3" | "4",
   slug?: string,
   token?: string,
 ) {
@@ -42,11 +42,9 @@ export async function generateMetadata({ searchParams }: PageProps): Promise<Met
   const index = parseRestaurantIndex(params.id);
   const template = resolveTemplate(params.template);
 
-  // Foodie is a static template (no restaurant data yet).
-  if (template === "4") return buildFoodieMetadata();
-
   try {
     const restaurant = await loadForTemplate(index, template, params.slug, params.token);
+    if (template === "4") return buildFoodieMetadata(restaurant);
     if (template === "3") return buildElysianMetadata(restaurant);
     if (template === "2") return buildAuroraMetadata(restaurant);
     return buildCinematicMetadata(restaurant);
@@ -60,14 +58,12 @@ export default async function HomePage({ searchParams }: PageProps) {
   const index = parseRestaurantIndex(params.id);
   const template = resolveTemplate(params.template);
 
-  // Foodie is a static landing template — render directly without loading data.
-  if (template === "4") {
-    return <FoodieTemplate />;
-  }
-
   try {
     const restaurant = await loadForTemplate(index, template, params.slug, params.token);
 
+    if (template === "4") {
+      return <FoodieTemplate restaurant={restaurant} />;
+    }
     if (template === "3") {
       const jsonLd = buildElysianJsonLd(restaurant);
       return (

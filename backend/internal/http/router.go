@@ -19,9 +19,11 @@ import (
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/db"
 	calendarprovider "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/calendar"
 	emailprovider "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/email"
+	llmprovider "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/llm"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/reservations"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/restaurants"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/scrapejobs"
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/seoreport"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/store"
 )
 
@@ -91,6 +93,35 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	reservationService := reservations.NewService(dataStore.Reservations)
 	reservationPublicHandler := handlers.NewReservationPublicHandler(reservationService, writeJSON, writeError)
 	companyConsultationHandler := handlers.NewCompanyConsultationHandler(consultationService, writeJSON)
+	var interestedRepo seoreport.InterestedRepository
+	var leadUpserter seoreport.LeadUpserter
+	if pool := dataStore.Pool(); pool != nil {
+		interestedRepo = seoreport.NewInterestedPostgres(pool)
+		leadUpserter = seoreport.NewLeadUpserter(pool)
+	}
+	// Prefer the same Google Workspace mailbox used for outreach sending.
+	seoMailer := emailProvider
+	if len(cfg.Outreach.GoogleWorkspaceAccounts) > 0 {
+		gmailMailer, gmailErr := emailprovider.NewGmail(cfg.Email, cfg.Outreach.GoogleWorkspaceAccounts[0])
+		if gmailErr != nil {
+			log.WarnContext(context.Background(), "seo_gmail_mailer_unavailable", "error", gmailErr)
+		} else {
+			seoMailer = gmailMailer
+			log.InfoContext(context.Background(), "seo_unlock_mailer", "provider", "gmail", "from", cfg.Outreach.GoogleWorkspaceAccounts[0].FromEmail)
+		}
+	}
+	seoService := seoreport.NewServiceFull(
+		cfg.Places,
+		cfg.App,
+		cfg.AppURLs,
+		dataStore.Profiles,
+		interestedRepo,
+		leadUpserter,
+		seoMailer,
+		llmprovider.NewFromConfig(cfg.LLM),
+		log,
+	)
+	seoPublicHandler := handlers.NewSEOPublicHandler(seoService, cfg.AppURLs.PublicWebURL, writeJSON, writeError)
 
 	mux.HandleFunc("POST /api/v1/auth/signup", authHandler.Signup)
 	mux.HandleFunc("POST /api/v1/auth/login", authHandler.Login)
@@ -161,6 +192,11 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	mux.HandleFunc("GET /api/public/v1/site/restaurants", restaurantPublicHandler.ListSiteRestaurants)
 	mux.HandleFunc("GET /api/public/v1/site/restaurants/{index}", restaurantPublicHandler.GetSiteContentByIndex)
 	mux.HandleFunc("GET /api/public/v1/site/by-place/{place_id}", restaurantPublicHandler.GetSiteContentByPlaceID)
+	mux.HandleFunc("GET /api/public/v1/seo/search", seoPublicHandler.Search)
+	mux.HandleFunc("GET /api/public/v1/seo/report/{place_id}", seoPublicHandler.Report)
+	mux.HandleFunc("POST /api/public/v1/seo/unlock/request", seoPublicHandler.RequestUnlock)
+	mux.HandleFunc("POST /api/public/v1/seo/unlock/verify", seoPublicHandler.VerifyUnlock)
+	mux.HandleFunc("GET /api/public/v1/seo/unlock/click/{token}", seoPublicHandler.ClickUnlock)
 	mux.HandleFunc("GET /api/public/v1/restaurants/{id}/table-availability", reservationPublicHandler.GetTableAvailability)
 	mux.HandleFunc("PUT /api/public/v1/restaurants/{id}/reservations", reservationPublicHandler.PutReservation)
 

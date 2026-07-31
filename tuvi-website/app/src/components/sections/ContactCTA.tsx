@@ -27,7 +27,7 @@ export default function ContactCTA() {
           <div className="relative mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
             <a
               href={getBookCallUrl()}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#fffef8] px-6 py-3 text-sm font-semibold text-ink shadow-lg transition-colors duration-200 hover:bg-sage sm:w-auto"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-black shadow-lg transition-colors duration-200 hover:bg-white/90 sm:w-auto"
             >
               {contact.primaryCta} <span aria-hidden>→</span>
             </a>
@@ -47,7 +47,7 @@ export default function ContactCTA() {
             </a>
           </div>
 
-          <div className="relative mx-auto mt-9 max-w-md rounded-3xl bg-[#fffef8] p-5 text-left shadow-2xl sm:p-6">
+          <div className="relative mx-auto mt-9 max-w-md rounded-3xl border border-white/10 bg-bg-elevated p-5 text-left shadow-2xl sm:p-6">
             <RequestCallbackForm />
             <p className="mt-4 text-center text-[11px] leading-5 text-muted">
               By submitting a callback request, you agree that Tuvi may contact you about this request. See our{" "}

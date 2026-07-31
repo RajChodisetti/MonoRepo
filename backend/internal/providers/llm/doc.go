@@ -1,2 +1,2 @@
-// Package llm is reserved for LLM provider adapters.
+// Package llm provides optional LLM provider adapters for SEO summaries and other text generation.
 package llm

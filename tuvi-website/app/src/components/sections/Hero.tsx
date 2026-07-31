@@ -1,169 +1,222 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { motion, useReducedMotion } from "framer-motion";
 import { siteContent } from "@/content/site";
 import { getBookCallUrl } from "@/lib/env";
 import Button from "@/components/ui/Button";
-import ServiceIcon, { type ServiceIconName } from "@/components/ui/ServiceIcon";
+import HeroServiceChip from "@/components/hero/HeroServiceChip";
+import type { ServiceIconName } from "@/components/ui/ServiceIcon";
 
-const solutionTracks: Array<{
+const HeroOrb3D = dynamic(() => import("@/components/hero/HeroOrb3D"), {
+  ssr: false,
+  loading: () => null,
+});
+
+const CHIP_CYCLE_MS = 3000;
+
+const leftChips: Array<{
   icon: ServiceIconName;
-  title: string;
-  description: string;
-  number: string;
+  label: string;
+  float: string;
+  imageSrc: string;
 }> = [
   {
     icon: "ai",
-    title: "AI systems",
-    description: "Voice, chat and workflow automation",
-    number: "01",
-  },
-  {
-    icon: "website",
-    title: "Web platforms",
-    description: "Fast websites and dependable web products",
-    number: "02",
+    label: "AI Systems",
+    float: "animate-float",
+    imageSrc: "/hero/chips/ai-robot.png",
   },
   {
     icon: "app",
-    title: "Apps & integrations",
-    description: "Connected tools for customers and teams",
-    number: "03",
+    label: "App Dev",
+    float: "animate-float-slow",
+    imageSrc: "/hero/chips/app-dev.png",
   },
 ];
+
+const rightChips: Array<{
+  icon: ServiceIconName;
+  label: string;
+  float: string;
+  imageSrc: string;
+}> = [
+  {
+    icon: "website",
+    label: "Web Platforms",
+    float: "animate-float-delayed",
+    imageSrc: "/hero/chips/web-platform.png",
+  },
+  {
+    icon: "restaurant",
+    label: "Restaurants",
+    float: "animate-float",
+    imageSrc: "/hero/chips/restaurants.png",
+  },
+];
+
+const heroStats = [
+  { value: "50+", label: "Projects complete" },
+  { value: "7+", label: "Countries" },
+  { value: "25+", label: "In progress" },
+] as const;
+
+const ease = [0.22, 1, 0.36, 1] as const;
 
 export default function Hero() {
   const { hero } = siteContent;
   const reduceMotion = useReducedMotion();
-  const rise = reduceMotion ? { opacity: 1, y: 0 } : { opacity: 0, y: 22 };
+  const [showChipImages, setShowChipImages] = useState(false);
+
+  // One shared clock — all chips flip together
+  useEffect(() => {
+    if (reduceMotion) return;
+    const id = window.setInterval(() => {
+      setShowChipImages((v) => !v);
+    }, CHIP_CYCLE_MS);
+    return () => window.clearInterval(id);
+  }, [reduceMotion]);
 
   return (
-    <section className="hero-blob relative flex items-center overflow-hidden pt-24 xl:min-h-[760px]">
-      <div className="pointer-events-none absolute inset-0 grid-bg opacity-35 [mask-image:radial-gradient(52rem_36rem_at_50%_30%,black,transparent)]" />
+    <section className="hero-blob relative flex h-[100svh] max-h-[100svh] flex-col overflow-hidden pt-[5.5rem] md:pt-24">
+      <div className="pointer-events-none absolute inset-0 grid-bg opacity-20 [mask-image:radial-gradient(50rem_34rem_at_50%_36%,black,transparent)]" />
 
-      <div className="relative mx-auto w-full max-w-6xl px-5 py-14 md:px-8 md:py-20 lg:py-24">
-        <div className="grid items-center gap-12 xl:grid-cols-[1.18fr_0.82fr] xl:gap-14">
-          <div className="max-w-2xl">
-            <motion.p
-              initial={rise}
+      <div className="relative z-10 mx-auto flex h-full w-full max-w-5xl flex-col px-5 pb-3 md:px-8 md:pb-4">
+        <div className="relative z-20 shrink-0 text-center">
+          <motion.p
+            initial={reduceMotion ? false : { opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease }}
+            className="inline-flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-white/45 md:text-[11px]"
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-primary" aria-hidden="true" />
+            {hero.eyebrow}
+          </motion.p>
+
+          <h1 className="mt-2 font-body text-[clamp(2.25rem,6.2vw,4.75rem)] font-bold leading-[0.92] tracking-[-0.055em] md:mt-3">
+            <motion.span
+              className="block text-white/28"
+              initial={reduceMotion ? false : { opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.45 }}
-              className="inline-flex items-center gap-2.5 rounded-full border border-border bg-bg-elevated/90 px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-primary shadow-sm"
+              transition={{ duration: 0.6, delay: reduceMotion ? 0 : 0.08, ease }}
             >
-              <span className="h-1.5 w-1.5 rounded-full bg-primary" aria-hidden="true" />
-              {hero.eyebrow}
-            </motion.p>
+              {hero.headline[0]}
+            </motion.span>
+            <motion.span
+              className="block text-white"
+              initial={reduceMotion ? false : { opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.65, delay: reduceMotion ? 0 : 0.16, ease }}
+            >
+              {hero.headline[1]}
+            </motion.span>
+          </h1>
+        </div>
 
-            <h1 className="mt-7 font-display text-[2.9rem] font-semibold leading-[0.98] tracking-[-0.04em] text-ink sm:text-6xl md:text-7xl lg:text-[4.5rem] xl:text-[4.65rem]">
-              {hero.headline.map((line, index) => (
-                <motion.span
-                  key={line}
-                  className={`block ${index === 1 ? "text-primary" : ""}`}
-                  initial={rise}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.58, delay: reduceMotion ? 0 : 0.1 + index * 0.1 }}
-                >
-                  {line}
-                </motion.span>
+        <div className="relative mx-auto mt-3 flex min-h-0 w-full max-w-4xl flex-1 items-center overflow-visible md:mt-4">
+          <div className="relative z-10 grid w-full grid-cols-1 items-center gap-3 overflow-visible md:grid-cols-[1fr_minmax(240px,380px)_1fr] md:gap-5">
+            <div className="hidden h-[min(48vh,360px)] flex-col justify-between py-3 md:flex">
+              {leftChips.map((chip, i) => (
+                <HeroServiceChip
+                  key={chip.label}
+                  {...chip}
+                  showImage={showChipImages}
+                  align="left"
+                  delay={reduceMotion ? 0 : 0.32 + i * 0.1}
+                />
               ))}
-            </h1>
-
-            <motion.p
-              initial={rise}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.55, delay: reduceMotion ? 0 : 0.32 }}
-              className="mt-7 max-w-xl text-base leading-7 text-muted md:text-lg md:leading-8"
-            >
-              {hero.subcopy}
-            </motion.p>
+            </div>
 
             <motion.div
-              initial={rise}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.55, delay: reduceMotion ? 0 : 0.42 }}
-              className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap"
+              className="relative mx-auto aspect-square w-[min(58vw,300px)] overflow-visible bg-transparent sm:w-[min(48vw,340px)] md:w-full md:max-w-[380px]"
+              initial={reduceMotion ? false : { opacity: 0, scale: 0.82 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.85, delay: reduceMotion ? 0 : 0.22, ease }}
+              style={{ background: "transparent" }}
             >
-              <Button href={getBookCallUrl()} className="w-full sm:w-auto">
-                {hero.primaryCta} <span aria-hidden="true">→</span>
-              </Button>
-              <Button href={hero.secondaryHref} variant="ghost" className="w-full sm:w-auto">
-                {hero.secondaryCta}
-              </Button>
+              <div className="absolute inset-0 overflow-visible bg-transparent">
+                <HeroOrb3D />
+              </div>
             </motion.div>
 
-            <motion.div
-              initial={{ opacity: reduceMotion ? 1 : 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: reduceMotion ? 0 : 0.58 }}
-              className="mt-8 flex flex-col gap-2 border-l-2 border-primary/30 pl-4 text-sm text-muted sm:flex-row sm:items-center sm:gap-4"
-            >
-              <span className="font-semibold text-ink">{hero.trust}</span>
-              <span className="hidden h-1 w-1 rounded-full bg-secondary sm:block" aria-hidden="true" />
-              <span>{hero.note}</span>
-            </motion.div>
+            <div className="hidden h-[min(48vh,360px)] flex-col justify-between py-3 md:flex">
+              {rightChips.map((chip, i) => (
+                <HeroServiceChip
+                  key={chip.label}
+                  {...chip}
+                  showImage={showChipImages}
+                  align="right"
+                  delay={reduceMotion ? 0 : 0.36 + i * 0.1}
+                />
+              ))}
+            </div>
           </div>
+        </div>
+
+        <div className="mt-3 flex shrink-0 justify-center gap-2 overflow-x-auto pb-1 md:hidden">
+          {[...leftChips, ...rightChips].map((chip, i) => (
+            <HeroServiceChip
+              key={chip.label}
+              {...chip}
+              showImage={showChipImages}
+              compact
+              delay={reduceMotion ? 0 : 0.35 + i * 0.06}
+            />
+          ))}
+        </div>
+
+        <div className="relative z-10 mx-auto mt-3 w-full max-w-lg shrink-0 text-center md:mt-4">
+          <motion.p
+            initial={reduceMotion ? false : { opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: reduceMotion ? 0 : 0.42, ease }}
+            className="line-clamp-2 text-[13px] leading-6 text-white/55 md:text-sm md:leading-7"
+          >
+            {hero.subcopy}
+          </motion.p>
 
           <motion.div
-            initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 24 }}
+            initial={reduceMotion ? false : { opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.72, delay: reduceMotion ? 0 : 0.24, ease: [0.22, 1, 0.36, 1] }}
-            className="mx-auto hidden w-full max-w-[460px] xl:block"
+            transition={{ duration: 0.5, delay: reduceMotion ? 0 : 0.5, ease }}
+            className="mt-4 flex flex-wrap items-center justify-center gap-2.5 md:mt-5 md:gap-3"
           >
-            <div className="ink-panel relative overflow-hidden rounded-[2rem] border border-white/10 p-5 text-[#fffef8] shadow-[0_34px_90px_-44px_rgba(15,39,31,0.72)] sm:p-7">
-              <div className="pointer-events-none absolute -right-24 -top-28 h-72 w-72 rounded-full border border-white/10" />
-              <div className="pointer-events-none absolute -bottom-32 -left-20 h-72 w-72 rounded-full border border-white/[0.07]" />
-
-              <div className="relative flex items-center justify-between gap-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/55">
-                  What Tuvi builds
-                </p>
-                <span className="inline-flex items-center gap-2 rounded-full border border-sage/25 bg-sage/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-sage">
-                  <span className="h-1.5 w-1.5 rounded-full bg-sage" aria-hidden="true" />
-                  AI + software
-                </span>
-              </div>
-
-              <div className="relative mt-8 max-w-md">
-                <p className="font-display text-3xl font-semibold leading-[1.08] tracking-[-0.03em] sm:text-4xl">
-                  From a strong idea to software people can rely on.
-                </p>
-                <p className="mt-3 max-w-sm text-sm leading-6 text-white/60">
-                  One focused team for strategy, design, engineering and the systems behind it.
-                </p>
-              </div>
-
-              <div className="relative mt-8 divide-y divide-white/10 border-y border-white/10">
-                {solutionTracks.map((item) => (
-                  <div
-                    key={item.title}
-                    className="grid grid-cols-[auto_1fr_auto] items-center gap-4 py-4"
-                  >
-                    <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/[0.08] text-sage">
-                      <ServiceIcon name={item.icon} className="h-5 w-5" />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="font-semibold text-[#fffef8]">{item.title}</p>
-                      <p className="mt-0.5 text-xs leading-5 text-white/50 sm:text-sm">
-                        {item.description}
-                      </p>
-                    </div>
-                    <span className="font-mono text-xs text-white/30" aria-hidden="true">
-                      {item.number}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="relative mt-6 grid grid-cols-4 gap-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-white/45">
-                {["Strategy", "Design", "Build", "Support"].map((stage) => (
-                  <span key={stage} className="rounded-lg bg-white/[0.05] px-3 py-2 text-center">
-                    {stage}
-                  </span>
-                ))}
-              </div>
-            </div>
+            <Button href={getBookCallUrl()} className="!bg-white !px-5 !text-black hover:!bg-white/90 md:!px-6">
+              {hero.primaryCta}
+            </Button>
+            <Button
+              href={hero.secondaryHref}
+              variant="ghost"
+              className="!border-white/20 !bg-transparent !text-white hover:!border-white/40 hover:!bg-white/[0.05]"
+            >
+              {hero.secondaryCta}
+            </Button>
           </motion.div>
         </div>
+
+        <motion.div
+          initial={reduceMotion ? false : { opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.55, delay: reduceMotion ? 0 : 0.58, ease }}
+          className="hero-stats-bar relative z-20 mt-4 grid shrink-0 grid-cols-3 gap-1 pt-4 md:mt-5 md:pt-5"
+        >
+          {heroStats.map((stat, index) => (
+            <div
+              key={stat.label}
+              className={`flex flex-col items-center text-center ${
+                index > 0 ? "border-l border-white/10" : ""
+              }`}
+            >
+              <p className="font-body text-xl font-bold tracking-tight text-white sm:text-2xl md:text-3xl">
+                {stat.value}
+              </p>
+              <p className="mt-1 text-[8px] font-semibold uppercase tracking-[0.18em] text-white/40 sm:text-[9px] md:text-[10px]">
+                {stat.label}
+              </p>
+            </div>
+          ))}
+        </motion.div>
       </div>
     </section>
   );

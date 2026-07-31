@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import Nav from "@/components/layout/Nav";
 import Footer from "@/components/layout/Footer";
-import BrandLogo from "@/components/layout/BrandLogo";
 import RestaurantFeatureVideo from "@/components/RestaurantFeatureVideo";
 import VoiceAssistantWidget from "@/components/VoiceAssistantWidget";
 import ServiceIcon, { type ServiceIconName } from "@/components/ui/ServiceIcon";
@@ -33,8 +33,9 @@ const featureVideos = [
     description:
       "Guests scan at the table, browse a mobile-first menu, customize their selection, and submit a structured request to the team—without downloading an app.",
     outcomes: ["Mobile-first menu journey", "Structured order requests", "No guest app download"],
-    video: `${mediaBase}/qr-ordering-kitchen-v3-web.mp4`,
-    poster: `${mediaBase}/qr-ordering-kitchen-v3-web-poster.jpg`,
+    video:
+      "https://d8j0ntlcm91z4.cloudfront.net/user_3GqRHjFvpA54koxgbUr0RwtJpGM/hf_20260722_114254_01477720-9904-471f-8476-76f952b304f6.mp4",
+    poster: "",
   },
   {
     id: "rewards",
@@ -101,9 +102,9 @@ function FeatureVideo({
       }`}
     >
       <div className={`relative ${reversed ? "lg:order-2" : ""}`}>
-        <div className="relative w-full overflow-hidden rounded-[2.25rem] border border-border bg-ink shadow-[0_34px_76px_-34px_rgba(15,39,31,0.45)]">
+        <div className="relative w-full overflow-hidden rounded-[2.25rem] border border-border bg-surface shadow-[0_34px_76px_-34px_rgba(0,0,0,0.65)]">
           <RestaurantFeatureVideo title={feature.title} poster={feature.poster} src={feature.video} />
-          <span className="absolute left-4 top-4 rounded-full border border-white/20 bg-ink/90 px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-[#fffef8] backdrop-blur">
+          <span className="absolute left-4 top-4 rounded-full border border-white/20 bg-black/70 px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-white backdrop-blur">
             {feature.badge}
           </span>
         </div>
@@ -118,7 +119,10 @@ function FeatureVideo({
         <ul className="mt-7 space-y-3">
           {feature.outcomes.map((outcome) => (
             <li key={outcome} className="flex items-center gap-3 text-sm font-semibold text-ink md:text-base">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sage text-xs font-bold text-primary" aria-hidden="true">
+              <span
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary"
+                aria-hidden="true"
+              >
                 ✓
               </span>
               {outcome}
@@ -132,42 +136,53 @@ function FeatureVideo({
 
 export default function RestaurantServicesPage() {
   return (
-    <>
+    <div data-theme="dark" className="min-h-screen bg-bg text-text">
       <Nav />
-      <main id="main-content" tabIndex={-1} className="min-h-screen bg-bg text-ink">
-        <section className="relative overflow-hidden bg-ink px-5 pb-16 pt-32 text-[#fffef8] md:px-8 md:pb-24 md:pt-40">
+      <main id="main-content" tabIndex={-1}>
+        <section className="hero-blob relative overflow-hidden px-5 pb-16 pt-32 text-ink md:px-8 md:pb-24 md:pt-40">
+          <div className="pointer-events-none absolute inset-0 grid-bg opacity-20 [mask-image:radial-gradient(48rem_32rem_at_70%_30%,black,transparent)]" />
           <div className="pointer-events-none absolute -right-24 top-12 h-[34rem] w-[34rem] rounded-full border border-white/10" />
           <div className="pointer-events-none absolute -right-8 top-28 h-[26rem] w-[26rem] rounded-full border border-white/10" />
+
           <div className="relative mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-[1.08fr_0.92fr]">
             <div>
-              <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-white/80">
-                <span className="h-1.5 w-1.5 rounded-full bg-sage" aria-hidden="true" />
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.04] px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-white/70">
+                <span className="h-1.5 w-1.5 rounded-full bg-primary" aria-hidden="true" />
                 Tuvi for restaurants
               </span>
-              <h1 className="mt-7 max-w-3xl font-display text-5xl font-semibold leading-[0.98] tracking-[-0.04em] text-[#fffef8] sm:text-6xl md:text-7xl">
+              <h1 className="mt-7 max-w-3xl font-display text-5xl font-semibold leading-[0.98] tracking-[-0.04em] text-white sm:text-6xl md:text-7xl">
                 Digital guest journeys, built around real service.
               </h1>
-              <p className="mt-6 max-w-2xl text-base leading-7 text-white/70 md:text-lg md:leading-8">
-                Bring discovery, ordering, rewards, reservation requests, voice AI, and guest communication into one considered restaurant experience.
+              <p className="mt-6 max-w-2xl text-base leading-7 text-white/55 md:text-lg md:leading-8">
+                Bring discovery, ordering, rewards, reservation requests, voice AI, and guest communication into one
+                considered restaurant experience.
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-                <Link href="#features" className="inline-flex items-center justify-center gap-2 rounded-full bg-[#fffef8] px-6 py-3 text-sm font-semibold text-ink transition-colors hover:bg-sage">
+                <Link
+                  href="#features"
+                  className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-black transition-colors hover:bg-white/90"
+                >
                   Watch the demos <span aria-hidden="true">↓</span>
                 </Link>
-                <Link href="/book" className="inline-flex items-center justify-center rounded-full border border-white/25 px-6 py-3 text-sm font-semibold text-[#fffef8] transition-colors hover:bg-white/10">
+                <Link
+                  href="/book"
+                  className="inline-flex items-center justify-center rounded-full border border-white/20 bg-transparent px-6 py-3 text-sm font-semibold text-white transition-colors hover:border-white/40 hover:bg-white/[0.05]"
+                >
                   Plan a restaurant walkthrough
                 </Link>
               </div>
             </div>
 
             <div className="mx-auto w-full max-w-[430px]">
-              <div className="relative aspect-square overflow-hidden rounded-[2.5rem] bg-[#fffef8] shadow-[0_36px_100px_-38px_rgba(0,0,0,0.72)]">
-                <div className="absolute inset-[7%]">
-                  <BrandLogo size="hero" showName={false} priority className="h-full w-full" />
-                </div>
-                <span className="absolute bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-ink px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#fffef8]">
-                  Restaurant growth systems
-                </span>
+              <div className="relative aspect-[3/4] overflow-hidden rounded-[2.5rem] border border-white/12 bg-black shadow-[0_36px_100px_-38px_rgba(0,0,0,0.85)]">
+                <Image
+                  src="/hero/restaurants/tuvi-assistant.png"
+                  alt="Tuvi Assistant — your AI restaurant concierge"
+                  fill
+                  priority
+                  sizes="(max-width: 768px) 90vw, 430px"
+                  className="object-cover object-top"
+                />
               </div>
             </div>
           </div>
@@ -181,7 +196,8 @@ export default function RestaurantServicesPage() {
                 The experience is easier to judge when you can watch it.
               </h2>
               <p className="mt-5 max-w-2xl text-base leading-7 text-muted md:text-lg">
-                These product demonstrations show the interaction model. A restaurant build is then shaped around its brand, menu, team, and operating rules.
+                These product demonstrations show the interaction model. A restaurant build is then shaped around its
+                brand, menu, team, and operating rules.
               </p>
             </div>
 
@@ -193,7 +209,7 @@ export default function RestaurantServicesPage() {
           </div>
         </section>
 
-        <section id="services" className="scroll-mt-28 bg-surface/65 px-5 py-20 md:px-8 md:py-28">
+        <section id="services" className="scroll-mt-28 bg-surface/40 px-5 py-20 md:px-8 md:py-28">
           <div className="mx-auto max-w-6xl">
             <div className="mx-auto max-w-3xl text-center">
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">Restaurant services</p>
@@ -206,16 +222,14 @@ export default function RestaurantServicesPage() {
               {serviceCards.map((service, index) => (
                 <article key={service.title} className="card-soft card-lift rounded-3xl p-7">
                   <div className="flex items-start justify-between gap-4">
-                    <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-sage/75 text-primary">
+                    <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/15 text-primary">
                       <ServiceIcon name={service.icon} />
                     </span>
-                    <span className="font-display text-2xl font-semibold text-primary/25">
+                    <span className="font-display text-2xl font-semibold text-primary/30">
                       {String(index + 1).padStart(2, "0")}
                     </span>
                   </div>
-                  <h3 className="mt-6 font-display text-2xl font-semibold tracking-[-0.02em] text-ink">
-                    {service.title}
-                  </h3>
+                  <h3 className="mt-6 font-display text-2xl font-semibold tracking-[-0.02em] text-ink">{service.title}</h3>
                   <p className="mt-3 text-sm leading-6 text-muted md:text-[15px]">{service.description}</p>
                 </article>
               ))}
@@ -224,19 +238,20 @@ export default function RestaurantServicesPage() {
         </section>
 
         <section className="bg-bg px-5 py-20 md:px-8 md:py-24">
-          <div className="ink-panel relative mx-auto max-w-6xl overflow-hidden rounded-[2.5rem] p-8 md:p-14">
+          <div className="ink-panel relative mx-auto max-w-6xl overflow-hidden rounded-[2.5rem] border border-white/10 p-8 md:p-14">
             <div className="pointer-events-none absolute -right-20 -top-20 h-72 w-72 rounded-full border border-white/10" />
             <div className="relative grid items-end gap-8 lg:grid-cols-[1fr_auto]">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-white/60">Next step</p>
-                <h2 className="mt-4 max-w-3xl font-display text-4xl font-semibold leading-[1.02] tracking-[-0.03em] text-[#fffef8] md:text-6xl">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-white/50">Next step</p>
+                <h2 className="mt-4 max-w-3xl font-display text-4xl font-semibold leading-[1.02] tracking-[-0.03em] text-white md:text-6xl">
                   Map the guest journey before choosing the software.
                 </h2>
-                <p className="mt-5 max-w-2xl text-base leading-7 text-white/70">
-                  Bring your current menu, booking flow, and biggest service bottleneck. We&apos;ll use the call to shape a practical first milestone.
+                <p className="mt-5 max-w-2xl text-base leading-7 text-white/55">
+                  Bring your current menu, booking flow, and biggest service bottleneck. We&apos;ll use the call to shape
+                  a practical first milestone.
                 </p>
               </div>
-              <Button href="/book" variant="ghost" className="!border-white/20 !bg-[#fffef8] !text-ink hover:!bg-sage">
+              <Button href="/book" className="!bg-white !text-black hover:!bg-white/90">
                 Book the walkthrough <span aria-hidden="true">→</span>
               </Button>
             </div>
@@ -245,6 +260,6 @@ export default function RestaurantServicesPage() {
       </main>
       <Footer />
       <VoiceAssistantWidget />
-    </>
+    </div>
   );
 }

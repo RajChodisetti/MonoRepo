@@ -1,4 +1,5 @@
-import { foodieContent } from "./lib/foodieContent";
+import type { RestaurantContent } from "@/data/types/restaurant";
+import { mapFoodieContent } from "./lib/mapContent";
 import FoodieNav from "./components/FoodieNav";
 import FoodieHero from "./components/FoodieHero";
 import FoodieMenu from "./components/FoodieMenu";
@@ -8,8 +9,8 @@ import FoodieContact from "./components/FoodieContact";
 import FoodieFooter from "./components/FoodieFooter";
 import "./theme.css";
 
-export default function FoodieTemplate() {
-  const content = foodieContent;
+export default function FoodieTemplate({ restaurant }: { restaurant: RestaurantContent }) {
+  const content = mapFoodieContent(restaurant);
 
   return (
     <div

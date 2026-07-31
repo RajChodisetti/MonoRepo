@@ -34,6 +34,7 @@ type Config struct {
 	Outreach      OutreachConfig
 	AppURLs       AppURLsConfig
 	LLM           LLMConfig
+	Places        PlacesConfig
 	Voice         VoiceConfig
 	Storage       StorageConfig
 	Token         TokenConfig
@@ -130,6 +131,12 @@ type LLMConfig struct {
 	Provider string
 	APIKey   string
 	Model    string
+}
+
+type PlacesConfig struct {
+	APIKey     string
+	BaseURL    string
+	RegionCode string
 }
 
 type VoiceConfig struct {
@@ -239,6 +246,7 @@ func Load() (Config, error) {
 			APIKey:   parser.string("LLM_API_KEY", ""),
 			Model:    parser.string("LLM_MODEL", ""),
 		},
+		Places: loadPlacesConfig(parser),
 		Voice: VoiceConfig{
 			Provider:      parser.string("VOICE_PROVIDER", providerDisabled),
 			WebhookSecret: parser.string("VOICE_WEBHOOK_SECRET", ""),
@@ -606,6 +614,18 @@ func (c Config) requiresExplicitSecrets() bool {
 func providerEnabled(provider string) bool {
 	provider = strings.TrimSpace(provider)
 	return provider != "" && provider != providerDisabled
+}
+
+func loadPlacesConfig(parser *envParser) PlacesConfig {
+	apiKey := strings.TrimSpace(parser.string("GOOGLE_PLACES_API_KEY", ""))
+	if apiKey == "" {
+		apiKey = strings.TrimSpace(parser.string("PLACES_API", ""))
+	}
+	return PlacesConfig{
+		APIKey:     apiKey,
+		BaseURL:    strings.TrimRight(parser.string("PLACES_API_BASE_URL", "https://places.googleapis.com/v1"), "/"),
+		RegionCode: strings.ToUpper(parser.string("PLACES_REGION_CODE", "AU")),
+	}
 }
 
 func loadEnvFiles() {

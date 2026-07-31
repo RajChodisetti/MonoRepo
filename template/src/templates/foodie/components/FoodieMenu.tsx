@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FoodieContent, FoodieMenuItem } from "../lib/foodieContent";
+
+const PAGE_SIZE = 4;
 
 function StarIcon() {
   return (
@@ -31,10 +33,12 @@ function DishCard({
   item,
   activeId,
   onHover,
+  onImageBroken,
 }: {
   item: FoodieMenuItem;
   activeId: string | null;
   onHover: (id: string | null) => void;
+  onImageBroken: (id: string) => void;
 }) {
   const filled = activeId === item.id || (!activeId && item.featured);
 
@@ -46,7 +50,11 @@ function DishCard({
     >
       <div className="foodie-menu-card-media">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={item.image} alt={item.name} />
+        <img
+          src={item.image}
+          alt={item.name}
+          onError={() => onImageBroken(item.id)}
+        />
       </div>
 
       <div className="foodie-menu-card-body">
@@ -55,8 +63,8 @@ function DishCard({
           <StarIcon />
         </div>
         <h3 className="foodie-menu-card-title">{item.name}</h3>
-        <p className="foodie-menu-card-price">{item.price}</p>
-        <p className="foodie-menu-card-desc">{item.description}</p>
+        {item.price ? <p className="foodie-menu-card-price">{item.price}</p> : null}
+        {item.description ? <p className="foodie-menu-card-desc">{item.description}</p> : null}
         <button type="button" className={`foodie-menu-cart${filled ? " filled" : ""}`}>
           Add to Cart
         </button>
@@ -67,9 +75,33 @@ function DishCard({
 
 export default function FoodieMenu({ menu }: { menu: FoodieContent["menu"] }) {
   const sectionRef = useRef<HTMLElement>(null);
-  const trackRef = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
   const [hoverId, setHoverId] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
+  const [brokenIds, setBrokenIds] = useState<Set<string>>(() => new Set());
+
+  const usableItems = useMemo(
+    () => menu.items.filter((item) => item.image && !brokenIds.has(item.id)),
+    [menu.items, brokenIds],
+  );
+
+  const pageCount = Math.max(1, Math.ceil(usableItems.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount - 1);
+
+  const visibleItems = useMemo(() => {
+    const start = safePage * PAGE_SIZE;
+    return usableItems.slice(start, start + PAGE_SIZE);
+  }, [usableItems, safePage]);
+
+  useEffect(() => {
+    setPage(0);
+    setHoverId(null);
+    setBrokenIds(new Set());
+  }, [menu.items]);
+
+  useEffect(() => {
+    if (page > pageCount - 1) setPage(Math.max(0, pageCount - 1));
+  }, [page, pageCount]);
 
   useEffect(() => {
     const el = sectionRef.current;
@@ -89,13 +121,17 @@ export default function FoodieMenu({ menu }: { menu: FoodieContent["menu"] }) {
     return () => io.disconnect();
   }, []);
 
-  const scrollBy = (dir: -1 | 1) => {
-    const track = trackRef.current;
-    if (!track) return;
-    const card = track.querySelector<HTMLElement>(".foodie-menu-card");
-    const amount = (card?.offsetWidth ?? 280) + 24;
-    track.scrollBy({ left: dir * amount, behavior: "smooth" });
+  const markBroken = (id: string) => {
+    setBrokenIds((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
   };
+
+  const goPrev = () => setPage((p) => Math.max(0, p - 1));
+  const goNext = () => setPage((p) => Math.min(pageCount - 1, p + 1));
 
   return (
     <section
@@ -135,22 +171,35 @@ export default function FoodieMenu({ menu }: { menu: FoodieContent["menu"] }) {
           </div>
 
           <div className="foodie-menu-arrows">
-            <button type="button" className="foodie-menu-arrow" aria-label="Previous dishes" onClick={() => scrollBy(-1)}>
+            <button
+              type="button"
+              className="foodie-menu-arrow"
+              aria-label="Previous dishes"
+              onClick={goPrev}
+              disabled={safePage <= 0}
+            >
               <ArrowLeft />
             </button>
-            <button type="button" className="foodie-menu-arrow active" aria-label="Next dishes" onClick={() => scrollBy(1)}>
+            <button
+              type="button"
+              className="foodie-menu-arrow active"
+              aria-label="Next dishes"
+              onClick={goNext}
+              disabled={safePage >= pageCount - 1}
+            >
               <ArrowRight />
             </button>
           </div>
         </div>
 
-        <div className="foodie-menu-track" ref={trackRef}>
-          {menu.items.map((item) => (
+        <div className="foodie-menu-track" key={safePage}>
+          {visibleItems.map((item) => (
             <DishCard
               key={item.id}
               item={item}
               activeId={hoverId}
               onHover={setHoverId}
+              onImageBroken={markBroken}
             />
           ))}
         </div>

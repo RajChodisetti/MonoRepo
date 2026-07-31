@@ -1,6 +1,4 @@
-// Static content for the Foodie landing template (TEMPLATE=4).
-// Kept as a plain object so it can later be produced by a
-// mapFoodieContent(restaurant) adapter without touching the components.
+// Seed defaults for Foodie (TEMPLATE=4). Live pages use mapFoodieContent(restaurant).
 
 export interface FoodieNavLink {
   href: string;
@@ -91,7 +89,7 @@ export interface FoodieContent {
     phone: string;
     email: string;
     hoursLine: string;
-    coordinates: { latitude: number; longitude: number };
+    coordinates?: { latitude: number; longitude: number };
     directionsLabel: string;
     callLabel: string;
   };

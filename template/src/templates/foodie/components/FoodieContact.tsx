@@ -76,7 +76,9 @@ export default function FoodieContact({
     return () => io.disconnect();
   }, []);
 
-  const embedSrc = mapsEmbedSrc(contact.coordinates);
+  const embedSrc = contact.coordinates
+    ? mapsEmbedSrc(contact.coordinates)
+    : `https://maps.google.com/maps?q=${encodeURIComponent(contact.address)}&z=15&output=embed`;
   const directionsUrl = mapsHref(contact.address, contact.coordinates);
   const phoneUrl = telHref(contact.phone);
 

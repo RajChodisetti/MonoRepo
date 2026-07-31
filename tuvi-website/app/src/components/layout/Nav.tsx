@@ -5,12 +5,11 @@ import { useEffect, useState } from "react";
 import { siteContent } from "@/content/site";
 import { getBookCallUrl } from "@/lib/env";
 import BrandLogo from "@/components/layout/BrandLogo";
-import Button from "@/components/ui/Button";
 
 function ChevronDownIcon({ open }: { open: boolean }) {
   return (
     <svg
-      className={`h-4 w-4 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+      className={`h-3.5 w-3.5 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -24,13 +23,16 @@ function ChevronDownIcon({ open }: { open: boolean }) {
   );
 }
 
+const linkClass =
+  "whitespace-nowrap rounded-full px-3.5 py-2 text-[13px] font-medium tracking-[-0.01em] text-white/55 transition-colors duration-200 hover:bg-white/[0.06] hover:text-white";
+
 export default function Nav() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [servicesOpen, setServicesOpen] = useState(false);
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 24);
+    const onScroll = () => setScrolled(window.scrollY > 16);
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setMobileOpen(false);
@@ -53,79 +55,75 @@ export default function Nav() {
   };
 
   return (
-    <header className="pointer-events-none fixed inset-x-0 top-0 z-50 px-3 pt-3 md:px-5">
+    <header className="pointer-events-none fixed inset-x-0 top-0 z-50 px-3 pt-4 md:px-6">
       <nav
         aria-label="Primary navigation"
-        className={`nav-glass pointer-events-auto mx-auto flex h-[72px] max-w-6xl items-center justify-between gap-4 rounded-2xl px-3.5 transition duration-300 md:px-5 ${
+        className={`nav-glass pointer-events-auto relative mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 rounded-full px-3 transition duration-300 md:h-[68px] md:px-5 ${
           scrolled ? "nav-glass-scrolled" : ""
         }`}
       >
-        <BrandLogo priority />
+        {/* Zone 1 — logo */}
+        <div className="relative z-10 shrink-0">
+          <BrandLogo priority />
+        </div>
 
-        <ul className="hidden min-w-0 items-center gap-1 xl:flex">
-          <li className="group relative shrink-0">
+        {/* Zone 2 — centered links (desktop) */}
+        <ul className="absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 items-center gap-0.5 xl:flex">
+          <li className="group relative">
             <button
               type="button"
-              className="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-2 text-sm font-semibold text-muted transition-colors duration-200 hover:bg-surface hover:text-ink"
+              className={`${linkClass} inline-flex cursor-pointer items-center gap-1.5`}
               aria-haspopup="true"
               aria-expanded={servicesOpen}
               aria-controls="desktop-services-menu"
               onClick={() => setServicesOpen((value) => !value)}
             >
-              {siteContent.servicesNav.label}
+              Services
               <ChevronDownIcon open={servicesOpen} />
             </button>
             <div
               id="desktop-services-menu"
-              className={`absolute left-1/2 top-full min-w-80 -translate-x-1/2 pt-4 transition duration-200 ${
+              className={`absolute left-1/2 top-full min-w-[20rem] -translate-x-1/2 pt-4 transition duration-200 ${
                 servicesOpen
                   ? "visible opacity-100"
                   : "invisible opacity-0 group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100"
               }`}
             >
-              <div className="rounded-2xl border border-border bg-bg-elevated p-2 shadow-[0_24px_60px_rgba(15,39,31,0.14)]">
+              <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#0c0c0c]/95 p-1.5 shadow-[0_28px_70px_rgba(0,0,0,0.55)] backdrop-blur-xl">
                 {siteContent.servicesNav.items.map((item) => (
                   <Link
                     key={item.href}
                     href={item.href}
                     onClick={closeMenus}
-                    className="block rounded-xl px-4 py-3 transition-colors duration-200 hover:bg-surface"
+                    className="block rounded-xl px-4 py-3 transition-colors duration-200 hover:bg-white/[0.06]"
                   >
-                    <span className="block font-display text-base font-semibold text-ink">
-                      {item.label}
-                    </span>
-                    <span className="mt-1 block text-xs leading-5 text-muted">
-                      {item.description}
-                    </span>
+                    <span className="block text-sm font-semibold text-white">{item.label}</span>
+                    <span className="mt-1 block text-xs leading-5 text-white/45">{item.description}</span>
                   </Link>
                 ))}
               </div>
             </div>
           </li>
           {siteContent.nav.map((link) => (
-            <li key={link.href} className="shrink-0">
-              <Link
-                href={link.href}
-                className="whitespace-nowrap rounded-full px-3.5 py-2 text-sm font-semibold text-muted transition-colors duration-200 hover:bg-surface hover:text-ink"
-              >
+            <li key={link.href}>
+              <Link href={link.href} className={linkClass}>
                 {link.label}
               </Link>
             </li>
           ))}
-          <li className="ml-3 shrink-0">
-            <Button href={getBookCallUrl()} className="!px-5 !py-2.5 !text-sm">
-              Book a call
-            </Button>
-          </li>
         </ul>
 
-        <div className="flex shrink-0 items-center gap-2 xl:hidden">
-          <Button href={getBookCallUrl()} className="!px-4 !py-2.5 text-xs sm:text-sm">
+        {/* Zone 3 — CTA / mobile */}
+        <div className="relative z-10 flex shrink-0 items-center gap-2">
+          <a
+            href={getBookCallUrl()}
+            className="hidden rounded-full bg-white px-5 py-2.5 text-[13px] font-semibold text-black shadow-[0_8px_24px_rgba(255,255,255,0.12)] transition hover:bg-white/90 sm:inline-flex"
+          >
             Book a call
-          </Button>
+          </a>
           <button
             type="button"
-            className="flex h-11 w-11 cursor-pointer flex-col items-center justify-center gap-1.5 rounded-full border border-border bg-bg-elevated text-ink transition-colors hover:bg-surface"
+            className="flex h-10 w-10 cursor-pointer flex-col items-center justify-center gap-1.5 rounded-full border border-white/12 bg-white/[0.04] text-white transition-colors hover:bg-white/[0.08] xl:hidden"
             aria-label={mobileOpen ? "Close menu" : "Open menu"}
             aria-expanded={mobileOpen}
             aria-controls="mobile-navigation"
@@ -134,8 +132,9 @@ export default function Nav() {
               setServicesOpen(false);
             }}
           >
-            <span className={`block h-0.5 w-5 bg-current transition ${mobileOpen ? "translate-y-1 rotate-45" : ""}`} />
-            <span className={`block h-0.5 w-5 bg-current transition ${mobileOpen ? "-translate-y-1 -rotate-45" : ""}`} />
+            <span className={`block h-0.5 w-4 bg-current transition ${mobileOpen ? "translate-y-[3px] rotate-45" : ""}`} />
+            <span className={`block h-0.5 w-4 bg-current transition ${mobileOpen ? "opacity-0" : ""}`} />
+            <span className={`block h-0.5 w-4 bg-current transition ${mobileOpen ? "-translate-y-[3px] -rotate-45" : ""}`} />
           </button>
         </div>
       </nav>
@@ -143,29 +142,29 @@ export default function Nav() {
       {mobileOpen ? (
         <div
           id="mobile-navigation"
-          className="nav-glass pointer-events-auto mx-auto mt-2 max-w-6xl rounded-2xl p-3 shadow-[0_24px_60px_rgba(15,39,31,0.14)] xl:hidden"
+          className="nav-glass pointer-events-auto mx-auto mt-2 max-w-6xl rounded-3xl p-2 shadow-[0_24px_60px_rgba(0,0,0,0.5)] xl:hidden"
         >
           <button
             type="button"
-            className="flex w-full cursor-pointer items-center justify-between rounded-xl px-3 py-3 text-left text-sm font-semibold text-ink transition-colors hover:bg-surface"
+            className="flex w-full cursor-pointer items-center justify-between rounded-2xl px-4 py-3.5 text-left text-sm font-semibold text-white transition-colors hover:bg-white/[0.05]"
             aria-expanded={servicesOpen}
             aria-controls="mobile-services-menu"
             onClick={() => setServicesOpen((value) => !value)}
           >
-            {siteContent.servicesNav.label}
+            Services
             <ChevronDownIcon open={servicesOpen} />
           </button>
           {servicesOpen ? (
-            <div id="mobile-services-menu" className="mb-2 grid gap-1">
+            <div id="mobile-services-menu" className="mb-1 grid gap-1 px-1">
               {siteContent.servicesNav.items.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
                   onClick={closeMenus}
-                  className="rounded-xl bg-surface px-3 py-3 text-sm text-ink transition-colors hover:bg-sage/60"
+                  className="rounded-2xl bg-white/[0.04] px-4 py-3 text-sm text-white transition-colors hover:bg-white/[0.08]"
                 >
                   <span className="block font-semibold">{item.label}</span>
-                  <span className="mt-1 block text-xs leading-5 text-muted">{item.description}</span>
+                  <span className="mt-1 block text-xs leading-5 text-white/45">{item.description}</span>
                 </Link>
               ))}
             </div>
@@ -175,11 +174,18 @@ export default function Nav() {
               key={link.href}
               href={link.href}
               onClick={closeMenus}
-              className="block rounded-xl px-3 py-3 text-sm font-semibold text-muted transition-colors hover:bg-surface hover:text-ink"
+              className="block rounded-2xl px-4 py-3.5 text-sm font-semibold text-white/65 transition-colors hover:bg-white/[0.05] hover:text-white"
             >
               {link.label}
             </Link>
           ))}
+          <a
+            href={getBookCallUrl()}
+            onClick={closeMenus}
+            className="mt-1 flex items-center justify-center rounded-full bg-white px-5 py-3 text-sm font-semibold text-black"
+          >
+            Book a call
+          </a>
         </div>
       ) : null}
     </header>
