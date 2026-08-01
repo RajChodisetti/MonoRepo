@@ -40,11 +40,19 @@ func TestBuildReportPointBudgets(t *testing.T) {
 			Email:          "hello@bistro.test",
 			Phone:          "+61 3 9000 0000",
 		},
+		WebsiteQualityKnown: true,
+		WebsiteQualityScore: 52, // strict visual band → modest website metric points
+		WebsiteReview:       "Clean layout but weak order CTA and menu prominence.",
+		WebsiteScreenshot:   "data:image/jpeg;base64,test",
 	}
 
 	report := BuildReport(in)
-	if report.OverallScore < 70 {
-		t.Fatalf("expected strong overall score, got %d", report.OverallScore)
+	// Strict scoring: even a relatively complete listing should land ~20–60, not 75+.
+	if report.OverallScore < 28 || report.OverallScore > 60 {
+		t.Fatalf("expected strict overall in 28–60, got %d", report.OverallScore)
+	}
+	if report.WebsiteQualityScore != 52 || report.WebsiteScreenshot == "" {
+		t.Fatalf("expected website audit fields on report")
 	}
 
 	totals := 0
@@ -74,8 +82,8 @@ func TestBuildReportMissingSignals(t *testing.T) {
 		},
 	}
 	report := BuildReport(in)
-	if report.OverallScore < 8 || report.OverallScore > 40 {
-		t.Fatalf("expected weak score, got %d", report.OverallScore)
+	if report.OverallScore < 12 || report.OverallScore > 35 {
+		t.Fatalf("expected weak strict score, got %d", report.OverallScore)
 	}
 	if len(report.Issues) == 0 {
 		t.Fatal("expected issues for weak listing")
@@ -88,10 +96,43 @@ func TestBuildReportMissingSignals(t *testing.T) {
 }
 
 func TestScoreWebsiteSocialPenalty(t *testing.T) {
-	social := scoreWebsite("https://instagram.com/myrestaurant")
-	dedicated := scoreWebsite("https://myrestaurant.com.au")
+	social := scoreWebsite("https://instagram.com/myrestaurant", true, 40)
+	dedicated := scoreWebsite("https://myrestaurant.com.au", true, 40)
 	if social >= dedicated {
 		t.Fatalf("social website should score lower than dedicated site (%d >= %d)", social, dedicated)
+	}
+}
+
+func TestScoreWebsiteNoFreeFullMarks(t *testing.T) {
+	// Presence alone (no visual audit) must not award the old free ~20 points.
+	presenceOnly := scoreWebsite("https://myrestaurant.com.au", false, 0)
+	if presenceOnly >= 12 {
+		t.Fatalf("presence-only website score too high: %d", presenceOnly)
+	}
+	// Strict mid quality (typical 20–60 band) maps into modest metric points.
+	mid := scoreWebsite("https://myrestaurant.com.au", true, 45)
+	if mid < 4 || mid > 10 {
+		t.Fatalf("expected mid visual quality to map ~4–10/20, got %d", mid)
+	}
+	// Even a high AI score is hard-capped well below a perfect 20.
+	high := scoreWebsite("https://myrestaurant.com.au", true, 90)
+	if high > 11 {
+		t.Fatalf("expected hard cap at 11/20, got %d", high)
+	}
+	if scoreWebsite("", true, 90) != 0 {
+		t.Fatal("empty website must score 0")
+	}
+}
+
+func TestStrictOverallScoreBand(t *testing.T) {
+	if got := strictOverallScore(90); got > 60 {
+		t.Fatalf("raw 90 should compress to <=60, got %d", got)
+	}
+	if got := strictOverallScore(75); got > 55 {
+		t.Fatalf("raw 75 should compress well below 75, got %d", got)
+	}
+	if got := strictOverallScore(40); got < 20 || got > 45 {
+		t.Fatalf("raw 40 should land mid-low band, got %d", got)
 	}
 }
 

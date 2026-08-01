@@ -78,6 +78,10 @@ type Report struct {
 	EstimatedMonthlyLoss int             `json:"estimatedMonthlyLoss"`
 	FullReportLocked     bool            `json:"fullReportLocked"`
 	UnlockCTA            string          `json:"unlockCta"`
+	// Website visual audit (screenshot + AI design review).
+	WebsiteScreenshot    string `json:"websiteScreenshot,omitempty"`
+	WebsiteQualityScore  int    `json:"websiteQualityScore,omitempty"`
+	WebsiteReview        string `json:"websiteReview,omitempty"`
 }
 
 // ReportResponse is the public API envelope for a place report.

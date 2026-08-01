@@ -24,6 +24,7 @@ type Service struct {
 	places     *PlacesClient
 	profiles   profiles.SiteRepository
 	summarizer Summarizer
+	llm        llmlib.Client
 	log        *slog.Logger
 
 	interested    InterestedRepository
@@ -60,6 +61,7 @@ func NewService(
 		places:     NewPlacesClient(placesCfg),
 		profiles:   profilesRepo,
 		summarizer: summarizer,
+		llm:        llmClient,
 		log:        log,
 		cache:      make(map[string]cachedReport),
 	}
@@ -186,6 +188,19 @@ func (s *Service) GetReport(ctx context.Context, placeID string) (ReportResponse
 	scoreIn.Reviews = reviews
 	scoreIn.PhotoCount = photoCount
 	scoreIn.HasHours = hasHours || enrichment.HasHours
+
+	if strings.TrimSpace(place.Website) != "" {
+		audit := AuditWebsite(ctx, place.Website, s.llm)
+		if audit.QualityScore > 0 || audit.Source == "social" || audit.Source == "fallback" || audit.Source == "vision" {
+			scoreIn.WebsiteQualityKnown = true
+			scoreIn.WebsiteQualityScore = audit.QualityScore
+			scoreIn.WebsiteReview = audit.Review
+			scoreIn.WebsiteScreenshot = audit.Screenshot
+		}
+		if audit.Source == "fallback" {
+			s.log.WarnContext(ctx, "seo_website_audit_fallback", "website", place.Website, "source", audit.Source)
+		}
+	}
 
 	report := BuildReport(scoreIn)
 	summary, sumErr := s.summarizer.Summarize(ctx, place, report, reviews)

@@ -55,6 +55,12 @@ type ScoreInput struct {
 	TakeoutKnown   bool
 	ReservableKnown bool
 	Enrichment Enrichment
+	// Website visual audit (from screenshot + AI). When QualityKnown is false,
+	// scoreWebsite uses a conservative presence fallback (never full 20).
+	WebsiteQualityKnown bool
+	WebsiteQualityScore int // 0–100
+	WebsiteReview       string
+	WebsiteScreenshot   string
 }
 
 // BuildReport computes the 100-point SEO report.
@@ -73,7 +79,7 @@ func BuildReport(in ScoreInput) Report {
 
 	seo := scoreSEO(place)
 	reviews := scoreReviews(place, in.Reviews)
-	website := scoreWebsite(place.Website)
+	website := scoreWebsite(place.Website, in.WebsiteQualityKnown, in.WebsiteQualityScore)
 	order := scoreOrderOnline(place.Website, in)
 	menu := scoreMenu(in)
 	contact := scoreContact(place.Phone, place.Email)
@@ -82,20 +88,16 @@ func BuildReport(in ScoreInput) Report {
 	metrics := []Metric{
 		metricOf("seo", "SEO keywords", seo, 20),
 		metricOf("reviews", "Recent reviews", reviews, 25),
-		metricOf("website", "Website", website, 20),
+		metricOf("website", "Website design", website, 20),
 		metricOf("order_online", "Order online", order, 5),
 		metricOf("menu", "Menu data", menu, 10),
 		metricOf("contact", "Phone & email", contact, 10),
 		metricOf("listing", "Listing completeness", listing, 10),
 	}
 
-	overall := seo + reviews + website + order + menu + contact + listing
-	if overall < 8 {
-		overall = 8
-	}
-	if overall > 98 {
-		overall = 98
-	}
+	rawTotal := seo + reviews + website + order + menu + contact + listing
+	// Raw bucket sum is intentionally generous; compress so typical reports land ~20–60.
+	overall := strictOverallScore(rawTotal)
 	label, color := labelForScore(overall)
 
 	issues := buildIssues(place, in, seo, reviews, website, order, menu, contact)
@@ -113,6 +115,9 @@ func BuildReport(in ScoreInput) Report {
 		EstimatedMonthlyLoss: loss,
 		FullReportLocked:     true,
 		UnlockCTA:            "Unlock the full SEO report by verifying your email.",
+		WebsiteScreenshot:    in.WebsiteScreenshot,
+		WebsiteQualityScore:  in.WebsiteQualityScore,
+		WebsiteReview:        in.WebsiteReview,
 	}
 }
 
@@ -127,10 +132,10 @@ func scoreSEO(place PlaceDetails) int {
 	}, " "))
 
 	if place.EditorialSummary != "" {
-		points += 6
+		points += 3
 	}
 	if len(cuisines) > 0 {
-		points += 4
+		points += 2
 		hits := 0
 		for _, cuisine := range cuisines {
 			if strings.Contains(blob, strings.ToLower(cuisine)) {
@@ -138,15 +143,15 @@ func scoreSEO(place PlaceDetails) int {
 			}
 		}
 		if hits > 0 {
-			points += 4
+			points += 2
 		}
 		if hits >= 2 {
-			points += 2
+			points += 1
 		}
 	}
 	// Locality signal: address suburb/city tokens appear with restaurant name context.
 	if hasLocalityKeyword(place.Name, place.Address) {
-		points += 4
+		points += 2
 	}
 	return clamp(points, 0, 20)
 }
@@ -161,8 +166,9 @@ func scoreReviews(place PlaceDetails, reviews []Review) int {
 		count = *place.UserRatingCount
 	}
 
-	volume := math.Min(1, float64(count)/200.0) * 10 // max 10
-	stars := (rating / 5.0) * 8                      // max 8
+	// Stricter volume curve — 200 reviews no longer maxes the bucket.
+	volume := math.Min(1, float64(count)/400.0) * 8 // max 8
+	stars := (rating / 5.0) * 6                     // max 6
 
 	recent := 0.0
 	if len(reviews) > 0 {
@@ -175,7 +181,7 @@ func scoreReviews(place PlaceDetails, reviews []Review) int {
 			}
 		}
 		avg := sum / float64(len(reviews))
-		recent = (avg / 5.0) * 5 // max 5
+		recent = (avg / 5.0) * 3 // max 3
 		// Recency bonus from relative time strings.
 		fresh := 0
 		for _, r := range reviews {
@@ -185,38 +191,45 @@ func scoreReviews(place PlaceDetails, reviews []Review) int {
 			}
 		}
 		if fresh >= 2 {
-			recent += 2
-		} else if fresh >= 1 {
 			recent += 1
 		}
 	} else if count > 0 {
-		recent = 1
+		recent = 0.5
 	}
 
 	return clamp(int(math.Round(volume+stars+recent)), 0, 25)
 }
 
-func scoreWebsite(website string) int {
+// scoreWebsite maps homepage visual quality into the 20-point Website bucket.
+// Presence alone must NEVER award a full 20 — scoring is driven by screenshot + AI review.
+func scoreWebsite(website string, qualityKnown bool, qualityScore int) int {
 	website = strings.TrimSpace(website)
 	if website == "" {
 		return 0
 	}
-	points := 12
 	parsed, err := url.Parse(website)
 	if err != nil || parsed.Host == "" {
-		return 8
+		return 3
 	}
 	host := strings.ToLower(parsed.Hostname())
 	host = strings.TrimPrefix(host, "www.")
-	if parsed.Scheme == "https" {
-		points += 4
-	}
 	if _, social := socialHosts[host]; social {
-		points -= 6
-	} else {
-		points += 4
+		// Social links are not a real restaurant website experience.
+		return 4
 	}
-	return clamp(points, 0, 20)
+
+	if qualityKnown {
+		// qualityScore is 0–100 (strict; typically 20–60) → 0–20 metric points.
+		points := int(math.Round(float64(qualityScore) / 100.0 * 16.0))
+		// Hard cap: visual review almost never fills the website bucket.
+		return clamp(points, 1, 11)
+	}
+
+	// Conservative fallback when screenshot/AI is unavailable — HTTPS dedicated site ≠ 20 pts.
+	if parsed.Scheme == "https" {
+		return 4
+	}
+	return 3
 }
 
 func scoreOrderOnline(website string, in ScoreInput) int {
@@ -281,10 +294,10 @@ func scoreMenu(in ScoreInput) int {
 func scoreContact(phone, email string) int {
 	points := 0
 	if strings.TrimSpace(phone) != "" {
-		points += 5
+		points += 3
 	}
 	if strings.TrimSpace(email) != "" {
-		points += 5
+		points += 3
 	}
 	return clamp(points, 0, 10)
 }
@@ -292,27 +305,38 @@ func scoreContact(phone, email string) int {
 func scoreListing(place PlaceDetails, hasHours bool, photoCount int) int {
 	points := 0
 	if place.MapsURI != "" || place.Address != "" {
-		points += 3
+		points += 2
 	}
 	if hasHours {
-		points += 3
+		points += 2
 	}
 	status := strings.ToUpper(place.BusinessStatus)
 	if status == "" || status == "OPERATIONAL" {
-		points += 2
+		points += 1
 	}
-	if photoCount > 0 {
+	if photoCount >= 8 {
 		points += 2
+	} else if photoCount > 0 {
+		points += 1
 	}
 	return clamp(points, 0, 10)
 }
 
 func buildIssues(place PlaceDetails, in ScoreInput, seo, reviews, website, order, menu, contact int) []Issue {
 	issues := make([]Issue, 0, 4)
-	if website < 10 || place.Website == "" {
+	if place.Website == "" {
 		issues = append(issues, Issue{
-			Title:       "No strong website on Google",
+			Title:       "No website on Google",
 			Description: "Competitors with a dedicated website capture more direct orders and Google clicks.",
+		})
+	} else if website < 10 {
+		desc := "Your linked site under-delivers on design, clarity, or booking CTAs versus stronger local rivals."
+		if strings.TrimSpace(in.WebsiteReview) != "" {
+			desc = in.WebsiteReview
+		}
+		issues = append(issues, Issue{
+			Title:       "Website design needs work",
+			Description: desc,
 		})
 	}
 	if contact < 5 || place.Phone == "" {
@@ -404,23 +428,42 @@ func metricOf(key, label string, score, max int) Metric {
 }
 
 func labelForScore(score int) (string, string) {
-	if score >= 75 {
+	// Calibrated for the strict 20–60 overall band.
+	if score >= 52 {
 		return "Good", colorGood
 	}
-	if score >= 50 {
+	if score >= 34 {
 		return "Fair", colorFair
 	}
 	return "Poor", colorPoor
 }
 
 func metricStatus(ratio float64) (string, string) {
-	if ratio >= 0.75 {
+	if ratio >= 0.65 {
 		return "Good", colorGood
 	}
-	if ratio >= 0.45 {
+	if ratio >= 0.35 {
 		return "Fair", colorFair
 	}
 	return "Poor", colorPoor
+}
+
+// strictOverallScore compresses the raw 0–100 bucket total so most restaurants
+// land between ~20 and ~60. Scores near 75+ should be rare.
+func strictOverallScore(raw int) int {
+	raw = clamp(raw, 0, 100)
+	// Power curve pulls inflated mid/high totals down hard.
+	scaled := 10 + int(math.Round(math.Pow(float64(raw)/100.0, 1.45)*48))
+	if scaled < 12 {
+		scaled = 12
+	}
+	if scaled > 58 {
+		scaled = 58 + (scaled-58)/3
+	}
+	if scaled > 62 {
+		scaled = 62
+	}
+	return scaled
 }
 
 func cuisineLabels(types []string) []string {

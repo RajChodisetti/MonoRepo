@@ -80,7 +80,7 @@ func buildDeterministicSummary(place PlaceDetails, report Report, reviews []Revi
 		case "reviews":
 			gaps = append(gaps, "recent 5-star review volume and reply cadence")
 		case "website":
-			gaps = append(gaps, "a dedicated HTTPS website linked on Google")
+			gaps = append(gaps, "homepage design, menu clarity, and booking CTAs on your website")
 		case "order_online":
 			gaps = append(gaps, "clear order-online / delivery signals")
 		case "menu":

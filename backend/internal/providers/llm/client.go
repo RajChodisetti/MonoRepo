@@ -3,6 +3,7 @@ package llm
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,6 +18,8 @@ import (
 type Client interface {
 	Enabled() bool
 	Complete(ctx context.Context, prompt string) (string, error)
+	// CompleteVision sends a text prompt plus one image (JPEG/PNG bytes) to a vision-capable model.
+	CompleteVision(ctx context.Context, prompt string, image []byte, mimeType string) (string, error)
 }
 
 type disabledClient struct{}
@@ -24,6 +27,10 @@ type disabledClient struct{}
 func (disabledClient) Enabled() bool { return false }
 
 func (disabledClient) Complete(context.Context, string) (string, error) {
+	return "", fmt.Errorf("llm disabled")
+}
+
+func (disabledClient) CompleteVision(context.Context, string, []byte, string) (string, error) {
 	return "", fmt.Errorf("llm disabled")
 }
 
@@ -46,7 +53,7 @@ func NewFromConfig(cfg config.LLMConfig) Client {
 		apiKey:  apiKey,
 		model:   model,
 		baseURL: strings.TrimRight(baseURL, "/"),
-		http:    &http.Client{Timeout: 10 * time.Second},
+		http:    &http.Client{Timeout: 55 * time.Second},
 	}
 }
 
@@ -72,6 +79,49 @@ func (c *openAIClient) Complete(ctx context.Context, prompt string) (string, err
 		"temperature": 0.4,
 		"max_tokens":  220,
 	}
+	return c.chat(ctx, body)
+}
+
+func (c *openAIClient) CompleteVision(ctx context.Context, prompt string, image []byte, mimeType string) (string, error) {
+	if !c.Enabled() {
+		return "", fmt.Errorf("llm disabled")
+	}
+	if len(image) == 0 {
+		return "", fmt.Errorf("empty image")
+	}
+	mimeType = strings.TrimSpace(strings.ToLower(mimeType))
+	if mimeType == "" {
+		mimeType = "image/jpeg"
+	}
+	encoded := base64.StdEncoding.EncodeToString(image)
+	dataURL := "data:" + mimeType + ";base64," + encoded
+	body := map[string]any{
+		"model": c.model,
+		"messages": []any{
+			map[string]any{
+				"role":    "system",
+				"content": "You are a harsh restaurant website UX and conversion auditor. Be strict.",
+			},
+			map[string]any{
+				"role": "user",
+				"content": []any{
+					map[string]any{"type": "text", "text": prompt},
+					map[string]any{
+						"type": "image_url",
+						"image_url": map[string]any{
+							"url": dataURL,
+						},
+					},
+				},
+			},
+		},
+		"temperature": 0.2,
+		"max_tokens":  450,
+	}
+	return c.chat(ctx, body)
+}
+
+func (c *openAIClient) chat(ctx context.Context, body map[string]any) (string, error) {
 	payload, err := json.Marshal(body)
 	if err != nil {
 		return "", err
@@ -88,7 +138,7 @@ func (c *openAIClient) Complete(ctx context.Context, prompt string) (string, err
 		return "", err
 	}
 	defer resp.Body.Close()
-	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		msg := string(raw)
 		if len(msg) > 200 {
