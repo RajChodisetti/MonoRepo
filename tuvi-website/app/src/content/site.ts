@@ -44,7 +44,7 @@ export const siteContent = {
 
   hero: {
     eyebrow: "AI & custom software for every stage",
-    headline: ["Practical AI.", "Custom software."],
+    headline: ["The right", "Software."],
     subcopy:
       "Tuvi Solutions designs and builds websites, customer and team apps, AI assistants, and connected automation — from first idea through launch and growth.",
     primaryCta: "Start your project",

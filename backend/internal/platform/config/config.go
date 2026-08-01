@@ -34,9 +34,9 @@ type Config struct {
 	Outreach      OutreachConfig
 	AppURLs       AppURLsConfig
 	LLM           LLMConfig
+	Places        PlacesConfig
 	Voice         VoiceConfig
 	Storage       StorageConfig
-	Places        PlacesConfig
 	Token         TokenConfig
 	Demo          DemoConfig
 	Jobs          JobsConfig
@@ -157,6 +157,7 @@ type StorageConfig struct {
 type PlacesConfig struct {
 	APIKey        string
 	APIBaseURL    string
+	RegionCode    string
 	PhotoLimit    int
 	PhotoMaxWidth int
 	Timeout       time.Duration
@@ -255,6 +256,7 @@ func Load() (Config, error) {
 			APIKey:   parser.string("LLM_API_KEY", ""),
 			Model:    parser.string("LLM_MODEL", ""),
 		},
+		Places: loadPlacesConfig(parser),
 		Voice: VoiceConfig{
 			Provider:      parser.string("VOICE_PROVIDER", providerDisabled),
 			WebhookSecret: parser.string("VOICE_WEBHOOK_SECRET", ""),
@@ -268,13 +270,6 @@ func Load() (Config, error) {
 			UsePathStyle:    parser.bool("STORAGE_USE_PATH_STYLE", false),
 			AccessKeyID:     parser.string("STORAGE_ACCESS_KEY_ID", ""),
 			SecretAccessKey: parser.string("STORAGE_SECRET_ACCESS_KEY", ""),
-		},
-		Places: PlacesConfig{
-			APIKey:        parser.string("GOOGLE_PLACES_API_KEY", ""),
-			APIBaseURL:    parser.string("PLACES_API_BASE_URL", "https://places.googleapis.com/v1"),
-			PhotoLimit:    parser.int("PLACES_PHOTO_LIMIT", 10),
-			PhotoMaxWidth: parser.int("PLACES_PHOTO_MAX_WIDTH", 1600),
-			Timeout:       parser.duration("PLACES_API_TIMEOUT", 20*time.Second),
 		},
 		Token: TokenConfig{
 			Secret:         parser.string("TOKEN_SECRET", localDevToken),
@@ -660,6 +655,21 @@ func (c Config) requiresExplicitSecrets() bool {
 func providerEnabled(provider string) bool {
 	provider = strings.TrimSpace(provider)
 	return provider != "" && provider != providerDisabled
+}
+
+func loadPlacesConfig(parser *envParser) PlacesConfig {
+	apiKey := strings.TrimSpace(parser.string("GOOGLE_PLACES_API_KEY", ""))
+	if apiKey == "" {
+		apiKey = strings.TrimSpace(parser.string("PLACES_API", ""))
+	}
+	return PlacesConfig{
+		APIKey:        apiKey,
+		APIBaseURL:    strings.TrimRight(parser.string("PLACES_API_BASE_URL", "https://places.googleapis.com/v1"), "/"),
+		RegionCode:    strings.ToUpper(parser.string("PLACES_REGION_CODE", "AU")),
+		PhotoLimit:    parser.int("PLACES_PHOTO_LIMIT", 10),
+		PhotoMaxWidth: parser.int("PLACES_PHOTO_MAX_WIDTH", 1600),
+		Timeout:       parser.duration("PLACES_API_TIMEOUT", 20*time.Second),
+	}
 }
 
 func loadEnvFiles() {

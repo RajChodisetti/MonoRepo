@@ -26,7 +26,7 @@ export const metadata: Metadata = {
 
 export default function HomePage() {
   return (
-    <>
+    <div data-theme="dark" className="min-h-screen bg-bg text-text">
       <Nav />
       <main id="main-content" tabIndex={-1}>
         <Hero />
@@ -40,6 +40,6 @@ export default function HomePage() {
       </main>
       <Footer />
       <VoiceAssistantWidget />
-    </>
+    </div>
   );
 }

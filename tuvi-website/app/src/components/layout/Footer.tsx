@@ -9,7 +9,7 @@ export default function Footer() {
   const callInHref = getCallInTelHref();
 
   return (
-    <footer className="border-t border-border bg-surface px-5 py-12 md:px-8 md:py-16">
+    <footer className="border-t border-border bg-bg-elevated px-5 py-12 md:px-8 md:py-16">
       <div className="mx-auto grid max-w-6xl gap-10 md:grid-cols-[1.2fr_0.8fr] md:items-end">
         <div>
           <BrandLogo size="footer" />

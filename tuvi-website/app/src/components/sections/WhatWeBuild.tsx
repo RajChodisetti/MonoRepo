@@ -65,7 +65,7 @@ export default function WhatWeBuild() {
             <article
               className={`card-lift group flex h-full flex-col overflow-hidden rounded-3xl p-6 md:p-7 ${
                 item.featured
-                  ? "relative border border-ink bg-ink text-[#fffef8] shadow-[0_24px_64px_-36px_rgba(15,39,31,0.7)]"
+                  ? "relative border border-white/15 bg-gradient-to-br from-white/10 to-white/[0.03] text-ink shadow-[0_24px_64px_-36px_rgba(0,0,0,0.7)]"
                   : "card-soft"
               }`}
             >
@@ -74,21 +74,21 @@ export default function WhatWeBuild() {
               ) : null}
               <span
                 className={`relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${
-                  item.featured ? "bg-white/10 text-[#fffef8]" : "bg-sage/70 text-primary"
+                  item.featured ? "bg-white/10 text-ink" : "bg-sage/70 text-primary"
                 }`}
               >
                 <ServiceIcon name={item.icon} />
               </span>
               <h3
                 className={`relative mt-6 font-display text-2xl font-semibold leading-tight tracking-[-0.02em] ${
-                  item.featured ? "text-[#fffef8] md:max-w-xl md:text-3xl" : "text-ink"
+                  item.featured ? "text-ink md:max-w-xl md:text-3xl" : "text-ink"
                 }`}
               >
                 {item.title}
               </h3>
               <p
                 className={`relative mt-3 flex-1 text-sm leading-6 md:text-[15px] ${
-                  item.featured ? "max-w-2xl text-white/70" : "text-muted"
+                  item.featured ? "max-w-2xl text-muted" : "text-muted"
                 }`}
               >
                 {item.description}
@@ -96,7 +96,7 @@ export default function WhatWeBuild() {
               {item.href ? (
                 <Link
                   href={item.href}
-                  className="relative mt-7 inline-flex w-fit items-center gap-2 rounded-full bg-[#fffef8] px-5 py-2.5 text-sm font-semibold text-ink transition-colors duration-200 hover:bg-sage"
+                  className="relative mt-7 inline-flex w-fit items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-black transition-colors duration-200 hover:bg-white/90"
                 >
                   {item.linkLabel} <span aria-hidden="true">→</span>
                 </Link>

@@ -8,13 +8,17 @@ export async function adminFetch<T = unknown>(
     method?: string;
     body?: unknown;
     query?: Record<string, string | number | boolean | undefined | null>;
+    /** Use public API surface under /api/public/v1 via admin session gate */
+    public?: boolean;
   } = {},
 ): Promise<T> {
   const url = new URL(
     withBasePath(
       path.startsWith("/api/admin/")
         ? path
-        : `/api/admin/proxy/${path.replace(/^\//, "")}`,
+        : options.public
+          ? `/api/admin/public/${path.replace(/^\//, "")}`
+          : `/api/admin/proxy/${path.replace(/^\//, "")}`,
     ),
     window.location.origin,
   );

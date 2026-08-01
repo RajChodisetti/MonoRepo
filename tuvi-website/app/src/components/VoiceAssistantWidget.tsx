@@ -585,7 +585,7 @@ export default function VoiceAssistantWidget() {
           type="button"
           onClick={() => (open ? closePanel() : handlePrimaryAction())}
           onMouseDown={() => void preloadWorklet()}
-          className="pointer-events-auto flex cursor-pointer items-center gap-2.5 rounded-full bg-ink px-5 py-3.5 text-sm font-semibold text-[#fffef8] shadow-[0_12px_34px_rgba(15,39,31,0.3)] transition-colors hover:bg-primary"
+          className="pointer-events-auto flex cursor-pointer items-center gap-2.5 rounded-full bg-white px-5 py-3.5 text-sm font-semibold text-black shadow-[0_12px_34px_rgba(0,0,0,0.35)] transition-colors hover:bg-white/90"
           aria-expanded={open}
           aria-haspopup="dialog"
         >
