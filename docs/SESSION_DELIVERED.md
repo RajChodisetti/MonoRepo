@@ -12,6 +12,502 @@ Each entry should explain:
 - how the work fits with the rest of the Phase 1 or Phase 2 plan;
 - risks, gaps, or follow-ups.
 
+## 2026-07-20 — Outreach Email Ghost-Link Cleanup
+
+**Role:** Backend, Security, Test, DevOps, and Documentation Agent
+
+**Delivered:** Fixed the outreach email preview/send workflow so stale stored
+campaign HTML can no longer display or send broken template-option links,
+duplicated demo buttons, or unresolved placeholders. Campaign list/detail reads
+now canonicalize outreach copy to the current template before admin display.
+Bulk outreach, ad hoc preview, and ad hoc send paths render the current template
+at execution time and inject only the live personalized demo URL, the direct
+Tuvi services catalog URL, and the opt-out URL. Ad hoc/manual sends still bypass
+the bulk job flag and generic email-disable flag, but now refuse to send if the
+campaign's published token-gated demo target is missing, expired, or token
+invalid.
+
+Added migration `000036_rewrite_outreach_three_link_template` to rewrite
+unsent draft/approved campaign rows that contained old Cinematic/Aurora/Elysian
+template options, duplicated "Open demo" buttons, or legacy template
+placeholders. Updated outreach/OpenAPI docs to describe the three-anchor
+template workflow and removed docs that said template-specific links remain a
+current send behavior.
+
+**Checks Run:** `go test ./backend/internal/campaigns ./backend/internal/outreach ./backend/internal/http/handlers ./backend/internal/providers/email`,
+`go test ./backend/...`, `go build ./backend/...`,
+`npm --prefix apps/web run lint`, `npx tsc --noEmit --incremental false` from
+`apps/web`, `npx -p node@22 -c 'node -v && npm run build'` from `apps/web`,
+`make openapi`, and `git diff --check` passed. OpenAPI validation retained the
+same three pre-existing warnings for tracking responses and one unused
+component.
+
+**Production Deployment:** Commit `91fc93a` was pushed to `master` and deployed
+from `/opt/tuvi/releases/monorepo-91fc93a`. Rollback points to
+`/opt/tuvi/releases/monorepo-778c0fe`. The VM rebuilt `migrate`, `api`, and
+`admin-web`; `migration up complete` applied migration `000036`, and
+`schema_migrations` in the `monorepo` database reports `36` rows with max
+version `36`.
+
+**Production Smokes:** `https://api.tuvisolutions.com/admin/login` returned
+200; `/admin/developer` and `/admin/outreach` redirected unauthenticated users
+to login with 307; unauthenticated `/api/v1/developer/schema` returned 401;
+`/api/public/v1/site/restaurants`, `https://demo.tuvisolutions.com/`, and
+`https://tuvisolutions.com/services/restaurants` returned 200. API/admin-web,
+worker, OCR worker, and scrape worker showed zero restarts after deployment, and
+recent API/admin-web logs showed no panic/fatal/traceback/error lines. Read-only
+production DB checks showed zero draft/approved outreach rows with old template
+labels/placeholders or "live website preview" anchors, zero draft/approved
+outreach rows with any HTML link count other than three, and Hotel520's
+token-gated demo preview returned 200 without printing the token. No real email
+was sent during verification.
+
+**Business Value / Plan Fit:** Repairs the Phase 1 lead-to-demo outreach loop
+so prospects receive only working, intentional destinations: personalized demo
+website, services catalog, and unsubscribe. Removes the broken multi-template
+email choice flow while preserving tracked demo analytics and opt-out safety.
+
+**Risks / Follow-ups:** Older emails already delivered to inboxes still contain
+whatever links existed at send time. New previews/sends and unsent stored rows
+are cleaned. Keep requiring a published, non-expired demo before manual sends so
+admins do not send another broken demo link.
+
+## 2026-07-19 — Manual Outreach Send Bypass and Two-Link Email Template
+
+**Role:** Backend, Frontend-adjacent, Security, Test, DevOps, and Documentation
+Agent
+
+**Delivered:** Updated internal-admin selective/manual outreach sends from the
+restaurant list and restaurant detail page so they no longer depend on the bulk
+email-job flag or the generic `EMAIL_DISABLE_SENDING` adapter flag. Manual sends
+now prefer the configured Gmail outreach account pool directly when it exists,
+falling back to the generic provider only when no pool is configured. Contact
+email, opt-out suppression, latest campaign draft, provider configuration, and
+internal-admin checks still apply. Provider-skipped or redirected deliveries no
+longer mark the restaurant contacted/emailed.
+
+Simplified newly generated outreach emails to two promotional links: a tracked
+“Personalized demo websites” link and a direct Tuvi `/services/restaurants`
+link labeled “Services catalog.” Duplicate demo CTAs and the old separate
+Cinematic/Aurora/Elysian sales links were removed from the generated HTML/text
+templates. Legacy `{{TEMPLATE_1_URL}}` through `{{TEMPLATE_3_URL}}` placeholders
+remain supported by tracking injection for older drafts. The required
+unsubscribe link remains in the footer.
+
+**Checks Run:** `go test ./backend/internal/campaigns ./backend/internal/outreach ./backend/internal/http/handlers ./backend/internal/providers/email`,
+`go test ./backend/...`, `go build ./backend/...`,
+`npm --prefix apps/web run lint`, `npx tsc --noEmit --incremental false` from
+`apps/web`, `npx -p node@22 -c 'node -v && npm run build'` from `apps/web`,
+`make openapi`, and `git diff --check` passed. OpenAPI validation retained the
+same three pre-existing warnings for non-2xx/4xx tracking responses and one
+unused component.
+
+**Production Deployment:** Commit `778c0fe` was pushed to `master` and deployed
+from a `git archive` release at `/opt/tuvi/releases/monorepo-778c0fe`.
+`/opt/tuvi/previous-release-path` points to
+`/opt/tuvi/releases/monorepo-e4d6801` for rollback. The VM rebuilt `migrate`,
+`api`, and `admin-web`; `migration up complete` ran with no new schema
+migration; `tuvi-api-1` and `tuvi-admin-web-1` were recreated. API, admin-web,
+worker, OCR worker, and scrape worker showed zero restarts after deployment.
+
+**Production Smokes:** `https://api.tuvisolutions.com/admin/login` returned 200;
+`https://api.tuvisolutions.com/admin/developer` redirected unauthenticated
+traffic to `/admin/login?next=%2Fdeveloper`;
+`https://api.tuvisolutions.com/api/v1/developer/schema` returned 401 without a
+token; `https://api.tuvisolutions.com/api/public/v1/site/restaurants` returned
+200; and `https://demo.tuvisolutions.com/` returned 200. Container-local
+`/healthz` and `/readyz` returned 401 as expected because health routes are
+developer-token protected. Recent API and admin-web log checks showed no
+panic/fatal/traceback/error lines. No real email was sent during verification.
+
+**Business Value / Plan Fit:** Lets Raj manually contact selected restaurants
+without starting or enabling the bulk outreach job, while keeping opt-out and
+admin-gated controls. The email copy now pushes exactly the two intended sales
+destinations for Phase 1: the personalized demo and the services catalog.
+
+**Risks / Follow-ups:** Manual selective sends bypass the durable bulk pacing
+ledger by design and are bounded only by the admin confirmation flow plus the
+25-restaurant synchronous batch limit. Keep using the persisted email-job toggle
+only for automated bulk outreach.
+
+## 2026-07-19 — Internal Developer SQL Console
+
+**Role:** Backend, Frontend, Security, Test, DevOps, and Documentation Agent
+
+**Delivered:** Added a new internal admin **Developer** tab at
+`/admin/developer`. It includes a read-only PostgreSQL SQL runner, result table,
+schema browser, and saved query shortcuts for menu popularity, stored row
+counts, and recent restaurants. The default menu query counts how many distinct
+restaurants offer each normalized menu item by joining `menu_items`, `menus`,
+and `restaurants`. Added protected Go endpoints:
+`GET /api/v1/developer/schema` and `POST /api/v1/developer/sql`, both requiring
+`internal_admin`. The SQL endpoint accepts one `SELECT`, `WITH`, `SHOW`, or
+`EXPLAIN` statement, executes inside a PostgreSQL read-only transaction, applies
+an 8-second statement timeout, and caps returned rows at 200.
+
+**Storage Answer:** The platform does store restaurants and menu tables in
+PostgreSQL. Production live-database read-only counts after deployment showed:
+944 `restaurants`, 944 `menus`, 47 `menu_items`, and 47 distinct normalized menu
+item names. The current menu item data is sparse: the top ten sampled item names
+were each present at one restaurant.
+
+**Checks Run:** `go test ./backend/internal/developer`,
+`go test ./backend/internal/http/test`,
+`go test ./backend/internal/http/handlers ./backend/internal/developer ./backend/internal/http/test`,
+`go test ./backend/...`, `go build ./...`, `go vet ./...`,
+`npm --prefix apps/web run lint`, `npx tsc --noEmit --incremental false` from
+`apps/web`, `npx -p node@22 -c 'node -v && npm run build'` from `apps/web`,
+`make openapi`, and `git diff --check` all passed. The first local
+`npm run build` under host Node v23 failed with a webpack JSON parsing error
+from a generated `.next` cache; after moving that generated cache aside, the
+Node 22 production build passed and rendered `/developer`.
+
+**Production Deployment:** Commit `e4d6801` was pushed to `master` and deployed
+from a `git archive` release at `/opt/tuvi/releases/monorepo-e4d6801`.
+`/opt/tuvi/previous-release-path` points to
+`/opt/tuvi/releases/monorepo-88b58eb` for rollback. The VM rebuilt `migrate`,
+`api`, and `admin-web`; `migration up complete` ran with no new schema
+migration; `tuvi-api-1` and `tuvi-admin-web-1` were recreated. Both containers
+showed zero restarts after deployment.
+
+**Production Smokes:** `https://api.tuvisolutions.com/admin/developer`
+redirected unauthenticated traffic to `/admin/login?next=%2Fdeveloper`;
+`https://api.tuvisolutions.com/admin/login` returned 200;
+`https://api.tuvisolutions.com/api/v1/developer/schema` returned 401 without a
+token; and `https://api.tuvisolutions.com/api/public/v1/site/restaurants`
+returned 200. VM logs showed the admin-web server ready and the Go API connected
+to the database and serving requests. An authenticated Developer schema/query
+smoke was not run because no production admin credentials were read or printed.
+
+**Business Value / Plan Fit:** Gives the internal operator a fast, protected
+way to inspect schema and answer sales/data questions such as menu-item
+coverage without SSH or psql. This supports Phase 1 dashboard/QA operations
+while preserving the production safety rule that browser-based SQL is
+read-only.
+
+**Risks / Follow-ups:** Internal admins can now read database rows through the
+admin UI, so account access should remain tightly controlled. The console is
+intentionally not a write console; destructive or mutating SQL still requires
+server/DB administration outside the browser.
+
+## 2026-07-17 — Low-Cost OCR Selection and Full-Photo Verification
+
+**Role:** AI Workflow, Backend, Frontend, Security, Test, Cost/Eval, and DevOps
+Agent
+
+**Model Evaluation:** Current Hugging Face provider metadata was checked through
+Context7, official documentation, and the live OpenAI-compatible router model
+catalog. Four inexpensive VLM routes were tested read-only against the same
+licensed restaurant-menu, plated-food, and non-restaurant fixtures. The free
+Ternary Bonsai route and `Qwen/Qwen3.5-9B:deepinfra` each completed only one of
+three requests. `google/gemma-3-4b-it:deepinfra` and Gemma 3 12B both completed
+and correctly classified all three; the 4B model extracted ten visible menu
+items and was selected because its live listed price was lower at $0.05 per
+million input tokens and $0.10 per million output tokens. Root-only benchmark
+artifacts are under `/opt/tuvi/benchmarks/`.
+
+**Delivered:** Durable database OCR now processes every discovered Google
+Places and trusted direct scraped photo, ignoring the manual/file
+`MENU_OCR_MAX_IMAGES` cap. Verification requires an exact full-success
+contract: discovered, analyzed, and successful counts must match; there must be
+zero resolution/model/parsing failures. Partial attempts persist their model,
+processed/total/failed counts, token usage, and sanitized errors before ending
+as `failed`. Migration 000028 resets any legacy partial-success verification
+and adds a database check preventing `ocr_status=verified` unless
+`menu_ocr.all_images_processed=true`. The restaurant Overview and Profile
+Review UI now shows discovered/analyzed/successful/failed counts, the all-photo
+result, model, and provider.
+
+**Checks Run:** `go test ./backend/...`, `go vet ./backend/...`, and
+`go build ./backend/cmd/...` passed. Admin `npm run lint` and
+`npx tsc --noEmit --incremental false` passed; the production Node 22 Docker
+build passed. Six new OCR contract/unit tests passed locally and in the exact
+production OCR image. The full production-image automation suite ran 32 tests:
+30 passed and only the same two obsolete `daily_ingestion.py` tests failed
+because that retired entry point intentionally refuses to replace the durable
+pipeline. Migration 000028 passed a transaction/rollback test against the live
+database before it was applied.
+
+**Production Deployment and Pilot:** Commit `fd2cc94` was pushed to `master`
+and deployed at `/opt/tuvi/releases/monorepo-fd2cc94`; migration 000028 is
+active. API, worker, and admin-web were recreated from the exact release, and
+API/admin health checks return HTTP 200. A validated backup exists at
+`/opt/tuvi/backups/pre-full-photo-ocr-fd2cc94.sql.gz` (mode 0600; 7,326,193
+bytes uncompressed), with a matching root-owned ingestion-config backup.
+
+The one-restaurant production pilot discovered, resolved, analyzed, and
+successfully classified all ten photos in 51 seconds, so and only then did the
+row become verified. It used 6,110 input and 1,068 output tokens, approximately
+$0.00041 at the current listed rate, and extracted no menu items because none
+of those ten photos was classified as a menu document. The downstream worker
+created one demo draft and one campaign draft; nothing was approved, published,
+or sent. Production is now 1 verified, 8 failed, and 470 pending.
+`LEAD_OCR_VERIFICATION_ENABLED=false` remains persisted, there is no OCR cron,
+and no OCR container remains running.
+
+**Business Value / Follow-up:** OCR now proves full photo coverage instead of
+mistaking one successful image for restaurant verification, while exposing the
+evidence needed for human review and cost tracking. At the pilot rate, 470
+similar pending restaurants would cost roughly $0.19 in model tokens but take
+about 6.7 serial hours; image complexity and provider latency can vary. A bulk
+run remains intentionally unscheduled so its batch size and operating window
+can be chosen explicitly.
+
+## 2026-07-17 — Approved Qwen2.5-VL Hyperbolic Production Pilot
+
+**Role:** AI Workflow, Security, Cost/Eval, and DevOps Agent
+
+**Approval and Scope:** The user explicitly approved changing the production
+OCR route to `Qwen/Qwen2.5-VL-7B-Instruct:hyperbolic` and running a
+five-restaurant pilot. The persistent OCR switch stayed disabled, no OCR
+schedule was installed, and the one-shot container was hard-limited to five
+pending profiles. Outreach remained disabled and no profile, demo, or campaign
+approval gate was bypassed.
+
+**Safety and Configuration:** Before the write, a validated live-database
+backup was created at
+`/opt/tuvi/backups/pre-qwen25-five-pilot-a2812de.sql.gz` (mode 0600;
+7,325,725 bytes uncompressed) and the root-owned ingestion configuration was
+backed up to
+`/opt/tuvi/backups/ingestion.env.pre-qwen25-five-pilot-a2812de` (mode 0600).
+Only `HF_VISION_MODEL` and `MENU_OCR_MODEL` were changed to the approved
+route. `LEAD_OCR_VERIFICATION_ENABLED=false` remains persisted, there are zero
+OCR cron entries, and no OCR container remains running.
+
+**Pilot Result:** The worker claimed exactly five pending profiles and
+resolved ten Google Places images for each. Hyperbolic returned HTTP 400 for
+all 50 vision requests, so the bounded job exited after
+`verified=0 failed=5`. The live database moved from 3 failed / 476 pending to
+8 failed / 471 pending, with each new failure recorded once and the sanitized
+error `No image could be analyzed successfully`. No profile remains in
+`running`; `menu_images` and `gallery_images` remain empty; demo sites stayed
+at one, campaigns stayed at zero, and no `lead.prepare` job or outreach action
+was created. Because no inference completed, the pilot produced no useful
+latency, token-usage, quality, or price sample; provider-side billing should be
+checked separately rather than inferred from HTTP status alone.
+
+**Root Cause and Checks:** Context7 and current official Hugging Face
+documentation confirmed the provider-suffix routing contract before the
+change. After the failed pilot, the live Hugging Face model metadata showed
+that `Qwen/Qwen2.5-VL-7B-Instruct` is now mapped only to
+`featherless-ai`; `hyperbolic` is no longer a live provider for this model.
+The OpenAI-compatible router's current model list also does not advertise this
+model. Production API and admin login checks both still return HTTP 200. The
+root-only pilot log is
+`/opt/tuvi/logs/qwen25-five-pilot-a2812de.log` (mode 0600).
+
+**Business Value / Follow-up:** The explicit approval was exercised with a
+bounded blast radius and left a complete audit/rollback trail, but this route
+cannot currently run the OCR workload. OCR remains off. Switching to
+Featherless or another current VLM/provider is a new production model-route
+decision and should begin with a non-restaurant compatibility probe before
+another database-backed pilot.
+
+## 2026-07-17 — Restaurant Photo URLs, OCR Visibility, Real Website Preview, and Production OCR Preflight
+
+**Role:** Full-Stack, Backend, Security, Test, and DevOps Agent
+
+**Delivered:** The restaurant-specific admin view now resolves and displays up
+to ten current Google Places photo URLs with dimensions and required author
+attribution, shows the complete URL and an open-image action, and keeps the
+Places credential server-side. The scraper had intentionally persisted the
+Google Place ID and photo count rather than expiring media URLs; the new
+`GET /api/v1/restaurants/{id}/images/google` adapter resolves fresh URLs on
+demand and returns `Cache-Control: no-store`. Existing OCR-classified menu and
+gallery images also show their stored URLs. The profile and overview tabs now
+distinguish “not checked,” running, verified, no-images, and failed OCR states,
+including attempts, start/completion timestamps, and sanitized errors.
+
+The Demo tab now exposes the existing database-driven generator for each
+restaurant UUID (mapped to the same current `?id=<index>&template=1|2|3`
+URLs used by `demo.tuvisolutions.com`) and explains the separate token-gated
+workflow. “Create restaurant demo draft” now snapshots the restaurant's actual
+public-safe database payload instead of the old `Sample Cafe` default;
+“Inspect payload” is read-only, “Publish” enforces OCR verification plus human
+profile approval, and “Unpublish” immediately revokes public access while
+retaining the draft. Campaign creation now supplies the required one-time demo
+token and is disabled when that token is unavailable.
+
+**Apollo / Photo Diagnosis:** The earlier scrape result was not an Apollo
+adapter failure: 45 candidates were enriched, 159 returned no candidate, 33
+were skipped because no usable domain existed, and the job recorded no Apollo
+provider errors. All 237 imported profiles had ten Google photo resources
+(2,370 total), but URLs were deliberately not persisted because Places media
+URLs expire. Before this release all 237 profiles were OCR `pending` with zero
+attempts and both `menu_images` and `gallery_images` empty.
+
+**Checks Run:** `go test ./backend/...` (157 passed), `go vet ./backend/...`,
+and `go build ./backend/cmd/...` passed. `npm run lint`,
+`npx tsc --noEmit --incremental false`, and a production Next.js build under
+Node 22 passed. The host's Node 23 reproduces the existing Next.js JSON-parser
+failure even on unchanged commit `82eb2e6`, so it is not introduced here.
+OpenAPI YAML parsing, Compose config validation, diff checks, Google Places
+adapter tests (including key/error redaction and attribution), and the new
+no-store handler test passed. In the production OCR dependency image, 24 of 26
+legacy automation tests passed; two outdated `daily_ingestion.py` tests fail
+because that retired entry point now intentionally refuses to run once the
+durable city pipeline is installed.
+
+**Production Deployment:** Commit `199241c` was fast-forwarded to the remote
+default branch `master` and deployed from a `git archive` release at
+`/opt/tuvi/releases/monorepo-199241c`. The API, worker, and admin-web containers
+were rebuilt/recreated; all run the exact release images with zero restarts.
+The new protected routes return 401 without authentication, the API root and
+admin login return 200, and the API container has the isolated Places key from
+root-owned `/opt/tuvi/env/places-api.env` rather than the Apollo/Hugging Face
+ingestion file. No migration or email send occurred. Rollback images are tagged
+`rollback-eaa525c`, `/opt/tuvi/previous-release-path` records the prior release,
+and the validated pre-OCR database backup is
+`/opt/tuvi/backups/pre-ocr-photo-ui-199241c.sql.gz` (mode 0600; 3,680,849 bytes
+uncompressed).
+
+**OCR Preflight / Blocker:** A deliberately limited three-profile OCR run was
+started after the backup. Google Places successfully resolved ten images for
+each profile, but all 30 Hugging Face calls returned HTTP 400. The live router
+model list confirms the configured `Qwen/Qwen2-VL-7B-Instruct` route is no
+longer served; current alternatives include
+`Qwen/Qwen3-VL-30B-A3B-Instruct`. The three rows are now correctly visible as
+`failed`, attempt 1, with sanitized errors; 234 remain pending and image tables
+remain empty. `LEAD_OCR_VERIFICATION_ENABLED=false` remains in production and
+no cron was installed. Changing the production vision model is an explicit
+model-route/cost approval gate, so recurring OCR is intentionally paused until
+that approval is received.
+
+**Business Value / Plan Fit:** Internal operators can now see the source photo
+URLs, immediately tell whether OCR actually checked a row, open the existing
+restaurant website generator by restaurant record, and understand the gated
+demo lifecycle. The controlled preflight converted a silent operational gap
+into a bounded, auditable model-configuration decision without enabling email
+or repeatedly billing a broken OCR route.
+
+## 2026-07-17 — Lead Photo Management, Ad Hoc/Bulk Send with Preview, Demo Links, and Admin Portal Production Deployment
+
+**Role:** Full-Stack and DevOps Agent
+
+**Delivered:** In the admin portal (`apps/web`), the restaurant lead detail
+view gained a Photos tab (list/hide/restore scraped menu and gallery images,
+soft-hide via new `hidden_at`/`hidden_by` columns so the public site-image
+endpoints and underlying scrape data are unaffected), a Demo links section,
+and a header "Send email" button; the restaurants list gained checkbox
+multi-select with a bulk send action bar. Both flows share a
+`SendPreviewModal` that renders the exact subject/HTML/text before the send
+is confirmed. Backend additions: `GET/DELETE/POST` image visibility
+endpoints, `GET .../demo-links`, and a new ad hoc outreach send path
+(`POST .../outreach/adhoc-send`, single and batch) — a deliberate product
+decision, made explicitly with the user, to skip the OCR/profile/demo/
+campaign approval gates the existing quota-managed bulk pipeline enforces,
+while still keeping the `EMAIL_DISABLE_SENDING` kill switch and the
+`email_suppressions` opt-out list as non-negotiable. The existing
+`POST /api/v1/outreach/bulk-send` pipeline is unmodified. Migration 000026
+adds the visibility columns; a pre-existing migration numbering collision
+(both the current work and the earlier `admin_portal` merge had claimed
+`000009`) was discovered and fixed by renumbering the unrelated,
+never-applied `scrape_ledger` migration to `000027`.
+
+**Deployed:** `apps/web` is now live at `https://api.tuvisolutions.com/admin`
+— same host as the API, Caddy path-routed (`handle /admin*`), no new
+subdomain, per explicit instruction. This is the admin portal's first
+production deployment (previously undeployed). Two real bugs were found and
+fixed only by deploying and testing against a running container, not by
+documentation review: (1) `next start` re-evaluates `next.config.ts`
+(and therefore `basePath`) at server boot, so `NEXT_PUBLIC_BASE_PATH` had to
+be set in the Docker runtime stage, not only the builder stage that produces
+the static assets — without it, every page under `/admin/*` 404'd while the
+same paths worked fine unprefixed; (2) `apps/web`'s Next.js pin (15.5.0) had
+a flagged CVE, upgraded to 15.5.20 in the same pass. `api` and `worker` were
+rebuilt and recreated to ship the new Go endpoints; no other existing
+service (postgres, redis, scrape-worker, voice-agent, tuvi-website, template,
+catalog) was rebuilt or restarted.
+
+**Checks Run:** `go build ./... && go vet ./... && go test ./...` — full
+backend suite green, including 5 new tests for the ad hoc send path
+(disabled-sending rejection, suppressed-email rejection, no-campaign-draft
+rejection, successful send + restaurant record update, batch partial
+results). `npx tsc --noEmit` clean on `apps/web` after every change (the
+local host's Node v23 breaks `next build`'s SWC step for unrelated reasons —
+confirmed pre-existing by testing the already-shipped `tuvi-website` app,
+which fails identically — so real build verification was done via the
+Node 22 Docker image, matching this repo's own Dockerfile convention).
+Production verification: pre- and post-migration Postgres backups taken
+against the correct live database (`monorepo`, not the legacy
+`tuvi`/`restaurant_platform` role/db pair, which turned out to be an inert
+leftover from before an earlier least-privilege database migration);
+`schema_migrations` confirms 000026 and 000027 applied; `https://api.
+tuvisolutions.com/admin/login` returns 200; `/admin/dashboard` without a
+session correctly redirects to `/admin/login?next=...`; the Go API's
+existing public endpoints, `/docs/`, `/openapi.yaml`, and the other four
+Tuvi domains (corporate site, voice, demo, and the unrelated Tilnest/
+SustainabilityWise/n8n sites sharing the VM) all verified unaffected
+post-deploy.
+
+**Business Value / Plan Fit:** Gives the internal_admin operator a working
+way to curate scraped photos, see a lead's demo link(s) without leaving the
+detail view, and send outreach to one or several hand-picked leads with a
+mandatory preview — closing the gap between "leads exist in the database"
+and "a human can act on them" that the admin portal's first (undeployed)
+merge left open.
+
+**Production Deployment:** Deployed via `git archive` snapshots into new
+`/opt/tuvi/releases/monorepo-<sha>` directories (release directories on this
+VM are not git checkouts), following the existing symlink-swap/rollback
+convention. Final release: `eaa525c`. `/opt/tuvi/MonoRepo` now points there;
+`/opt/tuvi/previous-release-path` records the prior release for rollback.
+
+**Risks / Follow-ups:** `EMAIL_DISABLE_SENDING=true` remains the production
+default (unchanged, per the existing human-approval gate in
+`docs/runbooks/vm-deployment-plan.md`) — the new ad hoc send buttons will
+503 in production until that separate decision is made, identical to
+today's existing bulk-send button. Several intermediate release directories
+from this session's iterative debugging (`monorepo-b19b870` through
+`monorepo-a00160a`) remain on the VM under `/opt/tuvi/releases/`; harmless
+(98GB free) but could be pruned. The bare `https://api.tuvisolutions.com/admin`
+root (no further path) takes two redirect hops to reach the login page
+instead of one (`/admin` → `/admin/dashboard` → `/admin/login`) — cosmetic
+only, not a functional issue, not investigated further given time already
+spent on the basePath root cause above.
+
+## 2026-07-16 — Admin Portal Merge and Documentation Sync
+
+**Role:** Documentation Agent
+
+**Delivered:** Fetched `origin/master` and merged its 4 new commits — most
+notably PR #8 (`admin_portal`) — into `agent/tuvi-oauth-homepage-verification`.
+This replaces the `apps/web` placeholder with the real Next.js `internal_admin`
+console (dashboard, scrape-jobs list/detail/retry, restaurant list/detail with
+profile-OCR review + demo + campaign + member management, outreach bulk-send),
+which talks to the Go API only through its own same-origin `/api/admin/*`
+BFF/proxy route with an httpOnly session cookie. The merge also brought in
+`automation/outreach/scrape_ledger.py`, `daily_pipeline.py`, `identity.py`, and
+migration `000027_scrape_ledger` (renumbered from 000009 during deployment after discovering it collided with the already-applied production migration 000009_email_campaigns). Updated `docs/SERVICES.md` (port plan,
+long-running services, interlinks, notes) and `AGENTS.md` LIVING MEMORY >
+Current Repo Shape / Recent Agent Updates to describe `apps/web` as the live
+admin UI instead of a placeholder. Reviewed `RTK.md` (local Codex CLI
+token-saving wrapper doc) for accuracy; no change needed — content is unrelated
+to this feature and still correct.
+
+**Checks Run:** `git merge` completed with no conflicts (verified via
+`git status` after merge). No code was written, so no test suite was run;
+`apps/web/README.md` (already accurate from the source commit) was cross-checked
+against the actual route files (`src/app/(admin)/**`, `src/lib/api.ts`,
+`src/lib/client-api.ts`, `src/app/api/admin/proxy/[...path]/route.ts`,
+`src/middleware.ts`) before writing doc updates.
+
+**Business Value / Plan Fit:** Keeps agent-facing context (AGENTS.md,
+docs/SERVICES.md) truthful about repo shape so future sessions don't
+mis-describe `apps/web` as unimplemented. Surfaces a real gap: the admin portal
+is not yet part of `infra/docker/docker-compose.vm.yml` or the VM Caddyfile, so
+it is not reachable on any `tuvisolutions.com` subdomain yet — flagged as a
+follow-up rather than actioned, since VM/Caddy changes are a production
+deployment decision requiring explicit approval.
+
+**Production Deployment:** None. This session only merged branches locally and
+edited documentation; nothing was pushed or deployed.
+
+**Follow-ups:** Decide and implement a VM domain (e.g.
+`admin.tuvisolutions.com`) and add an `apps/web` service block to
+`docker-compose.vm.yml` + the Caddyfile if/when the admin portal should be
+reachable outside the VM's private network.
+
 ## 2026-07-15 — Equal Restaurant Demo Sizing and Deployment
 
 **Role:** Frontend, DevOps, and Documentation Agent
@@ -1527,3 +2023,559 @@ API (New) key, and an Apollo API key before a Melbourne run can start. Apollo
 People Match can consume credits and its match accuracy/yield needs measurement.
 Places does not provide menu items. Google photo rendering requires a future
 server-side photo proxy if those images are exposed publicly.
+
+## 2026-07-15 — Voice Booking Form and Services Menu Fix
+
+**Role:** Frontend and AI Workflow Agent
+
+**Delivered:** Replaced the browser voice assistant's model-dependent email-only
+prompt with a required name, email, and phone booking form. The voice server now
+opens the form after slot confirmation, receives its values over the existing
+WebSocket, and falls back to opening it if the model tries to book without first
+requesting the form. The agent thanks the visitor and says the booking is
+confirmed only after the consultation API returns success. It no longer claims
+that an email was sent when delivery may be disabled. The desktop Services menu
+is now controlled only by component state, so selecting its first link closes it
+instead of the hover/focus CSS reopening it.
+
+**Production Inspection:** The VM contains zero rows in both
+`company_consultations` and `reservations`, and the API logs contain no matching
+confirmation-email delivery event. Production has `EMAIL_PROVIDER=disabled` and
+`EMAIL_DISABLE_SENDING=true`, so no booking confirmation email was sent.
+
+**Checks Run:** `npx tsc --noEmit --incremental false` — pass; Python
+`py_compile` — pass; browser/phone prompt and tool contract assertions — pass;
+`git diff --check` — pass. A local Next build remains blocked by the pre-existing
+dependency/cache `Unexpected end of JSON input` failure. A clean Docker build
+could not start because Docker Desktop's storage is full; no prune was run.
+
+**Plan Fit / Follow-up:** Restores the Phase 1 consultation conversion path while
+keeping confirmation tied to a successful database booking. No production
+deployment or email-provider change was performed; both require explicit
+approval.
+
+## 2026-07-15 — PostgreSQL-Only Consultation Slot Locking
+
+**Role:** Backend and DevOps Agent
+
+**Delivered:** Made PostgreSQL the sole source of truth for Tuvi consultation
+availability and confirmed bookings. The API no longer initializes or calls the
+Google Calendar provider, checks only confirmed `company_consultations` rows,
+and stores successful bookings before reporting confirmation. Migration 25
+replaces the unconditional `slot_start` uniqueness rule with a partial unique
+index for `status = 'confirmed'`, preventing concurrent double booking while
+allowing cancelled slots to be reused. Added a focused availability regression
+test and an accepted ADR for the deferred calendar integration.
+
+**Checks Run:** `go test ./backend/internal/consultations ./backend/internal/http/...`
+— 45 pass; `go test ./backend/...` — 146 pass. Cross-component and production
+deployment verification are recorded with the release outcome below.
+
+**Business Value / Plan Fit:** A confirmed booking immediately disappears from
+future availability without relying on external calendar state. This provides
+the deterministic Phase 1 booking boundary needed before Google Calendar
+synchronization is designed and approved.
+
+**Production Deployment:** Pushed functional commit `000cdd8` to
+`agent/tuvi-oauth-homepage-verification`, created protected pre-migration backup
+`/opt/tuvi/backups/monorepo-pre-000cdd8-20260715T192444Z.dump`, and staged the
+exact commit at `/opt/tuvi/releases/monorepo-000cdd8`. Migration 25 applied
+successfully. The API, voice agent, and Tuvi website were rebuilt and recreated;
+all run with zero restarts. PostgreSQL reports the partial index predicate
+`status = 'confirmed'`, the former unconditional constraint is absent, and the
+consultation table remains empty. No fake production booking was created.
+
+**Production Verification:** Protected and public availability both return
+`status=success` with 16 current slots; the voice status returns `ready`; the
+public website and voice host return HTTP 200; the rendered website contains the
+voice widget; and new API logs contain no calendar-provider initialization.
+
+## 2026-07-18 — Gmail Outreach Health and Restaurant Admin Completion
+
+**Role:** Full-Stack, Backend, Frontend, Security, Test, and Documentation Agent
+
+**GitHub / Local State:** Fetched and pruned all remotes. GitHub reports no open
+pull requests; PRs 1–8 are merged. The current local HEAD `44b6d7c` is identical
+to `origin/master`. Work stayed on `agent/tuvi-oauth-homepage-verification` to
+preserve unrelated dirty-worktree files; no user-owned change was overwritten.
+
+**Delivered:** Made the restaurant outreach account pool Gmail-only and kept it
+configuration-driven through `OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON`, so a new
+mailbox needs no code change. Added migration `000029`, a PostgreSQL sender-health
+ledger, and a worker loop that sends one real check from every configured Gmail
+mailbox to `rajchodisetti@gmail.com` when first registered and at least every 24
+hours. The Outreach UI now shows each account's pending/checking/healthy/failed
+state, last and next check, provider acceptance, and safe error. Existing
+migration `000024` remains the strategic delivery schedule: 40 attempts per
+account over eight hours, persisted 2–5 minute jitter/global gap, and 24-hour
+cooldown/continuation.
+
+The restaurant outreach job is now operationally controlled by a persisted
+on/off control in the Outreach admin UI instead of `EMAIL_DISABLE_SENDING`.
+Enabling queues the durable workflow; disabling prevents the next Gmail request
+from starting while allowing an in-flight request to resolve safely. The job
+continues to select only OCR-verified rows with an email plus the existing human
+profile, demo, and campaign approval evidence. Gmail OAuth credentials remain in
+secret environment configuration, and health checks remain separately controlled.
+
+Fixed all Cinematic, Aurora, and Elysian admin preview URLs to carry the immutable
+restaurant UUID and added a public UUID content resolver, preventing index changes
+or fallback sample data from showing the wrong site. Outgoing email service cards
+now include both the Tuvi restaurant-services presentation and three distinct
+restaurant-specific signed template links. The restaurant demo UI no longer
+exposes Publish/Unpublish or a public-demo link; its View personalized website
+buttons create a protected session capability and begin tracking before opening
+the chosen template.
+
+Made Contacted and Shown interest read-only automation results in the restaurant
+view. Confirmed sends already set Contacted/emailed; successful tracked link events
+now set Shown interest/interested. Added signed-demo session capabilities,
+heartbeats/end foreground-only duration, selected-template evidence, forwarded AI
+receptionist transcript turns, a protected restaurant engagement API, and an
+Engagement tab. Added phone, address, and OCR status to restaurant responses, an
+OCR table column and verified-only filter, and per-row Apollo outcomes in profile
+review.
+
+Secured the voice service's existing call/transcript read routes and administrative
+controls with the already-configured `CALL_API_SECRET` dependency and constant-time
+credential comparison. Production currently contains 10 generic call rows and 308
+transcript turns but zero restaurant-indexed calls, so there is no historical
+restaurant-specific transcript set to migrate into the new tenant-checked ledger.
+
+**Live Read-Only Findings:** The production environment and inspected backup have
+zero Gmail and zero Zoho outreach account records, so no credential could be tested
+and no real health email was sent. Production data has 708 restaurants: 589 lack
+email and 15 lack phone. Apollo successfully enriched 119 rows and all 119 have an
+email; 511 missing-email rows are `no_candidate` and 78 are `skipped_no_domain`.
+
+**Checks Run:** `go test ./backend/...` — all backend packages pass, including
+new admin-preview/template tests; `go vet ./backend/...` — pass; admin
+`npx tsc --noEmit --incremental false` — pass; admin `npm run lint` — pass;
+template `npx tsc --noEmit
+--incremental false` — pass; Redocly OpenAPI lint — valid with three pre-existing
+warnings plus the existing localhost-server warning when run without the Makefile
+skip; voice `python3 -m py_compile voice-sales-agent/bot.py` — pass; `git diff
+--check` — pass. Current Gmail and FastAPI documentation was checked with Context7
+to verify OAuth refresh-token, `users.messages.send`, and protected dependency behavior.
+Clean Node 22 production builds pass for both the admin and template apps. The
+template app has no ESLint 9 configuration, so its standalone lint command remains
+an existing tooling gap; its TypeScript and production-build checks are clean.
+
+**Business Value / Plan Fit:** Completes the Phase 1 visibility loop from configured
+sender → UI-authorized paced outreach → confirmed contact → tracked interest →
+personalized template/foreground time/transcript, while retaining human profile,
+demo, and campaign approval gates.
+
+**Risks / Follow-ups:** Nothing was deployed, migrated, committed, pushed, or sent.
+Deployment requires explicit approval, migrations `000024` and `000029`, and valid
+per-mailbox Gmail OAuth records. The three pasted Google API keys were treated as
+exposed, were not stored or tested, and cannot authorize mailbox sending; they must
+be revoked/rotated. Each Gmail mailbox needs offline OAuth consent and a refresh
+token with `gmail.send` permission. Daily health status proves Gmail API acceptance,
+not inbox delivery.
+
+## 2026-07-19 — Gmail Health, Admin Engagement, and Budgeted Background OCR Deployment
+
+**Role:** Full-Stack, Backend, Frontend, AI Workflow, Security, Test, DevOps,
+and Documentation Agent
+
+**Delivered:** Pushed `e6e7950` and `caffcfb` directly to `master`, with
+`caffcfb` as the deployed release. The Gmail-only outreach account pool, sender
+health ledger/UI, persisted email-job switch, paced delivery workflow, three
+restaurant-specific template links, Tuvi service presentation, UUID-backed
+previews, engagement/time/transcript evidence, contact/Apollo/OCR visibility,
+and secured voice reads from the prior local session are now live. The ignored
+local Gmail JSON was normalized to one dotenv-safe line, validated as three
+complete unique accounts, transferred through a mode-0600 temporary payload,
+and written only to the protected VM stack environment. No credential value was
+printed or committed.
+
+Added migration `000030` and a long-running `ocr-worker`. It claims only
+restaurants whose canonical email is nonblank and atomically reserves every
+vision-provider request in `ocr_daily_request_usage`. The global limit is hard
+capped at 200 requests per UTC day across worker restarts. OpenAI-compatible and
+Google GenAI automatic retries are disabled, provider/image calls receive an
+explicit timeout, and timeout/429/temporary failures release the current and
+unstarted claims to `pending` without consuming an OCR attempt. Ambiguous timed-
+out provider requests still consume one budget reservation. The old one-shot
+`ocr-job` remains available for diagnosis, and no competing VM OCR cron exists.
+
+Fixed the scrape-job trigger redirect to include the deployed `/admin` base path.
+Direct local and public requests to `/admin/scrape-jobs/<id>` now reach the admin
+application and return the expected authentication redirect instead of a 404.
+
+**Production Deployment:** The live database was at migration `000014` when the
+rollout began; pending migrations applied in order through `000029`, then
+`000030` applied after the OCR changes. Restaurant outreach remained seeded off
+throughout. A validated backup of the real `monorepo` database was written to
+`/opt/tuvi/backups/monorepo-pre-caffcfb-20260719T092320Z.dump`; the OCR environment
+backup is `/opt/tuvi/backups/ingestion.env.pre-caffcfb-20260719T092320Z`, and the
+pre-Gmail stack configuration backup is
+`/opt/tuvi/backups/stack.env.pre-e6e7950-20260719T090404Z`. Prior live images were
+tagged `rollback-fd2cc94`. The exact release is
+`/opt/tuvi/releases/monorepo-caffcfb`, now targeted by `/opt/tuvi/MonoRepo`.
+
+API, Go worker, admin web, template, voice agent, and OCR worker images built and
+started successfully. API auth gating returned 401 without a JWT as expected;
+admin login, template, and voice returned HTTP 200. Containers reported zero
+restarts at verification.
+
+**Live Verification:** All three configured Gmail accounts registered, ran their
+first real-message health check, and stored `healthy` with a provider message ID;
+zero failed. This proves Gmail API acceptance, not inbox placement. The persisted
+restaurant email job is `false`, active `outreach.bulk_send` jobs are zero, and
+restaurant delivery attempts created in the deployment window are zero.
+
+The OCR background worker started with 119 email-equipped candidates. At the
+verification snapshot it had reserved 17/200 daily requests, moved one additional
+profile to `verified`, held 49 email-equipped running claims, and had zero
+email-less running claims. The worker and budget continue in the background.
+
+**Checks Run:** `go test ./backend/...` — 159 pass in 43 packages; `go vet
+./backend/...` — pass; admin `npm run lint` and `npx tsc --noEmit --incremental
+false` — pass; focused OCR/unit suite — 20 pass; Python `py_compile` for all changed
+OCR modules — pass; all three configured provider clients accept the bounded
+timeout/no-retry construction; Compose VM config validation — pass; `git diff
+--check` and staged secret scans — pass. The broader outreach discovery ran 40
+tests with 38 pass and two pre-existing legacy-ingestion errors because the
+workstation PostgreSQL tunnel at `127.0.0.1:15432` was not running. Production
+Node 22/Docker builds passed for admin, template, voice, API, worker, migrate, and
+OCR worker. Context7 current Google GenAI and OpenAI Python documentation was used
+to verify timeout units and retry controls.
+
+**Business Value / Plan Fit:** Sender readiness, controlled outreach, tracked
+restaurant engagement, valid admin navigation, and continuously progressing OCR
+are now operational while preserving the Phase 1 human approval gate. Scarce OCR
+capacity is spent only on leads that can actually receive outreach and cannot
+exceed the provider's daily allowance.
+
+**Risks / Follow-ups:** Gmail health proves provider acceptance only; inspect the
+configured internal recipient inbox for placement. OCR will stop reserving calls
+at 200/200 and resume after the UTC date changes. Keep the Outreach UI email job
+off until profiles, demos, campaigns, recipients, and opt-out content have been
+reviewed for a real send window.
+
+## 2026-07-19 — Hybrid Restaurant Media and OCR-Aware Website Galleries (Local)
+
+**Role:** Full-Stack, Backend, Frontend, AI Workflow, Security, Test, and
+Documentation Agent
+
+**Delivered:** Implemented a hybrid media pipeline that keeps Google Places
+photos live-only and uncached while providing durable S3-compatible storage for
+restaurant-owned and separately licensed images. New migration `000031` adds
+source, rights, approval, placement, accessibility, visual-quality, OCR, and
+visibility metadata without storing Google photo URLs, resource names, or bytes.
+The import path now replaces only OCR-owned image rows and never deletes existing
+durable/manual rows when a Google-only OCR result has no persistent URL.
+
+Public restaurant and signed-demo payloads now resolve fresh Google Places photos
+at request time, pair them with their fresh attribution/report links, and expose
+only photos whose one-way resource fingerprint exactly matches a website-safe
+OCR classification. Unmatched, unclassified, low-confidence, text-heavy unknown,
+and menu-document photos fail closed.
+Public responses are non-cacheable, and live
+Google media bypasses the Next.js image optimizer. Restaurant-owned/licensed
+assets use immutable CDN URLs, remain draft until the shared OCR worker verifies
+them, and are rejected if identified as a menu document. The upload and visibility
+controls are available in the authenticated restaurant photo view with OCR state,
+errors, source rights, captions, and placement metadata.
+
+Expanded OCR classification to food, drink, interior, exterior, logo, team,
+event, menu document, and other, plus factual captions, accessible alt text,
+tags, orientation, subject placement, people/text flags, and quality/hero scores.
+All three personalized templates now use this metadata for source-aware hero
+selection, ambience/food gallery filters, lightboxes, and safe reusable placements.
+Google photos carry visible attribution at every rendered placement. Only durable
+owned/licensed media is reused across story, experience, footer, and SEO surfaces.
+Menu documents are excluded from public handlers, demo snapshots, legacy gallery
+fallbacks, menu-item image fallbacks, templates, uploads, and SEO.
+
+**Checks Run:** `go test ./backend/...` — 165 pass in 44 packages; `go vet
+./backend/...` and `go build ./backend/cmd/...` — pass; focused OCR/import suite —
+13 pass; changed Python modules compile; admin `npm run lint` and both TypeScript
+checks — pass; Node 22 optimized production builds for admin and template — pass;
+Redocly OpenAPI lint — valid with four existing warnings; `git diff --check` —
+pass; VM Compose configuration validation — pass. Context7 current AWS SDK v2 and Next.js documentation was used for the
+S3-compatible client, endpoint configuration, multipart proxy limit, and public
+image behavior. Docker Desktop was unavailable, so no container build or database
+migration was run locally.
+
+**Business Value / Plan Fit:** Existing personalized sites can display current,
+properly attributed non-menu Google imagery without depending on expired database
+URLs. Restaurants can progressively replace provider media with controlled,
+stable, OCR-enriched assets that improve the templates and remain portable.
+
+**Risks / Follow-ups:** This work is not committed, pushed, migrated, or deployed.
+Production remains on release `caffcfb` with migrations through `000030`.
+Deployment requires explicit approval plus an S3-compatible bucket/CDN configured
+with `STORAGE_*` variables and the template's matching public media base URL. The
+live Google path intentionally fails closed until each resource fingerprint has
+a successful OCR classification; migration `000031` returns older positional-only
+Google classifications to pending, and the existing background worker prioritizes
+restaurants with demos while retaining the shared 200-request UTC-day ceiling.
+
+## 2026-07-19 — Mobile Template Switch Clarity (Local)
+
+**Role:** Frontend, Test, and Documentation Agent
+
+**Delivered:** Reworked the shared template switcher used by Cinematic, Aurora,
+and Elysian on mobile. The mobile control is now a full-width website-design card
+that identifies the current design, shows its position in the three-template set,
+names the next preview, and explicitly says that restaurant details and photos do
+not change. Desktop copy now says “Preview” rather than implying a permanent
+switch. Elysian's desktop and mobile controls have separate responsive visibility,
+removing the duplicate control at smaller widths. Navigation now uses the current
+pathname and a cloned `useSearchParams` value, so restaurant IDs, signed-demo
+tokens, and other query parameters survive a template preview.
+
+**Photo URL Clarification:** Personalized demos never try to reopen the removed
+OCR URL. The API resolves current Google Places media URLs for each request and
+returns a photo only when its one-way provider-resource fingerprint exactly
+matches a website-safe OCR classification. If Google changes the underlying
+resource identity, the old URL is not reused and the photo fails closed until an
+OCR refresh. Durable owner/licensed media continues to use its stable configured
+object-storage URL.
+
+**Checks Run:** Template TypeScript check — pass; Node 22 optimized production
+build — pass; local development server returned HTTP 200 for Cinematic, Aurora,
+and Elysian sample routes; `git diff --check` — pass. Context7 current Next.js
+App Router guidance was used for query-parameter preservation. The in-app browser
+runtime had no available browser, so interactive screenshot verification could
+not be run in this workspace.
+
+**Risks / Follow-ups:** The change is local and unreleased. Production remains on
+`caffcfb`/migration `000030`; the hybrid media and mobile-switch work still require
+the previously documented storage configuration and explicit deployment approval.
+
+## 2026-07-19 — Hybrid Media and Mobile Template Production Deployment
+
+**Role:** Full-Stack, Backend, Frontend, AI Workflow, Security, Test, DevOps,
+and Documentation Agent
+
+**Delivered:** Pushed `b5f7299` and corrective packaging commit `6c21c15`
+directly to `master`, then deployed the immutable `6c21c15` release at
+`/opt/tuvi/releases/monorepo-6c21c15`. Migration `000031` is applied. Fresh,
+attributed Google Places photo resolution, exact OCR resource-fingerprint
+matching, public menu-document exclusion, non-destructive media imports,
+OCR-aware template placements, authenticated admin media controls, and the
+clear mobile template preview control are live.
+
+The release was built before downtime. A compressed database backup was saved
+as `/opt/tuvi/backups/monorepo-pre-b5f7299-20260719T174044Z.dump`, alongside
+protected stack and ingestion environment backups. The first production smoke
+found that `Dockerfile.ocr` omitted the new shared `media_asset_metadata.py`
+module. The OCR container was isolated in a restart loop; the API, admin, and
+templates remained healthy. Commit `6c21c15` added the missing module to the
+image, focused OCR/import tests passed 13/13, and only the OCR image/container
+was rebuilt. The corrected OCR worker is running with zero restarts.
+
+**Live Verification:** API, Go worker, scrape worker, OCR worker, admin portal,
+template, corporate website, and voice containers are running with zero
+restarts and no current error/traceback/panic/fatal logs. Public corporate site,
+restaurant API, admin login, voice readiness, and template variants 1/2/3 all
+return HTTP 200. Restaurant detail responses return `Cache-Control: no-store,
+max-age=0`. Schema version is 31 and `restaurant_media_assets` exists.
+
+Migration `000031` safely returned the 21 old fingerprint-less `verified`
+profiles to `pending`; production now has 940 pending and 4 failed profiles.
+There are 154 email-equipped unverified candidates. Today's shared OCR allowance
+was already 200/200, so the background worker is intentionally waiting for the
+UTC reset and has not exceeded the provider limit. The persisted outreach email
+job remains off and all three Gmail sender-health records remain healthy.
+
+**Checks Run:** Pre-release checks remained green: 165 Go tests across 44
+packages, Go vet/build, 13 OCR/import tests, Python compilation, admin lint and
+TypeScript, template TypeScript, both Node 22 production builds, OpenAPI,
+Compose validation, and diff checks. Production Docker builds succeeded for
+migrate, API, worker, scrape worker, OCR worker, admin, and template. Post-release
+database, container, logs, local HTTP, public HTTPS, cache-header, Gmail-health,
+outreach-control, OCR-budget, and release-symlink checks passed.
+
+**Risks / Follow-ups:** No S3-compatible production bucket/CDN is configured,
+so owner/licensed uploads remain unavailable while `STORAGE_PROVIDER=disabled`.
+This does not block live Google photo resolution. Personalized Google photos
+will remain fail-closed until the post-reset OCR worker writes exact resource
+fingerprints; menu documents remain excluded. The 200-request daily ceiling means
+the 154 eligible profiles will complete progressively rather than all at once.
+
+## 2026-07-19 — Restaurant List Filter Lifecycle Fix
+
+**Role:** Backend, Test, and Documentation Agent
+
+**Delivered:** Fixed the admin restaurant list's `demo_ready` lifecycle gap.
+Automatic lead preparation now advances a lead to `demo_ready` when it creates,
+refreshes, or reuses generated demo/outreach draft artifacts. Manual admin demo
+draft creation now also advances only fresh `lead` records to `demo_ready`,
+without downgrading emailed, interested, client, lost, or archived restaurants.
+Migration `000032` backfills existing `lead` restaurants that already have draft
+or published demo records, so the Status → `demo_ready` filter can return
+already-generated demos after deployment.
+
+Added focused regressions proving the admin list accepts and returns
+`status=demo_ready` and `ocr_status=verified` results. The OCR filter code path
+was already value-compatible; the new test protects it from regressing while the
+demo-ready lifecycle fix removes the common combined-filter empty-list case.
+
+**Checks Run:** Focused restaurant HTTP filter tests passed; focused demo-service
+status-transition test passed; `go test ./backend/...` passed with 167 tests in
+44 packages; `go vet ./backend/...` passed; `git diff --check` passed.
+
+**Business Value / Plan Fit:** Admins can reliably find leads that have moved
+from scraping/OCR into the personalized-demo review stage, which supports the
+Phase 1 lead → demo → outreach workflow.
+
+**Risks / Follow-ups:** The ignored local database tunnel at `127.0.0.1:15432`
+was unavailable, so migration `000032` was not applied locally. Production or
+staging deployment requires the normal migration approval gate.
+
+## 2026-07-19 — Demo-Ready Filter Deployment and UIPro Codex Skill
+
+**Role:** Backend, DevOps, Test, and Documentation Agent
+
+**Delivered:** Installed UI/UX Pro Max for Codex in the monorepo with
+`uipro init --ai codex`; the generated skill bundle lives under
+`.codex/skills/ui-ux-pro-max`, with Python bytecode ignored and excluded.
+Committed and pushed `cbc2eb8` to `master`, then deployed it to the VM as
+`/opt/tuvi/releases/monorepo-cbc2eb8`. The `/opt/tuvi/MonoRepo` symlink now
+points to `cbc2eb8`, and `/opt/tuvi/previous-release-path` points to the prior
+`6c21c15` release.
+
+**Production Migration:** A gzip-validated backup was saved at
+`/opt/tuvi/backups/monorepo-pre-cbc2eb8-20260719T181834Z.dump.gz` before
+migration. Migration `000032` applied successfully to the active `monorepo`
+database. Before the migration, schema was 31 and 22 `lead` restaurants already
+had draft/published demo records. After the migration, schema is 32,
+`demo_ready=22`, `lead=922`, and zero `lead` rows still have a demo record.
+
+**Live Verification:** Rebuilt backend/migrate images from `cbc2eb8` and
+force-recreated only API and worker. All Tuvi containers are running with zero
+restarts. API, admin login, corporate website, demo template, and voice readiness
+all return HTTP 200. API, worker, OCR worker, and scrape-worker logs show no
+panic/fatal/traceback/error lines in the checked tails. The UIPro search script
+runs on the VM through `python3`.
+
+**Safety State:** The Outreach UI email job remains disabled, active
+`outreach.bulk_send` jobs are zero, and today's OCR budget remains 200/200.
+Production currently has `restaurant_profiles` counts `pending=940`,
+`failed=4`, and `verified=0`; the OCR verified-only list filter will remain
+empty until new rows reach `ocr_status=verified`.
+
+**Checks Run:** Local `go test ./backend/...` passed with 167 tests in 44
+packages, `go vet ./backend/...` passed, staged whitespace checks passed, and
+UIPro local/VM smoke checks passed.
+
+## 2026-07-19 — Italian Villa Experimental Restaurant Template
+
+**Role:** Frontend, Backend, Test, DevOps, and Documentation Agent
+
+**Delivered:** Added a payload-driven `template=4` personalized website for
+Italian-focused restaurant demos. The new Italian Villa template uses the
+existing restaurant payload contract, safe source-aware media loader, Google
+photo attribution, reservation availability and request flow, generated menu
+sections, reviews, contact details, hours, template switching, and the existing
+floating voice-agent widget. UI/UX Pro Max was used for the premium restaurant
+design research pass, with emphasis on high-quality photography, restrained
+luxury typography, mobile-first booking, trust cues, and a fast path from visual
+appeal to reservation intent.
+
+The admin restaurant Demo tab now separates stable generated-site templates
+from an **Experimental templates** section and exposes “Italian Villa
+experimental” for each restaurant-generated payload. Demo engagement analytics
+now accepts `template_id=4`, and migration `000033` updates the production check
+constraint accordingly.
+
+**Production Deployment:** Commits `3b0c246` and `5ffddf2` were pushed to
+`master`; the VM is running the app code from
+`/opt/tuvi/releases/monorepo-5ffddf2` with `/opt/tuvi/previous-release-path`
+pointing to `/opt/tuvi/releases/monorepo-3b0c246`. A pre-migration backup was
+created at
+`/opt/tuvi/backups/pre-italian-template-3b0c246-20260719-185708.sql.gz`
+before applying migration `000033`; the active `monorepo` database now reports
+schema version 33.
+
+**Checks Run:** UIPro design-system search passed locally. Local checks passed:
+template TypeScript, admin TypeScript, admin ESLint, `go test ./backend/...`
+with 167 tests in 44 packages, and `git diff --check`. VM Docker builds passed
+for migrate, API, template, and admin-web at `3b0c246`; the final template image
+build passed at `5ffddf2`. Production smoke checks returned HTTP 200 for the
+Italian demo URL, admin login, public restaurants API, and voice readiness. All
+Tuvi containers were running with zero restarts after deployment.
+
+**Business Value / Plan Fit:** Sales demos now have an Italian-cuisine-specific
+premium website option that can be opened directly from restaurant leads without
+hand-building content. This expands the Phase 1 personalized demo library while
+preserving existing media safety, reservation, voice, and engagement contracts.
+
+**Risks / Follow-ups:** The template intentionally uses the existing fail-closed
+media pipeline. Restaurants without verified safe media still render the
+premium layout and copy, but image-heavy sections appear only when the payload
+contains safe media. Owner/licensed uploads remain dependent on the existing
+future bucket/CDN configuration.
+
+## 2026-07-19 — Italian Template Removal and Generated Preview Photo Repair
+
+**Role:** Frontend, Backend, Test, DevOps, and Documentation Agent
+
+**Delivered:** Removed the rejected Italian Villa experimental template from the
+personalized demo app, admin restaurant Demo tab, engagement tracking, template
+switcher, voice-widget variants, package scripts, and public template registry.
+The generated-site template set is back to Cinematic, Aurora, and Elysian only.
+Migration `000034` maps any existing `template_id='4'` demo-session analytics
+rows to Elysian (`3`) and restores the database check constraint to
+`template_id IN ('1', '2', '3')`.
+
+Fixed generated lead preview photos. The immediate production issue was that
+reviewed public media was empty: no durable media rows existed, and the older
+Google OCR classifications lacked exact source fingerprints/public eligibility,
+so the strict public path correctly returned no photos. Migration `000035`
+returned those fingerprint-less Google classifications to pending, and the
+rebuilt OCR worker will refresh them after the UTC daily budget resets.
+
+To unblock admin-opened generated previews now, the by-restaurant public site
+endpoint supports `preview_media=google_live`. That flag is used by the template
+app's UUID preview adapter only, and only when reviewed media is empty. It
+resolves fresh Google Places photos live, returns attribution/report metadata,
+sets `unoptimized=true`, and keeps provider URLs uncached. All three production
+templates now preserve the full media object for story, timeline, experience,
+about, and footer placements so live Google images and attribution render
+instead of being filtered out.
+
+**Production Deployment:** Pushed and deployed removal commit `b2a2f83`, then
+deployed photo-repair commit `88b58eb` as the active VM runtime release at
+`/opt/tuvi/releases/monorepo-88b58eb`. The rollback pointer is
+`/opt/tuvi/releases/monorepo-b2a2f83`. A gzip-validated pre-migration backup was
+saved at `/opt/tuvi/backups/pre-remove-italian-b2a2f83-20260719-193900.sql.gz`.
+The active database schema is `000035`.
+
+**Live Verification:** Production `demo_sessions` now only contain template IDs
+`1` and `2`, and the live constraint permits only `1`, `2`, and `3`. A generated
+preview for restaurant `020ca56c-4f99-4d1a-b449-2b0d7aaab792` returned ten
+`google_places_live` media objects with URLs and attribution, and the rendered
+Cinematic preview HTML contained `lh3.googleusercontent.com` plus Google Maps
+attribution. `?template=4` no longer renders Italian Villa content and falls
+back to the default template. Public template variants 1/2/3, admin login, the
+public restaurant API, and voice health all returned HTTP 200. API, admin,
+template, OCR worker, worker, scrape worker, voice, Postgres, Redis, corporate
+site, and catalog containers were running with zero restarts and no recent
+panic/fatal/traceback/error log lines in the checked tails.
+
+**Checks Run:** Template TypeScript passed; admin TypeScript and ESLint passed;
+`go test ./backend/...` passed with 169 tests across 44 packages; focused Python
+outreach/OCR unit tests passed with 10 tests; `git diff --check` passed. VM
+Docker builds passed for migrate, API, admin-web, template, and OCR worker while
+removing the template; the final API and template image rebuilds passed for
+`88b58eb`.
+
+**Business Value / Plan Fit:** The low-quality experimental design was removed
+quickly from the sales surface, while generated previews from the lead table now
+show real, attributed restaurant imagery immediately. Published/token-gated
+demos still use the stricter reviewed-media path, preserving the Phase 1
+media-safety policy.
+
+**Risks / Follow-ups:** The preview fallback makes live Places media requests for
+admin-opened generated previews before OCR classification is complete; it does
+not copy, cache, or publish those URLs. The OCR worker remains at the
+PostgreSQL-enforced 200/200 daily request ceiling until the UTC reset, after
+which reviewed public media can be rebuilt through the normal fingerprinted
+path. The production storage provider is still disabled, so owner/licensed
+uploads remain pending bucket/CDN configuration.

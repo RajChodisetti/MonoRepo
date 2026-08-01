@@ -7,19 +7,23 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/analytics"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/auth"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/campaigns"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/consultations"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/demos"
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/developer"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/http/handlers"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/jobs"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/leadreview"
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/media"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/outreach"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/config"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/db"
-	calendarprovider "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/calendar"
 	emailprovider "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/email"
 	llmprovider "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/llm"
+	placesprovider "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/places"
+	storageprovider "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/storage"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/reservations"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/restaurants"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/scrapejobs"
@@ -38,6 +42,20 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	authService := auth.NewService(dataStore.Users, tokenManager)
 	accessService := restaurants.NewService(dataStore.Restaurants, dataStore.Memberships)
 	demoService := demos.NewService(dataStore.Demos, accessService, cfg.Demo.TokenTTL)
+	placesClient := placesprovider.NewClient(cfg.Places)
+	objectStore, storageErr := storageprovider.New(context.Background(), cfg.Storage)
+	if storageErr != nil {
+		log.WarnContext(context.Background(), "restaurant_media_storage_unavailable", "error", storageErr)
+		objectStore = storageprovider.Disabled{}
+	}
+	mediaService := media.NewService(
+		media.NewPostgres(dataStore.Pool()),
+		dataStore.Profiles,
+		placesClient,
+		objectStore,
+		log,
+	)
+	demoEngagementService := analytics.NewService(demoService, analytics.NewPostgres(dataStore.Pool()))
 
 	jobQueue := jobs.NewPostgresQueue(dataStore.Pool(), cfg.Jobs.BufferSize, cfg.Jobs.RetryDelay)
 	var jobEnqueuer campaigns.SendJobEnqueuer = &jobs.CampaignEnqueuer{Queue: jobQueue}
@@ -45,22 +63,32 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 		jobEnqueuer = &jobs.CampaignEnqueuer{Queue: jobs.NewInMemoryQueue(cfg.Jobs.BufferSize)}
 	}
 	campaignService := campaigns.NewService(dataStore.Campaigns, dataStore.Demos, accessService, jobEnqueuer, cfg.AppURLs, cfg.Demo.TokenTTL)
-	calendarProvider := calendarprovider.NewFromConfig(context.Background(), cfg.Consultations, log)
 	emailProvider, err := emailprovider.NewFromConfig(cfg.Email, cfg.ZohoMail)
 	if err != nil {
 		log.ErrorContext(context.Background(), "consultation_email_provider_unavailable", "error", err)
 		emailProvider = emailprovider.NewDisabled()
 	}
-	consultationService := consultations.NewService(cfg.Consultations, dataStore.Consultations, calendarProvider, emailProvider, log)
+	consultationService := consultations.NewService(cfg.Consultations, dataStore.Consultations, emailProvider, log)
 
 	authHandler := handlers.NewAuthHandler(authService, cfg.App.Env, writeJSON, writeError)
 	adminHandler := handlers.NewAdminHandler(dataStore.Users, writeJSON, writeError)
 	userHandler := handlers.NewUserHandler(dataStore.Users, dataStore.Restaurants, dataStore.Memberships, writeJSON, writeError)
 	restaurantHandler := handlers.NewRestaurantHandler(accessService, writeJSON, writeError)
-	demoPublicHandler := handlers.NewDemoPublicHandler(demoService, writeJSON, writeError)
+	demoPublicHandler := handlers.NewDemoPublicHandler(demoService, mediaService, writeJSON, writeError)
 	demoAdminHandler := handlers.NewDemoAdminHandler(demoService, writeJSON, writeError)
+	demoEngagementHandler := handlers.NewDemoEngagementHandler(demoEngagementService, writeJSON, writeError)
 	campaignHandler := handlers.NewCampaignHandler(campaignService, writeJSON, writeError)
 	outreachRepo := outreach.NewPostgres(dataStore.Pool())
+	emailHealthService, emailHealthErr := emailprovider.NewHealthServiceFromConfig(
+		context.Background(),
+		cfg.Email,
+		cfg.Outreach,
+		outreachRepo,
+	)
+	if emailHealthErr != nil {
+		log.WarnContext(context.Background(), "email_health_unavailable", "error", emailHealthErr)
+		emailHealthService = nil
+	}
 	outreachAccountPool, outreachPoolErr := emailprovider.NewPersistentAccountPoolFromConfig(
 		context.Background(),
 		cfg.Email,
@@ -75,24 +103,45 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 		dataStore.Pool(),
 		dataStore.Campaigns,
 		campaignService,
+		accessService,
 		outreach.DemoTokenResolver{Campaigns: dataStore.Campaigns, Demos: dataStore.Demos},
 		outreachAccountPool,
+		emailProvider,
 		cfg.Email,
 		cfg.Outreach,
 		&jobs.OutreachBulkEnqueuer{Queue: jobQueue},
 		log,
 	)
 	outreachBulkHandler := handlers.NewOutreachBulkHandler(outreachService, writeJSON, writeError)
+	emailHealthHandler := handlers.NewEmailHealthHandler(emailHealthService, cfg.Outreach, writeJSON, writeError)
 	scrapeJobRepo := scrapejobs.NewPostgres(dataStore.Pool())
 	scrapeJobService := scrapejobs.NewService(scrapeJobRepo)
 	scrapeJobHandler := handlers.NewScrapeJobHandler(scrapeJobService, writeJSON, writeError)
 	leadReviewService := leadreview.NewService(dataStore.Pool())
 	leadReviewHandler := handlers.NewLeadReviewHandler(leadReviewService, writeJSON, writeError)
-	trackingHandler := handlers.NewTrackingHandler(dataStore.Campaigns, writeError)
-	restaurantPublicHandler := handlers.NewRestaurantPublicHandler(dataStore.Profiles, writeJSON, writeError)
+	trackingHandler := handlers.NewTrackingHandler(dataStore.Campaigns, dataStore.Restaurants, writeError)
+	restaurantPublicHandler := handlers.NewRestaurantPublicHandler(dataStore.Profiles, mediaService, writeJSON, writeError)
+	restaurantImagesAdminHandler := handlers.NewRestaurantImagesAdminHandler(
+		dataStore.Profiles,
+		placesClient,
+		mediaService,
+		writeJSON,
+		writeError,
+	)
+	restaurantSiteAdminHandler := handlers.NewRestaurantSiteAdminHandler(
+		dataStore.Profiles,
+		cfg.AppURLs.PublicWebURL,
+		writeJSON,
+		writeError,
+	)
 	reservationService := reservations.NewService(dataStore.Reservations)
 	reservationPublicHandler := handlers.NewReservationPublicHandler(reservationService, writeJSON, writeError)
 	companyConsultationHandler := handlers.NewCompanyConsultationHandler(consultationService, writeJSON)
+	developerHandler := handlers.NewDeveloperHandler(
+		developer.NewService(dataStore.Pool()),
+		writeJSON,
+		writeError,
+	)
 	var interestedRepo seoreport.InterestedRepository
 	var leadUpserter seoreport.LeadUpserter
 	if pool := dataStore.Pool(); pool != nil {
@@ -176,20 +225,43 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	mux.Handle("POST /api/v1/campaigns/{id}/regenerate", protectInternalAdmin(http.HandlerFunc(campaignHandler.Regenerate)))
 	mux.Handle("POST /api/v1/campaigns/{id}/stop", protectInternalAdmin(http.HandlerFunc(campaignHandler.Stop)))
 	mux.Handle("POST /api/v1/outreach/bulk-send", protectInternalAdmin(http.HandlerFunc(outreachBulkHandler.Trigger)))
+	mux.Handle("PATCH /api/v1/outreach/email-job", protectInternalAdmin(http.HandlerFunc(outreachBulkHandler.SetEmailJob)))
 	mux.Handle("GET /api/v1/outreach/bulk-send/status", protectInternalAdmin(http.HandlerFunc(outreachBulkHandler.Status)))
+	mux.Handle("GET /api/v1/outreach/email-accounts/health", protectInternalAdmin(http.HandlerFunc(emailHealthHandler.Status)))
+	mux.Handle("GET /api/v1/developer/schema", protectInternalAdmin(http.HandlerFunc(developerHandler.Schema)))
+	mux.Handle("POST /api/v1/developer/sql", protectInternalAdmin(http.HandlerFunc(developerHandler.ExecuteSQL)))
 	mux.Handle("POST /api/v1/scrape-jobs", protectInternalAdmin(http.HandlerFunc(scrapeJobHandler.Trigger)))
 	mux.Handle("GET /api/v1/scrape-jobs", protectInternalAdmin(http.HandlerFunc(scrapeJobHandler.List)))
 	mux.Handle("GET /api/v1/scrape-jobs/{id}", protectInternalAdmin(http.HandlerFunc(scrapeJobHandler.Get)))
 	mux.Handle("POST /api/v1/scrape-jobs/{id}/retry", protectInternalAdmin(http.HandlerFunc(scrapeJobHandler.Retry)))
+
+	mux.Handle("GET /api/v1/restaurants/{id}/images", protectRestaurantAdmin(http.HandlerFunc(restaurantImagesAdminHandler.List)))
+	mux.Handle("GET /api/v1/restaurants/{id}/images/google", protectRestaurantAdmin(http.HandlerFunc(restaurantImagesAdminHandler.ListGoogle)))
+	mux.Handle("POST /api/v1/restaurants/{id}/media", protectRestaurantAdmin(http.HandlerFunc(restaurantImagesAdminHandler.Upload)))
+	mux.Handle("DELETE /api/v1/restaurants/{id}/media/{assetId}", protectRestaurantAdmin(http.HandlerFunc(restaurantImagesAdminHandler.HideOwned)))
+	mux.Handle("POST /api/v1/restaurants/{id}/media/{assetId}/restore", protectRestaurantAdmin(http.HandlerFunc(restaurantImagesAdminHandler.RestoreOwned)))
+	mux.Handle("DELETE /api/v1/restaurants/{id}/images/{kind}/{imageId}", protectRestaurantAdmin(http.HandlerFunc(restaurantImagesAdminHandler.Hide)))
+	mux.Handle("POST /api/v1/restaurants/{id}/images/{kind}/{imageId}/restore", protectRestaurantAdmin(http.HandlerFunc(restaurantImagesAdminHandler.Unhide)))
+	mux.Handle("GET /api/v1/restaurants/{id}/demo-links", protectRestaurantAdmin(http.HandlerFunc(campaignHandler.ListDemoLinks)))
+	mux.Handle("GET /api/v1/restaurants/{id}/generated-site", protectRestaurantAdmin(http.HandlerFunc(restaurantSiteAdminHandler.Get)))
+	mux.Handle("GET /api/v1/restaurants/{id}/demo-engagement", protectRestaurantAdmin(http.HandlerFunc(demoEngagementHandler.ListByRestaurant)))
+	mux.Handle("POST /api/v1/restaurants/{id}/demo-engagement/preview", protectRestaurantAdmin(http.HandlerFunc(demoEngagementHandler.StartAdminPreview)))
+	mux.Handle("GET /api/v1/restaurants/{id}/outreach/adhoc-preview", protectRestaurantAdmin(http.HandlerFunc(outreachBulkHandler.PreviewAdHoc)))
+	mux.Handle("POST /api/v1/restaurants/{id}/outreach/adhoc-send", protectRestaurantAdmin(http.HandlerFunc(outreachBulkHandler.SendAdHoc)))
+	mux.Handle("POST /api/v1/outreach/adhoc-send", protectInternalAdmin(http.HandlerFunc(outreachBulkHandler.SendAdHocBatch)))
 
 	mux.HandleFunc("GET /t/click/{token}", trackingHandler.Click)
 	mux.HandleFunc("GET /t/open/{token}", trackingHandler.Open)
 	mux.HandleFunc("GET /t/unsubscribe/{token}", trackingHandler.Unsubscribe)
 
 	mux.HandleFunc("GET /api/public/v1/demo/{slug}", demoPublicHandler.Get)
+	mux.HandleFunc("POST /api/public/v1/demo/{slug}/sessions", demoEngagementHandler.Start)
+	mux.HandleFunc("POST /api/public/v1/demo-sessions/{session_id}/events", demoEngagementHandler.Touch)
+	mux.HandleFunc("POST /api/public/v1/demo-sessions/{session_id}/transcript", demoEngagementHandler.Transcript)
 	mux.HandleFunc("GET /api/public/v1/restaurants/{id}/site-images", restaurantPublicHandler.GetSiteImagesByID)
 	mux.HandleFunc("GET /api/public/v1/restaurants/by-place/{place_id}/site-images", restaurantPublicHandler.GetSiteImagesByPlaceID)
 	mux.HandleFunc("GET /api/public/v1/site/restaurants", restaurantPublicHandler.ListSiteRestaurants)
+	mux.HandleFunc("GET /api/public/v1/site/restaurants/by-id/{id}", restaurantPublicHandler.GetSiteContentByID)
 	mux.HandleFunc("GET /api/public/v1/site/restaurants/{index}", restaurantPublicHandler.GetSiteContentByIndex)
 	mux.HandleFunc("GET /api/public/v1/site/by-place/{place_id}", restaurantPublicHandler.GetSiteContentByPlaceID)
 	mux.HandleFunc("GET /api/public/v1/seo/search", seoPublicHandler.Search)

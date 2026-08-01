@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { adminFetch } from "@/lib/client-api";
+import { withBasePath } from "@/lib/base-path";
 import { CITIES, NICHES, formatDate } from "@/lib/constants";
 import type { ScrapeJob } from "@/lib/types";
 import { EmptyState, ErrorBanner, PageHeader, StatusBadge } from "@/components/ui";
@@ -49,7 +50,7 @@ export default function ScrapeJobsPage() {
       );
       await load();
       if (res.job?.id) {
-        window.location.href = `/scrape-jobs/${res.job.id}`;
+        window.location.assign(withBasePath(`/scrape-jobs/${res.job.id}`));
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to trigger job");

@@ -5,19 +5,21 @@ export function buildAuroraMetadata(restaurant: RestaurantContent): Metadata {
   const title = `${restaurant.name} | ${restaurant.cuisine} · ${restaurant.city}`;
   const description = `Experience ${restaurant.name} — ${restaurant.cuisine.toLowerCase()} dining reimagined with premium hospitality in ${restaurant.city}.`;
 
+  const durableHero = restaurant.heroMedia?.sourceKind === "google_places_live" ? "" : restaurant.heroPoster;
   return {
     title,
     description,
     openGraph: {
       title,
       description,
-      images: restaurant.heroPoster ? [{ url: restaurant.heroPoster }] : [],
+      images: durableHero ? [{ url: durableHero }] : [],
       type: "website",
     },
   };
 }
 
 export function buildAuroraJsonLd(restaurant: RestaurantContent): object {
+  const durableHero = restaurant.heroMedia?.sourceKind === "google_places_live" ? undefined : restaurant.heroPoster || undefined;
   return {
     "@context": "https://schema.org",
     "@type": "Restaurant",
@@ -41,6 +43,6 @@ export function buildAuroraJsonLd(restaurant: RestaurantContent): object {
           reviewCount: restaurant.reviewsCount || 0,
         }
       : undefined,
-    image: restaurant.heroPoster,
+    image: durableHero,
   };
 }

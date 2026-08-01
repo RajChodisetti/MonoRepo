@@ -141,8 +141,16 @@ export default function VoiceAssistantWidget({
       ? "border border-white/15 bg-[#09090B]/95 text-white shadow-[0_20px_60px_rgba(0,0,0,0.55)] backdrop-blur-xl"
       : "border border-[#e8e0d4]/20 bg-[#1a1614]/95 text-[#f7f0e6] shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-xl";
 
-  const accentClass = isElysian ? "text-[#D4AF37]" : isAurora ? "text-cyan-300" : "text-[#d4a853]";
-  const dimClass = isElysian ? "text-[#A9A9A9]" : isAurora ? "text-white/55" : "text-[#a89f96]";
+  const accentClass = isElysian
+    ? "text-[#D4AF37]"
+    : isAurora
+      ? "text-cyan-300"
+      : "text-[#d4a853]";
+  const dimClass = isElysian
+    ? "text-[#A9A9A9]"
+    : isAurora
+      ? "text-white/55"
+      : "text-[#a89f96]";
   const primaryBtnClass = isElysian
     ? "bg-gradient-to-r from-[#e9d38b] via-[#D4AF37] to-[#a9822a] text-[#0a0a0a] hover:opacity-90"
     : isAurora
@@ -158,7 +166,8 @@ export default function VoiceAssistantWidget({
     : isAurora
       ? "border border-red-400/40 bg-red-500/15 text-red-100"
       : "border border-red-400/35 bg-red-950/50 text-red-100";
-  const fabPositionClass = isElysian ? "bottom-24 right-6 md:bottom-24" : "bottom-20 right-4 md:bottom-6 md:right-6";
+  const fabPositionClass =
+    isElysian ? "bottom-24 right-6 md:bottom-24" : "bottom-20 right-4 md:bottom-6 md:right-6";
 
   useEffect(() => {
     if (!open) {

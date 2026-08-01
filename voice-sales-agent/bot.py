@@ -46,6 +46,7 @@
 """
 
 import asyncio
+import hmac
 import json
 import logging
 import os
@@ -672,7 +673,7 @@ async def _require_call_api_key(request: Request):
     if auth.lower().startswith("bearer "):
         bearer = auth[7:].strip()
     provided = header_key or bearer
-    if not provided or provided != secret:
+    if not provided or not hmac.compare_digest(provided, secret):
         raise HTTPException(status_code=401, detail="Invalid or missing call API key")
 
 
@@ -974,6 +975,79 @@ async def _wait_for_typed_email(
         "status": "success",
         "email": email,
         "message": f"Visitor typed email: {email}. Use this in book_consultation.",
+    }
+
+
+async def _wait_for_booking_details(
+    websocket,
+    mailbox: dict,
+    *,
+    call_db_id: int,
+    prompt: str = "",
+    timeout_s: float = 180.0,
+) -> dict:
+    """Open the browser booking form and wait for name, email, and phone."""
+    loop = asyncio.get_running_loop()
+    old = mailbox.get("booking_details_future")
+    if old is not None and not old.done():
+        old.cancel()
+
+    fut: asyncio.Future = loop.create_future()
+    mailbox["booking_details_future"] = fut
+    message = (prompt or "").strip() or "Enter your details to confirm the consultation."
+
+    try:
+        await websocket.send_text(
+            json.dumps({"event": "request_booking_details", "message": message})
+        )
+    except Exception as exc:
+        mailbox.pop("booking_details_future", None)
+        logger.warning("Failed to emit request_booking_details: %s", exc)
+        return {"status": "error", "message": "Could not open the booking form."}
+
+    log_turn(call_db_id, "assistant", message)
+    logger.info("Waiting for typed booking details (timeout=%ss)", timeout_s)
+
+    try:
+        details = await asyncio.wait_for(fut, timeout=timeout_s)
+    except asyncio.TimeoutError:
+        return {
+            "status": "error",
+            "message": "Timed out waiting for booking details. Open the form again.",
+        }
+    except asyncio.CancelledError:
+        return {"status": "error", "message": "Booking details collection was cancelled."}
+    finally:
+        if mailbox.get("booking_details_future") is fut:
+            mailbox.pop("booking_details_future", None)
+        try:
+            await websocket.send_text(
+                json.dumps({"event": "booking_details_prompt_closed"})
+            )
+        except Exception:
+            pass
+
+    name = (details.get("prospect_name") or "").strip()
+    email = (details.get("prospect_email") or "").strip().lower()
+    phone = (details.get("prospect_phone") or "").strip()
+    if not name:
+        return {"status": "error", "message": "Name is required. Open the form again."}
+    if not email or "@" not in email or "." not in email.split("@")[-1]:
+        return {"status": "error", "message": "Email is invalid. Open the form again."}
+    if not phone:
+        return {"status": "error", "message": "Phone is required. Open the form again."}
+
+    submitted = {
+        "prospect_name": name,
+        "prospect_email": email,
+        "prospect_phone": phone,
+    }
+    mailbox["booking_details"] = submitted
+    update_call_contact(call_db_id, contact_name=name, email=email, phone=phone)
+    return {
+        "status": "success",
+        **submitted,
+        "message": "The visitor submitted the booking form. Book the confirmed slot now.",
     }
 
 
@@ -1402,12 +1476,12 @@ async def readyz_browser():
 # ── Call log REST endpoints ────────────────────────────────────────────────────
 
 @app.get("/calls")
-async def get_calls(limit: int = 20):
+async def get_calls(limit: int = 20, _: None = Depends(_require_call_api_key)):
     return JSONResponse(list_calls(limit))
 
 
 @app.get("/calls/{call_id}")
-async def get_call(call_id: int):
+async def get_call(call_id: int, _: None = Depends(_require_call_api_key)):
     summary = get_call_summary(call_id)
     if not summary:
         return JSONResponse({"error": "not found"}, status_code=404)
@@ -1420,6 +1494,7 @@ async def get_transcripts(
     email: str | None = None,
     call_id: int | None = None,
     limit: int = 500,
+    _: None = Depends(_require_call_api_key),
 ):
     """
     List conversation transcripts (user + assistant), filterable by phone or email.
@@ -1441,7 +1516,7 @@ async def get_transcripts(
 # ── Admin endpoints ────────────────────────────────────────────────────────────
 
 @app.post("/admin/call/{call_sid}/hangup")
-async def admin_hangup(call_sid: str):
+async def admin_hangup(call_sid: str, _: None = Depends(_require_call_api_key)):
     """Manually terminate an active call pipeline."""
     task = _active_tasks.get(call_sid)
     if not task:
@@ -1452,14 +1527,14 @@ async def admin_hangup(call_sid: str):
 
 
 @app.post("/admin/campaign/{campaign_id}/pause")
-async def admin_pause_campaign(campaign_id: str):
+async def admin_pause_campaign(campaign_id: str, _: None = Depends(_require_call_api_key)):
     _paused_campaigns.add(campaign_id)
     logger.warning(f"Campaign {campaign_id} paused")
     return {"status": "paused", "campaign_id": campaign_id}
 
 
 @app.post("/admin/campaign/{campaign_id}/resume")
-async def admin_resume_campaign(campaign_id: str):
+async def admin_resume_campaign(campaign_id: str, _: None = Depends(_require_call_api_key)):
     _paused_campaigns.discard(campaign_id)
     return {"status": "resumed", "campaign_id": campaign_id}
 
@@ -2009,7 +2084,7 @@ async def browser_stream(websocket: WebSocket):
     booking_state: dict = {}
     outcome_state: list[str] = ["unknown"]
     task_ref: list = [None]
-    # Shared mailbox: browser_serializer puts typed email futures here
+    # Shared mailbox: browser_serializer puts typed contact-form futures here.
     client_mailbox: dict = {}
 
     # ── Transport ─────────────────────────────────────────────────────────────
@@ -2066,20 +2141,36 @@ async def browser_stream(websocket: WebSocket):
             await result_callback(json.dumps(result))
             return
 
-        # Browser booking must use a typed email — open the form if missing/invalid
+        if function_name == "request_booking_details":
+            result = await _wait_for_booking_details(
+                websocket,
+                client_mailbox,
+                call_db_id=call_db_id,
+                prompt=(arguments.get("prompt") or "").strip(),
+            )
+            await result_callback(json.dumps(result))
+            return
+
+        # Every browser consultation must use the on-screen contact-details form.
         if function_name == "book_consultation":
-            email = (arguments.get("prospect_email") or "").strip()
-            if not email or "@" not in email:
-                typed = await _wait_for_typed_email(
+            details = client_mailbox.pop("booking_details", None)
+            if details is None:
+                details = await _wait_for_booking_details(
                     websocket,
                     client_mailbox,
                     call_db_id=call_db_id,
-                    prompt="Enter your email to confirm the consultation.",
+                    prompt="Enter your name, email, and phone to confirm the consultation.",
                 )
-                if typed.get("status") != "success":
-                    await result_callback(json.dumps(typed))
+                if details.get("status") != "success":
+                    await result_callback(json.dumps(details))
                     return
-                arguments = {**arguments, "prospect_email": typed["email"]}
+            arguments = {
+                **arguments,
+                "prospect_name": details["prospect_name"],
+                "prospect_email": details["prospect_email"],
+                "prospect_phone": details["prospect_phone"],
+            }
+            client_mailbox.pop("booking_details", None)
 
         if function_name in check_tools:
             await _emit_booking_progress(websocket, "checking_slots", "Checking slots…")

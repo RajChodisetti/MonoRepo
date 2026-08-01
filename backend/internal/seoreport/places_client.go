@@ -61,7 +61,7 @@ type PlacesClient struct {
 
 // NewPlacesClient builds a Places client from config. Empty API key disables remote calls.
 func NewPlacesClient(cfg config.PlacesConfig) *PlacesClient {
-	base := strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/")
+	base := strings.TrimRight(strings.TrimSpace(cfg.APIBaseURL), "/")
 	if base == "" {
 		base = defaultPlacesBase
 	}

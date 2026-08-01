@@ -109,9 +109,9 @@ export default function SiteWalkthrough({ templateId }: { templateId: TemplateId
       {
         target: `[data-tour="${TOUR_TEMPLATE_SWITCH}"]`,
         placement: "bottom",
-        eyebrow: "1 / 2 · Other template",
+        eyebrow: "1 / 2 · Website design",
         title: switchCopy.title,
-        body: `Try out our other template. Tap "${switchCopy.cta}" to preview the ${switchCopy.targetLabel} layout instantly.`,
+        body: `Tap "${switchCopy.cta}" to preview the ${switchCopy.targetLabel} layout. The restaurant details and photos stay the same.`,
       },
       {
         target: `[data-tour="${TOUR_VOICE_ASSISTANT}"]`,
@@ -208,8 +208,16 @@ export default function SiteWalkthrough({ templateId }: { templateId: TemplateId
       ? "border border-white/20 bg-[#09090B]/98 text-white shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
       : "border border-[#e8e0d4]/25 bg-[#1a1614]/98 text-[#f7f0e6] shadow-[0_24px_80px_rgba(0,0,0,0.5)]";
 
-  const eyebrowClass = isElysian ? "text-[#D4AF37]" : isAurora ? "text-cyan-300" : "text-[#b88a44]";
-  const bodyClass = isElysian ? "text-[#A9A9A9]" : isAurora ? "text-white/65" : "text-[#a89f96]";
+  const eyebrowClass = isElysian
+    ? "text-[#D4AF37]"
+    : isAurora
+      ? "text-cyan-300"
+      : "text-[#b88a44]";
+  const bodyClass = isElysian
+    ? "text-[#A9A9A9]"
+    : isAurora
+      ? "text-white/65"
+      : "text-[#a89f96]";
   const primaryBtn = isElysian
     ? "bg-gradient-to-r from-[#e9d38b] via-[#D4AF37] to-[#a9822a] text-[#0a0a0a] hover:opacity-90"
     : isAurora

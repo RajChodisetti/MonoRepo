@@ -9,11 +9,12 @@ import (
 
 func TestBuildDraftIncludesPlaceholders(t *testing.T) {
 	draft := campaigns.BuildDraft(campaigns.DraftInput{
-		RestaurantName: "Aurora Cafe",
-		SiteIndex:      2,
-		DemoWebURL:     "http://localhost:3000",
-		DemoSlug:       "aurora-cafe",
-		DemoToken:      "demo-token",
+		RestaurantName:      "Aurora Cafe",
+		SiteIndex:           2,
+		DemoWebURL:          "http://localhost:3000",
+		DemoSlug:            "aurora-cafe",
+		DemoToken:           "demo-token",
+		PresentationSiteURL: "https://tuvisolutions.com/services/restaurants",
 	})
 
 	if !strings.Contains(draft.Subject, "Aurora Cafe") {
@@ -30,18 +31,44 @@ func TestBuildDraftIncludesPlaceholders(t *testing.T) {
 			t.Fatalf("body_html missing placeholder %s", placeholder)
 		}
 	}
+	for _, placeholder := range []string{
+		"{{TEMPLATE_1_URL}}",
+		"{{TEMPLATE_2_URL}}",
+		"{{TEMPLATE_3_URL}}",
+	} {
+		if strings.Contains(draft.BodyHTML, placeholder) {
+			t.Fatalf("body_html should not include legacy template placeholder %s", placeholder)
+		}
+	}
 	if !strings.Contains(draft.BodyText, "{{UNSUBSCRIBE_URL}}") {
 		t.Fatal("body_text missing unsubscribe placeholder")
 	}
-	for _, name := range []string{"AI Voice Receptionist", "Custom Apps"} {
+	for _, name := range []string{"Personalized demo websites", "Services catalog"} {
 		if !strings.Contains(draft.BodyHTML, name) {
 			t.Fatalf("body_html missing service %q", name)
 		}
 	}
-	for _, banned := range []string{"Cinematic", "Elysian", "We already built"} {
+	for _, name := range []string{"Cinematic personalized website", "Aurora personalized website", "Elysian personalized website", "Tuvi restaurant services presentation"} {
+		if strings.Contains(draft.BodyHTML, name) {
+			t.Fatalf("body_html should not include old service %q", name)
+		}
+	}
+	for _, banned := range []string{"We already built"} {
 		if strings.Contains(draft.BodyHTML, banned) {
 			t.Fatalf("body_html should not contain %q", banned)
 		}
+	}
+	if !strings.Contains(draft.BodyHTML, "https://tuvisolutions.com/services/restaurants") {
+		t.Fatal("body_html missing Services catalog URL")
+	}
+	if count := strings.Count(draft.BodyHTML, "{{CLICK_URL}}"); count != 1 {
+		t.Fatalf("body_html has %d personalized demo links, want 1", count)
+	}
+	if count := strings.Count(draft.BodyHTML, "https://tuvisolutions.com/services/restaurants"); count != 1 {
+		t.Fatalf("body_html has %d Services catalog links, want 1", count)
+	}
+	if count := strings.Count(draft.BodyHTML, "href="); count != 3 {
+		t.Fatalf("body_html has %d links, want exactly 3", count)
 	}
 }
 

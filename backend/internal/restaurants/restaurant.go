@@ -10,6 +10,9 @@ type Restaurant struct {
 	ID                    uuid.UUID
 	Name                  string
 	Email                 string
+	Phone                 string
+	Address               string
+	OCRStatus             string
 	Status                string
 	IsContacted           bool
 	ShownInterest         bool
@@ -31,6 +34,7 @@ type ListFilter struct {
 	Status          string
 	IsContacted     *bool
 	ShownInterest   *bool
+	OCRStatus       string
 	IncludeArchived bool
 }
 

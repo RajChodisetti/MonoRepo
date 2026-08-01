@@ -122,6 +122,9 @@ func (store *Store) VerifyLeadWorkflow(ctx context.Context) error {
 	if err := store.verifyTableExists(ctx, "scrape_jobs", "city scrape migration not applied: run make migrate-up"); err != nil {
 		return err
 	}
+	if err := store.verifyTableExists(ctx, "restaurant_media_assets", "restaurant media migration not applied: run make migrate-up"); err != nil {
+		return err
+	}
 	requiredColumns := []struct {
 		table  string
 		column string

@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -12,6 +14,8 @@ import (
 type Repository interface {
 	ListEligibleLeads(ctx context.Context, limit int) ([]EligibleLead, error)
 	CountEligibleLeads(ctx context.Context) (int, error)
+	IsEmailSuppressed(ctx context.Context, email string) (bool, error)
+	RecordAdHocEmailSent(ctx context.Context, restaurantID uuid.UUID, recipientEmail string) error
 }
 
 type Postgres struct {
@@ -20,6 +24,55 @@ type Postgres struct {
 
 func NewPostgres(pool *pgxpool.Pool) *Postgres {
 	return &Postgres{pool: pool}
+}
+
+func GetEmailJobControl(ctx context.Context, pool *pgxpool.Pool) (EmailJobControl, error) {
+	if pool == nil {
+		return EmailJobControl{}, nil
+	}
+	const query = `
+		SELECT enabled, enabled_at, enabled_by, updated_at
+		FROM outreach_runtime_control
+		WHERE control_key = 'email_job'`
+	var control EmailJobControl
+	err := pool.QueryRow(ctx, query).Scan(
+		&control.Enabled,
+		&control.EnabledAt,
+		&control.EnabledBy,
+		&control.UpdatedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return EmailJobControl{}, nil
+	}
+	if err != nil {
+		return EmailJobControl{}, fmt.Errorf("get outreach email job control: %w", err)
+	}
+	return control, nil
+}
+
+func SetEmailJobControl(ctx context.Context, pool *pgxpool.Pool, enabled bool, enabledBy *uuid.UUID) (EmailJobControl, error) {
+	if pool == nil {
+		return EmailJobControl{}, fmt.Errorf("database pool is not configured")
+	}
+	const query = `
+		INSERT INTO outreach_runtime_control (control_key, enabled, enabled_at, enabled_by, updated_at)
+		VALUES ('email_job', $1, CASE WHEN $1 THEN now() ELSE NULL END, CASE WHEN $1 THEN $2 ELSE NULL END, now())
+		ON CONFLICT (control_key) DO UPDATE
+		SET enabled = EXCLUDED.enabled,
+		    enabled_at = EXCLUDED.enabled_at,
+		    enabled_by = EXCLUDED.enabled_by,
+		    updated_at = now()
+		RETURNING enabled, enabled_at, enabled_by, updated_at`
+	var control EmailJobControl
+	if err := pool.QueryRow(ctx, query, enabled, enabledBy).Scan(
+		&control.Enabled,
+		&control.EnabledAt,
+		&control.EnabledBy,
+		&control.UpdatedAt,
+	); err != nil {
+		return EmailJobControl{}, fmt.Errorf("set outreach email job control: %w", err)
+	}
+	return control, nil
 }
 
 const eligibleLeadsBaseQuery = `
@@ -132,6 +185,45 @@ func (repo *Postgres) CountEligibleLeads(ctx context.Context) (int, error) {
 		return 0, fmt.Errorf("count eligible leads: %w", err)
 	}
 	return count, nil
+}
+
+func (repo *Postgres) IsEmailSuppressed(ctx context.Context, email string) (bool, error) {
+	if repo.pool == nil {
+		return false, fmt.Errorf("database pool is not configured")
+	}
+
+	const query = `SELECT EXISTS (SELECT 1 FROM email_suppressions WHERE email = lower(trim($1)))`
+	var suppressed bool
+	if err := repo.pool.QueryRow(ctx, query, strings.ToLower(strings.TrimSpace(email))).Scan(&suppressed); err != nil {
+		return false, fmt.Errorf("check email suppression: %w", err)
+	}
+	return suppressed, nil
+}
+
+func (repo *Postgres) RecordAdHocEmailSent(ctx context.Context, restaurantID uuid.UUID, recipientEmail string) error {
+	if repo.pool == nil {
+		return fmt.Errorf("database pool is not configured")
+	}
+
+	const query = `
+		UPDATE restaurants
+		SET is_contacted = true,
+		    email_sent = true,
+		    email_send_count = email_send_count + 1,
+		    last_email_sent_at = now(),
+		    last_email_recipient = $2,
+		    status = CASE WHEN status IN ('lead', 'demo_ready') THEN 'emailed' ELSE status END,
+		    updated_at = now()
+		WHERE id = $1`
+
+	result, err := repo.pool.Exec(ctx, query, restaurantID, recipientEmail)
+	if err != nil {
+		return fmt.Errorf("record ad hoc email sent: %w", err)
+	}
+	if result.RowsAffected() != 1 {
+		return fmt.Errorf("restaurant was not found while recording ad hoc email")
+	}
+	return nil
 }
 
 func HasActiveBulkJob(ctx context.Context, pool *pgxpool.Pool, jobType string) (bool, string, error) {

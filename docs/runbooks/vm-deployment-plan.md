@@ -27,7 +27,7 @@ The repo already has these deployable surfaces:
 | Tuvi corporate website | `tuvi-website/app` | Next.js app | Canonical public website, containerized on VM loopback |
 | Restaurant demo template | `template` | Next.js app on `3000` | Containerized in VM Compose and exposed only on VM loopback |
 | City scrape worker | `automation/outreach/city_scrape_worker.py` | Python worker in Docker | Long-running, database-backed poller with no public port |
-| OCR job | `automation/outreach/verify_leads_from_db.py` | One-shot Python job in Docker | Compose `jobs` profile; invoke manually or from a non-overlapping host schedule |
+| OCR worker/job | `automation/outreach/verify_leads_from_db.py` | Background worker plus one-shot diagnostic job | `ocr-worker` polls durable email-only work; `ocr-job` remains in the Compose `jobs` profile |
 
 Existing commands:
 
@@ -48,11 +48,12 @@ The application Compose stack starts:
 ```text
 postgres, redis -> migrate -> api -> worker
 postgres, api -> scrape-worker
+postgres -> ocr-worker
 redis, api -> voice-agent
 ```
 
-`ocr-job` is intentionally one-shot and is not started by the default service
-set. Run it through the `jobs` profile or a host timer/cron entry.
+`ocr-worker` is the default long-running scheduler. `ocr-job` remains one-shot
+for controlled diagnosis through the `jobs` profile; do not schedule both.
 
 The VM deployment adds `infra/docker/docker-compose.vm.yml`,
 `Dockerfile.catalog`, `Dockerfile.template`, and `Caddyfile.tuvi.example`.
@@ -146,6 +147,7 @@ TUVI_API_TOKEN=<32+ chars>
 CALL_API_SECRET=<same server-side value used by voice/template services>
 CONSULTATION_NOTIFY_EMAIL=<team email>
 CONSULTATION_TIMEZONE=Australia/Sydney
+# PostgreSQL is the active slot ledger; keep Calendar disabled for this release.
 CONSULTATION_GOOGLE_CALENDAR_DISABLED=true
 EMAIL_PROVIDER=disabled
 EMAIL_DISABLE_SENDING=true
@@ -180,13 +182,17 @@ SCRAPE_GRID_MAX_DEPTH=12
 
 LEAD_OCR_VERIFICATION_ENABLED=false
 LEAD_OCR_BATCH_SIZE=50
+LEAD_OCR_DAILY_REQUEST_LIMIT=200
+OCR_WORKER_POLL_SECONDS=900
+MENU_OCR_TIMEOUT=45
 HUGGING_FACE_API_KEY=<vision provider key>
 HF_VISION_MODEL=<supported vision model>
 ```
 
-Keep OCR false for migration/startup. Run the first reviewed one-shot with
-`-e LEAD_OCR_VERIFICATION_ENABLED=true`; set the ingestion file to true only
-after that batch is accepted and the non-overlapping schedule is installed.
+Keep OCR false during migration. Run the first reviewed one-shot with
+`-e LEAD_OCR_VERIFICATION_ENABLED=true`; after that batch is accepted, set the
+ingestion file to true and start the `ocr-worker` background service. Remove any
+older OCR cron so there is only one scheduler.
 
 The durable scrape worker runs Google Places first, then Apollo only for leads
 still missing an owner or work email and only when a usable business domain is
@@ -328,7 +334,7 @@ Use `infra/docker/docker-compose.vm.yml`. It defines:
 
 1. `postgres`, `redis`, `migrate`, `api`, and the Go `worker`.
 2. Long-running `scrape-worker`, which uses the API database and exposes no port.
-3. One-shot `ocr-job` in the `jobs` profile, invoked by an operator or host schedule.
+3. Long-running `ocr-worker`, plus one-shot `ocr-job` in the `jobs` profile for diagnosis.
 4. `restaurant-services-catalog`, built from the Vite app and served by Nginx.
 5. `tuvi-website`, built as the canonical corporate Next.js site.
 6. `template`, built as a Next.js production server.
@@ -348,7 +354,7 @@ api -> postgres, redis
 worker -> postgres, redis
 migrate -> postgres, redis
 scrape-worker -> postgres, api
-ocr-job (scheduled one-shot) -> postgres -> lead.prepare jobs -> worker
+ocr-worker -> postgres -> lead.prepare jobs -> worker
 voice-agent -> redis, api
 template -> api, voice-agent
 ```
@@ -390,7 +396,7 @@ template -> api, voice-agent
    - Confirm the scrape-worker logs show polling without credential, schema, or
      lease errors. Do not run the legacy ingestion scripts in parallel.
 
-4. Install the OCR schedule
+4. Start background OCR
    - Run one controlled batch and inspect its state transitions and generated drafts:
 
      ```bash
@@ -400,16 +406,20 @@ template -> api, voice-agent
      ```
 
    - Inspect that batch. Only after accepting its states and generated drafts,
-     set `LEAD_OCR_VERIFICATION_ENABLED=true` in `ingestion.env`, then schedule
-     the same one-shot command hourly with a non-overlapping lock:
+     set `LEAD_OCR_VERIFICATION_ENABLED=true` in `ingestion.env`, remove any
+     older OCR cron, and start the background worker:
 
-     ```cron
-     15 * * * * cd /opt/tuvi/MonoRepo && flock -n /var/lock/tuvi-ocr.lock docker compose --env-file /opt/tuvi/env/stack.env -p tuvi -f infra/docker/docker-compose.vm.yml --profile jobs run --rm ocr-job >> /opt/tuvi/logs/ocr.log 2>&1
+     ```bash
+     docker compose --env-file /opt/tuvi/env/stack.env -p tuvi \
+       -f infra/docker/docker-compose.vm.yml up -d --no-deps ocr-worker
      ```
 
    - OCR states are `pending`, `running`, `verified`, `no_images`, and `failed`.
      Only `verified` enqueues `lead.prepare` and is eligible for later human
-     approval. `no_images` must never be treated as verified.
+     approval. `no_images` must never be treated as verified. Only restaurants
+     with a canonical email are claimed. `ocr_daily_request_usage` enforces the
+     global 200-request UTC-day ceiling across restarts; timeout/429 claims are
+     returned to pending without consuming an attempt.
 
 5. Reverse proxy and TLS
    - Append `infra/docker/Caddyfile.tuvi.example` routes to `/etc/caddy/Caddyfile`.

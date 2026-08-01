@@ -30,13 +30,19 @@ POST city scrape job
 ```
 
 Creating a scrape job, running OCR, or preparing drafts does not send email.
-Real email still requires all three record approvals, email sending enabled, and
-an internal administrator starting the bulk workflow.
+Bulk outreach still requires all three record approvals and an internal
+administrator enabling the persisted email job from the Outreach UI. Internal
+administrators can also send bounded selective/manual emails from the restaurant
+list or a restaurant detail page; those ad hoc sends bypass the bulk email-job
+flag and the generic `EMAIL_DISABLE_SENDING` adapter flag, but still require a
+configured Gmail outreach sender, a contact email, and a recipient that has not
+opted out.
 
 ## Required deployment order
 
-1. Keep `LEAD_OCR_VERIFICATION_ENABLED=false` and
-   `EMAIL_DISABLE_SENDING=true` during rollout.
+1. Keep `LEAD_OCR_VERIFICATION_ENABLED=false`, keep the Outreach UI email job
+   disabled, and retain `EMAIL_DISABLE_SENDING=true` for the generic adapter
+   during rollout.
 2. Remove or disable every legacy `cron_lead_ingestion.sh` /
    `daily_ingestion.py` crontab entry so it cannot race the durable request
    ledger during or after rollout.
@@ -50,12 +56,14 @@ an internal administrator starting the bulk workflow.
    `000020`.
 5. Deploy/build the updated API, Go worker, scrape-worker, and OCR-job images,
    but do not start their application processes yet.
-6. Apply migrations `000015` through `000023`, in order. `000019` depends on
+6. Apply migrations `000015` through `000029`, in order. `000019` depends on
    the review-audit columns introduced by `000018`; `000021` binds tracking and
    delivery audit rows to the immutable address actually used for outreach.
    `000022` returns legacy automatic artifacts to draft, queues fresh preparation,
    and binds new artifacts to both OCR input and the exact identity/public payload.
-   `000023` makes maximum-depth coverage gaps a durable, visible waiting state.
+   `000023` makes maximum-depth coverage gaps a durable, visible waiting state;
+   `000024` adds durable eight-hour Gmail pacing; and `000029` adds daily Gmail
+   health evidence plus signed-demo engagement sessions/transcripts.
 7. Start the updated API and Go worker before enabling OCR. The updated Go worker must
    know the `lead.prepare` job type before OCR can enqueue it.
    Migration `000018` resets pre-audit profile approvals and demo publications
@@ -113,14 +121,32 @@ OUTREACH_SEND_JITTER_MIN=2m
 OUTREACH_SEND_JITTER_MAX=5m
 OUTREACH_ZOHO_ACCOUNTS_JSON=[]
 OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON=[{"key":"workspace-sales-1","mailbox_email":"sales1@example.com","from_email":"sales1@example.com","client_id":"<oauth client id>","client_secret":"<secret>","refresh_token":"<offline refresh token>"}]
+OUTREACH_EMAIL_HEALTH_ENABLED=true
+OUTREACH_EMAIL_HEALTH_RECIPIENT=rajchodisetti@gmail.com
+OUTREACH_EMAIL_HEALTH_INTERVAL=24h
 ```
 
 The singleton `ZOHO_*` values configure the generic Zoho adapter used by other
-email flows; `OUTREACH_ZOHO_ACCOUNTS_JSON` configures the independently rotated
-bulk-outreach pool. `OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON` provides the same
-pool behavior through Gmail's HTTPS API. If the generic adapter is intentionally
-unused, `EMAIL_PROVIDER=disabled` is valid while the rotating outreach pool is
-enabled through `EMAIL_DISABLE_SENDING=false`.
+email flows; quota-managed restaurant outreach uses only the Gmail accounts in
+`OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON`. Add another JSON entry to add a sender
+without a code change. If the generic adapter is intentionally unused,
+`EMAIL_PROVIDER=disabled` is valid while the Gmail outreach pool is configured;
+the restaurant outreach job is enabled from the admin UI.
+
+The admin photo viewer resolves temporary Google Places media URLs through the
+Go API. Keep its key in `/opt/tuvi/env/places-api.env` (mode `0600`) so the API
+does not receive the Apollo or Hugging Face secrets from `ingestion.env`:
+
+```text
+GOOGLE_PLACES_API_KEY=<server-side Places API key>
+PLACES_API_BASE_URL=https://places.googleapis.com/v1
+PLACES_PHOTO_LIMIT=10
+PLACES_PHOTO_MAX_WIDTH=1600
+PLACES_API_TIMEOUT=20s
+```
+
+The response is deliberately `no-store`; media URLs are refreshed on demand and
+must be displayed with the author attribution returned alongside each URL.
 
 For Google Workspace, create one OAuth web application, request only
 `https://www.googleapis.com/auth/gmail.send`, obtain offline consent separately
@@ -138,10 +164,17 @@ offset. During an on-time cycle, adjacent offsets normally yield effective gaps
 of about 9-15 minutes. A separate global 2-5 minute minimum-delay guard spans
 account transitions and prevents delayed/restarted workers from catching up in
 a burst. After slot 40, the account becomes available again only after its
-24-hour cooldown. Gmail and Zoho both use OAuth and HTTPS APIs; SMTP is rejected.
+24-hour cooldown. Gmail uses OAuth and the HTTPS API; SMTP is rejected.
 Configuration rejects duplicate provider identities even when aliases use
 different keys, and PostgreSQL retains the usage/cooldown row across credential
 rotation.
+
+The worker sends one real Gmail health-check message per configured mailbox to
+`OUTREACH_EMAIL_HEALTH_RECIPIENT` when the account is first registered and then
+once every 24 hours. Successful provider message IDs and safe failures are shown
+on the Outreach admin page. Health checks are controlled independently by
+`OUTREACH_EMAIL_HEALTH_ENABLED`; the restaurant outreach run is controlled by
+the persisted admin UI toggle.
 
 The limit is conservative: it is at most 40 reserved provider attempts, not a
 promise of 40 accepted or delivered emails. Fewer eligible approved leads,
@@ -175,6 +208,9 @@ LEAD_OCR_VERIFICATION_ENABLED=false
 LEAD_OCR_BATCH_SIZE=50
 LEAD_OCR_MAX_ATTEMPTS=3
 LEAD_OCR_RETRY_AFTER_HOURS=24
+LEAD_OCR_DAILY_REQUEST_LIMIT=200
+OCR_WORKER_POLL_SECONDS=900
+MENU_OCR_TIMEOUT=45
 HUGGING_FACE_API_KEY=<vision provider key>
 HF_VISION_MODEL=<supported vision model>
 ```
@@ -218,7 +254,7 @@ backup described above, run these as separate phases from
 ```bash
 docker compose --env-file /opt/tuvi/env/stack.env -p tuvi \
   -f infra/docker/docker-compose.vm.yml --profile jobs \
-  build migrate api worker scrape-worker ocr-job
+  build migrate api worker scrape-worker ocr-worker ocr-job
 
 docker compose --env-file /opt/tuvi/env/stack.env -p tuvi \
   -f infra/docker/docker-compose.vm.yml up -d postgres redis
@@ -234,11 +270,22 @@ docker compose --env-file /opt/tuvi/env/stack.env -p tuvi \
 
 docker compose --env-file /opt/tuvi/env/stack.env -p tuvi \
   -f infra/docker/docker-compose.vm.yml up -d --no-deps scrape-worker
+
+docker compose --env-file /opt/tuvi/env/stack.env -p tuvi \
+  -f infra/docker/docker-compose.vm.yml up -d --no-deps ocr-worker
 ```
 
-The scrape worker exposes no host port. It polls due `scrape_jobs` through the
-same PostgreSQL database as the API. Keep OCR disabled in `ingestion.env`; for
-the controlled batch below, enable it only on that one-shot container:
+The scrape and OCR workers expose no host ports. Both poll durable PostgreSQL
+state. Keep OCR disabled for the migration itself; enable the long-running OCR
+worker only after its provider key, daily budget, and email-only candidate query
+have been verified. The one-shot command below remains available for diagnosis.
+
+The durable database OCR verifier ignores `MENU_OCR_MAX_IMAGES`: it refreshes
+and attempts every discovered scraped photo. A restaurant reaches
+`ocr_status=verified` only when every photo resolves and returns a successful
+structured result. Partial provider, resolution, or parsing failures persist
+processed/total counts and leave the restaurant `failed`; `no_images` is also
+not verified.
 
 ```bash
 docker compose --env-file /opt/tuvi/env/stack.env -p tuvi \
@@ -324,7 +371,7 @@ docker compose --env-file /opt/tuvi/env/stack.env -p tuvi \
   -f infra/docker/docker-compose.vm.yml logs -f --tail=200 scrape-worker
 ```
 
-## Run and schedule OCR
+## Run background OCR
 
 Run one database-networked OCR batch:
 
@@ -334,21 +381,35 @@ docker compose --env-file /opt/tuvi/env/stack.env -p tuvi \
   -e LEAD_OCR_VERIFICATION_ENABLED=true ocr-job
 ```
 
-Inspect this controlled batch first. Only after its state transitions and draft
-artifacts are accepted, set `LEAD_OCR_VERIFICATION_ENABLED=true` in
-`/opt/tuvi/env/ingestion.env` and schedule the same one-shot job hourly with a
-non-overlapping lock (adjust the path if needed):
+After the controlled batch is accepted, set
+`LEAD_OCR_VERIFICATION_ENABLED=true` in `/opt/tuvi/env/ingestion.env` and start
+the durable background service:
 
-```cron
-15 * * * * cd /opt/tuvi/MonoRepo && flock -n /var/lock/tuvi-ocr.lock docker compose --env-file /opt/tuvi/env/stack.env -p tuvi -f infra/docker/docker-compose.vm.yml --profile jobs run --rm ocr-job >> /opt/tuvi/logs/ocr.log 2>&1
+```bash
+docker compose --env-file /opt/tuvi/env/stack.env -p tuvi \
+  -f infra/docker/docker-compose.vm.yml up -d --no-deps ocr-worker
 ```
+
+Do not keep the former host OCR cron beside `ocr-worker`. The worker polls every
+`OCR_WORKER_POLL_SECONDS` and claims only restaurants whose canonical
+`restaurants.email` is nonblank. Before every vision-provider request it makes
+an atomic reservation in `ocr_daily_request_usage`. The enforced global limit
+cannot exceed 200 requests per UTC day and survives container restarts. SDK
+automatic retries are disabled so one reservation can cause at most one provider
+request.
+
+Provider calls and image downloads use `MENU_OCR_TIMEOUT`. A timeout, HTTP 429,
+or temporary provider failure returns the active claim (and any unstarted batch
+claims) to `pending` without consuming an OCR attempt. A provider request that
+times out still counts against the daily limit because its remote outcome is
+ambiguous.
 
 OCR state meanings:
 
 - `pending`: ready to claim.
 - `running`: claimed; stale claims older than two hours can be reclaimed.
-- `verified`: at least one image was analyzed successfully; `lead.prepare` is
-  queued in the same transaction.
+- `verified`: every discovered image resolved and was analyzed successfully;
+  `lead.prepare` is queued in the same transaction.
 - `no_images`: no trusted Google-hosted direct image or Places photo resource was available;
   it is terminal and not outreach eligible.
 - `failed`: resolution or OCR failed and is not eligible. An unchanged input is
@@ -485,19 +546,22 @@ input.
 Before production enabling:
 
 1. Confirm the four production URL values exactly match the values above.
-2. Confirm every configured sender is verified by Zoho.
+2. Confirm every configured Gmail sender shows healthy in the Outreach UI.
 3. Confirm `EMAIL_REDIRECT_TO` is empty in production.
 4. Regenerate and re-review any old draft containing a local URL using the
    administrator sequence above. Production
    rendered-email preflight rejects unresolved placeholders, HTTP links,
    localhost/loopback links, and unapproved hosts before a provider call.
-5. Set `EMAIL_DISABLE_SENDING=false` and restart both API and Go worker.
+5. Open the Outreach admin page and confirm the job is disabled before starting.
 
-Start one approved bulk workflow:
+Start one approved bulk workflow from the Outreach admin page by selecting
+**Enable email job**. The equivalent authenticated API call is:
 
 ```bash
-curl -fsS -X POST "$TUVI_API/api/v1/outreach/bulk-send" \
-  -H "Authorization: Bearer $ADMIN_TOKEN" | jq
+curl -fsS -X PATCH "$TUVI_API/api/v1/outreach/email-job" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"enabled":true}' | jq
 
 curl -fsS "$TUVI_API/api/v1/outreach/bulk-send/status" \
   -H "Authorization: Bearer $ADMIN_TOKEN" | jq
@@ -563,31 +627,27 @@ A live demo for <Restaurant Name> — AI receptionist, website & more
 
 The invite says that missed calls and outdated websites can make it harder for
 guests to request a table, says a live preview plus a reservation-request form
-has already been prepared, and presents:
+has already been prepared, and presents two promotional links:
 
-- AI Voice Receptionist — “24/7 calls, reservation requests & callbacks” —
-  `https://tuvisolutions.com/services/restaurants`;
-- Presentation Websites — “Modern sites from your real menu & photos” —
-  `https://tuvisolutions.com/services/restaurants`;
-- Reservation Requests — “Guests submit table requests on your demo site” —
-  its own tracked token-gated template-3 demo link;
-- Custom Apps — “QR ordering, loyalty & more” —
-  `https://tuvisolutions.com`.
+- Personalized demo websites — the tracked token-gated demo link;
+- Services catalog — `https://tuvisolutions.com/services/restaurants`.
 
 The closing invitation is: “Reply anytime — happy to walk you through it in 10
 minutes.”
 
-The primary “Open <Restaurant Name> demo” CTA uses an API click-tracking URL on
+The “Personalized demo websites” link uses an API click-tracking URL on
 `https://api.tuvisolutions.com/t/click/<token>`, which redirects to the
 restaurant preview on `https://demo.tuvisolutions.com` with a demo slug
 and token plus `template=1`. That page fetches
 `/api/public/v1/demo/<slug>?token=<token>` with
 `no-store`; it never falls back to the ungated public restaurant-index API.
-The Reservation Requests service entry receives a separate click token whose
-target adds `template=3`. The token-gated payload supplies a server-derived
-restaurant UUID (never a mutable payload-provided ID), so that template can
-submit a `pending` reservation request for the correct restaurant.
-The current outreach template does not render a template-2 link.
+The token-gated payload supplies a server-derived restaurant UUID (never a
+mutable payload-provided ID), so the demo can submit a `pending` reservation
+request for the correct restaurant. Current outreach preview/send paths
+canonicalize the stored campaign into exactly three email anchors: Personalized
+demo websites, Services catalog, and Unsubscribe. Migration `000036` rewrites
+unsent draft/approved rows that still contain the old template-specific
+placeholders, template-option labels, or duplicated demo buttons.
 Click and open tracking tokens expire 30 days after creation or at the demo's
 earlier expiry, whichever comes first. Unsubscribe tokens intentionally remain
 valid so an older email retains a working opt-out. Each new tracking/delivery row
@@ -601,8 +661,8 @@ historical provider records when available.
 does not extend an emailed click/open URL past that 30-day cap.
 The legacy index-based voice widget is intentionally not mounted on token-gated
 previews until it supports a stable token-scoped restaurant identity; the AI
-service link instead opens the presentation page above. Unpublishing or
-expiring the demo therefore revokes the emailed preview. The footer includes
+services catalog link instead opens the Tuvi services page above. Unpublishing
+or expiring the demo therefore revokes the emailed preview. The footer includes
 `https://api.tuvisolutions.com/t/unsubscribe/<token>`. When enabled, a 1x1 open
 tracking image uses `https://api.tuvisolutions.com/t/open/<token>`.
 
@@ -674,8 +734,9 @@ requeue it merely because the old worker job is now `failed`.
 
 ## Stop controls
 
-- Disable new email immediately with `EMAIL_DISABLE_SENDING=true` and restart
-  API/worker. Already accepted provider sends cannot be recalled.
+- Disable the email job from the Outreach admin page. The currently in-flight
+  Gmail request is allowed to finish so its delivery state is recorded; no next
+  provider request starts. Already accepted provider sends cannot be recalled.
 - Stop an individual campaign with `POST /api/v1/campaigns/{id}/stop`.
 - Stop new scrape execution by stopping `scrape-worker`; checkpoints remain in
   PostgreSQL for a later restart.

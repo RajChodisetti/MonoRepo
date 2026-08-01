@@ -387,8 +387,13 @@
    GALLERY
    ========================================================= */
 .masonry { columns:3 260px; column-gap:20px; }
-[data-template="3"] .elysian-root .masonry-item { width:100%; margin-bottom:20px; border-radius:var(--radius-md); break-inside:avoid; cursor:pointer; transition:transform .5s var(--ease), filter .5s; overflow:hidden; }
+[data-template="3"] .elysian-root .gallery-filters { display:flex; flex-wrap:wrap; justify-content:center; gap:10px; margin:-10px 0 34px; }
+[data-template="3"] .elysian-root .gallery-filter { border:1px solid var(--border); border-radius:999px; padding:9px 16px; color:var(--muted); font-family:var(--font-btn); font-size:11px; letter-spacing:.08em; text-transform:uppercase; transition:all .25s var(--ease); }
+[data-template="3"] .elysian-root .gallery-filter:hover,
+[data-template="3"] .elysian-root .gallery-filter.active { border-color:var(--gold); color:var(--gold); background:rgba(212,175,55,.08); }
+[data-template="3"] .elysian-root .masonry-item { position:relative; width:100%; margin-bottom:20px; border-radius:var(--radius-md); break-inside:avoid; cursor:pointer; transition:transform .5s var(--ease), filter .5s; overflow:hidden; }
 [data-template="3"] .elysian-root .masonry-photo { width:100%; height:auto; border-radius:var(--radius-md); display:block; }
+[data-template="3"] .elysian-root .gallery-card-attribution { position:absolute; left:8px; right:8px; bottom:8px; z-index:2; border-radius:6px; padding:6px 8px; color:rgba(255,255,255,.84); background:rgba(0,0,0,.68); cursor:default; }
 [data-template="3"] .elysian-root .masonry-item:hover { transform:scale(1.02); filter:brightness(1.08); }
 [data-template="3"] .elysian-root .lightbox-photo { max-width:88vw; max-height:84vh; width:auto !important; height:auto !important; border-radius:14px; transform:scale(.9); transition:transform .5s var(--ease-soft); box-shadow:0 40px 80px -20px rgba(0,0,0,.8); }
 [data-template="3"] .elysian-root .lightbox.open .lightbox-photo { transform:scale(1); }
@@ -400,6 +405,7 @@
 [data-template="3"] .elysian-root .lightbox.open { opacity:1; visibility:visible; }
 [data-template="3"] .elysian-root .lightbox-close { position:absolute; top:32px; right:40px; font-size:36px; color:var(--white); line-height:1; }
 [data-template="3"] .elysian-root .lightbox-close:hover { color:var(--gold); }
+[data-template="3"] .elysian-root .lightbox-attribution { position:absolute; left:50%; bottom:24px; transform:translateX(-50%); max-width:88vw; border-radius:8px; padding:10px 14px; color:rgba(255,255,255,.78); background:rgba(0,0,0,.72); }
 [data-template="3"] .elysian-root /* =========================================================
    RESERVATION
    ========================================================= */

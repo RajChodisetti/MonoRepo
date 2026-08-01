@@ -69,6 +69,8 @@ tags:
     description: Public signup/login and session identity
   - name: Admin
     description: Internal admin profile
+  - name: Developer
+    description: Internal-admin database inspection tools
   - name: User
     description: Restaurant owner and developer profile
   - name: Restaurants
@@ -245,6 +247,7 @@ paths:
         - $ref: '#/components/parameters/statusFilter'
         - $ref: '#/components/parameters/isContactedFilter'
         - $ref: '#/components/parameters/shownInterestFilter'
+        - $ref: '#/components/parameters/ocrStatusFilter'
         - $ref: '#/components/parameters/includeArchivedFilter'
       responses:
         '200':
@@ -321,8 +324,9 @@ paths:
       security:
         - bearerAuth: []
       description: |
-        Requires role `internal_admin`.
-        Auto-status: `is_contacted=true` → `emailed`; `shown_interest=true` → `interested`.
+        Requires role `internal_admin`. The admin UI treats `is_contacted` and
+        `shown_interest` as read-only automation results: confirmed provider sends set
+        contacted/emailed, while tracked link clicks set shown-interest/interested.
       requestBody:
         required: true
         content:
@@ -470,7 +474,8 @@ paths:
       description: |
         Requires role `internal_admin`.
         Creates a **draft-only** demo and returns a one-time `token` in the response.
-        If `public_payload` is omitted, a default template is stored server-side.
+        If `public_payload` is omitted, the server snapshots the restaurant's current
+        public-safe profile, menu, image, and review data. It does not create a sample restaurant.
 
         Supplying `status=published` is rejected. Publish through
         `PATCH /api/v1/demo-sites/{id}/status` so OCR verification, human profile
@@ -534,6 +539,241 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+
+  /api/v1/restaurants/{id}/images/google:
+    parameters:
+      - $ref: '#/components/parameters/restaurantId'
+    get:
+      tags: [Restaurants, Lead Review]
+      summary: Refresh scraped Google Places photo URLs
+      operationId: getRestaurantGooglePhotos
+      security:
+        - bearerAuth: []
+      description: |
+        Requires restaurant-admin access. Looks up the stored Google Place ID and resolves
+        fresh Google Places media URLs on the server. The provider key is never returned.
+        URLs are temporary and the response is marked `Cache-Control: no-store`; required
+        author attributions accompany each image.
+      responses:
+        '200':
+          description: Fresh photo URLs and attribution
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: Always `no-store`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GooglePlacePhotos'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '502':
+          description: Google Places could not resolve the photo resources
+        '503':
+          description: The server-side Places credential is not configured
+
+  /api/v1/restaurants/{id}/media:
+    parameters:
+      - $ref: '#/components/parameters/restaurantId'
+    post:
+      tags: [Restaurants, Lead Review]
+      summary: Upload owner-granted or licensed website media
+      operationId: uploadRestaurantMedia
+      security:
+        - bearerAuth: []
+      description: |
+        Requires restaurant-admin access. Stores a JPEG, PNG, or GIF in configured
+        S3-compatible storage. The asset remains draft/private until background OCR
+        confirms it is not a menu document. Maximum file size is 15 MB.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, media_type, rights_status]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                media_type:
+                  $ref: '#/components/schemas/WebsiteMediaType'
+                placement_role:
+                  $ref: '#/components/schemas/MediaPlacementRole'
+                rights_status:
+                  type: string
+                  enum: [owner_granted, licensed]
+                caption:
+                  type: string
+                  maxLength: 180
+                alt_text:
+                  type: string
+                  maxLength: 180
+      responses:
+        '201':
+          description: Durable draft asset uploaded and queued for OCR review
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  asset:
+                    $ref: '#/components/schemas/PublicMedia'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          description: Durable media storage is not configured
+
+  /api/v1/restaurants/{id}/media/{assetId}:
+    parameters:
+      - $ref: '#/components/parameters/restaurantId'
+      - name: assetId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    delete:
+      tags: [Restaurants, Lead Review]
+      summary: Hide a durable restaurant media asset
+      operationId: hideRestaurantMedia
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Asset hidden from public website media
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/restaurants/{id}/media/{assetId}/restore:
+    parameters:
+      - $ref: '#/components/parameters/restaurantId'
+      - name: assetId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Restaurants, Lead Review]
+      summary: Restore a hidden durable restaurant media asset
+      operationId: restoreRestaurantMedia
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Asset visibility restored; approval/OCR state remains unchanged
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/restaurants/{id}/generated-site:
+    parameters:
+      - $ref: '#/components/parameters/restaurantId'
+    get:
+      tags: [Restaurants, Demo Sites]
+      summary: Get this restaurant's database-driven website templates
+      operationId: getRestaurantGeneratedSite
+      security:
+        - bearerAuth: []
+      description: |
+        Requires restaurant-admin access. Returns Cinematic, Aurora, and Elysian preview
+        URLs containing the immutable restaurant UUID (plus the legacy display index), so
+        list reordering cannot load another restaurant. These are internal previews, not
+        token-gated share links.
+      responses:
+        '200':
+          description: Generator index and template URLs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GeneratedSite'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/restaurants/{id}/demo-engagement:
+    parameters:
+      - $ref: '#/components/parameters/restaurantId'
+    get:
+      tags: [Restaurants, Public Demo]
+      summary: List personalized-website sessions and transcript turns for a restaurant
+      operationId: listRestaurantDemoEngagement
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Newest 200 demo sessions with duration and transcript turns
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DemoSession'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/restaurants/{id}/demo-engagement/preview:
+    parameters:
+      - $ref: '#/components/parameters/restaurantId'
+    post:
+      tags: [Restaurants, Public Demo]
+      summary: Start a tracked admin personalized-website preview
+      operationId: startRestaurantAdminPreviewSession
+      security:
+        - bearerAuth: []
+      description: |
+        Requires restaurant-admin access. Creates a capability-backed engagement session
+        before the admin UI opens Cinematic, Aurora, or Elysian. The returned token is placed
+        in the URL fragment so it is not sent in the demo page request.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [template_id]
+              properties:
+                template_id:
+                  type: string
+                  enum: ['1', '2', '3']
+      responses:
+        '201':
+          description: Browser session capability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemoSessionCapability'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /api/v1/restaurants/{id}/profile/review:
     parameters:
@@ -987,12 +1227,13 @@ paths:
   /api/v1/outreach/bulk-send:
     post:
       tags: [Email Campaigns]
-      summary: Trigger bulk outreach email job
+      summary: Enable and trigger the Gmail outreach job (compatibility route)
       operationId: triggerBulkOutreachSend
       security:
         - bearerAuth: []
       description: |
-        Requires role `internal_admin`. Enqueues an `outreach.bulk_send` job.
+        Requires role `internal_admin`. Enables the persisted email-job control and enqueues
+        an `outreach.bulk_send` job. The admin UI uses `PATCH /api/v1/outreach/email-job`.
 
         **Worker required:** run `make worker` in a separate terminal.
 
@@ -1005,9 +1246,9 @@ paths:
         - contact email present and not suppressed
 
         The bulk job does not create or approve campaigns. It sends the already-approved
-        sales outreach email (services + tracked live demo preview), rotating configured
-        Google Workspace Gmail API accounts (`OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON`) or
-        Zoho HTTP API accounts (`OUTREACH_ZOHO_ACCOUNTS_JSON`). PostgreSQL atomically enforces
+        sales outreach email (one personalized demo websites link plus one Services catalog link), rotating configured
+        Google Workspace Gmail API accounts (`OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON`).
+        PostgreSQL atomically enforces
         `OUTREACH_EMAILS_PER_ACCOUNT` (default 40) delivery claims per account, assigns a
         global `send_sequence` plus per-account cycle/slot, and spreads the 40 slots across
         `OUTREACH_SEND_WINDOW` (default 8 hours). A persisted random offset between
@@ -1033,15 +1274,15 @@ paths:
         An ambiguous provider outcome becomes campaign status `send_unknown` and is not
         automatically retried, preventing duplicate real-world delivery.
         Redirected sends are recorded as `skipped` and do not mark the restaurant emailed.
-        When sending is disabled, the trigger returns `503` before creating delivery attempts.
+        Disabling the persisted UI control prevents the next provider request from beginning.
 
-        Providers use HTTP(S) APIs only (`gmail` or `zoho` for the account pool; `resend` or
+        Providers use HTTP(S) APIs only (`gmail` for the outreach account pool; `resend` or
         `zoho` for the generic adapter). SMTP configuration is rejected. Production link validation requires:
         `https://api.tuvisolutions.com`, `https://demo.tuvisolutions.com`,
         `https://tuvisolutions.com`, and `https://tuvisolutions.com/services/restaurants`.
 
-        Returns `409` if another bulk job is already queued or running, and `503` when sending
-        is disabled or the account pool is not configured.
+        Returns `409` if another bulk job is already queued or running, and `503` when the
+        Gmail OAuth account pool is not configured.
       responses:
         '202':
           description: Bulk job queued
@@ -1060,11 +1301,51 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '503':
-          description: Email sending disabled or HTTP API outreach accounts not configured
+          description: Gmail OAuth outreach accounts not configured
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/outreach/email-job:
+    patch:
+      tags: [Email Campaigns]
+      summary: Enable or disable the Gmail outreach job from the admin UI
+      operationId: setOutreachEmailJob
+      security:
+        - bearerAuth: []
+      description: |
+        Requires role `internal_admin`. `enabled=true` persists the operational control and
+        immediately queues one durable run over eligible OCR-verified leads. `enabled=false`
+        prevents subsequent provider attempts; an already in-flight Gmail request is allowed
+        to resolve to preserve delivery-state accuracy. Credentials remain in secret configuration.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties:
+                enabled:
+                  type: boolean
+      responses:
+        '200':
+          description: Persisted email-job state and queued job metadata when enabling
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailJobActionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Another outreach job is already queued or running
+        '503':
+          description: Gmail OAuth outreach accounts are not configured
 
   /api/v1/outreach/bulk-send/status:
     get:
@@ -1076,7 +1357,7 @@ paths:
       description: |
         Requires role `internal_admin`.
         Returns pending eligible lead count, the next durable account availability time,
-        and active/last bulk job summary.
+        the persisted UI email-job state, and active/last bulk job summary.
       responses:
         '200':
           description: Bulk outreach status
@@ -1088,6 +1369,105 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+
+  /api/v1/outreach/email-accounts/health:
+    get:
+      tags: [Email Campaigns]
+      summary: List configured Gmail outreach sender health
+      operationId: listGmailOutreachHealth
+      security:
+        - bearerAuth: []
+      description: |
+        Requires role `internal_admin`. Each configured Gmail mailbox sends a real message
+        to `OUTREACH_EMAIL_HEALTH_RECIPIENT` when first registered and at the configured
+        interval (minimum 24 hours). Health checks are independent of the outreach-job toggle.
+        The response exposes status metadata, never OAuth secrets.
+      responses:
+        '200':
+          description: Gmail sender health status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailAccountHealthResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          description: Gmail health service is not configured
+
+  /api/v1/developer/schema:
+    get:
+      tags: [Developer]
+      summary: List public PostgreSQL tables and columns
+      operationId: developerSchema
+      security:
+        - bearerAuth: []
+      description: Requires role `internal_admin`. Returns table and column metadata from `information_schema`.
+      responses:
+        '200':
+          description: Public schema tables and columns
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeveloperSchemaResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          description: Database not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/developer/sql:
+    post:
+      tags: [Developer]
+      summary: Execute a read-only SQL query
+      operationId: developerExecuteSQL
+      security:
+        - bearerAuth: []
+      description: |
+        Requires role `internal_admin`. Executes one read-only `SELECT`, `WITH`, `SHOW`,
+        or `EXPLAIN` statement inside a PostgreSQL read-only transaction with a short
+        statement timeout and a 200-row response cap.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeveloperSQLRequest'
+            example:
+              query: |
+                SELECT
+                  lower(trim(mi.name)) AS item_name,
+                  count(DISTINCT m.restaurant_id) AS restaurant_count
+                FROM menu_items mi
+                JOIN menus m ON m.id = mi.menu_id
+                GROUP BY lower(trim(mi.name))
+                ORDER BY restaurant_count DESC
+                LIMIT 100
+      responses:
+        '200':
+          description: Query result rows
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeveloperQueryResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          description: Database not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /api/v1/campaigns/{id}/stop:
     parameters:
@@ -1135,7 +1515,9 @@ paths:
       security: []
       description: |
         Public endpoint (no auth). Records `clicked` in `email_events`, then **302 redirects**
-        to the demo URL stored on the tracking token.
+        to the demo URL stored on the tracking token. A successfully recorded click also
+        sets the restaurant's `shown_interest=true` and advances eligible lifecycle states
+        to `interested`.
       responses:
         '302':
           description: Redirect to demo site
@@ -1200,6 +1582,27 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+
+  /api/public/v1/site/restaurants/by-id/{id}:
+    parameters:
+      - $ref: '#/components/parameters/restaurantId'
+    get:
+      tags: [Public Demo]
+      summary: Load restaurant-specific website content by immutable restaurant ID
+      operationId: getPublicRestaurantSiteById
+      security: []
+      responses:
+        '200':
+          description: Public restaurant profile, menu, gallery, and review content
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /api/public/v1/restaurants/{id}/table-availability:
     parameters:
@@ -1315,6 +1718,118 @@ paths:
                   code: demo_not_found
                   message: Demo site was not found.
 
+  /api/public/v1/demo/{slug}/sessions:
+    parameters:
+      - name: slug
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      tags: [Public Demo]
+      summary: Start engagement tracking for a signed demo
+      operationId: startPublicDemoSession
+      security: []
+      description: Validates the same published, unexpired slug and opaque demo token as the demo payload endpoint.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [demo_token, template_id]
+              properties:
+                demo_token:
+                  type: string
+                template_id:
+                  type: string
+                  enum: ['1', '2', '3']
+      responses:
+        '201':
+          description: Short-lived browser session capability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemoSessionCapability'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/public/v1/demo-sessions/{session_id}/events:
+    parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Public Demo]
+      summary: Record signed-demo heartbeat or end
+      operationId: touchPublicDemoSession
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [session_token, event, active_seconds]
+              properties:
+                session_token:
+                  type: string
+                event:
+                  type: string
+                  enum: [heartbeat, end]
+                active_seconds:
+                  type: integer
+                  minimum: 0
+                  maximum: 86400
+                  description: Browser-measured foreground time; hidden-tab time is excluded.
+      responses:
+        '204':
+          description: Session duration updated
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/public/v1/demo-sessions/{session_id}/transcript:
+    parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Public Demo]
+      summary: Store an AI receptionist transcript turn for a signed-demo session
+      operationId: addPublicDemoTranscript
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [session_token, role, content]
+              properties:
+                session_token:
+                  type: string
+                role:
+                  type: string
+                  enum: [user, assistant, system]
+                content:
+                  type: string
+                  maxLength: 4000
+      responses:
+        '204':
+          description: Transcript turn recorded
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /healthz:
     get:
       tags: [Health]
@@ -1398,6 +1913,12 @@ components:
       in: query
       schema:
         type: boolean
+    ocrStatusFilter:
+      name: ocr_status
+      in: query
+      schema:
+        $ref: '#/components/schemas/OCRStatus'
+      description: Filter restaurant rows by profile OCR status; use `verified` for verified-only.
     includeArchivedFilter:
       name: include_archived
       in: query
@@ -1677,6 +2198,12 @@ components:
         email:
           type: string
           format: email
+        phone:
+          type: string
+        address:
+          type: string
+        ocr_status:
+          $ref: '#/components/schemas/OCRStatus'
         status:
           $ref: '#/components/schemas/RestaurantStatus'
         is_contacted:
@@ -1796,7 +2323,9 @@ components:
         public_payload:
           type: object
           additionalProperties: true
-          description: Stored server-side; only allowlisted keys returned on public demo
+          description: |
+            Optional explicit snapshot stored server-side. When omitted, the server builds
+            the current restaurant-specific public payload; only allowlisted keys are public.
 
     CreateDemoSiteResult:
       type: object
@@ -1846,7 +2375,10 @@ components:
         - restaurant_name
         - contact_email
         - ocr_status
+        - ocr_checked
         - ocr_input_fingerprint
+        - ocr_attempts
+        - ocr_verification_errors
         - review_status
         - restaurant_updated_at
         - profile_updated_at
@@ -1861,12 +2393,31 @@ components:
           type: string
         ocr_status:
           $ref: '#/components/schemas/OCRStatus'
+        ocr_checked:
+          type: boolean
+          description: True once at least one OCR attempt has started for this row.
         ocr_input_fingerprint:
           type: string
+        ocr_started_at:
+          type: string
+          format: date-time
+          nullable: true
         ocr_completed_at:
           type: string
           format: date-time
           nullable: true
+        ocr_attempts:
+          type: integer
+          minimum: 0
+        ocr_verification_errors:
+          type: array
+          items:
+            type: string
+        apollo_status:
+          type: string
+          description: Per-restaurant Apollo result such as enriched, skipped_no_domain, no_candidate, or no_match.
+        apollo_email_found:
+          type: boolean
         review_status:
           $ref: '#/components/schemas/ProfileReviewStatus'
         reviewed_at:
@@ -1886,6 +2437,172 @@ components:
         profile:
           type: object
           additionalProperties: true
+
+    GooglePhotoAttribution:
+      type: object
+      required: [display_name]
+      properties:
+        display_name:
+          type: string
+        uri:
+          type: string
+          format: uri
+        photo_uri:
+          type: string
+          format: uri
+
+    GooglePlacePhoto:
+      type: object
+      required: [url, author_attributions]
+      properties:
+        url:
+          type: string
+          format: uri
+        source_index:
+          type: integer
+          minimum: 0
+        width_px:
+          type: integer
+        height_px:
+          type: integer
+        author_attributions:
+          type: array
+          items:
+            $ref: '#/components/schemas/GooglePhotoAttribution'
+        google_maps_uri:
+          type: string
+          format: uri
+        flag_content_uri:
+          type: string
+          format: uri
+
+    WebsiteMediaType:
+      type: string
+      enum: [exterior, interior, food, drink, logo, team, event, other]
+
+    MediaPlacementRole:
+      type: string
+      enum: [hero, about, gallery, food_gallery, ambience_gallery, logo]
+
+    PublicMedia:
+      type: object
+      required: [url, source_kind, media_type, unoptimized]
+      properties:
+        id:
+          type: string
+          format: uuid
+        url:
+          type: string
+          format: uri
+        source_kind:
+          type: string
+          enum: [google_places_live, owner_upload, licensed]
+        media_type:
+          $ref: '#/components/schemas/WebsiteMediaType'
+        caption:
+          type: string
+        alt_text:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        quality_score:
+          type: number
+          minimum: 0
+          maximum: 1
+        hero_score:
+          type: number
+          minimum: 0
+          maximum: 1
+        width_px:
+          type: integer
+        height_px:
+          type: integer
+        orientation:
+          type: string
+          enum: [landscape, portrait, square, unknown]
+        subject_position:
+          type: string
+          enum: [left, center, right]
+        placement_role:
+          $ref: '#/components/schemas/MediaPlacementRole'
+        unoptimized:
+          type: boolean
+          description: True for live Google content that must bypass the Next.js image optimizer.
+        author_attributions:
+          type: array
+          items:
+            $ref: '#/components/schemas/GooglePhotoAttribution'
+        google_maps_uri:
+          type: string
+          format: uri
+        flag_content_uri:
+          type: string
+          format: uri
+
+    GooglePlacePhotos:
+      type: object
+      required:
+        - restaurant_id
+        - google_place_id
+        - photos
+        - refreshed_at
+        - urls_are_temporary
+      properties:
+        restaurant_id:
+          type: string
+          format: uuid
+        google_place_id:
+          type: string
+        photos:
+          type: array
+          items:
+            $ref: '#/components/schemas/GooglePlacePhoto'
+        refreshed_at:
+          type: string
+          format: date-time
+        urls_are_temporary:
+          type: boolean
+
+    GeneratedSiteTemplate:
+      type: object
+      required: [id, name, url]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        url:
+          type: string
+          format: uri
+
+    GeneratedSite:
+      type: object
+      required:
+        - restaurant_id
+        - restaurant_name
+        - google_place_id
+        - site_index
+        - templates
+        - shareable
+      properties:
+        restaurant_id:
+          type: string
+          format: uuid
+        restaurant_name:
+          type: string
+        google_place_id:
+          type: string
+        site_index:
+          type: integer
+          minimum: 0
+        templates:
+          type: array
+          items:
+            $ref: '#/components/schemas/GeneratedSiteTemplate'
+        shareable:
+          type: boolean
 
     ProfileReview:
       type: object
@@ -2183,6 +2900,8 @@ components:
           type: integer
         max_sends:
           type: integer
+        email_job:
+          $ref: '#/components/schemas/EmailJobControl'
         next_available_at:
           type: string
           format: date-time
@@ -2224,6 +2943,223 @@ components:
                   format: date-time
                   nullable: true
 
+    EmailJobControl:
+      type: object
+      required: [enabled]
+      properties:
+        enabled:
+          type: boolean
+        enabled_at:
+          type: string
+          format: date-time
+          nullable: true
+        enabled_by:
+          type: string
+          format: uuid
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+
+    EmailJobActionResponse:
+      type: object
+      properties:
+        email_job:
+          $ref: '#/components/schemas/EmailJobControl'
+        job_id:
+          type: string
+        status:
+          type: string
+          enum: [queued, disabled]
+        max_sends:
+          type: integer
+        pending_eligible_count:
+          type: integer
+
+    EmailAccountHealthResponse:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        recipient:
+          type: string
+          format: email
+        interval_hours:
+          type: integer
+          minimum: 24
+        accounts:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmailAccountHealth'
+
+    EmailAccountHealth:
+      type: object
+      properties:
+        account_key:
+          type: string
+        provider:
+          type: string
+          enum: [gmail]
+        provider_identity:
+          type: string
+        from_email:
+          type: string
+          format: email
+        enabled:
+          type: boolean
+        status:
+          type: string
+          enum: [pending, checking, healthy, failed, disabled]
+        last_checked_at:
+          type: string
+          format: date-time
+          nullable: true
+        next_check_at:
+          type: string
+          format: date-time
+          nullable: true
+        provider_message_id:
+          type: string
+        last_error:
+          type: string
+
+    DeveloperSchemaResponse:
+      type: object
+      required: [tables]
+      properties:
+        tables:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeveloperSchemaTable'
+
+    DeveloperSchemaTable:
+      type: object
+      required: [name, type, columns]
+      properties:
+        name:
+          type: string
+          example: menu_items
+        type:
+          type: string
+          example: BASE TABLE
+        columns:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeveloperSchemaColumn'
+
+    DeveloperSchemaColumn:
+      type: object
+      required: [name, data_type, database_type, is_nullable, ordinal_position]
+      properties:
+        name:
+          type: string
+          example: name
+        data_type:
+          type: string
+          example: text
+        database_type:
+          type: string
+          example: text
+        is_nullable:
+          type: boolean
+        column_default:
+          type: string
+        ordinal_position:
+          type: integer
+
+    DeveloperSQLRequest:
+      type: object
+      required: [query]
+      properties:
+        query:
+          type: string
+          description: One read-only SELECT, WITH, SHOW, or EXPLAIN statement.
+
+    DeveloperQueryResult:
+      type: object
+      required: [columns, rows, row_count, truncated, elapsed_ms, max_rows]
+      properties:
+        columns:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeveloperQueryColumn'
+        rows:
+          type: array
+          items:
+            type: array
+            items: {}
+        row_count:
+          type: integer
+        truncated:
+          type: boolean
+        elapsed_ms:
+          type: integer
+        max_rows:
+          type: integer
+
+    DeveloperQueryColumn:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+
+    DemoSessionCapability:
+      type: object
+      required: [session_id, session_token]
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        session_token:
+          type: string
+
+    DemoSession:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        demo_site_id:
+          type: string
+          format: uuid
+          nullable: true
+        restaurant_id:
+          type: string
+          format: uuid
+        template_id:
+          type: string
+          enum: ['1', '2', '3']
+        started_at:
+          type: string
+          format: date-time
+        last_seen_at:
+          type: string
+          format: date-time
+        ended_at:
+          type: string
+          format: date-time
+          nullable: true
+        duration_seconds:
+          type: integer
+          minimum: 0
+        transcript:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              role:
+                type: string
+                enum: [user, assistant, system]
+              content:
+                type: string
+              occurred_at:
+                type: string
+                format: date-time
+
     StopCampaignRequest:
       type: object
       properties:
@@ -2253,7 +3189,12 @@ components:
           type: string
         body_html:
           type: string
-          description: Draft HTML whose `{{CLICK_URL}}`, optional `{{TEMPLATE_1_URL}}`–`{{TEMPLATE_3_URL}}`, and `{{UNSUBSCRIBE_URL}}` placeholders are replaced at send time.
+          description: >
+            Current outreach HTML is canonicalized before preview/send to three
+            anchors only: `{{CLICK_URL}}` personalized-demo placeholder, the
+            Tuvi services catalog URL, and `{{UNSUBSCRIBE_URL}}` opt-out
+            placeholder. Template-specific placeholders are not generated for
+            current sends.
         body_text:
           type: string
         approved_at:
@@ -2411,6 +3352,15 @@ components:
           type: string
         ai_receptionist_cta:
           type: string
+        media:
+          type: array
+          description: OCR-approved source-aware website media. Menu documents are excluded.
+          items:
+            $ref: '#/components/schemas/PublicMedia'
+        media_manifest:
+          type: object
+          additionalProperties: true
+          description: Durable media provenance included in the reviewed demo fingerprint.
 
     HealthzResponse:
       type: object

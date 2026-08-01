@@ -1,5 +1,7 @@
 "use client";
 
+import { withBasePath } from "@/lib/base-path";
+
 export async function adminFetch<T = unknown>(
   path: string,
   options: {
@@ -11,11 +13,13 @@ export async function adminFetch<T = unknown>(
   } = {},
 ): Promise<T> {
   const url = new URL(
-    path.startsWith("/api/admin/")
-      ? path
-      : options.public
-        ? `/api/admin/public/${path.replace(/^\//, "")}`
-        : `/api/admin/proxy/${path.replace(/^\//, "")}`,
+    withBasePath(
+      path.startsWith("/api/admin/")
+        ? path
+        : options.public
+          ? `/api/admin/public/${path.replace(/^\//, "")}`
+          : `/api/admin/proxy/${path.replace(/^\//, "")}`,
+    ),
     window.location.origin,
   );
   if (options.query) {
@@ -26,13 +30,21 @@ export async function adminFetch<T = unknown>(
     }
   }
 
+  const isFormData = options.body instanceof FormData;
+  let requestBody: BodyInit | undefined;
+  if (options.body instanceof FormData) {
+    requestBody = options.body;
+  } else if (options.body !== undefined) {
+    requestBody = JSON.stringify(options.body);
+  }
+
   const res = await fetch(url.pathname + url.search, {
     method: options.method || "GET",
     headers:
-      options.body !== undefined
+      options.body !== undefined && !isFormData
         ? { "Content-Type": "application/json", Accept: "application/json" }
         : { Accept: "application/json" },
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    body: requestBody,
     credentials: "same-origin",
   });
 

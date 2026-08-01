@@ -80,3 +80,39 @@ func TestCreateDemoSiteRequiresInternalAdmin(t *testing.T) {
 		t.Fatal("expected forbidden error for restaurant owner")
 	}
 }
+
+func TestCreateDemoSiteBuildsRestaurantSpecificPayload(t *testing.T) {
+	restaurantID := uuid.New()
+	payload := json.RawMessage(`{"restaurant_name":"Real Restaurant","cuisine":"Indian"}`)
+	demosRepo := &Mock{PublicPayloads: map[uuid.UUID]json.RawMessage{restaurantID: payload}}
+	restaurantsRepo := &restaurants.Mock{Restaurants: map[uuid.UUID]restaurants.Restaurant{
+		restaurantID: {ID: restaurantID, Name: "Real Restaurant", Status: restaurants.StatusLead},
+	}}
+	service := NewService(
+		demosRepo,
+		restaurants.NewService(restaurantsRepo, &restaurants.MembershipMock{}),
+		time.Hour,
+	)
+
+	result, err := service.CreateDemoSite(context.Background(), auth.Principal{
+		UserID: uuid.New(),
+		Role:   auth.RoleInternalAdmin,
+	}, restaurantID, CreateDemoInput{Slug: "real-restaurant"})
+	if err != nil {
+		t.Fatalf("CreateDemoSite() error = %v", err)
+	}
+	record, err := demosRepo.GetByID(context.Background(), result.ID)
+	if err != nil {
+		t.Fatalf("GetByID() error = %v", err)
+	}
+	if string(record.PublicPayload) != string(payload) {
+		t.Fatalf("PublicPayload = %s, want %s", record.PublicPayload, payload)
+	}
+	restaurant, err := restaurantsRepo.GetByID(context.Background(), restaurantID)
+	if err != nil {
+		t.Fatalf("GetByID() error = %v", err)
+	}
+	if restaurant.Status != restaurants.StatusDemoReady {
+		t.Fatalf("restaurant status = %q, want %q", restaurant.Status, restaurants.StatusDemoReady)
+	}
+}

@@ -1,7 +1,8 @@
 "use client";
 
-import Image from "next/image";
 import type { RestaurantContent } from "@/data/types/restaurant";
+import SourceAwareImage, { mediaForURL } from "@/components/SourceAwareImage";
+import PhotoAttribution from "@/components/PhotoAttribution";
 
 export default function FinalCTA({
   restaurant,
@@ -11,9 +12,8 @@ export default function FinalCTA({
   return (
     <section className="relative flex min-h-[70vh] items-center justify-center overflow-hidden">
       {restaurant.heroPoster && (
-        <Image
-          src={restaurant.heroPoster}
-          alt=""
+        <SourceAwareImage
+          media={restaurant.heroMedia || mediaForURL(restaurant.heroPoster, "")}
           fill
           loading="lazy"
           className="object-cover"
@@ -21,6 +21,11 @@ export default function FinalCTA({
         />
       )}
       <div className="absolute inset-0 bg-charcoal/75" />
+      {restaurant.heroMedia?.sourceKind === "google_places_live" ? (
+        <div className="absolute bottom-5 left-5 z-20 rounded bg-black/60 px-3 py-2 text-white/75">
+          <PhotoAttribution media={restaurant.heroMedia} compact />
+        </div>
+      ) : null}
       <div className="relative z-10 mx-auto max-w-3xl px-6 text-center">
         <h2 className="font-display text-4xl text-cream md:text-6xl">
           Come hungry. Leave with a story.

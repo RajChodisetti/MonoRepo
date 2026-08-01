@@ -5,19 +5,21 @@ export function buildMetadata(restaurant: RestaurantContent): Metadata {
   const title = `${restaurant.name} | ${restaurant.cuisine} in ${restaurant.city}`;
   const description = `Reserve a table at ${restaurant.name}, a ${restaurant.cuisine.toLowerCase()} restaurant in ${restaurant.city} serving memorable dining, cocktails, and warm hospitality.`;
 
+  const durableHero = restaurant.heroMedia?.sourceKind === "google_places_live" ? "" : restaurant.heroPoster;
   return {
     title,
     description,
     openGraph: {
       title,
       description,
-      images: restaurant.heroPoster ? [{ url: restaurant.heroPoster }] : [],
+      images: durableHero ? [{ url: durableHero }] : [],
       type: "website",
     },
   };
 }
 
 export function buildRestaurantJsonLd(restaurant: RestaurantContent): object {
+  const durableHero = restaurant.heroMedia?.sourceKind === "google_places_live" ? undefined : restaurant.heroPoster || undefined;
   return {
     "@context": "https://schema.org",
     "@type": "Restaurant",
@@ -46,6 +48,6 @@ export function buildRestaurantJsonLd(restaurant: RestaurantContent): object {
       dayOfWeek: day.charAt(0).toUpperCase() + day.slice(1),
       description: hours,
     })),
-    image: restaurant.heroPoster,
+    image: durableHero,
   };
 }

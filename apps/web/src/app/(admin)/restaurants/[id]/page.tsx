@@ -7,65 +7,102 @@ import { adminFetch } from "@/lib/client-api";
 import { RESTAURANT_STATUSES, formatDate } from "@/lib/constants";
 import type {
   Campaign,
+  DemoLink,
+  DemoSession,
   DemoSite,
+  GeneratedSite,
   Member,
   ProfileReviewPreview,
   Restaurant,
-  SiteContent,
-  SiteImages,
 } from "@/lib/types";
 import { EmptyState, ErrorBanner, PageHeader, StatusBadge } from "@/components/ui";
-import { ScrapedDetailsPanel } from "@/components/ScrapedDetailsPanel";
+import { PhotoGallery } from "@/components/PhotoGallery";
+import { SendPreviewModal } from "@/components/SendPreviewModal";
 
-type Tab = "overview" | "scraped" | "profile" | "demo" | "campaign" | "members";
+type Tab = "overview" | "photos" | "profile" | "demo" | "campaign" | "engagement" | "members";
+
+function formatDuration(seconds: number) {
+  const safe = Math.max(0, Math.round(seconds || 0));
+  const minutes = Math.floor(safe / 60);
+  const remainder = safe % 60;
+  return minutes > 0 ? `${minutes}m ${remainder}s` : `${remainder}s`;
+}
+
+function templateName(templateID: DemoSession["template_id"]) {
+  if (templateID === "2") return "Aurora";
+  if (templateID === "3") return "Elysian";
+  return "Cinematic";
+}
+
+function apolloStatusMessage(status?: string, emailFound?: boolean) {
+  if (emailFound) return "Apollo found a work email for this restaurant.";
+  switch (status) {
+    case "skipped_no_domain":
+      return "Apollo could not run because the restaurant has no usable website or company domain.";
+    case "no_candidate":
+      return "Apollo searched the available domain but found no suitable owner/manager candidate.";
+    case "no_match":
+      return "Apollo found candidates, but none produced a verified work email match.";
+    case "enriched":
+      return "Apollo enriched the restaurant, but did not return a usable work email.";
+    case "not_recorded":
+      return "No Apollo enrichment result has been recorded for this restaurant yet.";
+    default:
+      return status ? `Apollo result: ${status}. No usable email was returned.` : "Apollo status is unavailable.";
+  }
+}
 
 function RestaurantDetailInner() {
   const params = useParams<{ id: string }>();
   const search = useSearchParams();
   const id = params.id;
-  const initialTab = (search.get("tab") as Tab) || "scraped";
+  const initialTab = (search.get("tab") as Tab) || "overview";
 
   const [tab, setTab] = useState<Tab>(initialTab);
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [detailsLoading, setDetailsLoading] = useState(true);
 
   // overview form
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [isContacted, setIsContacted] = useState(false);
-  const [shownInterest, setShownInterest] = useState(false);
   const [status, setStatus] = useState("lead");
 
-  // profile / scrape details
+  // profile
   const [preview, setPreview] = useState<ProfileReviewPreview | null>(null);
-  const [siteImages, setSiteImages] = useState<SiteImages | null>(null);
-  const [siteContent, setSiteContent] = useState<SiteContent | null>(null);
 
   // demo
   const [demoId, setDemoId] = useState("");
   const [demoPreview, setDemoPreview] = useState<Record<string, unknown> | null>(
     null,
   );
+  const [demoLinks, setDemoLinks] = useState<DemoLink[]>([]);
+  const [demoToken, setDemoToken] = useState("");
+  const [generatedSite, setGeneratedSite] = useState<GeneratedSite | null>(null);
+  const [generatedSiteError, setGeneratedSiteError] = useState<string | null>(null);
+
+  // ad hoc send
+  const [sendPreviewOpen, setSendPreviewOpen] = useState(false);
 
   // campaigns
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
 
+  // demo engagement
+  const [demoSessions, setDemoSessions] = useState<DemoSession[]>([]);
+
   // members
   const [members, setMembers] = useState<Member[]>([]);
   const [memberUserId, setMemberUserId] = useState("");
   const [memberRole, setMemberRole] = useState("owner");
+  const stableTemplates = generatedSite?.templates || [];
 
   const loadRestaurant = useCallback(async () => {
     const data = await adminFetch<Restaurant>(`restaurants/${id}`);
     setRestaurant(data);
     setName(data.name || "");
     setEmail(data.email || "");
-    setIsContacted(!!data.is_contacted);
-    setShownInterest(!!data.shown_interest);
     setStatus(data.status || "lead");
   }, [id]);
 
@@ -74,34 +111,6 @@ function RestaurantDetailInner() {
       `restaurants/${id}/profile/review-preview`,
     );
     setPreview(data);
-    return data;
-  }, [id]);
-
-  const loadScrapedExtras = useCallback(async (profilePreview?: ProfileReviewPreview | null) => {
-    try {
-      const images = await adminFetch<SiteImages>(
-        `restaurants/${id}/site-images`,
-        { public: true },
-      );
-      setSiteImages(images);
-    } catch {
-      setSiteImages(null);
-    }
-
-    const placeId = profilePreview?.profile?.google_place_id;
-    if (placeId) {
-      try {
-        const content = await adminFetch<SiteContent>(
-          `site/by-place/${encodeURIComponent(placeId)}`,
-          { public: true },
-        );
-        setSiteContent(content);
-      } catch {
-        setSiteContent(null);
-      }
-    } else {
-      setSiteContent(null);
-    }
   }, [id]);
 
   const loadCampaigns = useCallback(async () => {
@@ -109,6 +118,35 @@ function RestaurantDetailInner() {
       `restaurants/${id}/campaigns`,
     );
     setCampaigns(data.items || []);
+  }, [id]);
+
+  const loadEngagement = useCallback(async () => {
+    const data = await adminFetch<{ items: DemoSession[] }>(
+      `restaurants/${id}/demo-engagement`,
+    );
+    setDemoSessions(data.items || []);
+  }, [id]);
+
+  const loadDemoLinks = useCallback(async () => {
+    const data = await adminFetch<{ items: DemoLink[] }>(
+      `restaurants/${id}/demo-links`,
+    );
+    setDemoLinks(data.items || []);
+  }, [id]);
+
+  const loadGeneratedSite = useCallback(async () => {
+    setGeneratedSiteError(null);
+    try {
+      const data = await adminFetch<GeneratedSite>(
+        `restaurants/${id}/generated-site`,
+      );
+      setGeneratedSite(data);
+    } catch (err) {
+      setGeneratedSite(null);
+      setGeneratedSiteError(
+        err instanceof Error ? err.message : "Generated website is unavailable",
+      );
+    }
   }, [id]);
 
   const loadMembers = useCallback(async () => {
@@ -122,51 +160,51 @@ function RestaurantDetailInner() {
     let cancelled = false;
     async function boot() {
       setError(null);
-      setDetailsLoading(true);
       try {
         await loadRestaurant();
         try {
-          const p = await loadProfile();
-          if (!cancelled) await loadScrapedExtras(p);
+          await loadProfile();
         } catch {
-          // profile may not exist yet for brand-new leads
-          if (!cancelled) {
-            setPreview(null);
-            setSiteImages(null);
-            setSiteContent(null);
-          }
+          // A manually created restaurant may not have a scrape profile yet.
         }
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "Failed to load");
         }
-      } finally {
-        if (!cancelled) setDetailsLoading(false);
       }
     }
     boot();
     return () => {
       cancelled = true;
     };
-  }, [loadRestaurant, loadProfile, loadScrapedExtras]);
+  }, [loadRestaurant, loadProfile]);
 
   useEffect(() => {
     setMessage(null);
     setError(null);
     async function loadTab() {
       try {
-        if (tab === "scraped" || tab === "profile") {
-          const p = await loadProfile();
-          await loadScrapedExtras(p);
-        }
+        if (tab === "profile") await loadProfile();
         if (tab === "campaign") await loadCampaigns();
+        if (tab === "engagement") await loadEngagement();
         if (tab === "members") await loadMembers();
+        if (tab === "demo") {
+          await Promise.all([loadDemoLinks(), loadGeneratedSite()]);
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load tab");
       }
     }
     loadTab();
-  }, [tab, loadProfile, loadScrapedExtras, loadCampaigns, loadMembers]);
+  }, [
+    tab,
+    loadProfile,
+    loadCampaigns,
+    loadEngagement,
+    loadMembers,
+    loadDemoLinks,
+    loadGeneratedSite,
+  ]);
 
   async function saveOverview(e: FormEvent) {
     e.preventDefault();
@@ -179,8 +217,6 @@ function RestaurantDetailInner() {
         body: {
           name,
           email,
-          is_contacted: isContacted,
-          shown_interest: shownInterest,
         },
       });
       if (status !== restaurant?.status) {
@@ -264,10 +300,31 @@ function RestaurantDetailInner() {
         );
         setDemoPreview(previewRes);
       }
-      const token = res.token ? ` Token (save once): ${String(res.token)}` : "";
-      setMessage(`Demo draft created (${slug}).${token}`);
+      setDemoToken(typeof res.token === "string" ? res.token : "");
+      await loadDemoLinks();
+      setMessage(
+        `Restaurant-specific demo draft created (${slug}). Its one-time token is held in this browser session so you can create a campaign draft.`,
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Demo create failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function selectDemo(link: DemoLink) {
+    setDemoId(link.demo_site_id);
+    setDemoToken("");
+    setDemoPreview(null);
+    setBusy(true);
+    setError(null);
+    try {
+      const previewRes = await adminFetch<Record<string, unknown>>(
+        `demo-sites/${link.demo_site_id}/review-preview`,
+      );
+      setDemoPreview(previewRes);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to inspect demo");
     } finally {
       setBusy(false);
     }
@@ -289,39 +346,61 @@ function RestaurantDetailInner() {
     }
   }
 
-  async function setDemoStatus(next: "published" | "draft") {
-    if (!demoId || !demoPreview) return;
+  async function viewPersonalizedWebsite(
+    template: NonNullable<typeof generatedSite>["templates"][number],
+  ) {
+    const previewWindow = window.open("about:blank", "_blank");
+    if (!previewWindow) {
+      setError("Allow pop-ups for the admin portal to view the personalized website.");
+      return;
+    }
+    previewWindow.opener = null;
     setBusy(true);
     setError(null);
     try {
-      const updatedAt =
-        (demoPreview.updated_at as string) ||
-        ((demoPreview.demo_site as { updated_at?: string })?.updated_at as string);
-      await adminFetch(`demo-sites/${demoId}/status`, {
-        method: "PATCH",
-        body: {
-          status: next,
-          expected_updated_at: updatedAt,
-        },
+      const capability = await adminFetch<{
+        session_id: string;
+        session_token: string;
+      }>(`restaurants/${id}/demo-engagement/preview`, {
+        method: "POST",
+        body: { template_id: template.id },
       });
-      await loadDemoPreview();
-      setMessage(`Demo ${next}.`);
+      const url = new URL(template.url);
+      url.hash = new URLSearchParams({
+        engagement_session: capability.session_id,
+        engagement_token: capability.session_token,
+      }).toString();
+      previewWindow.location.replace(url.toString());
+      setMessage(`${template.name} personalized website opened; engagement tracking started.`);
+      await loadEngagement();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Demo status update failed");
+		previewWindow.close();
+		setError(err instanceof Error ? err.message : "Personalized website could not be opened");
     } finally {
       setBusy(false);
     }
   }
 
   async function createCampaign() {
+    if (!demoId || !demoToken) {
+      setError(
+        "Create a demo draft in this browser session first. Existing demo tokens are intentionally not returned by the API.",
+      );
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
       const res = await adminFetch<Campaign>(`restaurants/${id}/campaigns`, {
         method: "POST",
-        body: { campaign_type: "outreach" },
+        body: {
+          demo_site_id: demoId,
+          demo_token: demoToken,
+          campaign_type: "outreach",
+        },
       });
       await loadCampaigns();
+      await loadDemoLinks();
       setSelectedCampaign(res);
       setMessage("Campaign draft created.");
     } catch (err) {
@@ -432,13 +511,33 @@ function RestaurantDetailInner() {
   }
 
   const tabs: { id: Tab; label: string }[] = [
-    { id: "scraped", label: "Scraped details" },
-    { id: "overview", label: "Edit lead" },
+    { id: "overview", label: "Overview" },
+    { id: "photos", label: "Photos" },
     { id: "profile", label: "Profile review" },
     { id: "demo", label: "Demo" },
     { id: "campaign", label: "Campaign" },
+    { id: "engagement", label: "Engagement" },
     { id: "members", label: "Members" },
   ];
+  const ocrStatus = preview?.ocr_status || "unknown";
+  const ocrChecked = Boolean(preview?.ocr_checked || (preview?.ocr_attempts || 0) > 0);
+  const ocrStateLabel =
+    ocrStatus === "running"
+      ? "OCR is checking this restaurant now"
+      : ocrStatus === "pending" && !ocrChecked
+        ? "Not checked by OCR yet"
+        : ocrStatus === "verified"
+          ? "Checked and verified"
+          : ocrStatus === "no_images"
+            ? "Checked — no usable images found"
+            : ocrStatus === "failed"
+              ? "Checked — OCR failed"
+              : ocrChecked
+                ? `Checked — ${ocrStatus}`
+                : "OCR state unavailable";
+  const ocrErrors = Array.isArray(preview?.ocr_verification_errors)
+    ? preview.ocr_verification_errors.map(String)
+    : [];
 
   return (
     <div>
@@ -446,10 +545,26 @@ function RestaurantDetailInner() {
         title={restaurant?.name || "Restaurant"}
         subtitle={restaurant?.email || restaurant?.id}
         actions={
-          <Link className="btn btn-secondary" href="/restaurants">
-            All restaurants
-          </Link>
+          <>
+            <button
+              className="btn btn-primary"
+              type="button"
+              onClick={() => setSendPreviewOpen(true)}
+              disabled={!restaurant}
+            >
+              Send email
+            </button>
+            <Link className="btn btn-secondary" href="/restaurants">
+              All restaurants
+            </Link>
+          </>
         }
+      />
+      <SendPreviewModal
+        open={sendPreviewOpen}
+        restaurantIds={restaurant ? [restaurant.id] : []}
+        onClose={() => setSendPreviewOpen(false)}
+        onSent={loadRestaurant}
       />
       <ErrorBanner message={error} />
       {message ? (
@@ -477,15 +592,6 @@ function RestaurantDetailInner() {
         ))}
       </div>
 
-      {tab === "scraped" ? (
-        <ScrapedDetailsPanel
-          preview={preview}
-          siteImages={siteImages}
-          siteContent={siteContent}
-          loading={detailsLoading}
-        />
-      ) : null}
-
       {tab === "overview" && restaurant ? (
         <form onSubmit={saveOverview} className="card" style={{ display: "grid", gap: "0.85rem", maxWidth: 640 }}>
           <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
@@ -503,6 +609,14 @@ function RestaurantDetailInner() {
             <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
           </label>
           <label style={{ display: "grid", gap: "0.35rem" }}>
+            <span style={{ fontWeight: 600, fontSize: "0.85rem" }}>Phone</span>
+            <input className="input" value={restaurant.phone || ""} readOnly disabled />
+          </label>
+          <label style={{ display: "grid", gap: "0.35rem" }}>
+            <span style={{ fontWeight: 600, fontSize: "0.85rem" }}>Address</span>
+            <textarea className="input" value={restaurant.address || ""} readOnly disabled rows={2} />
+          </label>
+          <label style={{ display: "grid", gap: "0.35rem" }}>
             <span style={{ fontWeight: 600, fontSize: "0.85rem" }}>Status</span>
             <select className="select" value={status} onChange={(e) => setStatus(e.target.value)}>
               {RESTAURANT_STATUSES.map((s) => (
@@ -513,13 +627,16 @@ function RestaurantDetailInner() {
             </select>
           </label>
           <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-            <input type="checkbox" checked={isContacted} onChange={(e) => setIsContacted(e.target.checked)} />
+            <input type="checkbox" checked={!!restaurant.is_contacted} readOnly disabled />
             Contacted
           </label>
           <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-            <input type="checkbox" checked={shownInterest} onChange={(e) => setShownInterest(e.target.checked)} />
+            <input type="checkbox" checked={!!restaurant.shown_interest} readOnly disabled />
             Shown interest
           </label>
+          <div style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
+            Contacted is set after Gmail confirms a send. Shown interest is set after a tracked email link is clicked.
+          </div>
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
             <button className="btn btn-primary" type="submit" disabled={busy}>
               Save changes
@@ -533,18 +650,27 @@ function RestaurantDetailInner() {
             {restaurant.email_send_count ?? 0} · last:{" "}
             {formatDate(restaurant.last_email_sent_at)}
           </div>
+          <div className="alert alert-info" style={{ margin: 0 }}>
+            <strong>OCR:</strong> {ocrStateLabel} · status {ocrStatus} · attempts{" "}
+            {preview?.ocr_attempts ?? 0}
+            {(preview?.ocr_images_discovered ?? 0) > 0
+              ? ` · photos ${preview?.ocr_images_succeeded ?? 0}/${preview?.ocr_images_discovered ?? 0} successful`
+              : ""}
+            {preview?.ocr_completed_at
+              ? ` · completed ${formatDate(preview.ocr_completed_at)}`
+              : ""}
+          </div>
         </form>
       ) : null}
 
+      {tab === "photos" ? (
+        <div className="card">
+          <PhotoGallery restaurantId={id} />
+        </div>
+      ) : null}
+
       {tab === "profile" ? (
-        <div style={{ display: "grid", gap: "1rem" }}>
-          <ScrapedDetailsPanel
-            preview={preview}
-            siteImages={siteImages}
-            siteContent={siteContent}
-            loading={detailsLoading}
-          />
-          <div className="card" style={{ display: "grid", gap: "0.85rem" }}>
+        <div className="card" style={{ display: "grid", gap: "0.85rem" }}>
           {!preview ? (
             <p style={{ color: "var(--muted)", margin: 0 }}>Loading preview…</p>
           ) : (
@@ -553,9 +679,58 @@ function RestaurantDetailInner() {
                 <StatusBadge status={preview.review_status || "draft"} />
                 <StatusBadge status={preview.ocr_status || "ocr"} />
               </div>
+              <div className="alert alert-info" style={{ margin: 0 }}>
+                <strong>{ocrStateLabel}</strong>
+                <div style={{ marginTop: "0.3rem", fontSize: "0.85rem" }}>
+                  Attempts: {preview.ocr_attempts ?? 0} · started:{" "}
+                  {formatDate(preview.ocr_started_at)} · completed:{" "}
+                  {formatDate(preview.ocr_completed_at)}
+                </div>
+                <div style={{ marginTop: "0.3rem", fontSize: "0.85rem" }}>
+                  Photos discovered: {preview.ocr_images_discovered ?? 0} · analyzed:{" "}
+                  {preview.ocr_images_analyzed ?? 0} · successful:{" "}
+                  {preview.ocr_images_succeeded ?? 0} · failed:{" "}
+                  {preview.ocr_images_failed ?? 0} · all processed:{" "}
+                  {preview.ocr_all_images_processed ? "yes" : "no"}
+                </div>
+                {preview.ocr_model ? (
+                  <div style={{ marginTop: "0.3rem", fontSize: "0.85rem" }}>
+                    Model: <code>{preview.ocr_model}</code>
+                    {preview.ocr_provider ? ` · provider: ${preview.ocr_provider}` : ""}
+                  </div>
+                ) : null}
+                {ocrErrors.length > 0 ? (
+                  <ul style={{ margin: "0.45rem 0 0", paddingLeft: "1.2rem" }}>
+                    {ocrErrors.map((ocrError, index) => (
+                      <li key={`${ocrError}-${index}`}>{ocrError}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
               <div>
                 <strong>Contact:</strong> {preview.contact_email || "—"}
               </div>
+              <div className="alert alert-info" style={{ margin: 0 }}>
+                <strong>Apollo:</strong> {apolloStatusMessage(preview.apollo_status, preview.apollo_email_found)}
+                {preview.apollo_status ? (
+                  <div style={{ marginTop: "0.25rem", fontSize: "0.82rem" }}>
+                    Provider result: <code>{preview.apollo_status}</code>
+                  </div>
+                ) : null}
+              </div>
+              <pre
+                style={{
+                  margin: 0,
+                  padding: "0.85rem",
+                  background: "var(--bg)",
+                  border: "1px solid var(--line)",
+                  overflow: "auto",
+                  maxHeight: 360,
+                  fontSize: "0.82rem",
+                }}
+              >
+                {JSON.stringify(preview.profile ?? preview, null, 2)}
+              </pre>
               <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
                 <button className="btn btn-primary" type="button" disabled={busy} onClick={() => reviewProfile("approved")}>
                   Approve profile
@@ -566,76 +741,178 @@ function RestaurantDetailInner() {
                 <button className="btn btn-secondary" type="button" disabled={busy} onClick={() => reviewProfile("draft")}>
                   Reset to draft
                 </button>
-                <button
-                  className="btn btn-secondary"
-                  type="button"
-                  disabled={busy}
-                  onClick={async () => {
-                    const p = await loadProfile();
-                    await loadScrapedExtras(p);
-                  }}
-                >
+                <button className="btn btn-secondary" type="button" disabled={busy} onClick={loadProfile}>
                   Refresh preview
                 </button>
               </div>
             </>
           )}
-          </div>
         </div>
       ) : null}
 
       {tab === "demo" ? (
-        <div className="card" style={{ display: "grid", gap: "0.85rem" }}>
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "end" }}>
-            <button className="btn btn-primary" type="button" disabled={busy} onClick={createDemo}>
-              Create demo draft
-            </button>
-            <label style={{ display: "grid", gap: "0.35rem", minWidth: 280 }}>
-              <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>Demo site ID</span>
-              <input className="input" value={demoId} onChange={(e) => setDemoId(e.target.value)} placeholder="uuid" />
-            </label>
-            <button className="btn btn-secondary" type="button" disabled={busy || !demoId} onClick={loadDemoPreview}>
-              Load preview
-            </button>
-            <button className="btn btn-primary" type="button" disabled={busy || !demoId || !demoPreview} onClick={() => setDemoStatus("published")}>
-              Publish
-            </button>
-            <button className="btn btn-secondary" type="button" disabled={busy || !demoId || !demoPreview} onClick={() => setDemoStatus("draft")}>
-              Unpublish
-            </button>
+        <div style={{ display: "grid", gap: "1rem" }}>
+          <div className="card" style={{ display: "grid", gap: "0.75rem" }}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: "1rem" }}>Generated restaurant website</h3>
+              <p style={{ color: "var(--muted)", margin: "0.35rem 0 0", fontSize: "0.86rem" }}>
+                This is the existing database-driven website generator mapped from restaurant UUID{" "}
+                <code>{id}</code> to its current site index. It is an internal preview, not the
+                token-gated link to send a restaurant.
+              </p>
+            </div>
+            {generatedSiteError ? <ErrorBanner message={generatedSiteError} /> : null}
+            {generatedSite ? (
+              <>
+                <div style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
+                  Generator index: {generatedSite.site_index} · Google Place ID:{" "}
+                  <code>{generatedSite.google_place_id}</code>
+                </div>
+                <div style={{ display: "grid", gap: "0.75rem" }}>
+                  <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                    {stableTemplates.map((template) => (
+                      <button
+                        className="btn btn-primary"
+                        type="button"
+                        onClick={() => viewPersonalizedWebsite(template)}
+                        disabled={busy}
+                        key={template.id}
+                      >
+                        View {template.name} personalized website
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            ) : !generatedSiteError ? (
+              <p style={{ color: "var(--muted)", margin: 0 }}>Loading generated website links…</p>
+            ) : null}
           </div>
-          {demoPreview ? (
-            <pre
-              style={{
-                margin: 0,
-                padding: "0.85rem",
-                background: "var(--bg)",
-                border: "1px solid var(--line)",
-                overflow: "auto",
-                maxHeight: 420,
-                fontSize: "0.82rem",
-              }}
-            >
-              {JSON.stringify(demoPreview, null, 2)}
-            </pre>
-          ) : (
-            <p style={{ color: "var(--muted)", margin: 0 }}>
-              Create a demo or paste an existing demo site id to review/publish.
-            </p>
-          )}
+
+          <div className="card" style={{ display: "grid", gap: "0.65rem" }}>
+            <h3 style={{ margin: 0, fontSize: "1rem" }}>How personalized website previews work</h3>
+            <ol style={{ margin: 0, paddingLeft: "1.2rem", color: "var(--muted)", lineHeight: 1.65 }}>
+              <li>
+                <strong style={{ color: "var(--ink)" }}>View personalized website</strong> opens the
+                selected Cinematic, Aurora, or Elysian restaurant website and starts an admin-preview session clock.
+              </li>
+              <li>
+                <strong style={{ color: "var(--ink)" }}>Inspect payload</strong> shows the exact
+                server-side public-safe data used by approved outreach; it does not expose a public publish control.
+              </li>
+            </ol>
+          </div>
+
+          <div className="card" style={{ display: "grid", gap: "0.6rem" }}>
+            <h3 style={{ margin: 0, fontSize: "0.95rem" }}>Token-gated demo records</h3>
+            {demoLinks.length === 0 ? (
+              <p style={{ color: "var(--muted)", margin: 0 }}>
+                No demo snapshot exists yet. OCR automatically creates one after a successful check,
+                or you can create one manually below.
+              </p>
+            ) : (
+              <div className="table-wrap">
+                <table className="data">
+                  <thead>
+                    <tr>
+                      <th>Slug</th>
+                      <th>Status</th>
+                      <th>Created</th>
+                      <th>Manage</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {demoLinks.map((link) => (
+                      <tr key={link.demo_site_id}>
+                        <td>{link.slug}</td>
+                        <td>
+                          <StatusBadge status={link.status} />
+                        </td>
+                        <td>{formatDate(link.created_at)}</td>
+                        <td>
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={() => selectDemo(link)}
+                            disabled={busy}
+                          >
+                            Inspect payload
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+          <div className="card" style={{ display: "grid", gap: "0.85rem" }}>
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+              <button className="btn btn-primary" type="button" disabled={busy} onClick={createDemo}>
+                Create restaurant demo draft
+              </button>
+              <button className="btn btn-secondary" type="button" disabled={busy || !demoId} onClick={loadDemoPreview}>
+                Refresh payload
+              </button>
+            </div>
+            {demoId ? (
+              <div style={{ color: "var(--muted)", fontSize: "0.82rem" }}>
+                Selected demo: <code>{demoId}</code>
+              </div>
+            ) : null}
+            {demoToken ? (
+              <div className="alert alert-info" style={{ margin: 0 }}>
+                The new demo&apos;s one-time token is held only in this page session. Create a campaign
+                draft before leaving if you need a retained shareable link.
+              </div>
+            ) : null}
+            {demoPreview ? (
+              <div>
+                <h4 style={{ margin: "0 0 0.45rem", fontSize: "0.9rem" }}>Reviewed public payload</h4>
+                <pre
+                  style={{
+                    margin: 0,
+                    padding: "0.85rem",
+                    background: "var(--bg)",
+                    border: "1px solid var(--line)",
+                    overflow: "auto",
+                    maxHeight: 420,
+                    fontSize: "0.82rem",
+                  }}
+                >
+                  {JSON.stringify(demoPreview, null, 2)}
+                </pre>
+              </div>
+            ) : (
+              <p style={{ color: "var(--muted)", margin: 0 }}>
+                Choose “Inspect payload” on an existing record, or create a new restaurant snapshot.
+              </p>
+            )}
+          </div>
         </div>
       ) : null}
 
       {tab === "campaign" ? (
         <div style={{ display: "grid", gap: "1rem" }}>
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-            <button className="btn btn-primary" type="button" disabled={busy} onClick={createCampaign}>
+            <button
+              className="btn btn-primary"
+              type="button"
+              disabled={busy || !demoId || !demoToken}
+              onClick={createCampaign}
+            >
               Create campaign draft
             </button>
             <button className="btn btn-secondary" type="button" disabled={busy} onClick={loadCampaigns}>
               Refresh list
             </button>
           </div>
+          {!demoToken ? (
+            <p style={{ color: "var(--muted)", margin: 0, fontSize: "0.86rem" }}>
+              Create a new demo draft in the Demo tab first. Demo access tokens are returned only
+              once and are intentionally not recoverable from existing records.
+            </p>
+          ) : null}
           <div className="table-wrap">
             <table className="data">
               <thead>
@@ -720,6 +997,53 @@ function RestaurantDetailInner() {
               </div>
             </div>
           ) : null}
+        </div>
+      ) : null}
+
+      {tab === "engagement" ? (
+        <div style={{ display: "grid", gap: "1rem" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "center" }}>
+            <p style={{ color: "var(--muted)", margin: 0 }}>
+              Outreach-link and admin-preview visits, selected template, active time, and AI receptionist transcript turns for this restaurant.
+            </p>
+            <button className="btn btn-secondary" type="button" onClick={loadEngagement}>
+              Refresh
+            </button>
+          </div>
+          {demoSessions.length === 0 ? (
+            <EmptyState message="No personalized website engagement has been recorded yet." />
+          ) : (
+            demoSessions.map((session) => (
+              <div className="card" key={session.id} style={{ display: "grid", gap: "0.7rem" }}>
+                <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", alignItems: "center" }}>
+                  <strong>{formatDate(session.started_at)}</strong>
+                  <StatusBadge status={templateName(session.template_id)} />
+                  <span>Time on demo: {formatDuration(session.duration_seconds)}</span>
+                  <span style={{ color: "var(--muted)" }}>
+                    Last seen {formatDate(session.last_seen_at)}
+                  </span>
+                  <StatusBadge status={session.ended_at ? "ended" : "active"} />
+                </div>
+                {session.transcript.length === 0 ? (
+                  <p style={{ color: "var(--muted)", margin: 0 }}>No AI receptionist transcript in this visit.</p>
+                ) : (
+                  <div style={{ display: "grid", gap: "0.45rem" }}>
+                    {session.transcript.map((turn) => (
+                      <div key={turn.id} style={{ borderLeft: "3px solid var(--line)", paddingLeft: "0.7rem" }}>
+                        <div style={{ display: "flex", gap: "0.5rem", alignItems: "baseline" }}>
+                          <strong style={{ textTransform: "capitalize" }}>{turn.role}</strong>
+                          <span style={{ color: "var(--muted)", fontSize: "0.78rem" }}>
+                            {formatDate(turn.occurred_at)}
+                          </span>
+                        </div>
+                        <div style={{ whiteSpace: "pre-wrap", marginTop: "0.15rem" }}>{turn.content}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))
+          )}
         </div>
       ) : null}
 

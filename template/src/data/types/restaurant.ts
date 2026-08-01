@@ -10,6 +10,7 @@ export interface StoryStep {
   title: string;
   description: string;
   image: string;
+  imageMedia?: import("./gallery").GalleryImage;
 }
 
 export interface VideoAssets {
@@ -23,6 +24,7 @@ export interface ExperienceCard {
   title: string;
   description: string;
   image: string;
+  imageMedia?: import("./gallery").GalleryImage;
   cta: CTA;
 }
 
@@ -50,11 +52,11 @@ export interface RestaurantContent {
   primaryCTA: CTA;
   secondaryCTA: CTA;
   heroPoster: string;
+  heroMedia?: import("./gallery").GalleryImage;
   videos: VideoAssets;
   storySteps: StoryStep[];
   signatureDishes: import("./menu").MenuItem[];
   menuCategories: import("./menu").MenuCategory[];
-  menuListImages: import("./menuImages").MenuListImage[];
   galleryImages: import("./gallery").GalleryImage[];
   reviews: import("./reviews").Review[];
   experienceCards: ExperienceCard[];

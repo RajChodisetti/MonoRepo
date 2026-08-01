@@ -1,5 +1,6 @@
 import type { MenuItem } from "@/data/types/menu";
 import type { RestaurantContent } from "@/data/types/restaurant";
+import type { GalleryImage } from "@/data/types/gallery";
 
 export type ElysianMenuItem = {
   name: string;
@@ -18,11 +19,13 @@ export type ElysianContent = {
     titleLine2: string;
     subtitle: string;
     poster: string;
+    posterMedia?: RestaurantContent["heroMedia"];
     primaryCTA: { label: string; href: string };
     secondaryCTA: { label: string; href: string };
   };
   about: {
     image: string;
+    imageMedia?: GalleryImage;
     badgeYears: string;
     badgeLabel: string;
     paragraphs: string[];
@@ -47,7 +50,7 @@ export type ElysianContent = {
   };
   footer: {
     tagline: string;
-    instaImages: string[];
+    instaImages: RestaurantContent["galleryImages"];
   };
   show: {
     dishes: boolean;
@@ -200,9 +203,10 @@ export function mapElysianContent(restaurant: RestaurantContent): ElysianContent
   const menuCount = menuItems.length;
   const stats = buildStats(restaurant, menuCount);
   const faq = buildFaq(restaurant);
-  const aboutImage =
-    restaurant.galleryImages.find((g) => g.type === "ambience")?.url ||
-    restaurant.heroPoster;
+  const aboutMedia =
+    restaurant.galleryImages.find((image) => image.type === "ambience") ||
+    restaurant.heroMedia ||
+    restaurant.galleryImages[0];
 
   const timeline = restaurant.storySteps.map((step, i) => ({
     year: step.number || String(2010 + i * 5),
@@ -240,11 +244,13 @@ export function mapElysianContent(restaurant: RestaurantContent): ElysianContent
         : restaurant.name,
       subtitle: restaurant.subheadline,
       poster: restaurant.heroPoster,
+      posterMedia: restaurant.heroMedia,
       primaryCTA: restaurant.primaryCTA,
       secondaryCTA: restaurant.secondaryCTA,
     },
     about: {
-      image: aboutImage,
+      image: aboutMedia?.url || restaurant.heroPoster,
+      imageMedia: aboutMedia,
       badgeYears: restaurant.reviewsCount ? String(Math.min(99, Math.floor(restaurant.reviewsCount / 100) + 1)) : "1",
       badgeLabel: "Years of<br>Culinary Mastery",
       paragraphs,
@@ -269,7 +275,7 @@ export function mapElysianContent(restaurant: RestaurantContent): ElysianContent
     },
     footer: {
       tagline: restaurant.subheadline,
-      instaImages: restaurant.galleryImages.slice(0, 4).map((g) => g.url),
+      instaImages: restaurant.galleryImages.slice(0, 4),
     },
     show: {
       dishes: restaurant.signatureDishes.length > 0,

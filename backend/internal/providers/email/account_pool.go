@@ -153,6 +153,21 @@ func (pool *AccountPool) Send(ctx context.Context, req SendRequest) (SendResult,
 	return pool.sendInMemory(ctx, req)
 }
 
+// SendDirect uses the configured account providers without the durable quota
+// claim. It is intended for bounded, internal-admin manual sends where the
+// caller owns the preview/confirmation and restaurant contact recording.
+func (pool *AccountPool) SendDirect(ctx context.Context, req SendRequest) (SendResult, error) {
+	if pool == nil || len(pool.accounts) == 0 {
+		return SendResult{}, ErrAccountsExhausted
+	}
+	if pool.currentIndex >= len(pool.accounts) {
+		pool.currentIndex = 0
+	}
+	account := pool.accounts[pool.currentIndex]
+	pool.currentIndex = (pool.currentIndex + 1) % len(pool.accounts)
+	return account.provider.Send(ctx, req)
+}
+
 func (pool *AccountPool) sendInMemory(ctx context.Context, req SendRequest) (SendResult, error) {
 	if pool.Exhausted() {
 		return SendResult{}, ErrAccountsExhausted

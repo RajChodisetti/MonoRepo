@@ -793,16 +793,17 @@ Rules:
 
 ## Current Repo Shape
 
-_Last updated: 2026-07-14_
+_Last updated: 2026-07-20_
 
 ```text
 Root Go module with backend under backend/.
-Domain packages include internal/restaurants, demos, auth, campaigns, outreach, scrapejobs, leadprep, and leadreview.
-Automation includes a durable PostgreSQL-backed Python city scrape worker and claimed OCR worker.
-HTTP layer: internal/http with handlers and middleware.
+Domain packages include internal/restaurants, demos, auth, campaigns, outreach, scrapejobs, leadprep, leadreview, and media; providers include Places and S3-compatible durable object storage.
+Automation includes durable PostgreSQL-backed Python city scrape and background email-only OCR workers, plus automation/outreach/scrape_ledger.py and daily_pipeline.py/identity.py; migration 000027 backs the scrape ledger and migration 000030 backs the OCR daily request budget.
+HTTP layer: internal/http with handlers and middleware; backend/internal/developer backs the protected read-only SQL/schema console.
 Platform: internal/platform/{config,db,logger,errors,metadata,migrations,telemetry}.
-SQL migrations: backend/migrations, including durable scrape/OCR/outreach workflow migrations 000015-000024; migration 000024 is not yet deployed. Integration test slot: backend/tests.
-Frontend apps: tuvi-website/app canonical Next.js corporate site, apps/web placeholder, and apps/restaurant-services-catalog Vite restaurant-services catalog.
+SQL migrations: backend/migrations, including durable scrape/OCR/outreach workflow, restaurant-media, demo-ready backfill, template-removal, OCR-reset, and outreach ghost-link cleanup migrations through deployed 000036. Integration test slot: backend/tests.
+Frontend apps: tuvi-website/app canonical Next.js corporate site, apps/web internal admin portal (Next.js, port 3002, BFF-proxied to the main API — no longer a placeholder), apps/restaurant-services-catalog Vite restaurant-services catalog, and template/ personalized demo sites with three active templates.
+Codex project skills: .codex/skills/ui-ux-pro-max from `uipro init --ai codex`.
 Phase 1 docs: docs/phase1/PHASE1_IMPLEMENTATION_GUIDE.md and PHASE1_TECHNICAL_BACKLOG.md.
 Phase 2 docs: docs/phase2/ (placeholders). ADRs: docs/adr/.
 Session docs: docs/SESSION_DELIVERED.md and docs/SESSION_SUMMARY.md.
@@ -810,20 +811,37 @@ Session docs: docs/SESSION_DELIVERED.md and docs/SESSION_SUMMARY.md.
 
 ## Current Implementation State
 
-_Last updated: 2026-07-14_
+_Last updated: 2026-07-20_
 
 ```text
 P1-E01 foundation, P1-008 auth, P1-009 restaurant access, and P1-010 restaurant CRUD are implemented.
 Repository layout now matches docs/phase1/PHASE1_IMPLEMENTATION_GUIDE.md section 5 (domain packages).
-Workflow migrations 000001-000023 and the supporting services are deployed. The local worktree adds PostgreSQL-backed 40/account HTTP outreach pacing across eight hours with 24-hour continuation; migration 000024 and that pacing code remain undeployed.
-Melbourne triggering, OCR execution, pacing deployment, migration 000024, and real outreach remain pending explicit production approval.
+Production app release 91fc93a and migrations 000001-000036 are deployed. Gmail-only env-driven account health, the persisted Outreach UI job toggle, paced 40/account bulk delivery, manual selective outreach sends that bypass the bulk job/global generic-email flag, current three-anchor outreach preview/send (`Personalized demo websites`, `Services catalog`, and unsubscribe), UUID previews with live Google preview fallback, engagement/transcript evidence, contact/Apollo visibility, OCR filtering, secured voice reads, hybrid public media, the clarified mobile template switcher, demo-ready lifecycle backfill, and the internal-admin Developer SQL/schema console are live.
+Three configured Gmail OAuth mailboxes passed their first real-message provider health check. The persisted restaurant email job remains disabled; no bulk outreach job or restaurant delivery attempt was created during deployment.
+The background OCR worker is enabled for canonical-email rows only. PostgreSQL enforces a global 200 vision-request UTC-day ceiling; provider SDK retries are disabled, and timeout/429 claims return to pending without consuming an attempt. Migration 000031 returned 21 legacy fingerprint-less verified profiles to pending; migration 000035 reset fingerprint-less Google OCR classifications for a safe refresh. At deployment verification for 88b58eb, OCR budget was 200/200 and the worker was waiting for the UTC reset.
+The deployed hybrid media pipeline resolves fresh attributed Google Places photos live and requires an exact one-way OCR resource-fingerprint match; owner/licensed media can use S3-compatible storage, OCR enriches placement metadata, and menu documents/unmatched images fail closed on personalized websites. Admin-opened generated UUID previews may request a no-store live Google fallback when reviewed media is empty. The production storage provider remains disabled until a bucket/CDN is provisioned, which affects owner uploads but not the live Google resolver.
+Migration 000032 moved 22 existing `lead` restaurants with draft/published demo records to `demo_ready`; production now has demo_ready=22 and lead=922. Migration 000034 removed Italian Villa `template_id=4`, mapped any existing template 4 demo sessions to template 3, and restored the database constraint to templates 1/2/3.
 ```
 
 ## Recent Agent Updates
 
-_Last updated: 2026-07-14_
+_Last updated: 2026-07-20_
 
 ```text
+2026-07-20 — Backend/Security/Test/DevOps/Documentation — Pushed and deployed 91fc93a/migration 000036 to remove outreach ghost links/buttons from current preview/send and unsent stored drafts. Bulk and ad hoc sends now render current three-anchor copy before tracking injection, old template-specific tracking tokens are no longer generated for current sends, production has zero draft/approved outreach rows with legacy template labels/placeholders or non-three-link HTML, Hotel520's token-gated demo preview returned 200, runtime is `/opt/tuvi/releases/monorepo-91fc93a`, rollback is `/opt/tuvi/releases/monorepo-778c0fe`, API/admin-web logs are clean, and no real email was sent.
+2026-07-19 — Backend/Frontend-adjacent/Security/Test/DevOps/Documentation — Pushed and deployed 778c0fe to let internal-admin manual/selective sends from restaurant list/detail bypass the bulk email-job flag and generic `EMAIL_DISABLE_SENDING` while retaining sender, contact email, campaign draft, suppression, and admin checks. New outreach drafts now render only two promotional links: `Personalized demo websites` and `Services catalog`; production smokes returned 200/307/401 as expected with zero API/admin-web restarts, and no real email was sent during verification.
+2026-07-19 — Backend/Frontend/Security/Test/DevOps/Documentation — Pushed and deployed e4d6801 from a clean origin/master release to add `/admin/developer`, a protected internal-admin read-only SQL console and schema browser with menu-item popularity shortcuts. Production smokes returned 307-to-login for `/admin/developer`, 401 for unauthenticated `/api/v1/developer/schema`, 200 for `/admin/login` and public restaurants, zero restarts on API/admin-web, and live DB counts showed 944 restaurants, 944 menus, and 47 menu item rows.
+2026-07-19 — Frontend/Backend/Test/DevOps/Documentation — Pushed and deployed 88b58eb/migrations 000034-000035 to remove the rejected Italian Villa template and repair generated-preview photos. Template 4 is gone from app/admin/engagement constraints, generated UUID previews can request attributed live Google photos when reviewed media is empty, a live preview returned 10 Google media objects, production smokes returned 200, all Tuvi containers have zero restarts, and rollback points to `/opt/tuvi/releases/monorepo-b2a2f83`.
+2026-07-19 — Frontend/Backend/Test/DevOps/Documentation — Pushed and deployed 5ffddf2/migration 000033 with the Italian Villa experimental personalized-site template; superseded later the same day by 88b58eb removal. The admin Demo tab listed template 4 under Experimental templates, engagement accepted `template_id=4`, production demo/admin/API/voice smokes returned 200, all Tuvi containers had zero restarts, and rollback pointed to `/opt/tuvi/releases/monorepo-3b0c246`.
+2026-07-19 — Backend/DevOps/Test/Documentation — Pushed and deployed cbc2eb8/migration 000032 and installed `.codex/skills/ui-ux-pro-max` via `uipro init --ai codex`. The demo-ready filter is backed by lifecycle updates plus a 22-row production backfill; API/admin/website/demo/voice smokes return 200, all Tuvi containers have zero restarts, outreach remains off with zero active bulk-send jobs, and OCR remains at 200/200 with 0 verified profiles.
+2026-07-19 — Full-Stack/Backend/Frontend/AI-Workflow/Security/Test/DevOps/Documentation — Pushed b5f7299 and packaging fix 6c21c15 directly to master and deployed 6c21c15/migration 000031. Live attributed Google resolution, OCR-aware non-menu website placement, admin media controls, S3-compatible owned media support, and the clear mobile template preview are live. All production surfaces return 200 with zero restarts; OCR is stable and waiting at 200/200 for the UTC reset, outreach remains off, and 3/3 Gmail accounts remain healthy. Durable owner uploads remain disabled pending bucket/CDN configuration.
+2026-07-19 — Full-Stack/Backend/Frontend/AI-Workflow/Security/Test/Documentation — Locally implemented unreleased migration 000031 and hybrid website media: live attributed/non-cached Google resolution, durable S3-compatible owner/licensed assets, non-destructive imports, OCR metadata/template placement, admin upload/status controls, and menu-document exclusion at every public boundary. 165 Go tests and both Node 22 production builds pass; production remains caffcfb/000030 pending storage configuration and approval.
+2026-07-19 — Full-Stack/Backend/Frontend/AI-Workflow/Security/Test/DevOps/Documentation — Pushed and deployed caffcfb with Gmail health/outreach/admin engagement plus a background email-only OCR worker, durable 200/day global vision budget, timeout/429 claim release, and the `/admin` scrape-detail redirect fix. Migrations 000015-000030 were applied; 3/3 Gmail checks are healthy/provider-accepted, restaurant outreach remains off with zero recent attempts, and OCR was running at 17/200 with no email-less claims.
+2026-07-18 — Full-Stack/Backend/Frontend/Security/Test/Documentation — Reconciled the latest merged GitHub state and locally added Gmail-only env-driven credentials/health, a persisted UI outreach switch, presentation plus personalized tracked links, admin and outreach template/foreground-time/transcript evidence, address/phone/Apollo diagnostics, automatic click interest, OCR filtering, and authentication for existing voice reads. Production data shows 708 restaurants, 589 missing email, 511 Apollo `no_candidate`, 78 `skipped_no_domain`, and 119 successful enrichments; no deployment or real email occurred because production has zero Gmail OAuth account records.
+2026-07-17 — AI Workflow/Backend/Frontend/Security/Test/Cost-Eval/DevOps — Benchmarked four low-cost VLM routes, selected Gemma 3 4B via DeepInfra, deployed fd2cc94/migration 000028, and changed OCR verification to require every scraped photo. A one-row production pilot completed 10/10 photos in 51 seconds for about $0.00041; OCR remains disabled and unscheduled.
+2026-07-17 — AI Workflow/Security/Cost-Eval/DevOps — With explicit approval, changed the production OCR model variables to Qwen2.5-VL-7B via Hyperbolic and ran an exactly five-profile pilot after database/config backups. All 50 calls returned HTTP 400 because the live model registry now maps this model only to Featherless; 0 verified / 5 failed, no image rows or drafts, and OCR remains disabled and unscheduled.
+2026-07-17 — Full-Stack/Backend/Security/DevOps — Deployed release 199241c with on-demand attributed Google Places photo URLs, explicit OCR checked state, real restaurant demo snapshots, and UUID-linked generator templates. A three-row OCR preflight resolved images but failed because the configured Qwen2-VL route is no longer served; OCR remains disabled pending explicit approval for a current model route.
+2026-07-16 — Documentation Agent — Merged origin/master (PR #8, admin_portal) into agent/tuvi-oauth-homepage-verification, bringing in the real apps/web admin portal (dashboard, scrape-jobs, restaurants, outreach screens) and automation/outreach scrape-ledger changes; updated docs/SERVICES.md and this Repo Shape entry to match. No production deployment performed; apps/web is not yet wired into infra/docker/docker-compose.vm.yml or the VM Caddyfile.
 2026-07-14 — Frontend/Security/DevOps — Deployed the logo-led Tuvi corporate and restaurant-services redesign plus public Privacy, Terms, and Google Workspace pages as website-only release 4eaf7fa.
 2026-07-14 — Backend/Security/Documentation — Added local durable outreach pacing: 40 account slots over eight hours, persisted 2–5 minute jitter/global gate, one provider attempt per job activation, and migration 24; production remains approval-gated.
 2026-07-14 — Backend/Security/DevOps/Documentation — Implemented the local durable city scrape → OCR → reviewed token-gated demo/campaign → quota-managed HTTP outreach workflow and operating runbook; no production actions were taken.
@@ -836,7 +854,7 @@ _Last updated: 2026-07-14_
 
 ## Active Decisions
 
-_Last updated: 2026-07-14_
+_Last updated: 2026-07-19_
 
 ```text
 - Go is primary backend language.
@@ -846,8 +864,9 @@ _Last updated: 2026-07-14_
 - P1 foundation uses standard net/http routing, slog logging, pgxpool for PostgreSQL, SQL files plus internal migration runner, and an in-memory worker queue. See docs/adr/2026-06-17-p1-foundation-stack.md.
 - Implemented demo links use per-demo random opaque tokens, bcrypt hashes, expiry, and server-side payloads; see ADR `2026-07-14-token-gated-demo-access.md` (core shorthand above remains unchanged).
 - City acquisition is Google Places first with Apollo used only for missing owner/work-email enrichment; one persisted 500-call window resumes after 24 hours.
-- OCR `verified` creates drafts only; profile approval, demo publication, campaign approval, and bulk-start remain separate administrator gates.
-- Bulk outreach supports Google Workspace Gmail and Zoho HTTP APIs with PostgreSQL-backed 40/account cycles, durable eight-hour pacing, 24-hour cooldowns, leases, and at-most-once ambiguity handling; SMTP is rejected. Migration 000024 is still required before this pacing code is deployed.
+- Durable OCR uses `google/gemma-3-4b-it:deepinfra`; only canonical-email rows are claimed, the global vision budget is capped at 200 requests per UTC day in PostgreSQL, and timeout/429 claims return to pending without consuming an attempt. `verified` requires every discovered scraped photo to resolve and return a successful structured result. Verification creates drafts only; profile approval, demo publication, campaign approval, and bulk-start remain separate administrator gates.
+- Personalized-site media uses a hybrid policy: Google Places photos are resolved live with attribution, no application/optimizer caching, and an exact one-way OCR resource-fingerprint match, while only owner-granted or separately licensed assets may be copied into S3-compatible durable storage. Admin-opened generated UUID previews may request a no-store live Google fallback when reviewed media is empty; published/token-gated demos stay on the reviewed-media path. Menu documents and unmatched photos are never public; OCR metadata controls hero/gallery placement. See ADR `2026-07-19-hybrid-restaurant-media.md`.
+- Restaurant outreach uses Google Workspace Gmail only, loaded from an env JSON account list with one OAuth refresh token per mailbox. PostgreSQL backs the admin UI job toggle, 40/account cycles, durable eight-hour pacing, 24-hour cooldowns, leases, at-most-once ambiguity handling, and daily real-message health evidence; SMTP and Google API-key mailbox auth are rejected. See ADR `2026-07-18-gmail-outreach-and-health.md`.
 - AI receptionist is inbound-only for MVP and must disclose AI identity.
 - Phase 2 agents start approval-gated and auditable.
 - Local development prefers subscription-login coding tools, not API-key billing.

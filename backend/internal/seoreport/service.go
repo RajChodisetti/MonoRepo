@@ -276,7 +276,7 @@ func (s *Service) loadEnrichment(ctx context.Context, placeID string) Enrichment
 		Phone:          strings.TrimSpace(content.Phone),
 		Website:        strings.TrimSpace(content.Website),
 		MenuItemCount:  len(content.MenuItems),
-		MenuImageCount: len(content.MenuImages),
+		MenuImageCount: len(content.GalleryImages),
 		HasHours:       len(content.Hours) > 2,
 	}
 }

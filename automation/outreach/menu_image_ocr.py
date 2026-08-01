@@ -29,6 +29,7 @@ from urllib.parse import urljoin, urlparse
 import requests
 from env_loader import load_project_env
 from hf_llm import create_hf_client, hf_api_key, hf_enabled, hf_vision_model
+from ocr_request_budget import OCRDailyBudgetExhausted
 
 load_project_env()
 
@@ -37,8 +38,12 @@ log = logging.getLogger("menu_image_ocr")
 IMAGE_TYPES = frozenset({
     "menu_document",
     "food_photo",
+    "drink",
     "interior",
+    "exterior",
     "logo",
+    "team",
+    "event",
     "other",
 })
 
@@ -52,9 +57,18 @@ CLASSIFY_AND_OCR_PROMPT = """You analyze restaurant photos for a data pipeline.
 Look at the image and return JSON only (no markdown):
 
 {
-  "image_type": "menu_document" | "food_photo" | "interior" | "logo" | "other",
+  "image_type": "menu_document" | "food_photo" | "drink" | "interior" | "exterior" | "logo" | "team" | "event" | "other",
   "confidence": 0.0-1.0,
   "reason": "one short sentence",
+  "caption": "short factual website caption with no invented claims",
+  "alt_text": "concise accessible description of what is visibly shown",
+  "tags": ["up to 8 short visible-content tags"],
+  "quality_score": 0.0-1.0,
+  "hero_score": 0.0-1.0,
+  "orientation": "landscape" | "portrait" | "square" | "unknown",
+  "subject_position": "left" | "center" | "right",
+  "contains_people": true | false,
+  "contains_text": true | false,
   "menu_items": [
     {
       "name": "dish name",
@@ -68,10 +82,21 @@ Look at the image and return JSON only (no markdown):
 
 Rules:
 - menu_document: printed/digital MENU with multiple dish names and often prices (board, paper, PDF screenshot, menu page). NOT a single plated dish photo.
-- food_photo: a prepared dish, drink, or close-up of food on a plate/bowl.
-- interior: dining room, bar, storefront, staff, decor.
+- food_photo: a prepared dish or close-up of food on a plate/bowl.
+- drink: a beverage is the main subject.
+- interior: dining room, bar, seating, or indoor decor.
+- exterior: storefront, patio, facade, entrance, or outdoor restaurant space.
 - logo: brand mark only.
+- team: one or more staff members are the main subject.
+- event: live entertainment, celebration, or hosted restaurant event.
 - other: anything else.
+
+For website metadata:
+- Describe only what is visible. Never invent a dish name, award, quality claim, occasion, location, or restaurant identity.
+- caption may be empty when a useful factual caption is not possible.
+- alt_text should describe the visual, not start with "image of" or "photo of".
+- hero_score measures suitability as a wide website hero: composition, clarity, lighting, and useful negative space.
+- quality_score measures technical/display quality, not how good the restaurant or food is.
 
 For menu_items:
 - ONLY fill menu_items when image_type is menu_document.
@@ -80,6 +105,44 @@ For menu_items:
 - price_numeric: float without currency symbol, or null if unknown.
 - If not a menu, menu_items must be [].
 """
+
+
+class OCRTransientError(RuntimeError):
+    """An OCR input or provider failure that should be retried without penalty."""
+
+
+def _is_transient_provider_error(exc: Exception) -> bool:
+    error_name = type(exc).__name__.lower()
+    if "timeout" in error_name or error_name in {
+        "apiconnectionerror",
+        "ratelimiterror",
+        "connecterror",
+        "networkerror",
+    }:
+        return True
+    raw_status = getattr(exc, "status_code", None)
+    if raw_status is None:
+        raw_status = getattr(exc, "code", None)
+    try:
+        status = int(raw_status)
+    except (TypeError, ValueError):
+        return False
+    return status in (408, 429) or status >= 500
+
+
+def all_scraped_photos_processed(
+    summary: dict,
+    images_discovered: int,
+    resolution_error_count: int,
+) -> bool:
+    """Return true only when every discovered photo has a successful result."""
+    return (
+        images_discovered > 0
+        and resolution_error_count == 0
+        and int(summary.get("images_analyzed") or 0) == images_discovered
+        and int(summary.get("images_succeeded") or 0) == images_discovered
+        and int(summary.get("images_failed") or 0) == 0
+    )
 
 
 @dataclass
@@ -147,6 +210,30 @@ def _parse_json_response(text: str) -> dict:
         text = re.sub(r"^```(?:json)?\s*", "", text)
         text = re.sub(r"\s*```$", "", text)
     return json.loads(text)
+
+
+def _response_usage(response: Any) -> dict[str, int]:
+    """Normalize OpenAI-compatible token usage without depending on SDK types."""
+    usage = getattr(response, "usage", None)
+    if usage is None:
+        return {}
+
+    normalized: dict[str, int] = {}
+    for source_name, target_name in (
+        ("prompt_tokens", "input_tokens"),
+        ("completion_tokens", "output_tokens"),
+        ("total_tokens", "total_tokens"),
+    ):
+        value = getattr(usage, source_name, None)
+        if value is None and isinstance(usage, dict):
+            value = usage.get(source_name)
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            continue
+        if parsed >= 0:
+            normalized[target_name] = parsed
+    return normalized
 
 
 def _validate_image_url(url: str) -> str:
@@ -361,48 +448,87 @@ def _image_ref_for_openai(url: str, image_bytes: bytes, content_type: str) -> di
 
 
 class MenuImageAnalyzer:
-    def __init__(self, cfg: MenuOCRConfig | None = None):
+    def __init__(self, cfg: MenuOCRConfig | None = None, request_budget=None):
         self.cfg = cfg or MenuOCRConfig()
+        self._request_budget = request_budget
         self._hf = None
         self._openai = None
         self._gemini = None
 
         if self.cfg.huggingface_api_key:
-            self._hf = create_hf_client()
+            self._hf = create_hf_client(
+                timeout=max(1.0, float(self.cfg.timeout)),
+                max_retries=0,
+            )
         elif self.cfg.openai_api_key:
             from openai import OpenAI
-            self._openai = OpenAI(api_key=self.cfg.openai_api_key)
+            self._openai = OpenAI(
+                api_key=self.cfg.openai_api_key,
+                timeout=max(1.0, float(self.cfg.timeout)),
+                max_retries=0,
+            )
         elif self.cfg.gemini_api_key:
             from google import genai
-            self._gemini = genai.Client(api_key=self.cfg.gemini_api_key)
+            from google.genai import types
+
+            self._gemini = genai.Client(
+                api_key=self.cfg.gemini_api_key,
+                http_options=types.HttpOptions(
+                    timeout=max(1, int(self.cfg.timeout)) * 1000,
+                    retry_options=types.HttpRetryOptions(attempts=1),
+                ),
+            )
+
+    def _reserve_provider_request(self) -> None:
+        if self._request_budget is None:
+            return
+        snapshot = self._request_budget.reserve()
+        log.info(
+            "  OCR daily request budget: %d/%d used",
+            snapshot.requests_used,
+            snapshot.daily_limit,
+        )
 
     def analyze_image_url(self, url: str) -> dict:
         url = _validate_public_image_target(url)
         host = (urlparse(url).hostname or "").lower()
         is_google = _is_google_image_host(host)
 
-        if self._hf and is_google:
-            return self._analyze_huggingface(url, b"", "image/jpeg")
+        try:
+            if self._hf and is_google:
+                return self._analyze_huggingface(url, b"", "image/jpeg")
 
-        image_bytes, content_type = download_image(
-            url,
-            timeout=self.cfg.timeout,
-            max_bytes=self.cfg.max_image_bytes,
-        )
+            try:
+                image_bytes, content_type = download_image(
+                    url,
+                    timeout=self.cfg.timeout,
+                    max_bytes=self.cfg.max_image_bytes,
+                )
+            except requests.Timeout as exc:
+                raise OCRTransientError("Image download timed out; the OCR claim will be retried") from exc
 
-        if self._hf:
-            return self._analyze_huggingface(url, image_bytes, content_type)
-        if self._openai:
-            return self._analyze_openai(url, image_bytes, content_type)
-        if self._gemini:
-            return self._analyze_gemini(url, image_bytes, content_type)
-        raise RuntimeError(
-            "No vision API configured (set HUGGING_FACE_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY)"
-        )
+            if self._hf:
+                return self._analyze_huggingface(url, image_bytes, content_type)
+            if self._openai:
+                return self._analyze_openai(url, image_bytes, content_type)
+            if self._gemini:
+                return self._analyze_gemini(url, image_bytes, content_type)
+            raise RuntimeError(
+                "No vision API configured (set HUGGING_FACE_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY)"
+            )
+        except (OCRDailyBudgetExhausted, OCRTransientError):
+            raise
+        except Exception as exc:
+            if _is_transient_provider_error(exc):
+                raise OCRTransientError(
+                    "OCR provider timed out or was temporarily unavailable; the claim will be retried"
+                ) from exc
+            raise
 
     def _analyze_huggingface(self, url: str, image_bytes: bytes, content_type: str) -> dict:
         assert self._hf is not None
         image_part = _image_ref_for_openai(url, image_bytes, content_type)
+        self._reserve_provider_request()
         response = self._hf.chat.completions.create(
             model=self.cfg.hf_vision_model,
             messages=[{
@@ -417,11 +543,16 @@ class MenuImageAnalyzer:
         )
         raw = response.choices[0].message.content or "{}"
         parsed = _parse_json_response(raw)
-        return self._normalize_analysis(parsed, url)
+        result = self._normalize_analysis(parsed, url)
+        usage = _response_usage(response)
+        if usage:
+            result["usage"] = usage
+        return result
 
     def _analyze_openai(self, url: str, image_bytes: bytes, content_type: str) -> dict:
         assert self._openai is not None
         image_part = _image_ref_for_openai(url, image_bytes, content_type)
+        self._reserve_provider_request()
         response = self._openai.chat.completions.create(
             model=self.cfg.openai_model,
             messages=[{
@@ -437,13 +568,18 @@ class MenuImageAnalyzer:
         )
         raw = response.choices[0].message.content or "{}"
         parsed = _parse_json_response(raw)
-        return self._normalize_analysis(parsed, url)
+        result = self._normalize_analysis(parsed, url)
+        usage = _response_usage(response)
+        if usage:
+            result["usage"] = usage
+        return result
 
     def _analyze_gemini(self, url: str, image_bytes: bytes, content_type: str) -> dict:
         from google import genai
         from google.genai import types
 
         assert self._gemini is not None
+        self._reserve_provider_request()
         response = self._gemini.models.generate_content(
             model=self.cfg.gemini_model,
             contents=[
@@ -476,6 +612,38 @@ class MenuImageAnalyzer:
             confidence = 0.5
         confidence = max(0.0, min(1.0, confidence))
 
+        def score(name: str, default: float = 0.0) -> float:
+            try:
+                value = float(parsed.get(name))
+            except (TypeError, ValueError):
+                value = default
+            return max(0.0, min(1.0, value))
+
+        def boolean(name: str) -> bool:
+            value = parsed.get(name, False)
+            if isinstance(value, bool):
+                return value
+            return str(value or "").strip().lower() in {"1", "true", "yes"}
+
+        tags: list[str] = []
+        seen_tags: set[str] = set()
+        for raw_tag in parsed.get("tags") or []:
+            tag = str(raw_tag or "").strip()[:40]
+            key = tag.lower()
+            if not tag or key in seen_tags:
+                continue
+            seen_tags.add(key)
+            tags.append(tag)
+            if len(tags) == 8:
+                break
+
+        orientation = str(parsed.get("orientation") or "unknown").strip().lower()
+        if orientation not in {"landscape", "portrait", "square", "unknown"}:
+            orientation = "unknown"
+        subject_position = str(parsed.get("subject_position") or "center").strip().lower()
+        if subject_position not in {"left", "center", "right"}:
+            subject_position = "center"
+
         menu_items: list[dict] = []
         if image_type in MENU_TYPES:
             for raw in parsed.get("menu_items") or []:
@@ -495,6 +663,15 @@ class MenuImageAnalyzer:
             "image_type": image_type,
             "confidence": confidence,
             "reason": (parsed.get("reason") or "").strip(),
+            "caption": str(parsed.get("caption") or "").strip()[:180],
+            "alt_text": str(parsed.get("alt_text") or "").strip()[:180],
+            "tags": tags,
+            "quality_score": score("quality_score", confidence),
+            "hero_score": score("hero_score", 0.0),
+            "orientation": orientation,
+            "subject_position": subject_position,
+            "contains_people": boolean("contains_people"),
+            "contains_text": boolean("contains_text"),
             "menu_items": menu_items,
         }
 
@@ -620,6 +797,8 @@ def enrich_restaurant_with_menu_ocr(
     cfg: MenuOCRConfig | None = None,
     analyzer: MenuImageAnalyzer | None = None,
     analysis_candidates: list[dict] | None = None,
+    *,
+    process_all_candidates: bool = False,
 ) -> dict:
     """
     Classify images, split menu_photos vs gallery, OCR menus, merge menu_items.
@@ -644,7 +823,9 @@ def enrich_restaurant_with_menu_ocr(
         candidate
         for candidate in analysis_candidates
         if isinstance(candidate, dict) and str(candidate.get("analysis_url") or "").strip()
-    ][: cfg.max_images]
+    ]
+    if not process_all_candidates:
+        candidates = candidates[: cfg.max_images]
     if not candidates:
         return record
 
@@ -656,6 +837,9 @@ def enrich_restaurant_with_menu_ocr(
     url_types: dict[str, str] = {}
     images_succeeded = 0
     images_failed = 0
+    input_tokens = 0
+    output_tokens = 0
+    total_tokens = 0
 
     log.info(f"  Menu OCR: analyzing {len(candidates)} image(s)…")
 
@@ -665,11 +849,17 @@ def enrich_restaurant_with_menu_ocr(
         source = str(candidate.get("source") or "public_url").strip()
         source_ref = str(candidate.get("source_ref") or "").strip()
         google_place_id = str(candidate.get("google_place_id") or "").strip()
+        source_index = candidate.get("source_index")
+        source_fingerprint = str(candidate.get("source_fingerprint") or "").strip()
         attribution = candidate.get("author_attributions") or []
         source_metadata = {"source": source}
         if source == "google_places_photo":
             if google_place_id:
                 source_metadata["google_place_id"] = google_place_id
+            if isinstance(source_index, int) and source_index >= 0:
+                source_metadata["source_index"] = source_index
+            if re.fullmatch(r"[0-9a-f]{64}", source_fingerprint):
+                source_metadata["source_fingerprint"] = source_fingerprint
         elif source_ref:
             source_metadata["source_ref"] = source_ref
         if attribution:
@@ -677,6 +867,10 @@ def enrich_restaurant_with_menu_ocr(
         try:
             result = analyzer.analyze_image_url(url)
             images_succeeded += 1
+            usage = result.get("usage") or {}
+            input_tokens += int(usage.get("input_tokens") or 0)
+            output_tokens += int(usage.get("output_tokens") or 0)
+            total_tokens += int(usage.get("total_tokens") or 0)
             image_type = result["image_type"]
             confidence = result["confidence"]
             if persistent_url:
@@ -692,11 +886,29 @@ def enrich_restaurant_with_menu_ocr(
                     if isinstance(item, dict)
                 ]
 
-            persisted_classification = {
-                key: value
-                for key, value in result.items()
-                if key not in ("url", "menu_items")
-            }
+            if persistent_url:
+                persisted_classification = {
+                    key: value
+                    for key, value in result.items()
+                    if key not in ("url", "menu_items", "usage")
+                }
+            else:
+                # Google Places media is live-only. Persist its stable Place ID,
+                # source index, and internal classification, but not generated
+                # website copy or the temporary media URL/name.
+                persisted_classification = {
+                    "image_type": image_type,
+                    "confidence": confidence,
+                    "reason": result.get("reason", ""),
+                }
+            persisted_classification["public_eligible"] = bool(
+                image_type not in MENU_TYPES
+                and confidence >= cfg.min_confidence
+                and not (
+                    image_type == "other"
+                    and bool(result.get("contains_text", False))
+                )
+            )
             persisted_classification["menu_items"] = normalized_items
             if persistent_url:
                 persisted_classification["url"] = persistent_url
@@ -710,7 +922,19 @@ def enrich_restaurant_with_menu_ocr(
                 "reason": result.get("reason", ""),
             }
             if persistent_url:
-                entry.update({"url": persistent_url, "thumbnail": persistent_url})
+                entry.update({
+                    "url": persistent_url,
+                    "thumbnail": persistent_url,
+                    "caption": result.get("caption", ""),
+                    "alt_text": result.get("alt_text", ""),
+                    "tags": result.get("tags", []),
+                    "quality_score": result.get("quality_score"),
+                    "hero_score": result.get("hero_score"),
+                    "orientation": result.get("orientation", "unknown"),
+                    "subject_position": result.get("subject_position", "center"),
+                    "contains_people": result.get("contains_people", False),
+                    "contains_text": result.get("contains_text", False),
+                })
             else:
                 entry.update(source_metadata)
 
@@ -718,17 +942,19 @@ def enrich_restaurant_with_menu_ocr(
                 menu_photos.append(entry)
                 ocr_items.extend(normalized_items)
                 log.info(f"    [{idx}] menu_document ({confidence:.0%}) — {len(normalized_items)} items")
-            elif image_type == "food_photo":
+            elif image_type in ("food_photo", "drink"):
                 gallery.append({**entry, "title": ""})
-                if persistent_url:
+                if persistent_url and image_type == "food_photo":
                     _attach_food_image_to_item(record.get("menu_items") or [], persistent_url)
-                log.info(f"    [{idx}] food_photo ({confidence:.0%})")
-            elif image_type in ("interior", "logo", "other"):
+                log.info(f"    [{idx}] {image_type} ({confidence:.0%})")
+            elif image_type in ("interior", "exterior", "logo", "team", "event", "other"):
                 gallery.append({**entry, "title": image_type})
                 log.info(f"    [{idx}] {image_type} ({confidence:.0%})")
             else:
                 gallery.append({**entry, "title": "uncertain"})
 
+        except (OCRDailyBudgetExhausted, OCRTransientError):
+            raise
         except Exception as exc:
             images_failed += 1
             display_ref = persistent_url or source_ref or source
@@ -779,6 +1005,9 @@ def enrich_restaurant_with_menu_ocr(
         "images_failed": images_failed,
         "menu_photos_found": len(menu_photos),
         "items_extracted": len(ocr_items),
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens": total_tokens,
         "classifications": classifications,
     })
 

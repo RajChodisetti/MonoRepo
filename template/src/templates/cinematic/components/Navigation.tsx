@@ -95,7 +95,7 @@ export default function Navigation({ restaurant }: { restaurant: RestaurantConte
               </a>
             ))}
             <div className="mt-4">
-              <TemplateSwitchButton variant="cinematic" />
+              <TemplateSwitchButton variant="cinematic" mode="mobile" />
             </div>
             <a
               href={restaurant.primaryCTA.href}

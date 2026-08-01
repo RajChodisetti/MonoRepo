@@ -6,6 +6,7 @@ Protocol:
     binary  = raw PCM16 audio @ 16kHz mono  →  InputAudioRawFrame
     text    = {"event": "stop"}             →  EndFrame
     text    = {"event": "user_email", "email": "..."}  → mailbox (no frame)
+    text    = {"event": "user_booking_details", ...}     → mailbox (no frame)
 
   Server → Browser:
     binary  = raw PCM16 audio @ 16kHz mono  ←  OutputAudioRawFrame
@@ -24,7 +25,7 @@ from pipecat.serializers.base_serializer import FrameSerializer
 class BrowserFrameSerializer(FrameSerializer):
     """
     Converts between raw PCM16 WebSocket binary frames and pipecat audio frames.
-    Optional `mailbox` receives typed form events (e.g. user_email) during a session.
+    Optional `mailbox` receives typed form events during a session.
     """
 
     def __init__(self, mailbox: dict[str, Any] | None = None):
@@ -55,6 +56,18 @@ class BrowserFrameSerializer(FrameSerializer):
             fut = self._mailbox.get("email_future")
             if fut is not None and not fut.done():
                 fut.set_result((msg.get("email") or "").strip())
+            return None
+
+        if event == "user_booking_details":
+            fut = self._mailbox.get("booking_details_future")
+            if fut is not None and not fut.done():
+                fut.set_result(
+                    {
+                        "prospect_name": (msg.get("prospect_name") or "").strip(),
+                        "prospect_email": (msg.get("prospect_email") or "").strip(),
+                        "prospect_phone": (msg.get("prospect_phone") or "").strip(),
+                    }
+                )
             return None
 
         return None

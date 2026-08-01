@@ -57,6 +57,14 @@ cd tuvi-website/app && npm run dev
 Set `MONOREPO_API_URL=http://localhost:8080` and `TUVI_API_TOKEN` in `voice-sales-agent/.env`.
 
 **Book a Call** (`/book`) uses the main API's company consultation endpoints. Voice AI bookings use the same endpoints.
+After a visitor confirms an available slot in the browser voice assistant, the
+assistant opens one required on-screen form for name, email, and phone. The
+voice agent confirms the booking only after that form is submitted and the API
+returns success.
+
+PostgreSQL `company_consultations` is the current source of truth for available
+and confirmed consultation slots. Google Calendar synchronization is deferred;
+confirmed database slots are removed from subsequent availability responses.
 
 ## Structure
 

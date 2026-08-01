@@ -1,7 +1,8 @@
 "use client";
 
-import Image from "next/image";
 import type { ExperienceCard } from "@/data/types/restaurant";
+import SourceAwareImage, { mediaForURL } from "@/components/SourceAwareImage";
+import PhotoAttribution from "@/components/PhotoAttribution";
 
 export default function ExperienceCards({ cards }: { cards: ExperienceCard[] }) {
   return (
@@ -11,32 +12,39 @@ export default function ExperienceCards({ cards }: { cards: ExperienceCard[] }) 
         <h2 className="font-display mt-3 text-4xl text-cream md:text-5xl">More ways to dine</h2>
 
         <div className="mt-12 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-          {cards.map((card) => (
-            <article
-              key={card.id}
-              className="group relative min-h-[320px] overflow-hidden rounded-xl"
-            >
-              <Image
-                src={card.image}
-                alt={card.title}
-                fill
-                loading="lazy"
-                className="object-cover transition duration-700 group-hover:scale-110"
-                sizes="(max-width: 768px) 100vw, 25vw"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-charcoal via-charcoal/40 to-transparent transition group-hover:from-charcoal/95" />
-              <div className="absolute inset-x-0 bottom-0 p-6 transition group-hover:-translate-y-2">
-                <h3 className="font-display text-2xl text-cream">{card.title}</h3>
-                <p className="mt-2 text-sm text-cream/70">{card.description}</p>
-                <a
-                  href={card.cta.href}
-                  className="mt-4 inline-flex text-xs font-semibold uppercase tracking-wider text-brass opacity-0 transition group-hover:opacity-100"
-                >
-                  {card.cta.label} →
-                </a>
-              </div>
-            </article>
-          ))}
+          {cards.map((card) => {
+            const media = card.imageMedia || mediaForURL(card.image, card.title);
+            return (
+              <article
+                key={card.id}
+                className="group relative min-h-[320px] overflow-hidden rounded-xl"
+              >
+                <SourceAwareImage
+                  media={media}
+                  fill
+                  loading="lazy"
+                  className="object-cover transition duration-700 group-hover:scale-110"
+                  sizes="(max-width: 768px) 100vw, 25vw"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-charcoal via-charcoal/40 to-transparent transition group-hover:from-charcoal/95" />
+                {media.sourceKind === "google_places_live" ? (
+                  <div className="absolute inset-x-3 top-3 z-10 rounded bg-black/65 px-2 py-1 text-white/80">
+                    <PhotoAttribution media={media} compact />
+                  </div>
+                ) : null}
+                <div className="absolute inset-x-0 bottom-0 p-6 transition group-hover:-translate-y-2">
+                  <h3 className="font-display text-2xl text-cream">{card.title}</h3>
+                  <p className="mt-2 text-sm text-cream/70">{card.description}</p>
+                  <a
+                    href={card.cta.href}
+                    className="mt-4 inline-flex text-xs font-semibold uppercase tracking-wider text-brass opacity-0 transition group-hover:opacity-100"
+                  >
+                    {card.cta.label} →
+                  </a>
+                </div>
+              </article>
+            );
+          })}
         </div>
       </div>
     </section>

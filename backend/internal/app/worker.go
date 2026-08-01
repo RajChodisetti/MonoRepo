@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/campaigns"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/jobs"
@@ -20,12 +21,13 @@ import (
 )
 
 type WorkerApp struct {
-	cfg    config.Config
-	log    *slog.Logger
-	db     *db.DB
-	store  *store.Store
-	queue  *jobs.PostgresQueue
-	worker *jobs.Worker
+	cfg         config.Config
+	log         *slog.Logger
+	db          *db.DB
+	store       *store.Store
+	queue       *jobs.PostgresQueue
+	worker      *jobs.Worker
+	emailHealth *emailprovider.HealthService
 }
 
 func NewWorker(ctx context.Context) (*WorkerApp, error) {
@@ -75,6 +77,10 @@ func NewWorker(ctx context.Context) (*WorkerApp, error) {
 	}
 
 	outreachRepo := outreach.NewPostgres(dataStore.Pool())
+	emailHealth, err := emailprovider.NewHealthServiceFromConfig(ctx, cfg.Email, cfg.Outreach, outreachRepo)
+	if err != nil {
+		return nil, err
+	}
 	outreachAccountPool, outreachPoolErr := emailprovider.NewPersistentAccountPoolFromConfig(
 		ctx,
 		cfg.Email,
@@ -89,8 +95,10 @@ func NewWorker(ctx context.Context) (*WorkerApp, error) {
 		dataStore.Pool(),
 		dataStore.Campaigns,
 		campaignService,
+		accessService,
 		outreach.DemoTokenResolver{Campaigns: dataStore.Campaigns, Demos: dataStore.Demos},
 		outreachAccountPool,
+		emailProvider,
 		cfg.Email,
 		cfg.Outreach,
 		nil,
@@ -103,12 +111,13 @@ func NewWorker(ctx context.Context) (*WorkerApp, error) {
 	}
 
 	return &WorkerApp{
-		cfg:    cfg,
-		log:    log,
-		db:     database,
-		store:  dataStore,
-		queue:  queue,
-		worker: worker,
+		cfg:         cfg,
+		log:         log,
+		db:          database,
+		store:       dataStore,
+		queue:       queue,
+		worker:      worker,
+		emailHealth: emailHealth,
 	}, nil
 }
 
@@ -117,6 +126,7 @@ func (w *WorkerApp) Run(ctx context.Context) error {
 	defer stop()
 
 	w.queue.StartPoller(ctx)
+	go w.runEmailHealthChecks(ctx)
 
 	sample, err := jobs.NewSampleJob("worker booted")
 	if err != nil {
@@ -134,4 +144,28 @@ func (w *WorkerApp) Run(ctx context.Context) error {
 		return nil
 	}
 	return err
+}
+
+func (w *WorkerApp) runEmailHealthChecks(ctx context.Context) {
+	if w.emailHealth == nil {
+		return
+	}
+	run := func() {
+		checkCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+		defer cancel()
+		if err := w.emailHealth.RunDue(checkCtx); err != nil {
+			w.log.ErrorContext(ctx, "gmail_health_check_failed", "error", err)
+		}
+	}
+	run()
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			run()
+		}
+	}
 }

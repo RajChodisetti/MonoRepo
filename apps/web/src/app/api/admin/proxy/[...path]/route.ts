@@ -26,11 +26,11 @@ async function proxy(request: NextRequest, ctx: Ctx) {
   };
 
   const method = request.method.toUpperCase();
-  let body: string | undefined;
+  let body: ArrayBuffer | undefined;
   if (method !== "GET" && method !== "HEAD") {
-    const text = await request.text();
-    if (text) {
-      body = text;
+    const bytes = await request.arrayBuffer();
+    if (bytes.byteLength > 0) {
+      body = bytes;
       headers["Content-Type"] =
         request.headers.get("content-type") || "application/json";
     }

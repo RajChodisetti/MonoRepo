@@ -1,5 +1,5 @@
 import type { RestaurantContent } from "@/data/types/restaurant";
-import { fetchSignedDemo, fetchSiteRestaurant, getRestaurantCountFromApi } from "./restaurantSiteApi";
+import { fetchSignedDemo, fetchSiteRestaurant, fetchSiteRestaurantByID, getRestaurantCountFromApi } from "./restaurantSiteApi";
 import { loadRestaurant as loadRestaurantFromJson, getRestaurantCount as getJsonRestaurantCount } from "./scrapedRestaurant";
 
 export { parseRestaurantIndex } from "./scrapedRestaurant";
@@ -16,6 +16,14 @@ export async function loadRestaurantFromApiOnly(index: number): Promise<Restaura
     throw new Error(
       `Restaurant index ${index} not found via API. Ensure NEXT_PUBLIC_API_URL is set and the API is running.`,
     );
+  }
+  return fromApi;
+}
+
+export async function loadRestaurantByID(restaurantID: string): Promise<RestaurantContent> {
+  const fromApi = await fetchSiteRestaurantByID(restaurantID);
+  if (!fromApi) {
+    throw new Error(`Restaurant ${restaurantID} was not found via the restaurant API.`);
   }
   return fromApi;
 }

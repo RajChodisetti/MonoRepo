@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,6 +16,7 @@ import (
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/campaigns"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/config"
 	emailprovider "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/email"
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/restaurants"
 )
 
 type Service struct {
@@ -22,8 +24,10 @@ type Service struct {
 	pool            *pgxpool.Pool
 	campaigns       campaigns.Repository
 	campaignService *campaigns.Service
+	restaurants     *restaurants.Service
 	tokenResolver   DemoTokenResolver
 	emailPool       *emailprovider.AccountPool
+	emailProvider   emailprovider.Provider
 	emailCfg        config.EmailConfig
 	outreachCfg     config.OutreachConfig
 	enqueuer        BulkJobEnqueuer
@@ -35,8 +39,10 @@ func NewService(
 	pool *pgxpool.Pool,
 	campaignsRepo campaigns.Repository,
 	campaignService *campaigns.Service,
+	restaurantsService *restaurants.Service,
 	tokenResolver DemoTokenResolver,
 	emailPool *emailprovider.AccountPool,
+	emailProvider emailprovider.Provider,
 	emailCfg config.EmailConfig,
 	outreachCfg config.OutreachConfig,
 	enqueuer BulkJobEnqueuer,
@@ -50,8 +56,10 @@ func NewService(
 		pool:            pool,
 		campaigns:       campaignsRepo,
 		campaignService: campaignService,
+		restaurants:     restaurantsService,
 		tokenResolver:   tokenResolver,
 		emailPool:       emailPool,
+		emailProvider:   emailProvider,
 		emailCfg:        emailCfg,
 		outreachCfg:     outreachCfg,
 		enqueuer:        enqueuer,
@@ -59,39 +67,51 @@ func NewService(
 	}
 }
 
-func (service *Service) TriggerBulkSend(ctx context.Context, principal auth.Principal) (TriggerResult, error) {
+func (service *Service) SetEmailJob(ctx context.Context, principal auth.Principal, enabled bool) (EmailJobActionResult, error) {
 	if !auth.IsInternalAdmin(principal.Role) {
-		return TriggerResult{}, fmt.Errorf("forbidden")
+		return EmailJobActionResult{}, fmt.Errorf("forbidden")
 	}
-	if !service.emailSendingEnabled() {
-		return TriggerResult{}, ErrSendingDisabled
+	if !enabled {
+		control, err := SetEmailJobControl(ctx, service.pool, false, nil)
+		return EmailJobActionResult{
+			EmailJob: control,
+			Status:   "disabled",
+			MaxSends: service.outreachCfg.BulkMax,
+		}, err
 	}
 	if service.emailPool == nil {
-		return TriggerResult{}, ErrNotConfigured
+		return EmailJobActionResult{}, ErrNotConfigured
 	}
 	if err := validateBulkMax(service.outreachCfg.BulkMax); err != nil {
-		return TriggerResult{}, err
+		return EmailJobActionResult{}, err
 	}
-
 	active, _, err := HasActiveBulkJob(ctx, service.pool, BulkSendJobType)
 	if err != nil {
-		return TriggerResult{}, err
+		return EmailJobActionResult{}, err
 	}
 	if active {
-		return TriggerResult{}, ErrBulkJobActive
+		return EmailJobActionResult{}, ErrBulkJobActive
 	}
-
 	pending, err := service.repo.CountEligibleLeads(ctx)
 	if err != nil {
-		return TriggerResult{}, err
+		return EmailJobActionResult{}, err
 	}
-
+	control, err := SetEmailJobControl(ctx, service.pool, true, &principal.UserID)
+	if err != nil {
+		return EmailJobActionResult{}, err
+	}
 	jobID, err := service.enqueuer.EnqueueBulkSend(ctx, principal.UserID)
 	if err != nil {
-		return TriggerResult{}, err
+		// A concurrent admin activation may have won the queue's unique active-job
+		// constraint after our read check. Keep the shared control enabled for that
+		// winning job; only revert when no active job was created.
+		if !errors.Is(err, ErrBulkJobActive) {
+			_, _ = SetEmailJobControl(ctx, service.pool, false, nil)
+		}
+		return EmailJobActionResult{}, err
 	}
-
-	return TriggerResult{
+	return EmailJobActionResult{
+		EmailJob:             control,
 		JobID:                jobID,
 		Status:               "queued",
 		MaxSends:             service.outreachCfg.BulkMax,
@@ -113,6 +133,11 @@ func (service *Service) GetStatus(ctx context.Context, principal auth.Principal)
 		PendingEligibleCount: pending,
 		MaxSends:             service.outreachCfg.BulkMax,
 	}
+	control, err := GetEmailJobControl(ctx, service.pool)
+	if err != nil {
+		return StatusResult{}, err
+	}
+	result.EmailJob = control
 	if service.emailPool != nil && service.emailPool.Durable() {
 		nextAvailableAt, err := service.emailPool.NextAvailableAt(ctx)
 		if err != nil {
@@ -158,8 +183,13 @@ func (service *Service) RunBulkSend(ctx context.Context, triggeredBy uuid.UUID, 
 	}
 	startedAttempted := summary.Attempted
 
-	if !service.emailSendingEnabled() {
-		return summary, ErrSendingDisabled
+	jobControl, err := GetEmailJobControl(ctx, service.pool)
+	if err != nil {
+		return summary, err
+	}
+	if service.pool != nil && !jobControl.Enabled {
+		summary.StoppedReason = "disabled_by_admin"
+		return summary, nil
 	}
 	if service.emailPool == nil {
 		return summary, ErrNotConfigured
@@ -180,10 +210,21 @@ func (service *Service) RunBulkSend(ctx context.Context, triggeredBy uuid.UUID, 
 
 	if len(leads) == 0 {
 		summary.StoppedReason = "no_eligible_leads"
+		_, _ = SetEmailJobControl(ctx, service.pool, false, nil)
 		return summary, nil
 	}
 
 	for _, lead := range leads {
+		if service.pool != nil {
+			control, controlErr := GetEmailJobControl(ctx, service.pool)
+			if controlErr != nil {
+				return summary, controlErr
+			}
+			if !control.Enabled {
+				summary.StoppedReason = "disabled_by_admin"
+				break
+			}
+		}
 		if !service.emailPool.Durable() && service.emailPool.Exhausted() {
 			summary.StoppedReason = "account_limit_reached"
 			break
@@ -222,6 +263,7 @@ func (service *Service) RunBulkSend(ctx context.Context, triggeredBy uuid.UUID, 
 			)
 			summary.Failed++
 			summary.StoppedReason = "delivery_error"
+			_, _ = SetEmailJobControl(ctx, service.pool, false, nil)
 			return summary, err
 		} else if sent {
 			summary.Attempted++
@@ -276,6 +318,9 @@ func (service *Service) RunBulkSend(ctx context.Context, triggeredBy uuid.UUID, 
 		"triggered_by", triggeredBy,
 		"stopped_reason", summary.StoppedReason,
 	)
+	if summary.NextAvailableAt == nil {
+		_, _ = SetEmailJobControl(ctx, service.pool, false, nil)
+	}
 
 	return summary, nil
 }
@@ -336,11 +381,11 @@ func (service *Service) sendLead(ctx context.Context, lead EligibleLead, bulkJob
 		return false, fmt.Errorf("build tracking urls: %w", err)
 	}
 
-	draft := campaigns.InjectTracking(campaigns.DraftContent{
-		Subject:  campaign.Subject,
-		BodyHTML: campaign.BodyHTML,
-		BodyText: campaign.BodyText,
-	}, trackingURLs, service.emailCfg.OpenTrackingEnabled)
+	content, err := service.campaignService.BuildCurrentOutreachDraft(sendCtx.RestaurantName)
+	if err != nil {
+		return false, fmt.Errorf("render current outreach email: %w", err)
+	}
+	draft := campaigns.InjectTracking(content, trackingURLs, service.emailCfg.OpenTrackingEnabled)
 	if err := campaigns.ValidateRenderedEmail(draft, service.emailCfg.RequireHTTPSLinks, service.emailCfg.AllowedLinkHosts...); err != nil {
 		return false, fmt.Errorf("validate rendered outreach email: %w", err)
 	}
@@ -452,8 +497,163 @@ func (service *Service) sendLead(ctx context.Context, lead EligibleLead, bulkJob
 	return true, nil
 }
 
-func (service *Service) emailSendingEnabled() bool {
-	return !service.emailCfg.DisableSending
+// latestCampaignContent returns the most recently created campaign for a
+// restaurant (any status). The campaign record still carries the demo token
+// and audit identity, but list/Get canonicalize outreach copy so ad hoc
+// preview/send uses the current three-link template instead of stale HTML.
+func (service *Service) latestCampaignContent(ctx context.Context, principal auth.Principal, restaurantID uuid.UUID) (campaigns.Campaign, error) {
+	records, err := service.campaignService.ListByRestaurant(ctx, principal, restaurantID)
+	if err != nil {
+		return campaigns.Campaign{}, err
+	}
+	if len(records) == 0 {
+		return campaigns.Campaign{}, ErrNoCampaignDraft
+	}
+	return records[0], nil
+}
+
+// PreviewAdHoc renders what an ad hoc send would deliver right now, without
+// sending or mutating any state.
+func (service *Service) PreviewAdHoc(ctx context.Context, principal auth.Principal, restaurantID uuid.UUID) (AdHocPreview, error) {
+	if !auth.IsInternalAdmin(principal.Role) {
+		return AdHocPreview{}, restaurants.ErrForbidden
+	}
+
+	restaurant, err := service.restaurants.GetRestaurant(ctx, principal, restaurantID)
+	if err != nil {
+		return AdHocPreview{}, err
+	}
+
+	campaign, err := service.latestCampaignContent(ctx, principal, restaurantID)
+	if err != nil {
+		return AdHocPreview{}, err
+	}
+	previewURLs, err := service.campaignService.BuildAdHocPreviewURLs(ctx, campaign)
+	if err != nil {
+		return AdHocPreview{}, fmt.Errorf("%w: %v", ErrDemoLinkInvalid, err)
+	}
+	draft := campaigns.InjectTracking(campaigns.DraftContent{
+		Subject:  campaign.Subject,
+		BodyHTML: campaign.BodyHTML,
+		BodyText: campaign.BodyText,
+	}, previewURLs, false)
+
+	return AdHocPreview{
+		RestaurantID:   restaurantID,
+		RestaurantName: restaurant.Name,
+		RecipientEmail: restaurant.Email,
+		Subject:        draft.Subject,
+		BodyHTML:       draft.BodyHTML,
+		BodyText:       draft.BodyText,
+	}, nil
+}
+
+// SendAdHoc sends the latest campaign draft's rendered content to a single
+// restaurant immediately, outside the quota-managed bulk pipeline. It ignores
+// the generic EMAIL_DISABLE_SENDING flag and the bulk email-job control, but
+// still requires an internal admin, a configured sender, a valid contact email,
+// and an unsuppressed recipient.
+func (service *Service) SendAdHoc(ctx context.Context, principal auth.Principal, restaurantID uuid.UUID) (AdHocSendResult, error) {
+	if !auth.IsInternalAdmin(principal.Role) {
+		return AdHocSendResult{RestaurantID: restaurantID}, restaurants.ErrForbidden
+	}
+	if service.emailPool == nil && service.emailProvider == nil {
+		return AdHocSendResult{RestaurantID: restaurantID}, ErrNotConfigured
+	}
+
+	restaurant, err := service.restaurants.GetRestaurant(ctx, principal, restaurantID)
+	if err != nil {
+		return AdHocSendResult{RestaurantID: restaurantID}, err
+	}
+	email := strings.TrimSpace(restaurant.Email)
+	if email == "" {
+		return AdHocSendResult{RestaurantID: restaurantID}, ErrNoContactEmail
+	}
+
+	suppressed, err := service.repo.IsEmailSuppressed(ctx, email)
+	if err != nil {
+		return AdHocSendResult{RestaurantID: restaurantID}, err
+	}
+	if suppressed {
+		return AdHocSendResult{RestaurantID: restaurantID}, ErrEmailSuppressed
+	}
+
+	campaign, err := service.latestCampaignContent(ctx, principal, restaurantID)
+	if err != nil {
+		return AdHocSendResult{RestaurantID: restaurantID}, err
+	}
+	trackingURLs, err := service.campaignService.BuildAdHocTrackingURLs(ctx, campaign, email)
+	if err != nil {
+		return AdHocSendResult{RestaurantID: restaurantID}, fmt.Errorf("%w: %v", ErrDemoLinkInvalid, err)
+	}
+	draft := campaigns.InjectTracking(campaigns.DraftContent{
+		Subject:  campaign.Subject,
+		BodyHTML: campaign.BodyHTML,
+		BodyText: campaign.BodyText,
+	}, trackingURLs, service.emailCfg.OpenTrackingEnabled)
+	if err := campaigns.ValidateRenderedEmail(draft, service.emailCfg.RequireHTTPSLinks, service.emailCfg.AllowedLinkHosts...); err != nil {
+		return AdHocSendResult{RestaurantID: restaurantID}, fmt.Errorf("validate rendered ad hoc email: %w", err)
+	}
+
+	sendRequest := emailprovider.SendRequest{
+		To:       email,
+		Subject:  draft.Subject,
+		HTMLBody: draft.BodyHTML,
+		TextBody: draft.BodyText,
+		Metadata: map[string]string{
+			"restaurant_id": restaurantID.String(),
+			"campaign_id":   campaign.ID.String(),
+			"send_type":     "adhoc",
+		},
+	}
+	var result emailprovider.SendResult
+	if service.emailPool != nil {
+		result, err = service.emailPool.SendDirect(ctx, sendRequest)
+	} else {
+		result, err = service.emailProvider.Send(ctx, sendRequest)
+	}
+	if err != nil {
+		return AdHocSendResult{RestaurantID: restaurantID}, fmt.Errorf("send ad hoc email: %w", err)
+	}
+	if result.Skipped || result.RedirectedTo != "" {
+		return AdHocSendResult{RestaurantID: restaurantID}, ErrDeliverySkipped
+	}
+
+	if err := service.repo.RecordAdHocEmailSent(ctx, restaurantID, email); err != nil {
+		service.log.ErrorContext(ctx, "adhoc_email_sent_but_record_failed",
+			"restaurant_id", restaurantID.String(), "error", err)
+	}
+
+	return AdHocSendResult{RestaurantID: restaurantID, Sent: true}, nil
+}
+
+// SendAdHocBatch sends to multiple restaurants, collecting a per-restaurant
+// result rather than failing the whole batch on one lead's error. Capped to
+// keep this synchronous HTTP-request path bounded — unlike the durable bulk
+// pipeline, ad hoc sends have no async job queue or pacing.
+const adHocBatchLimit = 25
+
+func (service *Service) SendAdHocBatch(ctx context.Context, principal auth.Principal, restaurantIDs []uuid.UUID) ([]AdHocSendResult, error) {
+	if !auth.IsInternalAdmin(principal.Role) {
+		return nil, restaurants.ErrForbidden
+	}
+	if len(restaurantIDs) == 0 {
+		return nil, fmt.Errorf("restaurant_ids must not be empty")
+	}
+	if len(restaurantIDs) > adHocBatchLimit {
+		return nil, fmt.Errorf("cannot send to more than %d restaurants at once", adHocBatchLimit)
+	}
+
+	results := make([]AdHocSendResult, 0, len(restaurantIDs))
+	for _, restaurantID := range restaurantIDs {
+		result, err := service.SendAdHoc(ctx, principal, restaurantID)
+		if err != nil {
+			result.RestaurantID = restaurantID
+			result.Error = err.Error()
+		}
+		results = append(results, result)
+	}
+	return results, nil
 }
 
 func (service *Service) UpdateJobSummary(

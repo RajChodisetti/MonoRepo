@@ -2,13 +2,11 @@ package outreach_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 
-	"github.com/rajchodisetti/restaurant-platform/backend/internal/auth"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/campaigns"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/demos"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/outreach"
@@ -32,16 +30,12 @@ func (repo *mockRepo) CountEligibleLeads(ctx context.Context) (int, error) {
 	return repo.count, nil
 }
 
-type mockEnqueuer struct {
-	jobID string
-	err   error
+func (repo *mockRepo) IsEmailSuppressed(ctx context.Context, email string) (bool, error) {
+	return false, nil
 }
 
-func (enqueuer *mockEnqueuer) EnqueueBulkSend(ctx context.Context, triggeredBy uuid.UUID) (string, error) {
-	if enqueuer.err != nil {
-		return "", enqueuer.err
-	}
-	return enqueuer.jobID, nil
+func (repo *mockRepo) RecordAdHocEmailSent(ctx context.Context, restaurantID uuid.UUID, recipientEmail string) error {
+	return nil
 }
 
 type mockEmailProvider struct{}
@@ -57,93 +51,6 @@ func testAccountPool(t *testing.T) *emailprovider.AccountPool {
 		t.Fatalf("NewAccountPool() error = %v", err)
 	}
 	return pool
-}
-
-func TestTriggerBulkSendRequiresConfiguredAccounts(t *testing.T) {
-	service := outreach.NewService(
-		&mockRepo{count: 3},
-		nil,
-		nil,
-		nil,
-		outreach.DemoTokenResolver{},
-		nil,
-		config.EmailConfig{Provider: "zoho"},
-		config.OutreachConfig{BulkMax: 150},
-		&mockEnqueuer{jobID: "job-1"},
-		nil,
-	)
-
-	_, err := service.TriggerBulkSend(context.Background(), auth.Principal{
-		Role:   auth.RoleInternalAdmin,
-		UserID: uuid.New(),
-	})
-	if !errors.Is(err, outreach.ErrNotConfigured) {
-		t.Fatalf("TriggerBulkSend() error = %v, want ErrNotConfigured", err)
-	}
-}
-
-func TestTriggerBulkSendEnqueuesJob(t *testing.T) {
-	service := outreach.NewService(
-		&mockRepo{count: 7},
-		nil,
-		nil,
-		nil,
-		outreach.DemoTokenResolver{},
-		testAccountPool(t),
-		config.EmailConfig{},
-		config.OutreachConfig{
-			BulkMax: 150,
-			GoogleWorkspaceAccounts: []config.GmailMailConfig{{
-				AccountKey:   "workspace-sales-1",
-				MailboxEmail: "sales1@example.com",
-				ClientID:     "a",
-				ClientSecret: "b",
-				RefreshToken: "c",
-			}},
-		},
-		&mockEnqueuer{jobID: "job-123"},
-		nil,
-	)
-
-	result, err := service.TriggerBulkSend(context.Background(), auth.Principal{
-		Role:   auth.RoleInternalAdmin,
-		UserID: uuid.New(),
-	})
-	if err != nil {
-		t.Fatalf("TriggerBulkSend() error = %v, want nil", err)
-	}
-	if result.JobID != "job-123" {
-		t.Fatalf("JobID = %q, want job-123", result.JobID)
-	}
-	if result.PendingEligibleCount != 7 {
-		t.Fatalf("PendingEligibleCount = %d, want 7", result.PendingEligibleCount)
-	}
-}
-
-func TestTriggerBulkSendRejectsDisabledSending(t *testing.T) {
-	service := outreach.NewService(
-		&mockRepo{count: 7},
-		nil,
-		nil,
-		nil,
-		outreach.DemoTokenResolver{},
-		testAccountPool(t),
-		config.EmailConfig{Provider: "zoho", DisableSending: true},
-		config.OutreachConfig{
-			BulkMax:      150,
-			ZohoAccounts: []config.ZohoMailConfig{{AccountID: "1", ClientID: "a", ClientSecret: "b", RefreshToken: "c"}},
-		},
-		&mockEnqueuer{jobID: "job-123"},
-		nil,
-	)
-
-	_, err := service.TriggerBulkSend(context.Background(), auth.Principal{
-		Role:   auth.RoleInternalAdmin,
-		UserID: uuid.New(),
-	})
-	if !errors.Is(err, outreach.ErrSendingDisabled) {
-		t.Fatalf("TriggerBulkSend() error = %v, want ErrSendingDisabled", err)
-	}
 }
 
 func TestRunBulkSendUsesExistingApprovedCampaign(t *testing.T) {
@@ -207,8 +114,10 @@ func TestRunBulkSendUsesExistingApprovedCampaign(t *testing.T) {
 		nil,
 		campaignRepo,
 		campaignService,
+		nil,
 		outreach.DemoTokenResolver{},
 		testAccountPool(t),
+		nil,
 		config.EmailConfig{Provider: "zoho"},
 		config.OutreachConfig{
 			BulkMax:      150,

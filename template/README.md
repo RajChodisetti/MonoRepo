@@ -1,13 +1,12 @@
-# Restaurant Website Templates (Dual)
+# Restaurant Website Templates
 
-Two premium Next.js templates sharing the same restaurant JSON data, switched via `TEMPLATE` env variable.
+Premium Next.js templates sharing the same restaurant payload, switched via `TEMPLATE` env variable or `?template=`.
 
 | `TEMPLATE` | Name | Style |
 |------------|------|-------|
 | `1` (default) | **Cinematic** | Warm charcoal/brass, scroll-video storytelling |
 | `2` | **Aurora** | Futuristic navy/purple, glassmorphism, SaaS-tech motion |
-| `3` | **Elysian** | Ultra-premium gold/black fine dining |
-| `4` | **Foodie** | Bright cream/orange casual dining — static landing page (data wiring pending) |
+| `3` | **Elysian** | Premium black/gold reservation-led dining |
 
 ## Quick start
 
@@ -24,23 +23,18 @@ npm run dev:aurora
 # or: TEMPLATE=2 npm run dev
 # http://localhost:3000/?id=0
 
-# Template 4 — Foodie (static landing, no ?id needed)
-npm run dev:foodie
-# or: TEMPLATE=4 npm run dev
-# http://localhost:3000/
+# Template 3 — Elysian
+npm run dev:elysian
+# or: TEMPLATE=3 npm run dev
+# http://localhost:3000/?id=0&template=3
 ```
-
-**Foodie** is a static landing-page template (nav + hero only). Content lives in
-`src/templates/foodie/lib/foodieContent.ts` and images in `public/foodie/`. When
-ready for live data, add a `mapFoodieContent(restaurant)` adapter and load it in
-`src/app/page.tsx` like the other templates — no component changes required.
 
 ## Environment
 
 Set in **MonoRepo root** `.env` and/or **`template/.env.local`**:
 
 ```bash
-# 1 = Cinematic, 2 = Aurora
+# 1 = Cinematic, 2 = Aurora, 3 = Elysian
 TEMPLATE=1
 ```
 
@@ -50,7 +44,7 @@ Copy from [`template/.env.example`](.env.example). MonoRepo [`.env.example`](../
 
 ## Restaurant switching
 
-Both templates use `?id=N` (0-based index into `../data/restaurants_data.json`):
+Templates use `?id=N` (0-based index into `../data/restaurants_data.json`) or `restaurant_id=<uuid>` for API-backed generated sites:
 
 | URL | Restaurant |
 |-----|------------|
@@ -78,6 +72,7 @@ template/
     templates/
       cinematic/            # Template 1
       aurora/               # Template 2
+      elysian/              # Template 3
   legacy/                   # Original static HTML template
 ```
 
@@ -87,6 +82,7 @@ template/
 npm run build              # uses TEMPLATE from env (default 1)
 npm run build:cinematic    # TEMPLATE=1
 npm run build:aurora       # TEMPLATE=2
+npm run build:elysian      # TEMPLATE=3
 ```
 
 ## Legacy static template

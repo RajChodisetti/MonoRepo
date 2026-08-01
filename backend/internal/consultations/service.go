@@ -12,34 +12,30 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/config"
-	calendarprovider "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/calendar"
 	emailprovider "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/email"
 )
 
 var ErrConflict = errors.New("slot already booked")
 
 type Service struct {
-	cfg      config.ConsultationConfig
-	repo     Repository
-	calendar calendarprovider.Provider
-	email    emailprovider.Provider
-	log      *slog.Logger
-	slotCfg  SlotConfig
+	cfg     config.ConsultationConfig
+	repo    Repository
+	email   emailprovider.Provider
+	log     *slog.Logger
+	slotCfg SlotConfig
 }
 
 func NewService(
 	cfg config.ConsultationConfig,
 	repo Repository,
-	cal calendarprovider.Provider,
 	email emailprovider.Provider,
 	log *slog.Logger,
 ) *Service {
 	return &Service{
-		cfg:      cfg,
-		repo:     repo,
-		calendar: cal,
-		email:    email,
-		log:      log,
+		cfg:   cfg,
+		repo:  repo,
+		email: email,
+		log:   log,
 		slotCfg: SlotConfig{
 			Timezone:            cfg.Timezone,
 			BusinessHourStart:   cfg.BusinessHourStart,
@@ -117,12 +113,12 @@ func (s *Service) GetAvailability(ctx context.Context, dateStr string, days int)
 }
 
 func (s *Service) CheckSlot(ctx context.Context, dateStr, timeStr string) (CheckResult, error) {
-	slotStart, slotEnd, err := s.parseSlot(dateStr, timeStr)
+	slotStart, _, err := s.parseSlot(dateStr, timeStr)
 	if err != nil {
 		return CheckResult{}, err
 	}
 
-	available, err := s.isSlotFree(ctx, slotStart, slotEnd)
+	available, err := s.isSlotFree(ctx, slotStart)
 	if err != nil {
 		return CheckResult{}, err
 	}
@@ -165,7 +161,7 @@ func (s *Service) Book(ctx context.Context, req BookRequest) (BookSuccess, *Book
 		return BookSuccess{}, nil, err
 	}
 
-	free, err := s.isSlotFree(ctx, slotStart, slotEnd)
+	free, err := s.isSlotFree(ctx, slotStart)
 	if err != nil {
 		return BookSuccess{}, nil, err
 	}
@@ -187,41 +183,8 @@ func (s *Service) Book(ctx context.Context, req BookRequest) (BookSuccess, *Book
 	}
 
 	id := uuid.New()
-	desc := fmt.Sprintf(
-		"Consultation booking\nName: %s\nEmail: %s\nPhone: %s\nConfirmation: %s\nSource: %s",
-		req.ProspectName, req.ProspectEmail, req.ProspectPhone, code, req.Source,
-	)
-	eventTitle := "Tuvi Consultation"
-	if name := strings.TrimSpace(req.ProspectName); name != "" {
-		eventTitle = "Tuvi Consultation — " + name
-	}
-	event, err := s.calendar.CreateEvent(ctx, calendarprovider.CreateEventInput{
-		Title:       eventTitle,
-		Description: desc,
-		Start:       slotStart,
-		End:         slotEnd,
-		Attendee:    req.ProspectEmail,
-	})
-	if err != nil {
-		return BookSuccess{}, nil, fmt.Errorf("calendar booking failed: %w", err)
-	}
-
-	// Always build a Google Calendar "add event" link so the prospect can mark
-	// the booked date/time on their own calendar (works even if CRM calendar is noop).
-	calendarAddLink := GoogleCalendarAddURL(
-		slotStart,
-		slotEnd,
-		"Tuvi Consultation",
-		fmt.Sprintf(
-			"Tuvi Solutions free consultation\nConfirmation: %s\nName: %s\nPhone: %s\n\nhttps://tuvisolutions.com",
-			code, req.ProspectName, req.ProspectPhone,
-		),
-		"Tuvi Solutions (video call)",
-	)
-
 	tx, err := s.repo.BeginTx(ctx)
 	if err != nil {
-		_ = s.calendar.DeleteEvent(ctx, event.EventID)
 		return BookSuccess{}, nil, err
 	}
 	defer tx.Rollback(ctx)
@@ -234,11 +197,10 @@ func (s *Service) Book(ctx context.Context, req BookRequest) (BookSuccess, *Book
 		ProspectName:     req.ProspectName,
 		ProspectEmail:    req.ProspectEmail,
 		ProspectPhone:    req.ProspectPhone,
-		GoogleEventID:    event.EventID,
+		GoogleEventID:    "",
 		Source:           req.Source,
 	})
 	if err != nil {
-		_ = s.calendar.DeleteEvent(ctx, event.EventID)
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			alts, altErr := s.nearestAlternatives(ctx, slotStart, 3)
@@ -255,11 +217,10 @@ func (s *Service) Book(ctx context.Context, req BookRequest) (BookSuccess, *Book
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		_ = s.calendar.DeleteEvent(ctx, event.EventID)
 		return BookSuccess{}, nil, err
 	}
 
-	go s.sendBookingEmail(context.Background(), req, code, slotStart, calendarAddLink)
+	go s.sendBookingEmail(context.Background(), req, code, slotStart, "")
 
 	return BookSuccess{
 		Status:           "success",
@@ -270,7 +231,7 @@ func (s *Service) Book(ctx context.Context, req BookRequest) (BookSuccess, *Book
 		Slot:             slotStart.Format(time.RFC3339),
 		BookingDate:      slotStart.Format("2006-01-02"),
 		BookingTime:      FormatSlotTime(slotStart),
-		CalendarLink:     calendarAddLink,
+		CalendarLink:     "",
 		Message:          fmt.Sprintf("Your consultation is booked. Confirmation number %s.", code),
 	}, nil, nil
 }
@@ -322,19 +283,9 @@ func (s *Service) listFreeSlots(ctx context.Context, startDate time.Time, days i
 		return nil, err
 	}
 
-	busy, err := s.calendar.FreeBusy(ctx, rangeStart, rangeEnd.Add(24*time.Hour))
-	if err != nil {
-		return nil, err
-	}
-
 	var free []time.Time
-	duration := time.Duration(s.cfg.SlotDurationMinutes) * time.Minute
 	for _, slot := range candidates {
 		if ContainsTime(booked, slot) {
-			continue
-		}
-		slotEnd := slot.Add(duration)
-		if overlapsBusy(slot, slotEnd, busy) {
 			continue
 		}
 		free = append(free, slot)
@@ -342,19 +293,12 @@ func (s *Service) listFreeSlots(ctx context.Context, startDate time.Time, days i
 	return free, nil
 }
 
-func (s *Service) isSlotFree(ctx context.Context, slotStart, slotEnd time.Time) (bool, error) {
+func (s *Service) isSlotFree(ctx context.Context, slotStart time.Time) (bool, error) {
 	booked, err := s.repo.IsSlotBooked(ctx, slotStart)
 	if err != nil {
 		return false, err
 	}
-	if booked {
-		return false, nil
-	}
-	busy, err := s.calendar.FreeBusy(ctx, slotStart, slotEnd)
-	if err != nil {
-		return false, err
-	}
-	return !overlapsBusy(slotStart, slotEnd, busy), nil
+	return !booked, nil
 }
 
 func (s *Service) nearestAlternatives(ctx context.Context, around time.Time, limit int) ([]string, error) {
@@ -390,15 +334,6 @@ func (s *Service) nearestAlternatives(ctx context.Context, around time.Time, lim
 		}
 	}
 	return alts, nil
-}
-
-func overlapsBusy(start, end time.Time, busy []calendarprovider.BusyPeriod) bool {
-	for _, b := range busy {
-		if start.Before(b.End) && end.After(b.Start) {
-			return true
-		}
-	}
-	return false
 }
 
 func (s *Service) sendBookingEmail(ctx context.Context, req BookRequest, code string, slotStart time.Time, calendarLink string) {

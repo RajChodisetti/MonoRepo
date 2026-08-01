@@ -43,17 +43,54 @@ func (repo *Postgres) GetRestaurantIDByPlaceID(ctx context.Context, placeID stri
 	return restaurantID, nil
 }
 
-func (repo *Postgres) ListMenuImages(ctx context.Context, restaurantID uuid.UUID) ([]MenuImage, error) {
+func (repo *Postgres) GetGooglePlaceID(ctx context.Context, restaurantID uuid.UUID) (string, error) {
 	if repo.pool == nil {
-		return nil, fmt.Errorf("database pool is not configured")
+		return "", fmt.Errorf("database pool is not configured")
 	}
 
 	const query = `
+		SELECT COALESCE(google_place_id, '')
+		FROM restaurant_profiles
+		WHERE restaurant_id = $1`
+
+	var placeID string
+	err := repo.pool.QueryRow(ctx, query, restaurantID).Scan(&placeID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", repository.ErrNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("load restaurant google place id: %w", err)
+	}
+	if placeID == "" {
+		return "", repository.ErrNotFound
+	}
+	return placeID, nil
+}
+
+func (repo *Postgres) ListMenuImages(ctx context.Context, restaurantID uuid.UUID) ([]MenuImage, error) {
+	const query = `
 		SELECT id, restaurant_id, url, thumbnail_url, image_type, confidence,
-		       title, source, sort_order, metadata, created_at, updated_at
+		       title, source, sort_order, metadata, created_at, updated_at, hidden_at, hidden_by
+		FROM menu_images
+		WHERE restaurant_id = $1 AND hidden_at IS NULL
+		ORDER BY sort_order ASC, created_at ASC`
+	return repo.queryMenuImages(ctx, query, restaurantID)
+}
+
+func (repo *Postgres) ListMenuImagesAdmin(ctx context.Context, restaurantID uuid.UUID) ([]MenuImage, error) {
+	const query = `
+		SELECT id, restaurant_id, url, thumbnail_url, image_type, confidence,
+		       title, source, sort_order, metadata, created_at, updated_at, hidden_at, hidden_by
 		FROM menu_images
 		WHERE restaurant_id = $1
 		ORDER BY sort_order ASC, created_at ASC`
+	return repo.queryMenuImages(ctx, query, restaurantID)
+}
+
+func (repo *Postgres) queryMenuImages(ctx context.Context, query string, restaurantID uuid.UUID) ([]MenuImage, error) {
+	if repo.pool == nil {
+		return nil, fmt.Errorf("database pool is not configured")
+	}
 
 	rows, err := repo.pool.Query(ctx, query, restaurantID)
 	if err != nil {
@@ -77,16 +114,45 @@ func (repo *Postgres) ListMenuImages(ctx context.Context, restaurantID uuid.UUID
 }
 
 func (repo *Postgres) ListGalleryImages(ctx context.Context, restaurantID uuid.UUID) ([]GalleryImage, error) {
-	if repo.pool == nil {
-		return nil, fmt.Errorf("database pool is not configured")
-	}
-
 	const query = `
 		SELECT id, restaurant_id, url, thumbnail_url, image_type, confidence,
-		       title, source, sort_order, metadata, created_at, updated_at
+		       title, source, sort_order, metadata, created_at, updated_at, hidden_at, hidden_by
+		FROM gallery_images
+		WHERE restaurant_id = $1
+		  AND hidden_at IS NULL
+		  AND lower(COALESCE(image_type, '')) NOT IN ('menu_document', 'menu_list', 'menu_ocr')
+		ORDER BY sort_order ASC, created_at ASC`
+	images, err := repo.queryGalleryImages(ctx, query, restaurantID)
+	if err != nil {
+		return nil, err
+	}
+	filtered := make([]GalleryImage, 0, len(images))
+	for _, image := range images {
+		if isTemporaryGoogleMediaURL(image.URL) {
+			continue
+		}
+		if isTemporaryGoogleMediaURL(image.ThumbnailURL) {
+			image.ThumbnailURL = ""
+		}
+		filtered = append(filtered, image)
+	}
+	return filtered, nil
+}
+
+func (repo *Postgres) ListGalleryImagesAdmin(ctx context.Context, restaurantID uuid.UUID) ([]GalleryImage, error) {
+	const query = `
+		SELECT id, restaurant_id, url, thumbnail_url, image_type, confidence,
+		       title, source, sort_order, metadata, created_at, updated_at, hidden_at, hidden_by
 		FROM gallery_images
 		WHERE restaurant_id = $1
 		ORDER BY sort_order ASC, created_at ASC`
+	return repo.queryGalleryImages(ctx, query, restaurantID)
+}
+
+func (repo *Postgres) queryGalleryImages(ctx context.Context, query string, restaurantID uuid.UUID) ([]GalleryImage, error) {
+	if repo.pool == nil {
+		return nil, fmt.Errorf("database pool is not configured")
+	}
 
 	rows, err := repo.pool.Query(ctx, query, restaurantID)
 	if err != nil {
@@ -107,6 +173,47 @@ func (repo *Postgres) ListGalleryImages(ctx context.Context, restaurantID uuid.U
 	}
 
 	return images, nil
+}
+
+func (repo *Postgres) HideMenuImage(ctx context.Context, restaurantID, imageID, hiddenBy uuid.UUID) error {
+	return repo.setImageHidden(ctx, "menu_images", restaurantID, imageID, &hiddenBy)
+}
+
+func (repo *Postgres) HideGalleryImage(ctx context.Context, restaurantID, imageID, hiddenBy uuid.UUID) error {
+	return repo.setImageHidden(ctx, "gallery_images", restaurantID, imageID, &hiddenBy)
+}
+
+func (repo *Postgres) UnhideMenuImage(ctx context.Context, restaurantID, imageID uuid.UUID) error {
+	return repo.setImageHidden(ctx, "menu_images", restaurantID, imageID, nil)
+}
+
+func (repo *Postgres) UnhideGalleryImage(ctx context.Context, restaurantID, imageID uuid.UUID) error {
+	return repo.setImageHidden(ctx, "gallery_images", restaurantID, imageID, nil)
+}
+
+func (repo *Postgres) setImageHidden(ctx context.Context, table string, restaurantID, imageID uuid.UUID, hiddenBy *uuid.UUID) error {
+	if repo.pool == nil {
+		return fmt.Errorf("database pool is not configured")
+	}
+
+	var query string
+	var args []any
+	if hiddenBy != nil {
+		query = fmt.Sprintf(`UPDATE %s SET hidden_at = now(), hidden_by = $3, updated_at = now() WHERE id = $1 AND restaurant_id = $2`, table)
+		args = []any{imageID, restaurantID, *hiddenBy}
+	} else {
+		query = fmt.Sprintf(`UPDATE %s SET hidden_at = NULL, hidden_by = NULL, updated_at = now() WHERE id = $1 AND restaurant_id = $2`, table)
+		args = []any{imageID, restaurantID}
+	}
+
+	result, err := repo.pool.Exec(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("update %s visibility: %w", table, err)
+	}
+	if result.RowsAffected() != 1 {
+		return repository.ErrNotFound
+	}
+	return nil
 }
 
 func (repo *Postgres) GetSiteImages(ctx context.Context, restaurantID uuid.UUID) (SiteImages, error) {
@@ -151,6 +258,8 @@ func scanMenuImage(scanner interface {
 		&record.Metadata,
 		&record.CreatedAt,
 		&record.UpdatedAt,
+		&record.HiddenAt,
+		&record.HiddenBy,
 	)
 	if err != nil {
 		return MenuImage{}, fmt.Errorf("scan menu image: %w", err)
@@ -175,6 +284,8 @@ func scanGalleryImage(scanner interface {
 		&record.Metadata,
 		&record.CreatedAt,
 		&record.UpdatedAt,
+		&record.HiddenAt,
+		&record.HiddenBy,
 	)
 	if err != nil {
 		return GalleryImage{}, fmt.Errorf("scan gallery image: %w", err)

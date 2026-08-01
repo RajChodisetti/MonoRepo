@@ -18,8 +18,45 @@ const restaurantSelectColumns = `
 	email_sent, email_send_count, last_email_sent_at, last_email_send_sequence,
 	created_at, updated_at`
 
+const restaurantWithProfileSelectColumns = `
+	r.id, r.name, r.email, r.status, r.is_contacted, r.shown_interest,
+	r.email_sent, r.email_send_count, r.last_email_sent_at, r.last_email_send_sequence,
+	r.created_at, r.updated_at,
+	COALESCE(rp.phone, ''), COALESCE(rp.address, ''), COALESCE(rp.ocr_status, 'pending')`
+
 type Postgres struct {
 	pool *pgxpool.Pool
+}
+
+func scanRestaurantWithProfile(scanner interface {
+	Scan(dest ...any) error
+}) (Restaurant, error) {
+	record, err := scanRestaurantAndExtras(scanner)
+	return record, err
+}
+
+func scanRestaurantAndExtras(scanner interface {
+	Scan(dest ...any) error
+}) (Restaurant, error) {
+	var record Restaurant
+	err := scanner.Scan(
+		&record.ID,
+		&record.Name,
+		&record.Email,
+		&record.Status,
+		&record.IsContacted,
+		&record.ShownInterest,
+		&record.EmailSent,
+		&record.EmailSendCount,
+		&record.LastEmailSentAt,
+		&record.LastEmailSendSequence,
+		&record.CreatedAt,
+		&record.UpdatedAt,
+		&record.Phone,
+		&record.Address,
+		&record.OCRStatus,
+	)
+	return record, err
 }
 
 func NewPostgres(pool *pgxpool.Pool) *Postgres {
@@ -52,9 +89,12 @@ func (repo *Postgres) GetByID(ctx context.Context, id uuid.UUID) (Restaurant, er
 		return Restaurant{}, fmt.Errorf("database pool is not configured")
 	}
 
-	query := `SELECT` + restaurantSelectColumns + ` FROM restaurants WHERE id = $1`
+	query := `SELECT` + restaurantWithProfileSelectColumns + `
+		FROM restaurants r
+		LEFT JOIN restaurant_profiles rp ON rp.restaurant_id = r.id
+		WHERE r.id = $1`
 
-	record, err := scanRestaurant(repo.pool.QueryRow(ctx, query, id))
+	record, err := scanRestaurantWithProfile(repo.pool.QueryRow(ctx, query, id))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Restaurant{}, repository.ErrNotFound
 	}
@@ -81,47 +121,56 @@ func (repo *Postgres) queryList(ctx context.Context, ids []uuid.UUID, filter Lis
 		return nil, fmt.Errorf("database pool is not configured")
 	}
 
-	query := `SELECT` + restaurantSelectColumns + ` FROM restaurants WHERE 1=1`
+	query := `SELECT` + restaurantWithProfileSelectColumns + `
+		FROM restaurants r
+		LEFT JOIN restaurant_profiles rp ON rp.restaurant_id = r.id
+		WHERE 1=1`
 	args := make([]any, 0, 8)
 	argPos := 1
 
 	if len(ids) > 0 {
-		query += fmt.Sprintf(" AND id = ANY($%d)", argPos)
+		query += fmt.Sprintf(" AND r.id = ANY($%d)", argPos)
 		args = append(args, ids)
 		argPos++
 	}
 
 	if filter.Restaurant != "" {
-		query += fmt.Sprintf(" AND name ILIKE $%d", argPos)
+		query += fmt.Sprintf(" AND r.name ILIKE $%d", argPos)
 		args = append(args, "%"+filter.Restaurant+"%")
 		argPos++
 	}
 
 	if filter.Status != "" {
-		query += fmt.Sprintf(" AND status = $%d", argPos)
+		query += fmt.Sprintf(" AND r.status = $%d", argPos)
 		args = append(args, filter.Status)
 		argPos++
 	}
 
 	if filter.IsContacted != nil {
-		query += fmt.Sprintf(" AND is_contacted = $%d", argPos)
+		query += fmt.Sprintf(" AND r.is_contacted = $%d", argPos)
 		args = append(args, *filter.IsContacted)
 		argPos++
 	}
 
 	if filter.ShownInterest != nil {
-		query += fmt.Sprintf(" AND shown_interest = $%d", argPos)
+		query += fmt.Sprintf(" AND r.shown_interest = $%d", argPos)
 		args = append(args, *filter.ShownInterest)
 		argPos++
 	}
 
+	if filter.OCRStatus != "" {
+		query += fmt.Sprintf(" AND COALESCE(rp.ocr_status, 'pending') = $%d", argPos)
+		args = append(args, filter.OCRStatus)
+		argPos++
+	}
+
 	if !filter.IncludeArchived {
-		query += fmt.Sprintf(" AND status <> $%d", argPos)
+		query += fmt.Sprintf(" AND r.status <> $%d", argPos)
 		args = append(args, StatusArchived)
 		argPos++
 	}
 
-	query += " ORDER BY created_at DESC"
+	query += " ORDER BY r.created_at DESC"
 
 	rows, err := repo.pool.Query(ctx, query, args...)
 	if err != nil {
@@ -131,7 +180,7 @@ func (repo *Postgres) queryList(ctx context.Context, ids []uuid.UUID, filter Lis
 
 	var records []Restaurant
 	for rows.Next() {
-		record, err := scanRestaurant(rows)
+		record, err := scanRestaurantWithProfile(rows)
 		if err != nil {
 			return nil, fmt.Errorf("scan restaurant: %w", err)
 		}

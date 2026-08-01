@@ -11,7 +11,15 @@ import (
 )
 
 type Mock struct {
-	Sites map[string]Site
+	Sites          map[string]Site
+	PublicPayloads map[uuid.UUID]json.RawMessage
+}
+
+func (mock *Mock) BuildPublicPayload(_ context.Context, restaurantID uuid.UUID) (json.RawMessage, error) {
+	if payload := mock.PublicPayloads[restaurantID]; len(payload) > 0 {
+		return payload, nil
+	}
+	return DefaultPublicPayload(), nil
 }
 
 func (mock *Mock) GetBySlug(ctx context.Context, slug string) (Site, error) {
@@ -70,6 +78,16 @@ func (mock *Mock) UpdateTokenHash(ctx context.Context, id uuid.UUID, tokenHash s
 		}
 	}
 	return repository.ErrNotFound
+}
+
+func (mock *Mock) ListByRestaurantID(ctx context.Context, restaurantID uuid.UUID) ([]Site, error) {
+	sites := make([]Site, 0)
+	for _, record := range mock.Sites {
+		if record.RestaurantID == restaurantID {
+			sites = append(sites, record)
+		}
+	}
+	return sites, nil
 }
 
 var _ Repository = (*Mock)(nil)

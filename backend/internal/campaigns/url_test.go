@@ -29,31 +29,57 @@ func TestRenderOutreachEmail(t *testing.T) {
 	}
 	for _, token := range []string{
 		"{{CLICK_URL}}",
-		"{{TEMPLATE_3_URL}}",
 		"{{UNSUBSCRIBE_URL}}",
-		"AI Voice Receptionist",
-		"Presentation Websites",
-		"Reservation Requests",
-		"Custom Apps",
+		"Personalized demo websites",
+		"Services catalog",
 		"http://localhost:5500",
-		"http://localhost:3001",
-		"live website preview for Spice Garden",
-		"Open Spice Garden demo",
+		"live website preview for",
 	} {
 		if !strings.Contains(draft.BodyHTML, token) {
 			t.Fatalf("body_html missing %q", token)
 		}
 	}
+	for _, token := range []string{
+		"{{TEMPLATE_1_URL}}",
+		"{{TEMPLATE_2_URL}}",
+		"{{TEMPLATE_3_URL}}",
+		"Cinematic personalized website",
+		"Aurora personalized website",
+		"Elysian personalized website",
+		"Tuvi restaurant services presentation",
+		"Open Spice Garden demo",
+	} {
+		if strings.Contains(draft.BodyHTML, token) {
+			t.Fatalf("body_html should not include %q", token)
+		}
+	}
 	if strings.Contains(draft.BodyHTML, "%7b") {
 		t.Fatal("body_html has URL-escaped CLICK_URL braces")
 	}
-	// Long template-card section removed
-	for _, banned := range []string{"We already built a preview", "Cinematic", "Aurora", "Elysian"} {
+	if count := strings.Count(draft.BodyHTML, "{{CLICK_URL}}"); count != 1 {
+		t.Fatalf("body_html has %d personalized demo links, want 1", count)
+	}
+	if count := strings.Count(draft.BodyHTML, "href="); count != 3 {
+		t.Fatalf("body_html has %d links, want exactly 3", count)
+	}
+	for _, banned := range []string{"We already built a preview"} {
 		if strings.Contains(draft.BodyHTML, banned) {
 			t.Fatalf("body_html should not contain %q", banned)
 		}
 	}
-	if !strings.Contains(draft.BodyText, "AI Voice Receptionist") {
-		t.Fatal("body_text missing AI Voice Receptionist")
+	if !strings.Contains(draft.BodyText, "Services catalog") {
+		t.Fatal("body_text missing Services catalog link")
+	}
+}
+
+func TestRenderOutreachEmailUsesConfiguredPresentationURL(t *testing.T) {
+	draft, err := RenderOutreachEmailWithLinks("Spice Garden", OutreachLinkConfig{
+		PresentationURL: "https://tuvisolutions.com/services/restaurants",
+	})
+	if err != nil {
+		t.Fatalf("RenderOutreachEmailWithLinks() error = %v", err)
+	}
+	if !strings.Contains(draft.BodyHTML, "https://tuvisolutions.com/services/restaurants") {
+		t.Fatal("body_html missing configured Tuvi presentation URL")
 	}
 }

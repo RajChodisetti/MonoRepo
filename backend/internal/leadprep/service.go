@@ -18,6 +18,7 @@ import (
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/demos"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/config"
 	platformdb "github.com/rajchodisetti/restaurant-platform/backend/internal/platform/db"
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/restaurants"
 )
 
 var ErrLeadNotOCRVerified = errors.New("lead is not OCR verified")
@@ -107,6 +108,9 @@ func (service *Service) Prepare(ctx context.Context, restaurantID uuid.UUID) (Re
 				existingDemoOCRFingerprint != profile.OCRFingerprint ||
 				existingDemoProfileFingerprint != profileFingerprint)
 		if !refreshExistingDraft {
+			if err := markRestaurantDemoReady(ctx, tx, restaurantID); err != nil {
+				return Result{}, err
+			}
 			if err := tx.Commit(ctx); err != nil {
 				return Result{}, fmt.Errorf("commit existing lead preparation: %w", err)
 			}
@@ -290,6 +294,9 @@ func (service *Service) Prepare(ctx context.Context, restaurantID uuid.UUID) (Re
 		}
 	}
 
+	if err := markRestaurantDemoReady(ctx, tx, restaurantID); err != nil {
+		return Result{}, err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return Result{}, fmt.Errorf("commit lead preparation: %w", err)
 	}
@@ -299,6 +306,22 @@ func (service *Service) Prepare(ctx context.Context, restaurantID uuid.UUID) (Re
 		CampaignID:   campaignID,
 		Created:      !refreshExistingDraft,
 	}, nil
+}
+
+func markRestaurantDemoReady(ctx context.Context, tx pgx.Tx, restaurantID uuid.UUID) error {
+	if _, err := tx.Exec(ctx, `
+		UPDATE restaurants
+		SET status = $2,
+		    updated_at = now()
+		WHERE id = $1
+		  AND status = $3`,
+		restaurantID,
+		restaurants.StatusDemoReady,
+		restaurants.StatusLead,
+	); err != nil {
+		return fmt.Errorf("mark restaurant demo ready: %w", err)
+	}
+	return nil
 }
 
 type verifiedProfile struct {

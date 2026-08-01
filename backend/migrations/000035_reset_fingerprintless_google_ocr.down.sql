@@ -1,0 +1,2 @@
+-- Irreversible data hygiene migration. The previous fingerprintless Google
+-- photo OCR classifications intentionally remain cleared on rollback.

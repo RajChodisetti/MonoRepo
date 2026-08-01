@@ -121,6 +121,9 @@ type OutreachConfig struct {
 	SendJitterMin               time.Duration
 	SendJitterMax               time.Duration
 	AccountCooldown             time.Duration
+	EmailHealthEnabled          bool
+	EmailHealthRecipient        string
+	EmailHealthInterval         time.Duration
 	ZohoAccounts                []ZohoMailConfig
 	ZohoAccountsJSON            string
 	GoogleWorkspaceAccounts     []GmailMailConfig
@@ -133,12 +136,6 @@ type LLMConfig struct {
 	Model    string
 }
 
-type PlacesConfig struct {
-	APIKey     string
-	BaseURL    string
-	RegionCode string
-}
-
 type VoiceConfig struct {
 	Provider      string
 	WebhookSecret string
@@ -149,8 +146,21 @@ type StorageConfig struct {
 	Bucket          string
 	Region          string
 	Endpoint        string
+	PublicBaseURL   string
+	UsePathStyle    bool
 	AccessKeyID     string
 	SecretAccessKey string
+}
+
+// PlacesConfig is used only by server-side Google Places adapters. The API key
+// must never be returned to the browser or embedded in generated photo URLs.
+type PlacesConfig struct {
+	APIKey        string
+	APIBaseURL    string
+	RegionCode    string
+	PhotoLimit    int
+	PhotoMaxWidth int
+	Timeout       time.Duration
 }
 
 type TokenConfig struct {
@@ -256,6 +266,8 @@ func Load() (Config, error) {
 			Bucket:          parser.string("STORAGE_BUCKET", ""),
 			Region:          parser.string("STORAGE_REGION", ""),
 			Endpoint:        parser.string("STORAGE_ENDPOINT", ""),
+			PublicBaseURL:   parser.string("STORAGE_PUBLIC_BASE_URL", ""),
+			UsePathStyle:    parser.bool("STORAGE_USE_PATH_STYLE", false),
 			AccessKeyID:     parser.string("STORAGE_ACCESS_KEY_ID", ""),
 			SecretAccessKey: parser.string("STORAGE_SECRET_ACCESS_KEY", ""),
 		},
@@ -335,6 +347,18 @@ func (c Config) Validate() error {
 	if c.Database.ConnectTimeout <= 0 {
 		errs = append(errs, fmt.Errorf("DATABASE_CONNECT_TIMEOUT must be positive"))
 	}
+	if strings.TrimSpace(c.Places.APIBaseURL) == "" {
+		errs = append(errs, fmt.Errorf("PLACES_API_BASE_URL is required"))
+	}
+	if c.Places.PhotoLimit < 1 || c.Places.PhotoLimit > 10 {
+		errs = append(errs, fmt.Errorf("PLACES_PHOTO_LIMIT must be between 1 and 10"))
+	}
+	if c.Places.PhotoMaxWidth < 1 || c.Places.PhotoMaxWidth > 4800 {
+		errs = append(errs, fmt.Errorf("PLACES_PHOTO_MAX_WIDTH must be between 1 and 4800"))
+	}
+	if c.Places.Timeout <= 0 {
+		errs = append(errs, fmt.Errorf("PLACES_API_TIMEOUT must be positive"))
+	}
 	if len(c.Token.Secret) < 32 {
 		errs = append(errs, fmt.Errorf("TOKEN_SECRET must be at least 32 characters"))
 	}
@@ -367,6 +391,14 @@ func (c Config) Validate() error {
 	}
 	if c.Outreach.AccountCooldown < 24*time.Hour {
 		errs = append(errs, fmt.Errorf("OUTREACH_EMAIL_COOLDOWN must be at least 24h"))
+	}
+	if c.Outreach.EmailHealthInterval < 24*time.Hour {
+		errs = append(errs, fmt.Errorf("OUTREACH_EMAIL_HEALTH_INTERVAL must be at least 24h"))
+	}
+	if c.Outreach.EmailHealthEnabled && len(c.Outreach.GoogleWorkspaceAccounts) > 0 {
+		if _, err := canonicalOutreachMailbox(c.Outreach.EmailHealthRecipient); err != nil {
+			errs = append(errs, fmt.Errorf("OUTREACH_EMAIL_HEALTH_RECIPIENT must be a single valid email address"))
+		}
 	}
 	if c.App.Env == EnvProduction && strings.TrimSpace(c.Email.RedirectTo) != "" {
 		errs = append(errs, fmt.Errorf("EMAIL_REDIRECT_TO must be empty in production"))
@@ -429,7 +461,7 @@ func (c Config) Validate() error {
 }
 
 func (c Config) validateEmailURLs() []error {
-	if c.Email.DisableSending {
+	if c.Email.DisableSending && len(c.Outreach.GoogleWorkspaceAccounts) == 0 {
 		return nil
 	}
 
@@ -567,6 +599,9 @@ func (c Config) validateProviders() []error {
 	}
 
 	if providerEnabled(c.Storage.Provider) {
+		if c.Storage.Provider != "s3" {
+			errs = append(errs, fmt.Errorf("STORAGE_PROVIDER must be s3 or disabled"))
+		}
 		if strings.TrimSpace(c.Storage.Bucket) == "" {
 			errs = append(errs, fmt.Errorf("STORAGE_BUCKET is required when STORAGE_PROVIDER is enabled"))
 		}
@@ -578,6 +613,12 @@ func (c Config) validateProviders() []error {
 		}
 		if strings.TrimSpace(c.Storage.Region) == "" && strings.TrimSpace(c.Storage.Endpoint) == "" {
 			errs = append(errs, fmt.Errorf("STORAGE_REGION or STORAGE_ENDPOINT is required when STORAGE_PROVIDER is enabled"))
+		}
+		publicBase, err := url.Parse(strings.TrimSpace(c.Storage.PublicBaseURL))
+		if err != nil || publicBase.Scheme == "" || publicBase.Host == "" || publicBase.RawQuery != "" || publicBase.Fragment != "" {
+			errs = append(errs, fmt.Errorf("STORAGE_PUBLIC_BASE_URL must be an absolute URL when STORAGE_PROVIDER is enabled"))
+		} else if c.App.Env == EnvProduction && publicBase.Scheme != "https" {
+			errs = append(errs, fmt.Errorf("STORAGE_PUBLIC_BASE_URL must use https in production"))
 		}
 	}
 
@@ -622,9 +663,12 @@ func loadPlacesConfig(parser *envParser) PlacesConfig {
 		apiKey = strings.TrimSpace(parser.string("PLACES_API", ""))
 	}
 	return PlacesConfig{
-		APIKey:     apiKey,
-		BaseURL:    strings.TrimRight(parser.string("PLACES_API_BASE_URL", "https://places.googleapis.com/v1"), "/"),
-		RegionCode: strings.ToUpper(parser.string("PLACES_REGION_CODE", "AU")),
+		APIKey:        apiKey,
+		APIBaseURL:    strings.TrimRight(parser.string("PLACES_API_BASE_URL", "https://places.googleapis.com/v1"), "/"),
+		RegionCode:    strings.ToUpper(parser.string("PLACES_REGION_CODE", "AU")),
+		PhotoLimit:    parser.int("PLACES_PHOTO_LIMIT", 10),
+		PhotoMaxWidth: parser.int("PLACES_PHOTO_MAX_WIDTH", 1600),
+		Timeout:       parser.duration("PLACES_API_TIMEOUT", 20*time.Second),
 	}
 }
 

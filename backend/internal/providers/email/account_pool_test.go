@@ -14,24 +14,24 @@ type countingProvider struct {
 	sends int
 }
 
-func TestNewAccountPoolFromConfigRejectsDisabledSending(t *testing.T) {
+func TestNewAccountPoolFromConfigUsesUIControlInsteadOfLegacyEmailFlag(t *testing.T) {
 	t.Parallel()
 
 	_, err := email.NewAccountPoolFromConfig(
-		config.EmailConfig{Provider: "zoho", DisableSending: true},
+		config.EmailConfig{Provider: "gmail", DisableSending: true},
 		config.OutreachConfig{
-			BulkMax:          150,
-			EmailsPerAccount: 50,
-			ZohoAccounts: []config.ZohoMailConfig{{
-				AccountID:    "account",
+			BulkMax:          40,
+			EmailsPerAccount: 40,
+			GoogleWorkspaceAccounts: []config.GmailMailConfig{{
+				MailboxEmail: "sales@example.com",
 				ClientID:     "client",
 				ClientSecret: "secret",
 				RefreshToken: "refresh",
 			}},
 		},
 	)
-	if !errors.Is(err, email.ErrSendingDisabled) {
-		t.Fatalf("NewAccountPoolFromConfig() error = %v, want ErrSendingDisabled", err)
+	if err != nil {
+		t.Fatalf("NewAccountPoolFromConfig() error = %v", err)
 	}
 }
 

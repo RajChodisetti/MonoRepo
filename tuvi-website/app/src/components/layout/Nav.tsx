@@ -86,7 +86,7 @@ export default function Nav() {
               className={`absolute left-1/2 top-full min-w-[20rem] -translate-x-1/2 pt-4 transition duration-200 ${
                 servicesOpen
                   ? "visible opacity-100"
-                  : "invisible opacity-0 group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100"
+                  : "invisible opacity-0"
               }`}
             >
               <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#0c0c0c]/95 p-1.5 shadow-[0_28px_70px_rgba(0,0,0,0.55)] backdrop-blur-xl">

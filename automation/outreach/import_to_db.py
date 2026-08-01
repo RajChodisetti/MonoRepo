@@ -192,8 +192,21 @@ def sync_classified_images(cur, restaurant_id: uuid.UUID, record: dict) -> tuple
     menu_photos = images.get("menu_photos") or []
     gallery = images.get("gallery") or []
 
-    cur.execute("DELETE FROM menu_images WHERE restaurant_id = %s", (restaurant_id,))
-    cur.execute("DELETE FROM gallery_images WHERE restaurant_id = %s", (restaurant_id,))
+    # Replace only OCR-managed rows and only after a replacement set actually
+    # contains stable URLs. Google Places media URLs are intentionally absent;
+    # an empty transient-only result must never erase durable/manual media.
+    menu_has_persistent_urls = any(image_record_url(img) for img in menu_photos)
+    gallery_has_persistent_urls = any(image_record_url(img) for img in gallery)
+    if menu_has_persistent_urls:
+        cur.execute(
+            "DELETE FROM menu_images WHERE restaurant_id = %s AND source = 'menu_ocr'",
+            (restaurant_id,),
+        )
+    if gallery_has_persistent_urls:
+        cur.execute(
+            "DELETE FROM gallery_images WHERE restaurant_id = %s AND source = 'menu_ocr'",
+            (restaurant_id,),
+        )
 
     menu_count = 0
     for i, img in enumerate(menu_photos):
@@ -588,9 +601,11 @@ def mark_ocr_status(
     claim_id: uuid.UUID,
     claim_fingerprint: str,
     errors: list[str] | None = None,
+    summary: dict | None = None,
 ) -> None:
     if status not in ("verified", "no_images", "failed"):
         raise ValueError(f"Unsupported OCR status: {status}")
+    summary_json = jdump(summary) if summary is not None else None
     lock_restaurant_workflow(cur, restaurant_id)
     cur.execute(
         """
@@ -610,6 +625,15 @@ def mark_ocr_status(
             ocr_claim_id = NULL,
             ocr_claim_fingerprint = NULL,
             ocr_verification_errors = %s::jsonb,
+            raw_public_data = CASE
+                WHEN %s::jsonb IS NULL THEN raw_public_data
+                ELSE jsonb_set(
+                    COALESCE(raw_public_data, '{}'::jsonb),
+                    '{menu_ocr}',
+                    %s::jsonb,
+                    true
+                )
+            END,
             updated_at = now()
         WHERE restaurant_id = %s
           AND ocr_status = 'running'
@@ -624,6 +648,8 @@ def mark_ocr_status(
             status,
             status,
             jdump(errors or []),
+            summary_json,
+            summary_json,
             restaurant_id,
             claim_id,
             claim_fingerprint,
@@ -661,6 +687,47 @@ def mark_ocr_verified(
         claim_fingerprint=claim_fingerprint,
         errors=[note] if note else [],
     )
+
+
+def release_ocr_claim(
+    cur,
+    restaurant_id: uuid.UUID,
+    *,
+    claim_id: uuid.UUID,
+    claim_fingerprint: str,
+    reason: str,
+) -> None:
+    """Return quota/timeout work to pending without consuming an attempt."""
+    lock_restaurant_workflow(cur, restaurant_id)
+    cur.execute(
+        """
+        UPDATE restaurant_profiles
+        SET ocr_status = 'pending',
+            ocr_verified = false,
+            ocr_verified_at = NULL,
+            ocr_started_at = NULL,
+            ocr_completed_at = NULL,
+            ocr_attempts = GREATEST(ocr_attempts - 1, 0),
+            ocr_claim_id = NULL,
+            ocr_claim_fingerprint = NULL,
+            ocr_verification_errors = %s::jsonb,
+            updated_at = now()
+        WHERE restaurant_id = %s
+          AND ocr_status = 'running'
+          AND ocr_claim_id = %s
+          AND ocr_claim_fingerprint = %s
+          AND ocr_input_fingerprint = %s
+        """,
+        (
+            jdump([str(reason or "OCR work deferred")[:500]]),
+            restaurant_id,
+            claim_id,
+            claim_fingerprint,
+            claim_fingerprint,
+        ),
+    )
+    if cur.rowcount != 1:
+        raise StaleOCRClaim("OCR claim or input fingerprint is no longer current")
 
 
 def append_ocr_verification_error(cur, restaurant_id: uuid.UUID, message: str) -> None:
@@ -772,7 +839,21 @@ def fetch_unverified_leads(
             )
               AND rp.raw_public_data IS NOT NULL
               AND rp.raw_public_data <> '{}'::jsonb
-            ORDER BY rp.created_at ASC
+              AND NULLIF(BTRIM(r.email), '') IS NOT NULL
+            ORDER BY
+              CASE
+                WHEN EXISTS (
+                  SELECT 1 FROM demo_sites demo
+                  WHERE demo.restaurant_id = rp.restaurant_id
+                    AND demo.status = 'published'
+                ) THEN 0
+                WHEN EXISTS (
+                  SELECT 1 FROM demo_sites demo
+                  WHERE demo.restaurant_id = rp.restaurant_id
+                ) THEN 1
+                ELSE 2
+              END,
+              rp.created_at ASC
             LIMIT %s
             """,
             (max_attempts, retry_after_hours, limit),
@@ -821,7 +902,21 @@ def fetch_unverified_leads(
                 )
                   AND rp.raw_public_data IS NOT NULL
                   AND rp.raw_public_data <> '{}'::jsonb
-                ORDER BY rp.created_at ASC
+                  AND NULLIF(BTRIM(r.email), '') IS NOT NULL
+                ORDER BY
+                  CASE
+                    WHEN EXISTS (
+                      SELECT 1 FROM demo_sites demo
+                      WHERE demo.restaurant_id = rp.restaurant_id
+                        AND demo.status = 'published'
+                    ) THEN 0
+                    WHEN EXISTS (
+                      SELECT 1 FROM demo_sites demo
+                      WHERE demo.restaurant_id = rp.restaurant_id
+                    ) THEN 1
+                    ELSE 2
+                  END,
+                  rp.created_at ASC
                 LIMIT %s
                 FOR UPDATE OF rp SKIP LOCKED
             )

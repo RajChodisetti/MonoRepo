@@ -20,7 +20,6 @@ const (
 	placeholderUnsubscribeURL = "{{UNSUBSCRIBE_URL}}"
 
 	defaultPresentationURL = "http://localhost:5500"
-	defaultMarketingURL    = "http://localhost:3001"
 )
 
 type OutreachServiceLink struct {
@@ -59,34 +58,19 @@ func buildOutreachEmailData(restaurantName string, links OutreachLinkConfig) Out
 	if presentationURL == "" {
 		presentationURL = defaultPresentationURL
 	}
-	marketingURL := strings.TrimSpace(links.MarketingURL)
-	if marketingURL == "" {
-		marketingURL = defaultMarketingURL
-	}
 
 	// Use an internal marker so html/template does not URL-escape placeholder
 	// braces; injectOutreachPlaceholders rewrites it after render.
-	reservationDemoURL := htmltemplate.URL("__TEMPLATE_3_URL__")
 	services := []OutreachServiceLink{
 		{
-			Title:       "AI Voice Receptionist",
-			Description: "24/7 calls, reservation requests & callbacks",
+			Title:       "Personalized demo websites",
+			Description: "Open the live restaurant-specific website preview we prepared",
+			URL:         htmltemplate.URL("__CLICK_URL__"),
+		},
+		{
+			Title:       "Services catalog",
+			Description: "Explore Tuvi's restaurant services, including websites, AI receptionist, reservations, and growth tools",
 			URL:         htmltemplate.URL(presentationURL),
-		},
-		{
-			Title:       "Presentation Websites",
-			Description: "Modern sites from your real menu & photos",
-			URL:         htmltemplate.URL(presentationURL),
-		},
-		{
-			Title:       "Reservation Requests",
-			Description: "Guests submit table requests on your demo site",
-			URL:         reservationDemoURL,
-		},
-		{
-			Title:       "Custom Apps",
-			Description: "QR ordering, loyalty & more",
-			URL:         htmltemplate.URL(marketingURL),
 		},
 	}
 

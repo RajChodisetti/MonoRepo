@@ -58,6 +58,10 @@ services:
     env_file:
       - path: ${TUVI_ENV_DIR:-/opt/tuvi/env}/stack.env
         required: false
+      # Restrict the Places key to the API photo resolver instead of sharing the
+      # ingestion file (which also contains Apollo and OCR credentials).
+      - path: ${TUVI_ENV_DIR:-/opt/tuvi/env}/places-api.env
+        required: false
     environment:
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
       REDIS_URL: redis://redis:6379
@@ -108,6 +112,23 @@ services:
         condition: service_completed_successfully
       api:
         condition: service_started
+    restart: unless-stopped
+
+  ocr-worker:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.ocr
+    command: ["python", "verify_leads_from_db.py", "--watch"]
+    env_file:
+      - path: ${TUVI_ENV_DIR:-/opt/tuvi/env}/stack.env
+        required: false
+      - path: ${TUVI_ENV_DIR:-/opt/tuvi/env}/ingestion.env
+        required: false
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   ocr-job:
@@ -176,6 +197,7 @@ services:
         TEMPLATE: ${TEMPLATE:-2}
         NEXT_PUBLIC_API_URL: ${TEMPLATE_NEXT_PUBLIC_API_URL:-https://api.tuvisolutions.com}
         NEXT_PUBLIC_VOICE_AGENT_URL: ${TEMPLATE_NEXT_PUBLIC_VOICE_AGENT_URL:-https://voice.tuvisolutions.com}
+        NEXT_PUBLIC_MEDIA_BASE_URL: ${TEMPLATE_MEDIA_PUBLIC_BASE_URL:-}
     env_file:
       - path: ${TUVI_ENV_DIR:-/opt/tuvi/env}/template.env
         required: false
@@ -183,6 +205,7 @@ services:
       TEMPLATE: ${TEMPLATE:-2}
       NEXT_PUBLIC_API_URL: ${TEMPLATE_NEXT_PUBLIC_API_URL:-https://api.tuvisolutions.com}
       NEXT_PUBLIC_VOICE_AGENT_URL: ${TEMPLATE_NEXT_PUBLIC_VOICE_AGENT_URL:-https://voice.tuvisolutions.com}
+      NEXT_PUBLIC_MEDIA_BASE_URL: ${TEMPLATE_MEDIA_PUBLIC_BASE_URL:-}
       VOICE_AGENT_URL: http://voice-agent:8000
     ports:
       - "127.0.0.1:${TUVI_TEMPLATE_PORT:-13000}:3000"
@@ -190,6 +213,25 @@ services:
       api:
         condition: service_started
       voice-agent:
+        condition: service_started
+    restart: unless-stopped
+
+  admin-web:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.web
+      args:
+        NEXT_PUBLIC_BASE_PATH: /admin
+    env_file:
+      - path: ${TUVI_ENV_DIR:-/opt/tuvi/env}/stack.env
+        required: false
+    environment:
+      NODE_ENV: production
+      API_BASE_URL: http://api:8080
+    ports:
+      - "127.0.0.1:${TUVI_ADMIN_WEB_PORT:-13002}:3002"
+    depends_on:
+      api:
         condition: service_started
     restart: unless-stopped
 

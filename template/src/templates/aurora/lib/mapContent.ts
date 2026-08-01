@@ -7,6 +7,8 @@ export interface AuroraContent {
     tagline: string;
     subheadline: string;
     poster: string;
+    posterMedia?: RestaurantContent["heroMedia"];
+    supportingMedia: RestaurantContent["galleryImages"];
     rating?: number;
     reviewsCount?: number;
     priceLevel?: string;
@@ -78,6 +80,10 @@ export function mapAuroraContent(restaurant: RestaurantContent): AuroraContent {
       tagline: restaurant.tagline,
       subheadline: restaurant.subheadline,
       poster: restaurant.heroPoster,
+      posterMedia: restaurant.heroMedia,
+      supportingMedia: restaurant.galleryImages
+        .filter((image) => image.url !== restaurant.heroPoster)
+        .slice(0, 2),
       rating: restaurant.rating,
       reviewsCount: restaurant.reviewsCount,
       priceLevel: restaurant.priceLevel,

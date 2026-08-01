@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/url"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -51,6 +53,41 @@ func (repo *Postgres) ListSiteRestaurants(ctx context.Context) ([]SiteRestaurant
 	return summaries, nil
 }
 
+func (repo *Postgres) GetSiteRestaurantByID(ctx context.Context, restaurantID uuid.UUID) (SiteRestaurantSummary, error) {
+	if repo.pool == nil {
+		return SiteRestaurantSummary{}, fmt.Errorf("database pool is not configured")
+	}
+
+	const query = `
+		WITH ranked AS (
+			SELECT r.id, r.name, COALESCE(rp.google_place_id, '') AS place_id,
+			       COALESCE(rp.city, '') AS city,
+			       row_number() OVER (ORDER BY r.created_at ASC, r.name ASC) - 1 AS site_index
+			FROM restaurants r
+			JOIN restaurant_profiles rp ON rp.restaurant_id = r.id
+			WHERE rp.google_place_id IS NOT NULL AND rp.google_place_id <> ''
+		)
+		SELECT id, name, place_id, city, site_index
+		FROM ranked
+		WHERE id = $1`
+
+	var summary SiteRestaurantSummary
+	err := repo.pool.QueryRow(ctx, query, restaurantID).Scan(
+		&summary.ID,
+		&summary.Name,
+		&summary.PlaceID,
+		&summary.City,
+		&summary.Index,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return SiteRestaurantSummary{}, repository.ErrNotFound
+	}
+	if err != nil {
+		return SiteRestaurantSummary{}, fmt.Errorf("load generated site restaurant: %w", err)
+	}
+	return summary, nil
+}
+
 func (repo *Postgres) GetSiteContentByIndex(ctx context.Context, index int) (SiteContent, error) {
 	summaries, err := repo.ListSiteRestaurants(ctx)
 	if err != nil {
@@ -60,6 +97,14 @@ func (repo *Postgres) GetSiteContentByIndex(ctx context.Context, index int) (Sit
 		return SiteContent{}, repository.ErrNotFound
 	}
 	return repo.buildSiteContent(ctx, summaries[index])
+}
+
+func (repo *Postgres) GetSiteContentByID(ctx context.Context, restaurantID uuid.UUID) (SiteContent, error) {
+	summary, err := repo.GetSiteRestaurantByID(ctx, restaurantID)
+	if err != nil {
+		return SiteContent{}, err
+	}
+	return repo.buildSiteContent(ctx, summary)
 }
 
 func (repo *Postgres) GetSiteContentByPlaceID(ctx context.Context, placeID string) (SiteContent, error) {
@@ -138,8 +183,14 @@ func (repo *Postgres) buildSiteContent(ctx context.Context, summary SiteRestaura
 	if err != nil {
 		return SiteContent{}, fmt.Errorf("load site profile: %w", err)
 	}
+	if isTemporaryGoogleMediaURL(content.Thumbnail) {
+		content.Thumbnail = ""
+	}
 
-	menuImages, err := repo.ListMenuImages(ctx, summary.ID)
+	// Include hidden menu documents in the exclusion set as well. Hiding an
+	// admin-only menu scan must never let the same URL fall through to a dish
+	// card or any public website surface.
+	menuImages, err := repo.ListMenuImagesAdmin(ctx, summary.ID)
 	if err != nil {
 		return SiteContent{}, err
 	}
@@ -164,7 +215,6 @@ func (repo *Postgres) buildSiteContent(ctx context.Context, summary SiteRestaura
 	}
 
 	content.MenuItems = menuItems
-	content.MenuImages = menuImages
 	content.GalleryImages = galleryImages
 	content.Reviews = reviews
 
@@ -249,7 +299,7 @@ func (repo *Postgres) listSiteReviews(ctx context.Context, restaurantID uuid.UUI
 }
 
 func pickFoodImageURL(imageURL string, imagesJSON json.RawMessage, menuBoardURLs map[string]struct{}) string {
-	if imageURL != "" {
+	if imageURL != "" && !isTemporaryGoogleMediaURL(imageURL) {
 		if _, isMenu := menuBoardURLs[imageURL]; !isMenu {
 			return imageURL
 		}
@@ -273,6 +323,9 @@ func pickFoodImageURL(imageURL string, imagesJSON json.RawMessage, menuBoardURLs
 		if url == "" {
 			continue
 		}
+		if isTemporaryGoogleMediaURL(url) {
+			continue
+		}
 		if _, isMenu := menuBoardURLs[url]; isMenu {
 			continue
 		}
@@ -289,4 +342,14 @@ func pickFoodImageURL(imageURL string, imagesJSON json.RawMessage, menuBoardURLs
 	}
 
 	return ""
+}
+
+func isTemporaryGoogleMediaURL(value string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(value))
+	if err != nil {
+		return false
+	}
+	hostname := strings.ToLower(strings.TrimSuffix(parsed.Hostname(), "."))
+	return hostname == "googleusercontent.com" || strings.HasSuffix(hostname, ".googleusercontent.com") ||
+		hostname == "ggpht.com" || strings.HasSuffix(hostname, ".ggpht.com")
 }

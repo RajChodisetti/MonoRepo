@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Image from "next/image";
 import { gsap, registerGsap } from "@/lib/gsap";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import type { StoryStep } from "@/data/types/restaurant";
 import BlurReveal from "./ui/BlurReveal";
+import SourceAwareImage, { mediaForURL } from "@/components/SourceAwareImage";
+import PhotoAttribution from "@/components/PhotoAttribution";
 
 export default function WorkflowTimeline({ steps }: { steps: StoryStep[] }) {
   const sectionRef = useRef<HTMLElement>(null);
@@ -76,21 +77,29 @@ export default function WorkflowTimeline({ steps }: { steps: StoryStep[] }) {
         </BlurReveal>
 
         <div className="relative aspect-square overflow-hidden rounded-2xl border border-white/10">
-          {steps.map((s, i) => (
-            <div
-              key={s.number}
-              className={`absolute inset-0 transition-all duration-700 ${
-                i === active ? "opacity-100 scale-100" : "opacity-0 scale-105"
-              }`}
-            >
-              <Image src={s.image} alt={s.title} fill className="object-cover" sizes="50vw" />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#09090B] via-[#09090B]/40 to-transparent" />
-              <div className="absolute bottom-0 p-8">
-                <h3 className="aurora-heading text-2xl font-bold text-white">{s.title}</h3>
-                <p className="mt-2 text-white/70">{s.description}</p>
+          {steps.map((s, i) => {
+            const media = s.imageMedia || mediaForURL(s.image, s.title);
+            return (
+              <div
+                key={s.number}
+                className={`absolute inset-0 transition-all duration-700 ${
+                  i === active ? "opacity-100 scale-100" : "opacity-0 scale-105"
+                }`}
+              >
+                <SourceAwareImage media={media} fill className="object-cover" sizes="50vw" />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#09090B] via-[#09090B]/40 to-transparent" />
+                {media.sourceKind === "google_places_live" ? (
+                  <div className="absolute inset-x-3 top-3 z-10 rounded bg-black/65 px-2 py-1 text-white/80">
+                    <PhotoAttribution media={media} compact />
+                  </div>
+                ) : null}
+                <div className="absolute bottom-0 p-8">
+                  <h3 className="aurora-heading text-2xl font-bold text-white">{s.title}</h3>
+                  <p className="mt-2 text-white/70">{s.description}</p>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </section>

@@ -1,7 +1,8 @@
 "use client";
 
-import Image from "next/image";
 import { forwardRef, type CSSProperties, type MouseEventHandler, type Ref } from "react";
+import type { GalleryImage } from "@/data/types/gallery";
+import SourceAwareImage, { mediaForURL } from "@/components/SourceAwareImage";
 
 type ElysianImageProps = {
   src: string;
@@ -16,9 +17,10 @@ type ElysianImageProps = {
   id?: string;
   onClick?: () => void;
   onMouseMove?: MouseEventHandler<HTMLDivElement>;
+  media?: GalleryImage;
 };
 
-/** Remote Google / CDN photos via Next.js image optimizer (fixes broken plain img tags). */
+/** Source-aware remote image: live Google bypasses caching; durable CDN media is optimized. */
 const ElysianImage = forwardRef(function ElysianImage(
   {
     src,
@@ -33,9 +35,11 @@ const ElysianImage = forwardRef(function ElysianImage(
     id,
     onClick,
     onMouseMove,
+    media,
   }: ElysianImageProps,
   ref: Ref<HTMLDivElement>,
 ) {
+  const resolvedMedia = media || mediaForURL(src, alt);
   if (fill) {
     return (
       <div
@@ -46,9 +50,8 @@ const ElysianImage = forwardRef(function ElysianImage(
         onClick={onClick}
         onMouseMove={onMouseMove}
       >
-        <Image
-          src={src}
-          alt={alt}
+        <SourceAwareImage
+          media={resolvedMedia}
           fill
           className="object-cover"
           sizes={sizes || "100vw"}
@@ -59,9 +62,8 @@ const ElysianImage = forwardRef(function ElysianImage(
   }
 
   return (
-    <Image
-      src={src}
-      alt={alt}
+    <SourceAwareImage
+      media={resolvedMedia}
       width={width!}
       height={height!}
       className={className}

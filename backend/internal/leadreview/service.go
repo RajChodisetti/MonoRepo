@@ -57,18 +57,31 @@ type DemoReview struct {
 }
 
 type ProfileReviewPreview struct {
-	RestaurantID        uuid.UUID       `json:"restaurant_id"`
-	RestaurantName      string          `json:"restaurant_name"`
-	ContactEmail        string          `json:"contact_email"`
-	OCRStatus           string          `json:"ocr_status"`
-	OCRInputFingerprint string          `json:"ocr_input_fingerprint"`
-	OCRCompletedAt      *time.Time      `json:"ocr_completed_at,omitempty"`
-	ReviewStatus        string          `json:"review_status"`
-	ReviewedAt          *time.Time      `json:"reviewed_at,omitempty"`
-	ReviewedBy          *uuid.UUID      `json:"reviewed_by,omitempty"`
-	RestaurantUpdatedAt time.Time       `json:"restaurant_updated_at"`
-	ProfileUpdatedAt    time.Time       `json:"profile_updated_at"`
-	Profile             json.RawMessage `json:"profile"`
+	RestaurantID          uuid.UUID       `json:"restaurant_id"`
+	RestaurantName        string          `json:"restaurant_name"`
+	ContactEmail          string          `json:"contact_email"`
+	OCRStatus             string          `json:"ocr_status"`
+	OCRInputFingerprint   string          `json:"ocr_input_fingerprint"`
+	OCRChecked            bool            `json:"ocr_checked"`
+	OCRStartedAt          *time.Time      `json:"ocr_started_at,omitempty"`
+	OCRCompletedAt        *time.Time      `json:"ocr_completed_at,omitempty"`
+	OCRAttempts           int             `json:"ocr_attempts"`
+	OCRVerificationErrors json.RawMessage `json:"ocr_verification_errors"`
+	OCRImagesDiscovered   int             `json:"ocr_images_discovered"`
+	OCRImagesAnalyzed     int             `json:"ocr_images_analyzed"`
+	OCRImagesSucceeded    int             `json:"ocr_images_succeeded"`
+	OCRImagesFailed       int             `json:"ocr_images_failed"`
+	OCRAllImagesProcessed bool            `json:"ocr_all_images_processed"`
+	OCRProvider           string          `json:"ocr_provider"`
+	OCRModel              string          `json:"ocr_model"`
+	ApolloStatus          string          `json:"apollo_status"`
+	ApolloEmailFound      bool            `json:"apollo_email_found"`
+	ReviewStatus          string          `json:"review_status"`
+	ReviewedAt            *time.Time      `json:"reviewed_at,omitempty"`
+	ReviewedBy            *uuid.UUID      `json:"reviewed_by,omitempty"`
+	RestaurantUpdatedAt   time.Time       `json:"restaurant_updated_at"`
+	ProfileUpdatedAt      time.Time       `json:"profile_updated_at"`
+	Profile               json.RawMessage `json:"profile"`
 }
 
 type Service struct {
@@ -96,7 +109,41 @@ func (service *Service) GetProfileReviewPreview(
 		       r.email,
 		       rp.ocr_status,
 		       rp.ocr_input_fingerprint,
+		       rp.ocr_started_at,
 		       rp.ocr_completed_at,
+		       rp.ocr_attempts,
+		       rp.ocr_verification_errors,
+		       CASE
+		         WHEN jsonb_typeof(rp.raw_public_data #> '{menu_ocr,images_discovered}') = 'number'
+		         THEN (rp.raw_public_data #>> '{menu_ocr,images_discovered}')::int
+		         ELSE 0
+		       END,
+		       CASE
+		         WHEN jsonb_typeof(rp.raw_public_data #> '{menu_ocr,images_analyzed}') = 'number'
+		         THEN (rp.raw_public_data #>> '{menu_ocr,images_analyzed}')::int
+		         ELSE 0
+		       END,
+		       CASE
+		         WHEN jsonb_typeof(rp.raw_public_data #> '{menu_ocr,images_succeeded}') = 'number'
+		         THEN (rp.raw_public_data #>> '{menu_ocr,images_succeeded}')::int
+		         ELSE 0
+		       END,
+		       CASE
+		         WHEN jsonb_typeof(rp.raw_public_data #> '{menu_ocr,images_failed}') = 'number'
+		         THEN (rp.raw_public_data #>> '{menu_ocr,images_failed}')::int
+		         ELSE 0
+		       END,
+		       COALESCE(
+		         (rp.raw_public_data #>> '{menu_ocr,all_images_processed}')::boolean,
+		         false
+		       ),
+		       COALESCE(rp.raw_public_data #>> '{menu_ocr,provider}', ''),
+		       COALESCE(rp.raw_public_data #>> '{menu_ocr,model}', ''),
+		       COALESCE(
+		         NULLIF(rp.raw_public_data #>> '{apollo_enrichment,status}', ''),
+		         CASE WHEN rp.apollo_lead <> '{}'::jsonb THEN 'enriched' ELSE 'not_recorded' END
+		       ),
+		       COALESCE(NULLIF(rp.apollo_lead #>> '{contact,email}', ''), '') <> '',
 		       rp.review_status,
 		       rp.reviewed_at,
 		       rp.reviewed_by,
@@ -138,7 +185,19 @@ func (service *Service) GetProfileReviewPreview(
 		&result.ContactEmail,
 		&result.OCRStatus,
 		&result.OCRInputFingerprint,
+		&result.OCRStartedAt,
 		&result.OCRCompletedAt,
+		&result.OCRAttempts,
+		&result.OCRVerificationErrors,
+		&result.OCRImagesDiscovered,
+		&result.OCRImagesAnalyzed,
+		&result.OCRImagesSucceeded,
+		&result.OCRImagesFailed,
+		&result.OCRAllImagesProcessed,
+		&result.OCRProvider,
+		&result.OCRModel,
+		&result.ApolloStatus,
+		&result.ApolloEmailFound,
 		&result.ReviewStatus,
 		&result.ReviewedAt,
 		&result.ReviewedBy,
@@ -153,6 +212,7 @@ func (service *Service) GetProfileReviewPreview(
 		return ProfileReviewPreview{}, fmt.Errorf("load profile review preview: %w", err)
 	}
 	result.Profile = json.RawMessage(profile)
+	result.OCRChecked = result.OCRAttempts > 0
 	return result, nil
 }
 

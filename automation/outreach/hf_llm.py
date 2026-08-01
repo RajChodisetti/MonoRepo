@@ -41,17 +41,26 @@ def hf_vision_model() -> str:
     return (
         os.getenv("HF_VISION_MODEL", "").strip()
         or os.getenv("MENU_OCR_MODEL", "").strip()
-        or "Qwen/Qwen2-VL-7B-Instruct"
+        or "google/gemma-3-4b-it:deepinfra"
     )
 
 
-def create_hf_client() -> "OpenAI":
+def create_hf_client(
+    *,
+    timeout: float | None = None,
+    max_retries: int | None = None,
+) -> "OpenAI":
     if OpenAI is None:
         raise ImportError("openai SDK not installed. Run: pip install openai")
     key = hf_api_key()
     if not key:
         raise ValueError("HUGGING_FACE_API_KEY not set (check backend/.env)")
-    return OpenAI(base_url=HF_ROUTER_BASE, api_key=key)
+    kwargs = {"base_url": HF_ROUTER_BASE, "api_key": key}
+    if timeout is not None:
+        kwargs["timeout"] = timeout
+    if max_retries is not None:
+        kwargs["max_retries"] = max_retries
+    return OpenAI(**kwargs)
 
 
 def chat_completion(

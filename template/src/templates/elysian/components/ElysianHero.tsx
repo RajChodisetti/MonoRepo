@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import type { ElysianContent } from "../lib/mapContent";
 import ElysianImage from "./ElysianImage";
+import PhotoAttribution from "@/components/PhotoAttribution";
 
 export default function ElysianHero({
   hero,
@@ -40,6 +41,7 @@ export default function ElysianHero({
             ref={imgRef}
             src={hero.poster}
             alt={hero.name}
+            media={hero.posterMedia}
             fill
             className="hero-img"
             id="heroImg"
@@ -58,6 +60,11 @@ export default function ElysianHero({
         <div className="hero-overlay" />
         <div className="hero-grain" />
       </div>
+      {hero.posterMedia?.sourceKind === "google_places_live" ? (
+        <div className="absolute bottom-5 left-5 z-20 rounded bg-black/55 px-3 py-2 text-white/70">
+          <PhotoAttribution media={hero.posterMedia} compact />
+        </div>
+      ) : null}
       <div className="hero-particles" ref={particlesRef} id="heroParticles" />
       <div className="hero-content">
         <p className="eyebrow reveal-line">

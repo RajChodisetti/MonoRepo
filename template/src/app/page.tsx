@@ -2,10 +2,9 @@ import type { Metadata } from "next";
 import CinematicTemplate from "@/templates/cinematic/CinematicTemplate";
 import AuroraTemplate from "@/templates/aurora/AuroraTemplate";
 import ElysianTemplate from "@/templates/elysian/ElysianTemplate";
-import FoodieTemplate from "@/templates/foodie/FoodieTemplate";
 import {
   loadRestaurant,
-  loadRestaurantFromApiOnly,
+  loadRestaurantByID,
   loadSignedDemo,
   parseRestaurantIndex,
   getRestaurantCount,
@@ -14,26 +13,28 @@ import { resolveTemplate } from "@/lib/templateConfig";
 import { buildMetadata as buildCinematicMetadata } from "@/templates/cinematic/seo";
 import { buildAuroraMetadata } from "@/templates/aurora/seo";
 import { buildElysianMetadata, buildElysianJsonLd } from "@/templates/elysian/seo";
-import { buildFoodieMetadata } from "@/templates/foodie/seo";
+import DemoEngagementTracker from "@/components/DemoEngagementTracker";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 interface PageProps {
-  searchParams: Promise<{ id?: string; template?: string; slug?: string; token?: string }>;
+  searchParams: Promise<{ id?: string; restaurant_id?: string; template?: string; slug?: string; token?: string }>;
 }
 
 async function loadForTemplate(
   index: number,
-  template: "1" | "2" | "3" | "4",
+  template: "1" | "2" | "3",
   slug?: string,
   token?: string,
+  restaurantID?: string,
 ) {
   if (slug || token) {
     if (!slug || !token) throw new Error("The signed demo link is incomplete.");
     return loadSignedDemo(slug, token, index);
   }
-  if (template === "3") return loadRestaurantFromApiOnly(index);
+  if (restaurantID) return loadRestaurantByID(restaurantID);
+  if (template === "3") return loadRestaurant(index);
   return loadRestaurant(index);
 }
 
@@ -43,8 +44,7 @@ export async function generateMetadata({ searchParams }: PageProps): Promise<Met
   const template = resolveTemplate(params.template);
 
   try {
-    const restaurant = await loadForTemplate(index, template, params.slug, params.token);
-    if (template === "4") return buildFoodieMetadata(restaurant);
+    const restaurant = await loadForTemplate(index, template, params.slug, params.token, params.restaurant_id);
     if (template === "3") return buildElysianMetadata(restaurant);
     if (template === "2") return buildAuroraMetadata(restaurant);
     return buildCinematicMetadata(restaurant);
@@ -59,15 +59,13 @@ export default async function HomePage({ searchParams }: PageProps) {
   const template = resolveTemplate(params.template);
 
   try {
-    const restaurant = await loadForTemplate(index, template, params.slug, params.token);
+    const restaurant = await loadForTemplate(index, template, params.slug, params.token, params.restaurant_id);
 
-    if (template === "4") {
-      return <FoodieTemplate restaurant={restaurant} />;
-    }
     if (template === "3") {
       const jsonLd = buildElysianJsonLd(restaurant);
       return (
         <>
+          <DemoEngagementTracker slug={params.slug} demoToken={params.token} templateID="3" />
           <script
             type="application/ld+json"
             dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
@@ -77,9 +75,19 @@ export default async function HomePage({ searchParams }: PageProps) {
       );
     }
     if (template === "2") {
-      return <AuroraTemplate restaurant={restaurant} />;
+      return (
+        <>
+          <DemoEngagementTracker slug={params.slug} demoToken={params.token} templateID="2" />
+          <AuroraTemplate restaurant={restaurant} />
+        </>
+      );
     }
-    return <CinematicTemplate restaurant={restaurant} />;
+    return (
+      <>
+        <DemoEngagementTracker slug={params.slug} demoToken={params.token} templateID="1" />
+        <CinematicTemplate restaurant={restaurant} />
+      </>
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     const signedDemo = Boolean(params.slug || params.token);
@@ -96,7 +104,7 @@ export default async function HomePage({ searchParams }: PageProps) {
           ) : (
             <p className="mt-2 text-sm text-white/40">
               Use ?id=0–{total - 1} · Template {template} active
-              {template === "3" ? " (Elysian requires API — set NEXT_PUBLIC_API_URL)" : ""}
+              {template === "3" ? " (API-backed templates require NEXT_PUBLIC_API_URL)" : ""}
             </p>
           )}
         </div>

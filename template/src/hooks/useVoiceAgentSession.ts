@@ -289,9 +289,15 @@ export function useVoiceAgentSession(restaurantIndex = 0) {
           }
         }
 
-        // Transcript is audio-only in the UI; voice-sales-agent persists every turn via log_turn.
+        // The voice service keeps its operational log; signed demo pages also
+        // forward each turn to the main engagement ledger for restaurant review.
         if (msg.event === "transcript" && msg.role && msg.text) {
           clearThinkingTimer();
+          window.dispatchEvent(
+            new CustomEvent("tuvi:voice-transcript", {
+              detail: { role: msg.role, text: msg.text },
+            }),
+          );
         }
 
         if (msg.event === "booking" && msg.status === "pending" && msg.reservation_id) {

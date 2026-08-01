@@ -2,19 +2,23 @@ package demos
 
 import (
 	"encoding/json"
+
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/media"
 )
 
 type PublicDemoPayload struct {
-	RestaurantID      string          `json:"restaurant_id"`
-	RestaurantName    string          `json:"restaurant_name"`
-	Cuisine           string          `json:"cuisine"`
-	Hero              string          `json:"hero"`
-	Hours             json.RawMessage `json:"hours,omitempty"`
-	Address           string          `json:"address,omitempty"`
-	Phone             string          `json:"phone,omitempty"`
-	MenuSections      json.RawMessage `json:"menu_sections,omitempty"`
-	ReservationCTA    string          `json:"reservation_cta,omitempty"`
-	AIReceptionistCTA string          `json:"ai_receptionist_cta,omitempty"`
+	RestaurantID      string              `json:"restaurant_id"`
+	RestaurantName    string              `json:"restaurant_name"`
+	Cuisine           string              `json:"cuisine"`
+	Hero              string              `json:"hero"`
+	Hours             json.RawMessage     `json:"hours,omitempty"`
+	Address           string              `json:"address,omitempty"`
+	Phone             string              `json:"phone,omitempty"`
+	MenuSections      json.RawMessage     `json:"menu_sections,omitempty"`
+	ReservationCTA    string              `json:"reservation_cta,omitempty"`
+	AIReceptionistCTA string              `json:"ai_receptionist_cta,omitempty"`
+	Media             []media.PublicMedia `json:"media,omitempty"`
+	MediaManifest     json.RawMessage     `json:"media_manifest,omitempty"`
 }
 
 func MapPublicPayload(raw json.RawMessage) PublicDemoPayload {
@@ -50,6 +54,9 @@ func MapPublicPayload(raw json.RawMessage) PublicDemoPayload {
 	}
 	if value, ok := source["ai_receptionist_cta"]; ok {
 		_ = json.Unmarshal(value, &payload.AIReceptionistCTA)
+	}
+	if value, ok := source["media_manifest"]; ok {
+		payload.MediaManifest = value
 	}
 
 	return payload

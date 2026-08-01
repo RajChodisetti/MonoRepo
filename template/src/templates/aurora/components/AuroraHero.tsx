@@ -1,11 +1,12 @@
 "use client";
 
-import Image from "next/image";
 import { motion } from "framer-motion";
 import type { AuroraContent } from "../lib/mapContent";
 import MagneticButton from "./ui/MagneticButton";
 import BlurReveal from "./ui/BlurReveal";
 import Marquee from "./ui/Marquee";
+import SourceAwareImage from "@/components/SourceAwareImage";
+import PhotoAttribution from "@/components/PhotoAttribution";
 
 export default function AuroraHero({ content }: { content: AuroraContent["hero"] }) {
   return (
@@ -57,9 +58,8 @@ export default function AuroraHero({ content }: { content: AuroraContent["hero"]
           >
             {content.poster && (
               <div className="relative aspect-[4/3] overflow-hidden rounded-xl">
-                <Image
-                  src={content.poster}
-                  alt={`${content.name} preview`}
+                <SourceAwareImage
+                  media={content.posterMedia || { url: content.poster, alt: `${content.name} preview` }}
                   fill
                   priority
                   className="object-cover"
@@ -68,17 +68,22 @@ export default function AuroraHero({ content }: { content: AuroraContent["hero"]
                 <div className="absolute inset-0 bg-gradient-to-t from-[#09090B] via-transparent to-transparent" />
               </div>
             )}
-            <div className="absolute bottom-4 left-4 right-4 grid grid-cols-3 gap-2">
-              {["Menu", "Reserve", "Gallery"].map((label) => (
-                <div
-                  key={label}
-                  className="rounded-lg border border-white/10 bg-white/10 px-3 py-2 text-center text-[10px] uppercase tracking-wider text-white/80 backdrop-blur-md"
-                >
-                  {label}
-                </div>
-              ))}
-            </div>
+            {content.supportingMedia.length ? (
+              <div className="absolute bottom-4 left-4 right-4 flex justify-end gap-2">
+                {content.supportingMedia.map((image) => (
+                  <div key={image.url} className="relative h-16 w-24 overflow-hidden rounded-lg border border-white/20 bg-black/30">
+                    <SourceAwareImage media={image} fill className="object-cover" sizes="96px" />
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </motion.div>
+
+          {content.posterMedia?.sourceKind === "google_places_live" ? (
+            <div className="mt-2 text-white/45">
+              <PhotoAttribution media={content.posterMedia} compact />
+            </div>
+          ) : null}
 
           <motion.div
             animate={{ y: [0, 8, 0] }}
