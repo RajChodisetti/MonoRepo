@@ -15,6 +15,10 @@ apps/web/.next/
 apps/web/node_modules/
 tuvi-website/app/node_modules/
 tuvi-website/app/.next/
+web/.next/
+web/node_modules/
+web/.env*.local
+web/*.tsbuildinfo
 
 # Local artifacts
 tmp/
