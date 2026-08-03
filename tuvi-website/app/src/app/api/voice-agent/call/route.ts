@@ -1,4 +1,8 @@
-import { getVoiceAgentBaseUrl } from "@/lib/voiceAgentConfig";
+import {
+  getVoiceAgentBaseUrl,
+  type RealEstateLanguage,
+  type VoiceAgentKind,
+} from "@/lib/voiceAgentConfig";
 
 /** Simple in-memory IP throttle for outbound dial proxy. */
 const hits = new Map<string, { count: number; resetAt: number }>();
@@ -27,6 +31,16 @@ function looksLikePhone(raw: string): boolean {
   return digits.length >= 8 && digits.length <= 15;
 }
 
+function parseAgent(raw: unknown): VoiceAgentKind {
+  return raw === "real_estate" ? "real_estate" : "corporate";
+}
+
+function parseLanguage(raw: unknown): RealEstateLanguage {
+  const v = String(raw || "en").trim().toLowerCase();
+  if (v === "hi" || v === "te" || v === "auto" || v === "en") return v;
+  return "en";
+}
+
 export async function POST(req: Request) {
   const ip = clientIp(req);
   if (rateLimited(ip)) {
@@ -36,7 +50,12 @@ export async function POST(req: Request) {
     );
   }
 
-  let body: { phone?: string; name?: string };
+  let body: {
+    phone?: string;
+    name?: string;
+    agent?: string;
+    language?: string;
+  };
   try {
     body = await req.json();
   } catch {
@@ -54,8 +73,13 @@ export async function POST(req: Request) {
     );
   }
 
-  const base = getVoiceAgentBaseUrl();
-  const secret = process.env.CALL_API_SECRET || "";
+  const kind = parseAgent(body.agent);
+  const language = parseLanguage(body.language);
+  const base = getVoiceAgentBaseUrl(kind);
+  const secret =
+    (kind === "real_estate"
+      ? process.env.REAL_ESTATE_CALL_API_SECRET || process.env.CALL_API_SECRET
+      : process.env.CALL_API_SECRET) || "";
   const isDev = process.env.NODE_ENV !== "production";
 
   const headers: Record<string, string> = {
@@ -65,16 +89,27 @@ export async function POST(req: Request) {
     headers["X-Call-Api-Key"] = secret;
   }
 
+  const payload =
+    kind === "real_estate"
+      ? {
+          to: phone,
+          agent: "andre",
+          language,
+          campaign_id: "website_form_real_estate",
+          skip_compliance: isDev,
+        }
+      : {
+          to: phone,
+          agent: "corporate",
+          campaign_id: "website_form",
+          skip_compliance: isDev,
+        };
+
   try {
     const res = await fetch(`${base}/call`, {
       method: "POST",
       headers,
-      body: JSON.stringify({
-        to: phone,
-        agent: "corporate",
-        campaign_id: "website_form",
-        skip_compliance: isDev,
-      }),
+      body: JSON.stringify(payload),
       cache: "no-store",
       signal: AbortSignal.timeout(20_000),
     });
@@ -138,7 +173,9 @@ export async function POST(req: Request) {
       {
         status: "unavailable",
         message:
-          "Voice agent is not reachable. Start voice-sales-agent and ensure PUBLIC_BASE_URL is set for Twilio.",
+          kind === "real_estate"
+            ? "Real estate agent is not reachable. Start andre-voice-agent on port 8001."
+            : "Voice agent is not reachable. Start voice-sales-agent and ensure PUBLIC_BASE_URL is set for Twilio.",
       },
       { status: 503 },
     );

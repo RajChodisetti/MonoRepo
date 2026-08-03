@@ -118,18 +118,21 @@ services:
     restart: unless-stopped
 
   ocr-worker:
+    profiles: [stack]
     build:
       context: ../..
       dockerfile: infra/docker/Dockerfile.ocr
     command: ["python", "verify_leads_from_db.py", "--watch"]
     env_file:
-      - path: ${TUVI_ENV_DIR:-/opt/tuvi/env}/stack.env
+      - path: ../../.env
         required: false
-      - path: ${TUVI_ENV_DIR:-/opt/tuvi/env}/ingestion.env
+      - path: ../../automation/outreach/.env
         required: false
     environment:
-      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/restaurant_platform?sslmode=disable
     depends_on:
+      postgres:
+        condition: service_healthy
       migrate:
         condition: service_completed_successfully
     restart: unless-stopped

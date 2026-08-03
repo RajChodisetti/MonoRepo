@@ -1,0 +1,287 @@
+@import "tailwindcss";
+
+/* Tuvi Solutions brand — warm ivory paper, deep forest ink */
+:root {
+  --background: #fffef8;
+  --foreground: #0f271f;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --color-bg: #fffef8;
+  --color-surface: #f5f0e6;
+  --color-parchment: #f2ecdf;
+  --color-sage: #dce6dd;
+  --color-border: rgba(15, 39, 31, 0.14);
+
+  --color-ink: #0f271f;
+  --color-primary: #174c3a;
+  --color-primary-dim: #0f372a;
+  --color-accent: #2f6b54;
+  --color-secondary: #7b927f;
+  --color-muted: #586860;
+
+  --font-sans: var(--font-instrument), system-ui, sans-serif;
+  --font-display: var(--font-newsreader), Georgia, serif;
+  --font-mono: var(--font-geist-mono);
+}
+
+@layer base {
+  body {
+    background: var(--color-bg);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+  }
+
+  ::selection {
+    background: rgba(23, 76, 58, 0.18);
+    color: #0f271f;
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: var(--font-display);
+  }
+
+  .text-gradient-tuvi {
+    background: linear-gradient(105deg, #0f271f 0%, #2f6b54 58%, #7b927f 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .hero-atmosphere {
+    background:
+      radial-gradient(42rem 26rem at 12% 0%, rgba(220, 230, 221, 0.95), transparent 62%),
+      radial-gradient(34rem 22rem at 92% 18%, rgba(242, 236, 223, 0.95), transparent 64%),
+      radial-gradient(28rem 18rem at 50% 100%, rgba(23, 76, 58, 0.06), transparent 70%),
+      #fffef8;
+  }
+
+  .hero-grid {
+    background-image: radial-gradient(
+      circle at center,
+      rgba(15, 39, 31, 0.07) 1px,
+      transparent 1.2px
+    );
+    background-size: 28px 28px;
+  }
+
+  .tuvi-forest-panel {
+    background:
+      radial-gradient(36rem 24rem at 8% 0%, rgba(102, 138, 116, 0.4), transparent 58%),
+      radial-gradient(30rem 20rem at 96% 100%, rgba(220, 230, 221, 0.16), transparent 58%),
+      #0f271f;
+  }
+
+  .tuvi-accent-panel {
+    background:
+      radial-gradient(ellipse 90% 80% at 30% 40%, #3d8f6e 0%, #2f6b54 35%, #174c3a 70%, #0f271f 100%);
+  }
+
+  .nav-glass {
+    background: rgba(255, 254, 248, 0.82);
+    backdrop-filter: blur(16px) saturate(160%);
+    -webkit-backdrop-filter: blur(16px) saturate(160%);
+    border-bottom: 1px solid rgba(15, 39, 31, 0.08);
+  }
+}
+
+@keyframes tuvi-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes tuvi-marquee-reverse {
+  from {
+    transform: translateX(-50%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes tuvi-drift {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(2%, -3%) scale(1.04);
+  }
+}
+
+@keyframes tuvi-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes tuvi-soft-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+@keyframes scan-beam-sweep {
+  0% {
+    top: 4%;
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  92% {
+    opacity: 1;
+  }
+  100% {
+    top: 92%;
+    opacity: 0;
+  }
+}
+
+@keyframes scan-spinner {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes scan-step-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(23, 76, 58, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(23, 76, 58, 0);
+  }
+}
+
+@keyframes scan-card-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes report-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.owner-marquee-track,
+.tuvi-marquee-track {
+  animation: tuvi-marquee 45s linear infinite;
+}
+
+.owner-marquee-track-reverse,
+.tuvi-marquee-track-reverse {
+  animation: tuvi-marquee-reverse 50s linear infinite;
+}
+
+.tuvi-drift {
+  animation: tuvi-drift 14s ease-in-out infinite;
+}
+
+.tuvi-rise {
+  animation: tuvi-rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.tuvi-soft-pulse {
+  animation: tuvi-soft-pulse 5s ease-in-out infinite;
+}
+
+.scan-beam {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(47, 107, 84, 0.05) 15%,
+    rgba(47, 107, 84, 0.85) 50%,
+    rgba(47, 107, 84, 0.05) 85%,
+    transparent 100%
+  );
+  box-shadow: 0 0 24px 6px rgba(47, 107, 84, 0.25);
+  animation: scan-beam-sweep 2.8s ease-in-out infinite;
+}
+
+.scan-spinner {
+  animation: scan-spinner 0.85s linear infinite;
+}
+
+.scan-step-active {
+  animation: scan-step-pulse 1.6s ease-out infinite;
+}
+
+.scan-card-float {
+  animation: scan-card-float 5.5s ease-in-out infinite;
+}
+
+.scan-progress-fill {
+  background-image: linear-gradient(
+    90deg,
+    #174c3a 0%,
+    #2f6b54 45%,
+    #3d8f6e 70%,
+    #174c3a 100%
+  );
+  background-size: 200% 100%;
+}
+
+.report-reveal {
+  animation: report-reveal 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.report-phone-stage {
+  box-shadow:
+    0 28px 70px rgba(15, 39, 31, 0.16),
+    0 2px 0 rgba(255, 255, 255, 0.4) inset;
+  animation: report-reveal 0.65s cubic-bezier(0.22, 1, 0.36, 1) 0.08s both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .owner-marquee-track,
+  .tuvi-marquee-track,
+  .owner-marquee-track-reverse,
+  .tuvi-marquee-track-reverse,
+  .tuvi-drift,
+  .tuvi-soft-pulse,
+  .scan-beam,
+  .scan-spinner,
+  .scan-step-active,
+  .scan-card-float {
+    animation: none;
+  }
+
+  .tuvi-rise,
+  .report-reveal,
+  .report-phone-stage {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}

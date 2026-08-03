@@ -7,9 +7,13 @@ type FormStatus = "idle" | "loading" | "success" | "error" | "queued";
 
 export default function RequestCallbackForm({
   compact = false,
+  agent = "corporate",
+  language = "en",
   onSuccess,
 }: {
   compact?: boolean;
+  agent?: "corporate" | "real_estate";
+  language?: "en" | "hi" | "te" | "auto";
   onSuccess?: () => void;
 }) {
   const [phone, setPhone] = useState("");
@@ -27,7 +31,12 @@ export default function RequestCallbackForm({
       const res = await fetch("/api/voice-agent/call", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: phone.trim(), name: nameVal.trim() || undefined }),
+        body: JSON.stringify({
+          phone: phone.trim(),
+          name: nameVal.trim() || undefined,
+          agent,
+          language,
+        }),
       });
       const data = (await res.json()) as { status?: string; message?: string };
       if (data.status === "calling") {
@@ -53,7 +62,7 @@ export default function RequestCallbackForm({
   }
 
   const inputClass =
-    "w-full rounded-xl border border-border bg-bg-elevated px-3 py-2.5 text-sm text-text placeholder:text-muted/70 outline-none transition focus:border-primary/60";
+    "w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm text-text placeholder:text-muted/70 outline-none transition focus:border-primary/60";
 
   return (
     <div className={compact ? "space-y-3" : "mx-auto max-w-md space-y-3 text-left"}>
@@ -101,7 +110,7 @@ export default function RequestCallbackForm({
         <button
           type="submit"
           disabled={status === "loading"}
-          className="w-full cursor-pointer rounded-xl bg-ink px-4 py-3 text-sm font-semibold text-[#fffef8] transition-colors hover:bg-primary disabled:opacity-60"
+          className="w-full cursor-pointer rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-bg transition-colors hover:bg-primary-dim disabled:opacity-60"
         >
           {status === "loading" ? "Requesting…" : "Request a callback"}
         </button>

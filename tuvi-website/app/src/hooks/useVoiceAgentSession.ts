@@ -1,7 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getVoiceAgentWsUrl } from "@/lib/voiceAgentConfig";
+import {
+  getDefaultRealEstateLanguage,
+  getVoiceAgentWsUrl,
+  type RealEstateLanguage,
+  type VoiceAgentKind,
+} from "@/lib/voiceAgentConfig";
 
 export type VoiceSessionStatus =
   | "idle"
@@ -47,9 +52,14 @@ type ReadinessResult =
 
 const READY_TIMEOUT_MS = 12_000;
 
-export async function checkVoiceAgentReadiness(): Promise<ReadinessResult> {
+export async function checkVoiceAgentReadiness(
+  agent: VoiceAgentKind = "corporate",
+): Promise<ReadinessResult> {
+  const label = agent === "real_estate" ? "Real estate agent" : "Tuvi agent";
+  const portHint = agent === "real_estate" ? "8001" : "8000";
   try {
-    const res = await fetch("/api/voice-agent/status", {
+    const qs = new URLSearchParams({ agent });
+    const res = await fetch(`/api/voice-agent/status?${qs.toString()}`, {
       cache: "no-store",
       signal: AbortSignal.timeout(5000),
     });
@@ -69,25 +79,25 @@ export async function checkVoiceAgentReadiness(): Promise<ReadinessResult> {
         missing: data.missing,
         message:
           data.message ||
-          `Missing API keys: ${data.missing.join(", ")}. Update voice-sales-agent/.env`,
+          `Missing API keys for ${label}: ${data.missing.join(", ")}.`,
       };
     }
 
     if (data.status === "unavailable") {
       return {
         ok: false,
-        message: data.message || "Voice agent server is not running on port 8000.",
+        message: data.message || `${label} server is not running on port ${portHint}.`,
       };
     }
 
     return {
       ok: false,
-      message: data.message || "Voice assistant is not ready.",
+      message: data.message || `${label} is not ready.`,
     };
   } catch {
     return {
       ok: false,
-      message: "Could not reach voice assistant. Is the server running on port 8000?",
+      message: `Could not reach ${label}. Is the server running on port ${portHint}?`,
     };
   }
 }
@@ -124,7 +134,17 @@ function waitForWsOpen(ws: WebSocket, timeoutMs: number): Promise<void> {
   });
 }
 
-export function useVoiceAgentSession() {
+export function useVoiceAgentSession(options?: {
+  agent?: VoiceAgentKind;
+  language?: RealEstateLanguage;
+}) {
+  const agent = options?.agent ?? "corporate";
+  const language = options?.language ?? getDefaultRealEstateLanguage();
+  const agentRef = useRef(agent);
+  const languageRef = useRef(language);
+  agentRef.current = agent;
+  languageRef.current = language;
+
   const [status, setStatus] = useState<VoiceSessionStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const [active, setActive] = useState(false);
@@ -391,7 +411,7 @@ export function useVoiceAgentSession() {
 
   const prefetchStatus = useCallback(async () => {
     setStatus("checking");
-    const readiness = await checkVoiceAgentReadiness();
+    const readiness = await checkVoiceAgentReadiness(agentRef.current);
     if (!readiness.ok) {
       fail(readiness.message);
       return readiness;
@@ -406,6 +426,8 @@ export function useVoiceAgentSession() {
 
     connectInFlightRef.current = true;
     const gen = ++connectGenRef.current;
+    const kind = agentRef.current;
+    const lang = languageRef.current;
 
     setError(null);
     setStatus("checking");
@@ -413,7 +435,7 @@ export function useVoiceAgentSession() {
     setEmailPrompt(null);
     setBookingDetailsPrompt(null);
 
-    const readiness = await checkVoiceAgentReadiness();
+    const readiness = await checkVoiceAgentReadiness(kind);
     if (gen !== connectGenRef.current) return;
     if (!readiness.ok) {
       connectInFlightRef.current = false;
@@ -461,7 +483,7 @@ export function useVoiceAgentSession() {
       if (audioCtx.state !== "running") await audioCtx.resume();
       audioCtxRef.current = audioCtx;
 
-      const ws = new WebSocket(getVoiceAgentWsUrl());
+      const ws = new WebSocket(getVoiceAgentWsUrl(kind, lang));
       ws.binaryType = "arraybuffer";
       wsRef.current = ws;
 
@@ -507,6 +529,15 @@ export function useVoiceAgentSession() {
       }
     }
   }, [cleanup, fail, handleMessage, preloadWorklet]);
+
+  // Drop active call if the user switches Tuvi ↔ Real estate tab.
+  useEffect(() => {
+    if (sessionActiveRef.current || connectInFlightRef.current) {
+      cleanup(true);
+      setStatus("idle");
+      setError(null);
+    }
+  }, [agent, language, cleanup]);
 
   const disconnect = useCallback(() => {
     cleanup(true);

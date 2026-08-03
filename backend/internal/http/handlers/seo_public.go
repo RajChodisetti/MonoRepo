@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/seoreport"
@@ -126,6 +127,37 @@ func (handler *SEOPublicHandler) ClickUnlock(w http.ResponseWriter, r *http.Requ
 	}
 	dest := base + "/report/" + url.PathEscape(place.PlaceID) + "?unlock=" + url.QueryEscape(rec.UnlockToken)
 	http.Redirect(w, r, dest, http.StatusFound)
+}
+
+// Photo handles GET /api/public/v1/seo/photo?name=&max=
+// Proxies Google Places photo media so the API key stays server-side.
+func (handler *SEOPublicHandler) Photo(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimSpace(r.URL.Query().Get("name"))
+	if name == "" {
+		handler.writeError(w, http.StatusBadRequest, "invalid_photo", "Photo name is required.")
+		return
+	}
+	maxPx := 720
+	if raw := strings.TrimSpace(r.URL.Query().Get("max")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			maxPx = n
+		}
+	}
+
+	body, contentType, err := handler.service.FetchPlacePhoto(r.Context(), name, maxPx)
+	if err != nil {
+		if errors.Is(err, seoreport.ErrNotFound) {
+			handler.writeError(w, http.StatusNotFound, "not_found", "Photo was not found.")
+			return
+		}
+		handler.writeError(w, http.StatusBadGateway, "photo_failed", "Could not load listing photo.")
+		return
+	}
+
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(body)
 }
 
 func (handler *SEOPublicHandler) writeUnlockError(w http.ResponseWriter, err error) {

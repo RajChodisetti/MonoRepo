@@ -189,6 +189,16 @@ func (s *Service) GetReport(ctx context.Context, placeID string) (ReportResponse
 	scoreIn.PhotoCount = photoCount
 	scoreIn.HasHours = hasHours || enrichment.HasHours
 
+	var siteMedia *profilesSiteMedia
+	if content, ok := s.loadSiteContent(ctx, placeID); ok {
+		siteMedia = siteMediaFromContent(content)
+	}
+	var photos []placePhoto
+	if snap != nil {
+		photos = snap.Photos
+	}
+	place.Media = buildPlaceMedia(place, photos, siteMedia)
+
 	if strings.TrimSpace(place.Website) != "" {
 		audit := AuditWebsite(ctx, place.Website, s.llm)
 		if audit.QualityScore > 0 || audit.Source == "social" || audit.Source == "fallback" || audit.Source == "vision" {
@@ -312,6 +322,39 @@ func placeFromSite(content profiles.SiteContent) PlaceDetails {
 		place.UserRatingCount = content.ReviewsCount
 	}
 	return place
+}
+
+func siteMediaFromContent(content profiles.SiteContent) *profilesSiteMedia {
+	out := &profilesSiteMedia{
+		MenuItems: make([]siteMenuMedia, 0, len(content.MenuItems)),
+		Gallery:   make([]siteGalleryMedia, 0, len(content.GalleryImages)),
+	}
+	for _, item := range content.MenuItems {
+		img := strings.TrimSpace(item.ImageURL)
+		if img == "" {
+			continue
+		}
+		out.MenuItems = append(out.MenuItems, siteMenuMedia{
+			Name:     strings.TrimSpace(item.Name),
+			ImageURL: img,
+		})
+	}
+	for _, g := range content.GalleryImages {
+		out.Gallery = append(out.Gallery, siteGalleryMedia{
+			Title:        g.Title,
+			URL:          g.URL,
+			ThumbnailURL: g.ThumbnailURL,
+		})
+	}
+	return out
+}
+
+// FetchPlacePhoto proxies a Google Places photo through the server.
+func (s *Service) FetchPlacePhoto(ctx context.Context, photoName string, maxPx int) ([]byte, string, error) {
+	if s == nil || s.places == nil || !s.places.Enabled() {
+		return nil, "", ErrNotFound
+	}
+	return s.places.FetchPhotoMedia(ctx, photoName, maxPx)
 }
 
 func filterEmpty(values []string) []string {

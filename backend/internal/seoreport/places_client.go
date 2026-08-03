@@ -163,10 +163,20 @@ func (c *PlacesClient) SearchRestaurants(ctx context.Context, query, location st
 	return out, nil
 }
 
+// placePhoto is a raw Places photo resource used for media URLs.
+type placePhoto struct {
+	Name         string
+	WidthPx      int
+	HeightPx     int
+	Attribution  string
+	GoogleMapsURI string
+}
+
 // placeSnapshot is the internal Places details model used for scoring.
 type placeSnapshot struct {
 	Details          PlaceDetails
 	Reviews          []Review
+	Photos           []placePhoto
 	PhotoCount       int
 	HasHours         bool
 	Delivery         bool
@@ -236,7 +246,8 @@ func (c *PlacesClient) GetPlaceDetails(ctx context.Context, placeID string) (*pl
 		snap.Details.UserRatingCount = &count
 	}
 	if photos, ok := place["photos"].([]any); ok {
-		snap.PhotoCount = len(photos)
+		snap.Photos = parsePlacePhotos(photos)
+		snap.PhotoCount = len(snap.Photos)
 	}
 	if hours, ok := place["regularOpeningHours"].(map[string]any); ok && len(hours) > 0 {
 		snap.HasHours = true
@@ -283,6 +294,91 @@ func (c *PlacesClient) GetPlaceDetails(ctx context.Context, placeID string) (*pl
 	}
 
 	return snap, nil
+}
+
+// FetchPhotoMedia streams a Places photo binary (keeps the API key server-side).
+func (c *PlacesClient) FetchPhotoMedia(ctx context.Context, photoName string, maxPx int) (body []byte, contentType string, err error) {
+	if !c.Enabled() {
+		return nil, "", fmt.Errorf("places api not configured")
+	}
+	name := sanitizePhotoName(photoName)
+	if name == "" {
+		return nil, "", fmt.Errorf("invalid photo name")
+	}
+	if maxPx < 64 {
+		maxPx = 64
+	}
+	if maxPx > 1600 {
+		maxPx = 1600
+	}
+
+	endpoint := fmt.Sprintf("%s/%s/media?maxHeightPx=%d&maxWidthPx=%d&skipHttpRedirect=false",
+		c.baseURL, name, maxPx, maxPx)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, "", fmt.Errorf("create photo media request: %w", err)
+	}
+	req.Header.Set("X-Goog-Api-Key", c.apiKey)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, "", fmt.Errorf("places photo media: %w", err)
+	}
+	defer resp.Body.Close()
+
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, "", fmt.Errorf("places photo media failed (%d): %s", resp.StatusCode, truncate(string(raw), 160))
+	}
+	ct := resp.Header.Get("Content-Type")
+	if ct == "" {
+		ct = "image/jpeg"
+	}
+	return raw, ct, nil
+}
+
+func parsePlacePhotos(photos []any) []placePhoto {
+	out := make([]placePhoto, 0, len(photos))
+	for i, item := range photos {
+		if i >= 12 {
+			break
+		}
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		name := strings.TrimSpace(asString(m["name"]))
+		if name == "" {
+			continue
+		}
+		p := placePhoto{Name: name, GoogleMapsURI: asString(m["googleMapsUri"])}
+		if w, ok := asInt(m["widthPx"]); ok {
+			p.WidthPx = w
+		}
+		if h, ok := asInt(m["heightPx"]); ok {
+			p.HeightPx = h
+		}
+		if attrs, ok := m["authorAttributions"].([]any); ok && len(attrs) > 0 {
+			if attr, ok := attrs[0].(map[string]any); ok {
+				p.Attribution = asString(attr["displayName"])
+			}
+		}
+		out = append(out, p)
+	}
+	return out
+}
+
+func sanitizePhotoName(photoName string) string {
+	name := strings.TrimSpace(photoName)
+	name = strings.TrimPrefix(name, "/")
+	if name == "" || strings.Contains(name, "..") || strings.ContainsAny(name, " \t\n\r") {
+		return ""
+	}
+	// Expected: places/{placeId}/photos/{photoId}
+	if !strings.HasPrefix(name, "places/") || !strings.Contains(name, "/photos/") {
+		return ""
+	}
+	return name
 }
 
 func sanitizePlaceID(placeID string) string {

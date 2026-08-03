@@ -26,6 +26,25 @@ type PlaceDetails struct {
 	Types             []string `json:"types,omitempty"`
 	EditorialSummary  string   `json:"editorialSummary,omitempty"`
 	Source            string   `json:"source"`
+	// Media is Google Maps-style menu/highlights + photos scraped from Places / inventory.
+	Media             *PlaceMedia `json:"media,omitempty"`
+}
+
+// MediaCard is one tile in the listing media carousels.
+type MediaCard struct {
+	Kind      string `json:"kind"` // menu | highlight | photo | latest | video
+	Label     string `json:"label"`
+	Subtitle  string `json:"subtitle,omitempty"`
+	ImageURL  string `json:"imageUrl,omitempty"`
+	PhotoName string `json:"photoName,omitempty"`
+	Href      string `json:"href,omitempty"`
+}
+
+// PlaceMedia groups scraped listing visuals for the report UI.
+type PlaceMedia struct {
+	MenuAndHighlights []MediaCard `json:"menuAndHighlights,omitempty"`
+	PhotosAndVideos   []MediaCard `json:"photosAndVideos,omitempty"`
+	MapsURI           string      `json:"mapsUri,omitempty"`
 }
 
 // Review is a single Google review used for scoring/summary.

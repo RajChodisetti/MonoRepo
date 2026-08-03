@@ -266,6 +266,7 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	mux.HandleFunc("GET /api/public/v1/site/by-place/{place_id}", restaurantPublicHandler.GetSiteContentByPlaceID)
 	mux.HandleFunc("GET /api/public/v1/seo/search", seoPublicHandler.Search)
 	mux.HandleFunc("GET /api/public/v1/seo/report/{place_id}", seoPublicHandler.Report)
+	mux.HandleFunc("GET /api/public/v1/seo/photo", seoPublicHandler.Photo)
 	mux.HandleFunc("POST /api/public/v1/seo/unlock/request", seoPublicHandler.RequestUnlock)
 	mux.HandleFunc("POST /api/public/v1/seo/unlock/verify", seoPublicHandler.VerifyUnlock)
 	mux.HandleFunc("GET /api/public/v1/seo/unlock/click/{token}", seoPublicHandler.ClickUnlock)

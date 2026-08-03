@@ -4,6 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { useVoiceAgentSession, type BookingProgressPhase } from "@/hooks/useVoiceAgentSession";
 import RequestCallbackForm from "@/components/RequestCallbackForm";
 import VoiceOrbCanvas, { statusGlow } from "@/components/VoiceOrbCanvas";
+import {
+  getDefaultRealEstateLanguage,
+  type RealEstateLanguage,
+  type VoiceAgentKind,
+} from "@/lib/voiceAgentConfig";
 
 const STATUS_LABELS: Record<string, string> = {
   idle: "Ready",
@@ -166,7 +171,7 @@ function BookingProgressOverlay({
             <CheckIcon />
           </div>
         ) : (
-          <SpinnerIcon className="text-cyan" />
+          <SpinnerIcon className="text-primary" />
         )}
         <p className={`text-sm font-semibold ${isSuccess ? "text-emerald-600" : "text-text"}`}>
           {message || (phase === "checking_slots" ? "Checking slots…" : "Booking slot…")}
@@ -182,6 +187,8 @@ function BookingProgressOverlay({
 export default function VoiceAssistantWidget() {
   const [open, setOpen] = useState(false);
   const [showCallback, setShowCallback] = useState(false);
+  const [agentKind, setAgentKind] = useState<VoiceAgentKind>("corporate");
+  const [language, setLanguage] = useState<RealEstateLanguage>(getDefaultRealEstateLanguage());
   const panelRef = useRef<HTMLDivElement>(null);
   const {
     status,
@@ -199,12 +206,15 @@ export default function VoiceAssistantWidget() {
     submitBookingDetails,
     prefetchStatus,
     preloadWorklet,
-  } = useVoiceAgentSession();
+  } = useVoiceAgentSession({ agent: agentKind, language });
 
   const [emailInput, setEmailInput] = useState("");
   const [bookingName, setBookingName] = useState("");
   const [bookingEmail, setBookingEmail] = useState("");
   const [bookingPhone, setBookingPhone] = useState("");
+
+  const isRealEstate = agentKind === "real_estate";
+  const agentTitle = isRealEstate ? "Real estate agent" : "Tuvi agent";
 
   useEffect(() => {
     if (emailPrompt) setEmailInput("");
@@ -223,7 +233,14 @@ export default function VoiceAssistantWidget() {
       return;
     }
     void prefetchStatus();
-  }, [open, prefetchStatus]);
+  }, [open, agentKind, prefetchStatus]);
+
+  const switchAgent = (next: VoiceAgentKind) => {
+    if (next === agentKind) return;
+    if (active) disconnect();
+    setShowCallback(false);
+    setAgentKind(next);
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -280,15 +297,15 @@ export default function VoiceAssistantWidget() {
 
   return (
     <>
-      {consultation && (
+      {consultation && !isRealEstate && (
         <div
           className="pointer-events-auto fixed inset-0 z-[90] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
           aria-label="Consultation confirmation"
         >
-          <div className="w-full max-w-sm rounded-2xl border border-slate-300 bg-bg-elevated p-6 text-center shadow-2xl">
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan">
+          <div className="w-full max-w-sm rounded-2xl border border-border bg-bg-elevated p-6 text-center shadow-2xl">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">
               Consultation booked
             </p>
             <h2 className="mt-2 text-xl font-semibold text-text">Your call is confirmed</h2>
@@ -297,7 +314,7 @@ export default function VoiceAssistantWidget() {
               Save your confirmation number below.
             </p>
 
-            <div className="mt-5 space-y-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-left">
+            <div className="mt-5 space-y-3 rounded-xl border border-border bg-surface px-4 py-4 text-left">
               <div className="flex justify-between gap-3">
                 <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">Day</span>
                 <span className="text-sm font-medium text-text">
@@ -312,11 +329,11 @@ export default function VoiceAssistantWidget() {
               </div>
             </div>
 
-            <div className="mt-4 rounded-xl border border-gold/30 bg-gold/5 px-4 py-4">
+            <div className="mt-4 rounded-xl border border-primary/30 bg-primary/5 px-4 py-4">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">
                 Confirmation ID
               </p>
-              <p className="mt-2 font-mono text-3xl font-bold tracking-[0.2em] text-gold">
+              <p className="mt-2 font-mono text-3xl font-bold tracking-[0.2em] text-primary">
                 {consultation.confirmationCode}
               </p>
             </div>
@@ -327,7 +344,7 @@ export default function VoiceAssistantWidget() {
                   href={calendarUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="rounded-xl bg-ink px-4 py-3 text-sm font-semibold text-[#fffef8] transition-colors hover:bg-primary"
+                  className="rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-bg transition-colors hover:bg-primary-dim"
                 >
                   Open in Google Calendar
                 </a>
@@ -335,7 +352,7 @@ export default function VoiceAssistantWidget() {
               <button
                 type="button"
                 onClick={dismissConsultation}
-                className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium text-muted transition hover:text-text"
+                className="rounded-xl border border-border px-4 py-3 text-sm font-medium text-muted transition hover:text-text"
               >
                 Got it
               </button>
@@ -348,36 +365,31 @@ export default function VoiceAssistantWidget() {
         {open && (
           <div
             ref={panelRef}
-            className="pointer-events-auto relative mb-3 w-[min(440px,calc(100vw-2.5rem))] overflow-hidden rounded-2xl border border-slate-300 bg-bg-elevated/95 p-5 text-text shadow-2xl backdrop-blur-xl"
-            style={
-              bookingDetailsPrompt
-                ? { height: "min(590px, calc(100vh - 7rem))" }
-                : undefined
-            }
+            className="pointer-events-auto relative mb-3 w-[min(380px,calc(100vw-2.5rem))] overflow-hidden rounded-2xl border border-border bg-bg-elevated p-4 text-text shadow-2xl backdrop-blur-xl sm:p-5"
             role="dialog"
-            aria-label="Tuvi AI assistant"
+            aria-label={agentTitle}
           >
-            {activeBookingProgress && (
+            {activeBookingProgress && !isRealEstate && (
               <BookingProgressOverlay
                 phase={activeBookingProgress.phase}
                 message={activeBookingProgress.message}
               />
             )}
 
-            {emailPrompt && (
+            {emailPrompt && !isRealEstate && (
               <div
                 className="absolute inset-0 z-30 flex items-start justify-center overflow-y-auto rounded-2xl bg-bg/80 p-4 backdrop-blur-md sm:items-center"
                 role="dialog"
                 aria-label="Enter email"
               >
                 <form
-                  className="w-full space-y-3 rounded-xl border border-cyan/30 bg-bg-elevated p-4 shadow-xl"
+                  className="w-full space-y-3 rounded-xl border border-primary/30 bg-bg-elevated p-4 shadow-xl"
                   onSubmit={(e) => {
                     e.preventDefault();
                     submitEmail(emailInput);
                   }}
                 >
-                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-cyan">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-primary">
                     Confirm email
                   </p>
                   <p className="text-sm text-text">{emailPrompt}</p>
@@ -389,11 +401,11 @@ export default function VoiceAssistantWidget() {
                     placeholder="you@company.com"
                     value={emailInput}
                     onChange={(e) => setEmailInput(e.target.value)}
-                    className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm text-text outline-none placeholder:text-muted/70 focus:border-cyan/50"
+                    className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm text-text outline-none placeholder:text-muted/70 focus:border-primary/50"
                   />
                   <button
                     type="submit"
-                    className="w-full cursor-pointer rounded-xl bg-ink px-4 py-2.5 text-sm font-semibold text-[#fffef8] transition-colors hover:bg-primary"
+                    className="w-full cursor-pointer rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-bg transition-colors hover:bg-primary-dim"
                   >
                     Enter
                   </button>
@@ -404,14 +416,14 @@ export default function VoiceAssistantWidget() {
               </div>
             )}
 
-            {bookingDetailsPrompt && (
+            {bookingDetailsPrompt && !isRealEstate && (
               <div
                 className="absolute inset-0 z-30 flex items-center justify-center rounded-2xl bg-bg/80 p-4 backdrop-blur-md"
                 role="dialog"
                 aria-label="Enter booking details"
               >
                 <form
-                  className="w-full space-y-3 rounded-xl border border-cyan/30 bg-bg-elevated p-4 shadow-xl"
+                  className="w-full space-y-3 rounded-xl border border-primary/30 bg-bg-elevated p-4 shadow-xl"
                   onSubmit={(event) => {
                     event.preventDefault();
                     submitBookingDetails({
@@ -421,7 +433,7 @@ export default function VoiceAssistantWidget() {
                     });
                   }}
                 >
-                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-cyan">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-primary">
                     Confirm your booking
                   </p>
                   <p className="text-sm text-text">{bookingDetailsPrompt}</p>
@@ -435,7 +447,7 @@ export default function VoiceAssistantWidget() {
                       placeholder="Your full name"
                       value={bookingName}
                       onChange={(event) => setBookingName(event.target.value)}
-                      className="mt-1.5 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm font-normal text-text outline-none placeholder:text-muted/70 focus:border-cyan/50"
+                      className="mt-1.5 w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm font-normal text-text outline-none placeholder:text-muted/70 focus:border-primary/50"
                     />
                   </label>
                   <label className="block text-xs font-semibold text-muted">
@@ -447,7 +459,7 @@ export default function VoiceAssistantWidget() {
                       placeholder="you@company.com"
                       value={bookingEmail}
                       onChange={(event) => setBookingEmail(event.target.value)}
-                      className="mt-1.5 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm font-normal text-text outline-none placeholder:text-muted/70 focus:border-cyan/50"
+                      className="mt-1.5 w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm font-normal text-text outline-none placeholder:text-muted/70 focus:border-primary/50"
                     />
                   </label>
                   <label className="block text-xs font-semibold text-muted">
@@ -459,12 +471,12 @@ export default function VoiceAssistantWidget() {
                       placeholder="+61 4XX XXX XXX"
                       value={bookingPhone}
                       onChange={(event) => setBookingPhone(event.target.value)}
-                      className="mt-1.5 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm font-normal text-text outline-none placeholder:text-muted/70 focus:border-cyan/50"
+                      className="mt-1.5 w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm font-normal text-text outline-none placeholder:text-muted/70 focus:border-primary/50"
                     />
                   </label>
                   <button
                     type="submit"
-                    className="w-full cursor-pointer rounded-xl bg-ink px-4 py-2.5 text-sm font-semibold text-[#fffef8] transition-colors hover:bg-primary"
+                    className="w-full cursor-pointer rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-bg transition-colors hover:bg-primary-dim"
                   >
                     Confirm booking
                   </button>
@@ -475,43 +487,105 @@ export default function VoiceAssistantWidget() {
               </div>
             )}
 
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <p className="text-xs font-semibold uppercase tracking-wider text-cyan">Tuvi AI</p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">
+                {agentTitle}
+              </p>
               <button
                 type="button"
                 onClick={closePanel}
-                className="rounded-lg p-1.5 text-muted transition hover:bg-slate-100 hover:text-text"
+                className="rounded-lg p-1.5 text-muted transition hover:bg-surface hover:text-text"
                 aria-label="Close assistant"
               >
                 <CloseIcon />
               </button>
             </div>
 
+            <div
+              className="mt-3 grid grid-cols-2 gap-1 rounded-xl border border-border bg-surface p-1"
+              role="tablist"
+              aria-label="Choose voice agent"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={!isRealEstate}
+                disabled={active}
+                onClick={() => switchAgent("corporate")}
+                className={`rounded-lg px-2.5 py-2 text-[12px] font-semibold transition disabled:opacity-50 ${
+                  !isRealEstate
+                    ? "bg-primary text-bg shadow-sm"
+                    : "text-muted hover:bg-bg hover:text-text"
+                }`}
+              >
+                Tuvi agent
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={isRealEstate}
+                disabled={active}
+                onClick={() => switchAgent("real_estate")}
+                className={`rounded-lg px-2.5 py-2 text-[12px] font-semibold transition disabled:opacity-50 ${
+                  isRealEstate
+                    ? "bg-primary text-bg shadow-sm"
+                    : "text-muted hover:bg-bg hover:text-text"
+                }`}
+              >
+                Real estate
+              </button>
+            </div>
+
+            <p className="mt-2 text-[12px] leading-snug text-muted">
+              {isRealEstate
+                ? "Ananya — property search, listings & callbacks."
+                : "Software consultations & booking."}
+            </p>
+
+            {isRealEstate && !active ? (
+              <label className="mt-2.5 flex items-center gap-2 text-[11px] text-muted">
+                <span className="shrink-0 font-semibold uppercase tracking-wider">Lang</span>
+                <select
+                  value={language}
+                  onChange={(e) => setLanguage(e.target.value as RealEstateLanguage)}
+                  className="min-w-0 flex-1 rounded-lg border border-border bg-bg px-2.5 py-2 text-[12px] font-medium text-text outline-none focus:border-primary/50"
+                  aria-label="Real estate agent language"
+                >
+                  <option value="en">English</option>
+                  <option value="hi">Hindi</option>
+                  <option value="te">Telugu</option>
+                  <option value="auto">Auto-detect</option>
+                </select>
+              </label>
+            ) : null}
+
             {error && !showCallback && (
               <div
-                className="mb-3 rounded-xl border border-red-400/40 bg-red-500/15 px-3 py-2.5 text-red-100"
+                className="mt-3 rounded-xl border border-danger/35 bg-danger/10 px-3 py-2.5"
                 role="alert"
               >
-                <p className="text-[11px] font-bold uppercase tracking-wider text-rose-600">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-danger">
                   Configuration error
                 </p>
-                <p className="mt-1 text-sm leading-relaxed">{error}</p>
+                <p className="mt-1 text-sm leading-relaxed text-text">{error}</p>
               </div>
             )}
 
             {showCallback ? (
-              <div className="space-y-3">
+              <div className="mt-4 space-y-3">
                 <div className="flex items-center justify-between gap-2">
                   <div>
                     <p className="text-sm font-semibold text-text">Call me</p>
                     <p className="mt-0.5 text-xs text-muted">
-                      Drop your number — our AI will dial you now.
+                      {isRealEstate
+                        ? "Drop your number — the real estate agent will dial you."
+                        : "Drop your number — our AI will dial you now."}
                     </p>
                   </div>
                   <button
                     type="button"
                     onClick={() => setShowCallback(false)}
-                    className="rounded-lg p-1.5 text-muted transition hover:bg-slate-100 hover:text-text"
+                    className="rounded-lg p-1.5 text-muted transition hover:bg-surface hover:text-text"
                     aria-label="Close callback form"
                   >
                     <CloseIcon />
@@ -519,24 +593,24 @@ export default function VoiceAssistantWidget() {
                 </div>
                 <RequestCallbackForm
                   compact
+                  agent={agentKind}
+                  language={language}
                   onSuccess={() => {
                     window.setTimeout(() => setShowCallback(false), 1800);
                   }}
                 />
               </div>
             ) : (
-              <div className="flex flex-col items-center py-1">
-                <VoiceOrbCanvas status={status} size={176} className="mx-auto bg-transparent" />
+              <div className="mt-4 flex flex-col items-center">
+                <VoiceOrbCanvas status={status} size={132} className="mx-auto bg-transparent" />
 
                 <div
-                  className="mt-3 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5"
-                  style={{ borderColor: `${glow}40` }}
+                  className="mt-2 inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1.5"
+                  style={{ borderColor: `${glow}55` }}
                 >
                   <span
                     className={`h-2 w-2 shrink-0 rounded-full ${
-                      status === "thinking" || status === "connecting"
-                        ? "animate-pulse"
-                        : ""
+                      status === "thinking" || status === "connecting" ? "animate-pulse" : ""
                     }`}
                     style={{ backgroundColor: glow, boxShadow: `0 0 8px ${glow}` }}
                   />
@@ -549,7 +623,7 @@ export default function VoiceAssistantWidget() {
                   <button
                     type="button"
                     onClick={() => setShowCallback(true)}
-                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-slate-300 bg-slate-50 text-text transition hover:border-cyan/40 hover:bg-slate-100 hover:text-cyan"
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-text transition hover:border-primary/40 hover:text-primary"
                     aria-label="Get a callback"
                     title="Get a callback"
                   >
@@ -560,7 +634,7 @@ export default function VoiceAssistantWidget() {
                     type="button"
                     onMouseDown={() => void preloadWorklet()}
                     onClick={() => void handlePrimaryAction()}
-                    className="flex h-12 flex-1 cursor-pointer items-center justify-center gap-2 rounded-full bg-ink px-4 text-sm font-semibold text-[#fffef8] transition-colors hover:bg-primary"
+                    className="flex h-11 flex-1 cursor-pointer items-center justify-center gap-2 rounded-full bg-primary px-4 text-sm font-semibold text-bg transition-colors hover:bg-primary-dim"
                   >
                     <MicIcon />
                     {active ? "End" : error ? "Check again" : "Start talking"}
@@ -570,7 +644,7 @@ export default function VoiceAssistantWidget() {
                     <button
                       type="button"
                       onClick={reset}
-                      className="h-12 shrink-0 rounded-full border border-slate-300 px-3 text-sm text-muted transition hover:bg-slate-50"
+                      className="h-11 shrink-0 rounded-full border border-border px-3 text-sm text-muted transition hover:bg-surface hover:text-text"
                     >
                       Reset
                     </button>
