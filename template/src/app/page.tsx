@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import CinematicTemplate from "@/templates/cinematic/CinematicTemplate";
 import AuroraTemplate from "@/templates/aurora/AuroraTemplate";
 import ElysianTemplate from "@/templates/elysian/ElysianTemplate";
+import FoodieTemplate from "@/templates/foodie/FoodieTemplate";
 import {
   loadRestaurant,
   loadRestaurantByID,
@@ -9,10 +10,11 @@ import {
   parseRestaurantIndex,
   getRestaurantCount,
 } from "@/lib/adapters/restaurantLoader";
-import { resolveTemplate } from "@/lib/templateConfig";
+import { resolveTemplate, type TemplateId } from "@/lib/templateConfig";
 import { buildMetadata as buildCinematicMetadata } from "@/templates/cinematic/seo";
 import { buildAuroraMetadata } from "@/templates/aurora/seo";
 import { buildElysianMetadata, buildElysianJsonLd } from "@/templates/elysian/seo";
+import { buildFoodieMetadata } from "@/templates/foodie/seo";
 import DemoEngagementTracker from "@/components/DemoEngagementTracker";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +26,7 @@ interface PageProps {
 
 async function loadForTemplate(
   index: number,
-  template: "1" | "2" | "3",
+  _template: TemplateId,
   slug?: string,
   token?: string,
   restaurantID?: string,
@@ -34,7 +36,6 @@ async function loadForTemplate(
     return loadSignedDemo(slug, token, index);
   }
   if (restaurantID) return loadRestaurantByID(restaurantID);
-  if (template === "3") return loadRestaurant(index);
   return loadRestaurant(index);
 }
 
@@ -45,6 +46,7 @@ export async function generateMetadata({ searchParams }: PageProps): Promise<Met
 
   try {
     const restaurant = await loadForTemplate(index, template, params.slug, params.token, params.restaurant_id);
+    if (template === "4") return buildFoodieMetadata(restaurant);
     if (template === "3") return buildElysianMetadata(restaurant);
     if (template === "2") return buildAuroraMetadata(restaurant);
     return buildCinematicMetadata(restaurant);
@@ -61,6 +63,14 @@ export default async function HomePage({ searchParams }: PageProps) {
   try {
     const restaurant = await loadForTemplate(index, template, params.slug, params.token, params.restaurant_id);
 
+    if (template === "4") {
+      return (
+        <>
+          <DemoEngagementTracker slug={params.slug} demoToken={params.token} templateID="4" />
+          <FoodieTemplate restaurant={restaurant} />
+        </>
+      );
+    }
     if (template === "3") {
       const jsonLd = buildElysianJsonLd(restaurant);
       return (
@@ -104,7 +114,9 @@ export default async function HomePage({ searchParams }: PageProps) {
           ) : (
             <p className="mt-2 text-sm text-white/40">
               Use ?id=0–{total - 1} · Template {template} active
-              {template === "3" ? " (API-backed templates require NEXT_PUBLIC_API_URL)" : ""}
+              {template === "3" || template === "4"
+                ? " (API-backed templates require NEXT_PUBLIC_API_URL)"
+                : ""}
             </p>
           )}
         </div>
