@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import type { TemplateId } from "@/lib/templateConfig";
 
 type SessionCapability = {
   session_id: string;
@@ -19,7 +20,7 @@ export default function DemoEngagementTracker({
 }: {
   slug?: string;
   demoToken?: string;
-  templateID: "1" | "2" | "3";
+  templateID: TemplateId;
 }) {
   const sessionRef = useRef<SessionCapability | null>(null);
   const activeSecondsRef = useRef(0);

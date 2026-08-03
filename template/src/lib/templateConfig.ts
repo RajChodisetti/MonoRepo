@@ -68,22 +68,11 @@ export function getTemplateSwitchCopy(current: TemplateId) {
   if (current === "3") {
     return {
       ...shared,
-      eyebrow: "Same restaurant, new look",
-      title: "Preview the Cinematic design",
-      description:
-        "Keep the same restaurant details and photos in a warm editorial design with elegant typography.",
-      cta: `Preview ${targetLabel}`,
-    };
-  }
-
-  if (current === "3") {
-    return {
       eyebrow: "Fresh & friendly",
-      title: "Try our Foodie template",
+      title: "Preview the Foodie design",
       description:
-        "Switch to a bright, appetizing cream and orange layout built for casual dining and quick orders.",
-      cta: `Switch to ${targetLabel}`,
-      targetLabel,
+        "Keep the same restaurant details and photos in a bright cream-and-orange layout built for casual dining.",
+      cta: `Preview ${targetLabel}`,
     };
   }
 
