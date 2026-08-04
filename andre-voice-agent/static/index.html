@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ananya — Real Estate</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0b1220;
+      --panel: #121a2b;
+      --border: #243149;
+      --text: #e8eef8;
+      --dim: #8b9bb4;
+      --accent: #2f9e7a;
+      --blue: #4f8cff;
+      --red: #e35d5d;
+      --amber: #d4a017;
+      --radius: 14px;
+    }
+
+    body {
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background:
+        radial-gradient(900px 420px at 15% -10%, #1a3d33 0%, transparent 55%),
+        radial-gradient(700px 380px at 100% 0%, #1a2740 0%, transparent 50%),
+        var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: color-mix(in srgb, var(--panel) 88%, transparent);
+      backdrop-filter: blur(8px);
+    }
+
+    header h1 { font-size: 18px; font-weight: 650; letter-spacing: -0.02em; }
+    header .sub { font-size: 13px; color: var(--dim); }
+    header #server-status { margin-left: auto; font-size: 13px; color: var(--dim); }
+
+    main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 20px;
+      padding: 24px;
+      max-width: 1100px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    @media (max-width: 820px) {
+      main { grid-template-columns: 1fr; }
+    }
+
+    .panel {
+      background: color-mix(in srgb, var(--panel) 92%, transparent);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      min-height: 520px;
+    }
+
+    .panel-title {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--dim);
+    }
+
+    .hint {
+      font-size: 14px;
+      color: var(--dim);
+      line-height: 1.45;
+    }
+
+    .mic-area {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      padding: 18px 0 8px;
+    }
+
+    .mic-btn {
+      width: 104px;
+      height: 104px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      background: #0e1626;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: border-color 0.2s, background 0.2s, box-shadow 0.2s, transform 0.15s;
+    }
+    .mic-btn:hover { border-color: var(--accent); transform: translateY(-1px); }
+    .mic-btn.connecting { border-color: var(--amber); }
+    .mic-btn.active {
+      border-color: var(--accent);
+      background: #0d241c;
+      box-shadow: 0 0 0 8px rgba(47,158,122,0.12);
+      animation: pulse 2s ease-in-out infinite;
+    }
+    .mic-btn.bot-speaking {
+      border-color: var(--blue);
+      background: #0d1830;
+      box-shadow: 0 0 0 8px rgba(79,140,255,0.14);
+      animation: pulse-blue 1.4s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 8px rgba(47,158,122,0.12); }
+      50% { box-shadow: 0 0 0 16px rgba(47,158,122,0.04); }
+    }
+    @keyframes pulse-blue {
+      0%, 100% { box-shadow: 0 0 0 8px rgba(79,140,255,0.14); }
+      50% { box-shadow: 0 0 0 16px rgba(79,140,255,0.05); }
+    }
+
+    .mic-icon { color: var(--dim); }
+    .mic-btn.active .mic-icon { color: var(--accent); }
+    .mic-btn.bot-speaking .mic-icon { color: var(--blue); }
+
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      color: var(--dim);
+      min-height: 22px;
+    }
+    .status-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--dim); flex-shrink: 0;
+    }
+    .status-dot.ready { background: var(--dim); }
+    .status-dot.connecting { background: var(--amber); }
+    .status-dot.listening { background: var(--accent); }
+    .status-dot.thinking { background: var(--amber); }
+    .status-dot.speaking { background: var(--blue); }
+    .status-dot.user-speaking { background: var(--accent); }
+
+    .lang-row {
+      display: flex;
+      gap: 10px;
+      align-items: end;
+    }
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      flex: 1;
+    }
+    .form-group label { font-size: 12px; color: var(--dim); font-weight: 600; }
+    .form-group select,
+    .form-group input {
+      background: #0b1220;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 14px;
+      padding: 10px 12px;
+      outline: none;
+    }
+    .form-group select:focus,
+    .form-group input:focus { border-color: var(--blue); }
+
+    .connect-btn, .call-btn {
+      padding: 12px 18px;
+      border-radius: 10px;
+      border: none;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      width: 100%;
+      transition: opacity 0.15s;
+    }
+    .connect-btn:disabled, .call-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .connect-btn.connect { background: var(--accent); color: #04150f; }
+    .connect-btn.disconnect { background: var(--red); color: #fff; }
+    .call-btn { background: var(--blue); color: #041018; }
+    .connect-btn:hover:not(:disabled),
+    .call-btn:hover:not(:disabled) { opacity: 0.9; }
+
+    .transcript-box {
+      flex: 1;
+      min-height: 220px;
+      max-height: 360px;
+      background: #0b1220;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .transcript-box:empty::before {
+      content: "Conversation appears here. Start talking — Ananya will ask about apartment, villa, or plot, then city and budget.";
+      color: var(--dim);
+      font-style: italic;
+    }
+    .turn { display: flex; flex-direction: column; gap: 3px; }
+    .turn-label { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+    .turn-label.user { color: var(--accent); }
+    .turn-label.assistant { color: var(--blue); }
+    .turn-text { color: var(--text); }
+
+    .section-divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 2px 0;
+    }
+
+    .calls-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .refresh-btn {
+      background: none; border: none; color: var(--dim);
+      cursor: pointer; font-size: 13px;
+    }
+    .refresh-btn:hover { color: var(--text); }
+
+    .calls-list {
+      display: flex; flex-direction: column; gap: 6px;
+      max-height: 220px; overflow-y: auto;
+    }
+    .call-row {
+      display: flex; gap: 10px; align-items: center;
+      padding: 9px 10px; background: #0b1220;
+      border: 1px solid var(--border); border-radius: 8px;
+      font-size: 12px; cursor: pointer;
+    }
+    .call-row:hover { border-color: var(--blue); }
+    .call-num { font-family: ui-monospace, monospace; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .call-outcome { color: var(--dim); text-transform: capitalize; }
+    .empty-state { color: var(--dim); font-size: 13px; font-style: italic; text-align: center; padding: 16px 0; }
+
+    .toast {
+      position: fixed; bottom: 24px; right: 24px;
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 10px; padding: 12px 16px; font-size: 13px;
+      max-width: 300px; z-index: 100; transition: opacity 0.3s;
+    }
+    .toast.error { border-color: var(--red); color: var(--red); }
+    .toast.success { border-color: var(--accent); color: var(--accent); }
+    .toast.info { border-color: var(--blue); color: var(--blue); }
+    .toast.hidden { opacity: 0; pointer-events: none; }
+  </style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Ananya</h1>
+    <div class="sub">Real estate voice assistant · Hindi · English · Telugu</div>
+  </div>
+  <span id="server-status">● checking…</span>
+</header>
+
+<main>
+  <div class="panel">
+    <div class="panel-title">Live conversation</div>
+    <p class="hint">
+      Click <strong>Start talking</strong>, allow the mic, then speak.
+      Ananya asks one preference at a time (type, city, budget), searches listings, and answers when you pause.
+      Language is set from the dropdown when you connect (<code>?language=</code>).
+    </p>
+
+    <div class="lang-row">
+      <div class="form-group">
+        <label for="language">Language</label>
+        <select id="language">
+          <option value="auto">Auto (mirror you)</option>
+          <option value="en">English</option>
+          <option value="hi">Hindi</option>
+          <option value="te">Telugu</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="mic-area">
+      <button class="mic-btn" id="mic-btn" title="Start / stop conversation"
+              onmousedown="preloadWorklet()" onclick="toggleSession()">
+        <svg class="mic-icon" width="36" height="36" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="2" width="6" height="11" rx="3"/>
+          <path d="M5 10a7 7 0 0 0 14 0M12 19v3M9 22h6"/>
+        </svg>
+      </button>
+      <div class="status-badge">
+        <div class="status-dot ready" id="status-dot"></div>
+        <span id="status-label">Ready — click to start talking</span>
+      </div>
+    </div>
+
+    <button class="connect-btn connect" id="connect-btn"
+            onmousedown="preloadWorklet()" onclick="toggleSession()">
+      Start talking
+    </button>
+
+    <div class="transcript-box" id="transcript"></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Phone call</div>
+    <p class="hint">Ananya will call this number (needs Twilio + HTTPS tunnel — see CALLING.md).</p>
+
+    <div class="form-group">
+      <label for="phone-input">Phone (E.164)</label>
+      <input id="phone-input" type="tel" placeholder="+919876543210" />
+    </div>
+    <div class="form-group">
+      <label for="call-language">Call language</label>
+      <select id="call-language">
+        <option value="auto">Auto</option>
+        <option value="en">English</option>
+        <option value="hi">Hindi</option>
+        <option value="te">Telugu</option>
+      </select>
+    </div>
+
+    <button class="call-btn" id="call-btn" onclick="makeCall()">Call me now</button>
+
+    <hr class="section-divider">
+
+    <div class="calls-header">
+      <div class="panel-title">Recent sessions</div>
+      <button class="refresh-btn" onclick="loadCalls()">↻ refresh</button>
+    </div>
+    <div class="calls-list" id="calls-list">
+      <div class="empty-state">No sessions yet.</div>
+    </div>
+  </div>
+</main>
+
+<div class="toast hidden" id="toast"></div>
+
+<script>
+let ws = null;
+let audioCtx = null;
+let workletNode = null;
+let stream = null;
+let nextPlayTime = 0;
+let sessionActive = false;
+let uiConfig = { call_api_key: "" };
+
+let _workletReady = false;
+let _preloadCtx = null;
+
+function wsUrl() {
+  const lang = document.getElementById('language').value || 'auto';
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  return `${proto}://${location.host}/browser-stream?language=${encodeURIComponent(lang)}`;
+}
+
+async function preloadWorklet() {
+  if (_workletReady) return;
+  try {
+    _preloadCtx = new AudioContext({ sampleRate: 16000 });
+    await _preloadCtx.audioWorklet.addModule('/static/audio-processor.js');
+    _workletReady = true;
+  } catch (_) {}
+}
+
+function setStatus(state, label) {
+  const dot = document.getElementById('status-dot');
+  const lbl = document.getElementById('status-label');
+  const btn = document.getElementById('mic-btn');
+  const cbtn = document.getElementById('connect-btn');
+
+  dot.className = 'status-dot ' + state;
+  lbl.textContent = label;
+
+  btn.className = 'mic-btn';
+  if (state === 'listening' || state === 'user-speaking') btn.classList.add('active');
+  if (state === 'speaking') btn.classList.add('bot-speaking');
+  if (state === 'connecting') btn.classList.add('connecting');
+
+  cbtn.className = 'connect-btn ' + (sessionActive ? 'disconnect' : 'connect');
+  cbtn.textContent = sessionActive ? 'Stop conversation' : 'Start talking';
+  document.getElementById('language').disabled = sessionActive;
+}
+
+function addTranscript(role, text) {
+  const box = document.getElementById('transcript');
+  const chunk = (text || '').trim();
+  if (!chunk) return;
+  const last = box.lastElementChild;
+  const lastRole = last?.querySelector?.('.turn-label')?.classList.contains(role);
+  if (last && lastRole) {
+    const content = last.querySelector('.turn-text');
+    if (content) {
+      const prev = content.textContent || '';
+      const needsSpace =
+        !prev.endsWith(' ') &&
+        !chunk.startsWith(' ') &&
+        !',.!?;:)]}\'"'.includes(chunk[0] || '');
+      content.textContent = `${prev}${needsSpace ? ' ' : ''}${chunk}`.replace(/\s+/g, ' ').trim();
+      box.scrollTop = box.scrollHeight;
+      return;
+    }
+  }
+  const turn = document.createElement('div');
+  turn.className = 'turn';
+  const label = document.createElement('div');
+  label.className = `turn-label ${role}`;
+  label.textContent = role === 'user' ? 'You' : 'Ananya';
+  const content = document.createElement('div');
+  content.className = 'turn-text';
+  content.textContent = chunk;
+  turn.appendChild(label);
+  turn.appendChild(content);
+  box.appendChild(turn);
+  box.scrollTop = box.scrollHeight;
+}
+
+async function playPCM16(buffer) {
+  if (!audioCtx) return;
+  // Browsers may suspend AudioContext after tab blur — resume AND still play this chunk
+  if (audioCtx.state === 'suspended') {
+    try { await audioCtx.resume(); } catch (_) { return; }
+  }
+  if (audioCtx.state !== 'running') return;
+  const int16 = new Int16Array(buffer);
+  const float32 = new Float32Array(int16.length);
+  for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / 32768.0;
+  const audioBuffer = audioCtx.createBuffer(1, float32.length, 16000);
+  audioBuffer.copyToChannel(float32, 0);
+  const source = audioCtx.createBufferSource();
+  source.buffer = audioBuffer;
+  source.connect(audioCtx.destination);
+  const start = Math.max(audioCtx.currentTime, nextPlayTime);
+  source.start(start);
+  nextPlayTime = start + audioBuffer.duration;
+}
+
+function resetPlayback() {
+  nextPlayTime = audioCtx ? audioCtx.currentTime : 0;
+}
+
+async function startSession() {
+  let socket = null;
+  let setupDone = false;
+  try {
+    setStatus('connecting', 'Requesting microphone…');
+    document.getElementById('transcript').innerHTML = '';
+
+    const micPromise = navigator.mediaDevices.getUserMedia({
+      audio: { channelCount: 1, sampleRate: 16000, echoCancellation: true, noiseSuppression: true }
+    });
+
+    socket = new WebSocket(wsUrl());
+    ws = socket;
+    socket.binaryType = 'arraybuffer';
+
+    const earlyMessages = [];
+    let audioReady = false;
+    let closedDuringSetup = false;
+
+    socket.onerror = () => {
+      if (!setupDone) closedDuringSetup = true;
+      else showToast('WebSocket error — is the agent running on :8001?', 'error');
+    };
+    socket.onclose = () => {
+      if (sessionActive || setupDone) stopSession(false);
+      else closedDuringSetup = true;
+    };
+    socket.onmessage = async (evt) => {
+      if (!audioReady) { earlyMessages.push(evt.data); return; }
+      await _handleMessage(evt);
+    };
+
+    stream = await micPromise;
+    if (closedDuringSetup || socket.readyState === WebSocket.CLOSED) {
+      throw new Error('Server closed the connection — check agent logs');
+    }
+
+    if (_workletReady && _preloadCtx && _preloadCtx.state !== 'closed') {
+      audioCtx = _preloadCtx;
+      _preloadCtx = null;
+    } else {
+      audioCtx = new AudioContext({ sampleRate: 16000 });
+      await audioCtx.audioWorklet.addModule('/static/audio-processor.js');
+      _workletReady = true;
+    }
+    if (audioCtx.state !== 'running') await audioCtx.resume();
+    audioReady = true;
+
+    for (const data of earlyMessages) await _handleMessage({ data });
+    earlyMessages.length = 0;
+
+    if (closedDuringSetup || socket.readyState === WebSocket.CLOSED) {
+      throw new Error('Server closed the connection — check agent logs');
+    }
+
+    socket.onmessage = async (evt) => { await _handleMessage(evt); };
+    setupDone = true;
+  } catch (e) {
+    showToast(`Could not start: ${e.message}`, 'error');
+    setStatus('ready', 'Ready — click to start talking');
+    if (ws) { ws.close(); ws = null; }
+    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+    if (audioCtx) { audioCtx.close(); audioCtx = null; _workletReady = false; }
+  }
+}
+
+async function _handleMessage(evt) {
+  if (typeof evt.data === 'string') {
+    let msg;
+    try { msg = JSON.parse(evt.data); } catch { return; }
+
+    if (msg.event === 'ready') {
+      await startMic();
+      sessionActive = true;
+      setStatus('speaking', 'Ananya is greeting you…');
+    }
+    if (msg.event === 'status') {
+      const stateMap = {
+        user_speaking: ['user-speaking', 'Listening to you…'],
+        thinking: ['thinking', 'Ananya is thinking…'],
+        bot_speaking: ['speaking', 'Ananya is speaking…'],
+        listening: ['listening', 'Listening — speak anytime'],
+      };
+      const [s, l] = stateMap[msg.state] || ['listening', 'Listening — speak anytime'];
+      if (msg.state === 'user_speaking') resetPlayback();
+      setStatus(s, l);
+    }
+    if (msg.event === 'transcript') addTranscript(msg.role, msg.text);
+    if (msg.event === 'error') {
+      showToast(msg.message || 'Session error', 'error');
+      stopSession(false);
+    }
+  } else {
+    await playPCM16(evt.data);
+  }
+}
+
+async function startMic() {
+  if (!audioCtx || !stream) return;
+  const source = audioCtx.createMediaStreamSource(stream);
+  workletNode = new AudioWorkletNode(audioCtx, 'mic-processor');
+  if (!workletNode?.port) throw new Error('Microphone processor failed to start');
+  workletNode.port.onmessage = (e) => {
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(e.data);
+  };
+  source.connect(workletNode);
+  // Do not connect worklet to destination (avoids mic feedback loop)
+}
+
+function stopSession(sendStop = true) {
+  sessionActive = false;
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    if (sendStop) ws.send(JSON.stringify({ event: 'stop' }));
+    ws.close();
+  }
+  ws = null;
+  if (workletNode) { workletNode.disconnect(); workletNode = null; }
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  if (audioCtx) { audioCtx.close(); audioCtx = null; _workletReady = false; }
+  nextPlayTime = 0;
+  setStatus('ready', 'Ready — click to start talking');
+}
+
+function toggleSession() {
+  if (sessionActive || (ws && ws.readyState <= 1)) stopSession(true);
+  else startSession();
+}
+
+async function makeCall() {
+  const phone = document.getElementById('phone-input').value.trim();
+  const language = document.getElementById('call-language').value || 'auto';
+  if (!phone) { showToast('Enter a phone number with country code.', 'error'); return; }
+
+  const btn = document.getElementById('call-btn');
+  btn.disabled = true;
+  btn.textContent = 'Calling…';
+
+  try {
+    const headers = { 'Content-Type': 'application/json' };
+    if (uiConfig.call_api_key) headers['X-Call-Api-Key'] = uiConfig.call_api_key;
+    const res = await fetch('/call', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ to: phone, language, campaign_id: 'browser', skip_compliance: true }),
+    });
+    const data = await res.json();
+    if (data.status === 'calling') showToast(`Calling ${data.to}…`, 'success');
+    else if (data.status === 'blocked') showToast(`Blocked: ${data.reason}`, 'error');
+    else if (data.status === 'queued') showToast(data.message || 'Queued', 'info');
+    else if (res.status >= 400) showToast(data.detail || JSON.stringify(data), 'error');
+    else showToast(JSON.stringify(data), 'info');
+    loadCalls();
+  } catch (e) {
+    showToast(`Error: ${e.message}`, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Call me now';
+  }
+}
+
+function fmtDuration(s) {
+  if (!s && s !== 0) return '—';
+  if (s < 60) return `${Math.round(s)}s`;
+  return `${Math.floor(s / 60)}m ${Math.round(s % 60)}s`;
+}
+
+async function loadCalls() {
+  try {
+    const res = await fetch('/calls?limit=30');
+    const calls = await res.json();
+    const list = document.getElementById('calls-list');
+    if (!calls.length) {
+      list.innerHTML = '<div class="empty-state">No sessions yet.</div>';
+      return;
+    }
+    list.innerHTML = calls.map(c => {
+      const to = c.to_number || c.channel || c.call_sid || '—';
+      const outcome = c.outcome || 'unknown';
+      return `<div class="call-row" onclick="viewCall(${c.id})">
+        <span class="call-num">${escHtml(to)}</span>
+        <span class="call-outcome">${escHtml(outcome)}</span>
+        <span>${fmtDuration(c.duration_s)}</span>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+async function viewCall(id) {
+  try {
+    const res = await fetch(`/calls/${id}`);
+    const data = await res.json();
+    const turns = (data.transcript || []).map(t => `[${t.role}] ${t.content}`).join('\n');
+    alert(`Session #${id}\nOutcome: ${data.outcome || '—'}\n\n${turns || '(no transcript)'}`);
+  } catch {
+    showToast(`Failed to load session ${id}`, 'error');
+  }
+}
+
+function escHtml(str) {
+  return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+let _toastTimer = null;
+function showToast(msg, type = 'info') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `toast ${type}`;
+  if (_toastTimer) clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => t.classList.add('hidden'), 4000);
+}
+
+async function checkServer() {
+  const el = document.getElementById('server-status');
+  try {
+    const res = await fetch('/healthz');
+    if (res.ok) { el.textContent = '● online'; el.style.color = 'var(--accent)'; }
+    else throw new Error('bad');
+  } catch {
+    el.textContent = '● offline'; el.style.color = 'var(--red)';
+  }
+}
+
+async function loadConfig() {
+  try {
+    const res = await fetch('/ui-config');
+    if (res.ok) uiConfig = await res.json();
+  } catch (_) {}
+}
+
+checkServer();
+loadConfig();
+loadCalls();
+setInterval(checkServer, 30000);
+</script>
+</body>
+</html>

@@ -174,7 +174,7 @@ export async function POST(req: Request) {
         status: "unavailable",
         message:
           kind === "real_estate"
-            ? "Real estate agent is not reachable. Start andre-voice-agent on port 8001."
+            ? "Real estate agent is not reachable. Start MonoRepo/andre-voice-agent on port 8001."
             : "Voice agent is not reachable. Start voice-sales-agent and ensure PUBLIC_BASE_URL is set for Twilio.",
       },
       { status: 503 },

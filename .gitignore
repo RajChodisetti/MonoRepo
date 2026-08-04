@@ -9,6 +9,10 @@ coverage.out
 # Python
 __pycache__/
 *.pyc
+**/.venv/
+**/venv/
+*.db
+*.sqlite3
 
 # Frontend / Next.js
 **/node_modules/

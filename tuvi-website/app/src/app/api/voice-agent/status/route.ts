@@ -11,7 +11,7 @@ export async function GET(request: Request) {
   const label = kind === "real_estate" ? "Real estate agent" : "Tuvi agent";
   const startHint =
     kind === "real_estate"
-      ? "Start it: cd andre-voice-agent && uvicorn bot:app --host 0.0.0.0 --port 8001"
+      ? "Start it: cd MonoRepo/andre-voice-agent && uvicorn bot:app --host 0.0.0.0 --port 8001"
       : "Start it: cd voice-sales-agent && docker compose up -d";
 
   try {

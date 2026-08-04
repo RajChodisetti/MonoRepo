@@ -4,12 +4,16 @@ Ops console for the Real Voice Agent: property listings CRUD + browser talk / ou
 
 ## Prerequisites
 
-1. Voice agent running on `:8001` (`andre-voice-agent`)
+1. Voice agent running on `:8001` (`MonoRepo/andre-voice-agent`)
 2. Matching `CALL_API_SECRET` in agent `.env` and this app `.env.local`
 
 ## Run
 
 ```bash
+# Terminal 1 — agent (from MonoRepo root)
+make andre-voice-dev
+
+# Terminal 2 — admin UI
 cd apps/andre-admin
 cp .env.example .env.local   # if needed
 npm install

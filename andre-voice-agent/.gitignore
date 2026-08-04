@@ -1,0 +1,35 @@
+# Secrets — never commit (keep example templates)
+.env
+*.env
+.env.*
+!.env.example
+
+# Database / local runtime (local dev only)
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+.Python
+
+# uv
+uv.lock
+
+# macOS
+.DS_Store
+
+# Logs and recordings
+*.log
+recordings/
+
+# IDE
+.vscode/
+.idea/
+*.swp

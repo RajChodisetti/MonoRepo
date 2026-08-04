@@ -1,0 +1,43 @@
+# Andre voice agent + Redis (standalone)
+#   docker compose up --build
+
+services:
+  agent:
+    build: .
+    ports:
+      - "${PORT:-8001}:8001"
+    env_file: .env
+    environment:
+      - ENVIRONMENT=development
+      - PORT=8001
+      - REDIS_URL=redis://redis:6379
+      - CALL_LOG_DB=/app/data/calls.db
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./data:/app/data
+      - ./bot.py:/app/bot.py
+      - ./prompts:/app/prompts
+      - ./static:/app/static
+      - ./ui.py:/app/ui.py
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  redis_data:
