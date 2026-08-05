@@ -22,6 +22,14 @@ export type ReportIssue = {
   description: string;
 };
 
+export type RecentReview = {
+  author?: string;
+  text?: string;
+  rating?: number;
+  relativeTime?: string;
+  sentiment?: "positive" | "mixed" | "negative" | string;
+};
+
 export type RestaurantReport = {
   restaurantName: string;
   address: string;
@@ -37,9 +45,13 @@ export type RestaurantReport = {
   unlockCta?: string;
   /** Homepage screenshot as data URL (JPEG). */
   websiteScreenshot?: string;
+  /** Mobile viewport homepage screenshot for scan phone mockup. */
+  websiteMobileScreenshot?: string;
   /** Strict visual quality 0–100 (typical 20–60). */
   websiteQualityScore?: number;
   websiteReview?: string;
+  /** Live Google reviews for the scan map UI. */
+  recentReviews?: RecentReview[];
 };
 
 /** Format metric score for UI. Prefer status-only displays — avoid x/y fractions. */

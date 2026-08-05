@@ -61,6 +61,7 @@ type ScoreInput struct {
 	WebsiteQualityScore int // 0–100
 	WebsiteReview       string
 	WebsiteScreenshot   string
+	WebsiteMobileScreenshot string
 }
 
 // BuildReport computes the 100-point SEO report.
@@ -115,9 +116,63 @@ func BuildReport(in ScoreInput) Report {
 		EstimatedMonthlyLoss: loss,
 		FullReportLocked:     true,
 		UnlockCTA:            "Unlock the full SEO report by verifying your email.",
-		WebsiteScreenshot:    in.WebsiteScreenshot,
-		WebsiteQualityScore:  in.WebsiteQualityScore,
-		WebsiteReview:        in.WebsiteReview,
+		WebsiteScreenshot:       in.WebsiteScreenshot,
+		WebsiteMobileScreenshot: in.WebsiteMobileScreenshot,
+		WebsiteQualityScore:     in.WebsiteQualityScore,
+		WebsiteReview:           in.WebsiteReview,
+		RecentReviews:           decorateReviewsForScan(in.Reviews),
+	}
+}
+
+func decorateReviewsForScan(reviews []Review) []Review {
+	if len(reviews) == 0 {
+		return nil
+	}
+	out := make([]Review, 0, len(reviews))
+	for i, r := range reviews {
+		if i >= 5 {
+			break
+		}
+		text := strings.TrimSpace(r.Text)
+		if text == "" && r.Rating <= 0 {
+			continue
+		}
+		if len([]rune(text)) > 160 {
+			runes := []rune(text)
+			text = string(runes[:157]) + "…"
+		}
+		r.Text = text
+		r.Sentiment = reviewSentiment(r)
+		out = append(out, r)
+	}
+	return out
+}
+
+func reviewSentiment(r Review) string {
+	text := strings.ToLower(r.Text)
+	negHits := 0
+	posHits := 0
+	for _, w := range []string{"worst", "terrible", "awful", "rude", "dirty", "slow", "overpriced", "never again", "disappoint"} {
+		if strings.Contains(text, w) {
+			negHits++
+		}
+	}
+	for _, w := range []string{"amazing", "excellent", "love", "delicious", "friendly", "recommend", "great", "perfect", "wonderful"} {
+		if strings.Contains(text, w) {
+			posHits++
+		}
+	}
+	switch {
+	case r.Rating >= 4.5 && negHits == 0:
+		return "positive"
+	case r.Rating > 0 && r.Rating < 3:
+		return "negative"
+	case negHits > posHits:
+		return "negative"
+	case posHits > negHits || r.Rating >= 4:
+		return "positive"
+	default:
+		return "mixed"
 	}
 }
 

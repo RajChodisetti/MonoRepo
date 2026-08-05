@@ -23,6 +23,7 @@ var searchFieldMask = strings.Join([]string{
 	"places.id",
 	"places.displayName",
 	"places.formattedAddress",
+	"places.location",
 	"places.rating",
 	"places.userRatingCount",
 	"places.businessStatus",
@@ -36,6 +37,7 @@ var detailFieldMask = strings.Join([]string{
 	"internationalPhoneNumber",
 	"websiteUri",
 	"googleMapsUri",
+	"location",
 	"rating",
 	"userRatingCount",
 	"priceLevel",
@@ -152,6 +154,10 @@ func (c *PlacesClient) SearchRestaurants(ctx context.Context, query, location st
 		if summary.Name == "" {
 			summary.Name = "Restaurant"
 		}
+		if lat, lng, ok := placeLatLng(place["location"]); ok {
+			summary.Latitude = &lat
+			summary.Longitude = &lng
+		}
 		if rating, ok := asFloat(place["rating"]); ok {
 			summary.Rating = &rating
 		}
@@ -238,6 +244,10 @@ func (c *PlacesClient) GetPlaceDetails(ctx context.Context, placeID string) (*pl
 			EditorialSummary: localizedText(place["editorialSummary"]),
 			Source:           "places",
 		},
+	}
+	if lat, lng, ok := placeLatLng(place["location"]); ok {
+		snap.Details.Latitude = &lat
+		snap.Details.Longitude = &lng
 	}
 	if rating, ok := asFloat(place["rating"]); ok {
 		snap.Details.Rating = &rating
@@ -400,6 +410,22 @@ func localizedText(value any) string {
 	default:
 		return ""
 	}
+}
+
+func placeLatLng(value any) (lat float64, lng float64, ok bool) {
+	m, ok := value.(map[string]any)
+	if !ok {
+		return 0, 0, false
+	}
+	lat, okLat := asFloat(m["latitude"])
+	lng, okLng := asFloat(m["longitude"])
+	if !okLat || !okLng {
+		return 0, 0, false
+	}
+	if lat < -90 || lat > 90 || lng < -180 || lng > 180 {
+		return 0, 0, false
+	}
+	return lat, lng, true
 }
 
 func asString(value any) string {

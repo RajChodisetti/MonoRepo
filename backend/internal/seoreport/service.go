@@ -206,6 +206,7 @@ func (s *Service) GetReport(ctx context.Context, placeID string) (ReportResponse
 			scoreIn.WebsiteQualityScore = audit.QualityScore
 			scoreIn.WebsiteReview = audit.Review
 			scoreIn.WebsiteScreenshot = audit.Screenshot
+			scoreIn.WebsiteMobileScreenshot = audit.MobileScreenshot
 		}
 		if audit.Source == "fallback" {
 			s.log.WarnContext(ctx, "seo_website_audit_fallback", "website", place.Website, "source", audit.Source)

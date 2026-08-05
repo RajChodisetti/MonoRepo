@@ -7,6 +7,8 @@ export type RestaurantSearchResult = {
   placeId: string;
   name: string;
   address: string;
+  latitude?: number;
+  longitude?: number;
   rating?: number;
   userRatingCount?: number;
   source: "monorepo" | "places";
@@ -20,6 +22,8 @@ export type RestaurantDetails = {
   email?: string;
   website?: string;
   mapsUri?: string;
+  latitude?: number;
+  longitude?: number;
   rating?: number;
   userRatingCount?: number;
   priceLevel?: string;
@@ -77,6 +81,8 @@ export async function searchSeoRestaurants(
       placeId?: string;
       name?: string;
       address?: string;
+      latitude?: number;
+      longitude?: number;
       rating?: number;
       userRatingCount?: number;
       source?: string;
@@ -92,6 +98,8 @@ export async function searchSeoRestaurants(
       placeId,
       name: String(item.name || "Restaurant"),
       address: String(item.address || ""),
+      latitude: typeof item.latitude === "number" ? item.latitude : undefined,
+      longitude: typeof item.longitude === "number" ? item.longitude : undefined,
       rating: typeof item.rating === "number" ? item.rating : undefined,
       userRatingCount:
         typeof item.userRatingCount === "number" ? item.userRatingCount : undefined,

@@ -21,6 +21,11 @@ export default function ReportClient({ placeId }: { placeId: string }) {
   const searchParams = useSearchParams();
   const unlockFromLink = (searchParams.get("unlock") || "").trim();
   const nameFromQuery = (searchParams.get("name") || "").trim();
+  const addressFromQuery = (searchParams.get("address") || "").trim();
+  const latFromQuery = Number(searchParams.get("lat") || "");
+  const lngFromQuery = Number(searchParams.get("lng") || "");
+  const latPreview = Number.isFinite(latFromQuery) ? latFromQuery : undefined;
+  const lngPreview = Number.isFinite(lngFromQuery) ? lngFromQuery : undefined;
 
   const [data, setData] = useState<Payload | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -101,12 +106,12 @@ export default function ReportClient({ placeId }: { placeId: string }) {
     setPhase("ready");
   }, []);
 
-  // Hard escape hatch: never leave users stuck on the scan screen
+  // Hard escape hatch — only after min scan window + buffer
   useEffect(() => {
-    if (phase !== "scan" || !fetchComplete) return;
-    const t = window.setTimeout(() => setPhase("ready"), 4000);
+    if (phase !== "scan") return;
+    const t = window.setTimeout(() => setPhase("ready"), 90_000);
     return () => window.clearTimeout(t);
-  }, [phase, fetchComplete]);
+  }, [phase]);
 
   async function requestOtp(event: FormEvent) {
     event.preventDefault();
@@ -174,11 +179,48 @@ export default function ReportClient({ placeId }: { placeId: string }) {
     const previewName = data?.place.name || nameFromQuery || "Your restaurant";
     const categoryRaw = data?.place.types?.[0]?.replace(/_/g, " ") || "Restaurant";
     const category = categoryRaw.replace(/\b\w/g, (c) => c.toUpperCase());
+
+    const photoCards = [
+      ...(data?.place.media?.menuAndHighlights || []),
+      ...(data?.place.media?.photosAndVideos || []),
+    ];
+    const scanPhotos = photoCards
+      .map((card) => {
+        const src = card.imageUrl
+          ? card.imageUrl
+          : card.photoName
+            ? `/api/restaurants/photo?name=${encodeURIComponent(card.photoName)}&max=480`
+            : "";
+        return src ? { src, label: card.label } : null;
+      })
+      .filter((p): p is { src: string; label: string } => Boolean(p));
+
+    const heroPhoto =
+      scanPhotos[0]?.src ||
+      (data?.place.media?.photosAndVideos?.[0]?.photoName
+        ? `/api/restaurants/photo?name=${encodeURIComponent(data.place.media.photosAndVideos[0].photoName)}&max=480`
+        : undefined);
+
     return (
       <ScanExperience
         restaurantName={previewName}
+        address={data?.place.address || data?.report.address || addressFromQuery || undefined}
         rating={data?.place.rating}
         category={category}
+        website={data?.place.website}
+        placeId={placeId}
+        mapsUri={data?.place.mapsUri || data?.place.media?.mapsUri}
+        latitude={data?.place.latitude ?? latPreview}
+        longitude={data?.place.longitude ?? lngPreview}
+        photoUrl={heroPhoto}
+        photos={scanPhotos}
+        reviews={data?.report.recentReviews || []}
+        mobileScreenshot={
+          data?.report.websiteMobileScreenshot ||
+          data?.report.websiteScreenshot ||
+          undefined
+        }
+        websiteUrl={data?.place.website}
         fetchComplete={fetchComplete}
         onReady={handleScanReady}
       />

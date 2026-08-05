@@ -9,6 +9,8 @@ type SearchHit = {
   placeId: string;
   name: string;
   address: string;
+  latitude?: number;
+  longitude?: number;
   rating?: number;
   source: "monorepo" | "places";
 };
@@ -177,7 +179,14 @@ export default function Hero() {
     setSelected(hit);
     setQuery(hit.name);
     setOpen(false);
-    router.push(`/report/${encodeURIComponent(hit.placeId)}?name=${encodeURIComponent(hit.name)}`);
+    const params = new URLSearchParams();
+    params.set("name", hit.name);
+    if (hit.address) params.set("address", hit.address);
+    if (typeof hit.latitude === "number" && typeof hit.longitude === "number") {
+      params.set("lat", String(hit.latitude));
+      params.set("lng", String(hit.longitude));
+    }
+    router.push(`/report/${encodeURIComponent(hit.placeId)}?${params.toString()}`);
   }
 
   async function onSubmit(event: FormEvent) {

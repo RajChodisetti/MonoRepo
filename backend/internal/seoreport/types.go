@@ -5,6 +5,8 @@ type PlaceSummary struct {
 	PlaceID         string   `json:"placeId"`
 	Name            string   `json:"name"`
 	Address         string   `json:"address"`
+	Latitude        *float64 `json:"latitude,omitempty"`
+	Longitude       *float64 `json:"longitude,omitempty"`
 	Rating          *float64 `json:"rating,omitempty"`
 	UserRatingCount *int     `json:"userRatingCount,omitempty"`
 	Source          string   `json:"source"`
@@ -19,6 +21,9 @@ type PlaceDetails struct {
 	Email             string   `json:"email,omitempty"`
 	Website           string   `json:"website,omitempty"`
 	MapsURI           string   `json:"mapsUri,omitempty"`
+	// Latitude / Longitude from Places location (WGS84) for map pin.
+	Latitude          *float64 `json:"latitude,omitempty"`
+	Longitude         *float64 `json:"longitude,omitempty"`
 	Rating            *float64 `json:"rating,omitempty"`
 	UserRatingCount   *int     `json:"userRatingCount,omitempty"`
 	PriceLevel        string   `json:"priceLevel,omitempty"`
@@ -49,11 +54,13 @@ type PlaceMedia struct {
 
 // Review is a single Google review used for scoring/summary.
 type Review struct {
-	Author  string  `json:"author,omitempty"`
-	Text    string  `json:"text,omitempty"`
-	Rating  float64 `json:"rating,omitempty"`
-	RelativeTime string `json:"relativeTime,omitempty"`
-	PublishTime  string `json:"publishTime,omitempty"`
+	Author       string  `json:"author,omitempty"`
+	Text         string  `json:"text,omitempty"`
+	Rating       float64 `json:"rating,omitempty"`
+	RelativeTime string  `json:"relativeTime,omitempty"`
+	PublishTime  string  `json:"publishTime,omitempty"`
+	// Sentiment is a coarse label for scan UI: positive | mixed | negative.
+	Sentiment string `json:"sentiment,omitempty"`
 }
 
 // Metric is one scored bucket of the SEO report.
@@ -98,9 +105,12 @@ type Report struct {
 	FullReportLocked     bool            `json:"fullReportLocked"`
 	UnlockCTA            string          `json:"unlockCta"`
 	// Website visual audit (screenshot + AI design review).
-	WebsiteScreenshot    string `json:"websiteScreenshot,omitempty"`
-	WebsiteQualityScore  int    `json:"websiteQualityScore,omitempty"`
-	WebsiteReview        string `json:"websiteReview,omitempty"`
+	WebsiteScreenshot       string `json:"websiteScreenshot,omitempty"`
+	WebsiteMobileScreenshot string `json:"websiteMobileScreenshot,omitempty"`
+	WebsiteQualityScore     int    `json:"websiteQualityScore,omitempty"`
+	WebsiteReview           string `json:"websiteReview,omitempty"`
+	// RecentReviews are live Google reviews shown during the scan experience.
+	RecentReviews []Review `json:"recentReviews,omitempty"`
 }
 
 // ReportResponse is the public API envelope for a place report.
