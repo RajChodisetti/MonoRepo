@@ -10,13 +10,13 @@ export const kitchenTablet: ProductPageConfig = {
     heading: "Tickets the kitchen can cook from.",
     subheading:
       "Online, app, and phone orders show up clearly on a kitchen tablet — so nothing gets lost between the counter and the line.",
-    primaryCta: { label: "Get a free demo", href: "#" },
-    secondaryCta: { label: "View pricing", href: "/pricing" },
+    primaryCta: { label: "Get a free demo", href: "/demo" },
+    secondaryCta: { label: "See how it works", href: "/how-it-works" },
     testimonial: {
-      imageSrc: "/product/sarkis-panossian.jpg",
-      imageAlt: "Kitchen team working from digital tickets",
-      title: "See how clear tickets keep the line moving",
-      attribution: "Sarkis Panossian — Township Line Pizza",
+      imageSrc: "/resources/resource-seo-hero.png",
+      imageAlt: "Mira Chen from Tileoven Co.",
+      title: "See how clear tickets keep Mira's line moving",
+      attribution: "Mira Chen — Tileoven Co.",
     },
   },
   featureSplit: {

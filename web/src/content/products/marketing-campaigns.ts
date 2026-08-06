@@ -4,19 +4,19 @@ export const marketingCampaigns: ProductPageConfig = {
   meta: {
     title: "Marketing Campaigns | Tuvi",
     description:
-      "Run restaurant marketing campaigns across email, SMS, and push — from one place, timed to drive orders.",
+      "Run restaurant campaigns across email, SMS, and push — from one place, timed to drive first-party orders.",
   },
   hero: {
     heading: "Campaigns that fill seats and grow orders.",
     subheading:
-      "Plan, launch, and measure restaurant promotions across every channel without juggling five tools.",
-    primaryCta: { label: "Get a free demo", href: "#" },
-    secondaryCta: { label: "View pricing", href: "/pricing" },
+      "Plan, launch, and measure promotions across every channel without juggling five tools — and keep the guest list yours.",
+    primaryCta: { label: "Get a free demo", href: "/demo" },
+    secondaryCta: { label: "See how it works", href: "/how-it-works" },
     testimonial: {
-      imageSrc: "/product/gia-schultz.jpg",
-      imageAlt: "Restaurant marketer reviewing campaign results",
-      title: "See how campaigns bring guests back midweek",
-      attribution: "Gia Schultz — HillCrust Pizza",
+      imageSrc: "/resources/resource-blog-hero.png",
+      imageAlt: "Casey Bloom from Leaf & Loom Cafe",
+      title: "See how Casey's campaigns refill quiet midweeks",
+      attribution: "Casey Bloom — Leaf & Loom Cafe",
     },
   },
   featureSplit: {
@@ -33,7 +33,7 @@ export const marketingCampaigns: ProductPageConfig = {
       {
         icon: "chart",
         title: "Built for restaurants",
-        body: "Templates for happy hour, slow nights, holidays, and loyalty offers — ready to customize.",
+        body: "Templates for happy hour, slow nights, holidays, and loyalty offers — ready to customise.",
       },
       {
         icon: "gauge",
@@ -43,7 +43,7 @@ export const marketingCampaigns: ProductPageConfig = {
     ],
   },
   featureCards: {
-    sectionHeading: "Marketing that runs on autopilot when you are busy.",
+    sectionHeading: "Marketing that runs when you are busy on the floor.",
     sectionBg: "beige",
     cards: [
       {
@@ -79,7 +79,7 @@ export const marketingCampaigns: ProductPageConfig = {
       {
         question: "Do campaigns sync with my customer list?",
         answer:
-          "They use your Tuvi guest list automatically — including loyalty members and past online orderers.",
+          "They use your Tuvi guest list automatically — including loyalty members and past online orderers you own.",
       },
       {
         question: "Will this spam my guests?",

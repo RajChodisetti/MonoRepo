@@ -29,8 +29,8 @@ function FooterColumnBlock({ column }: { column: FooterColumn }) {
 
 export default function SiteFooter() {
   return (
-    <footer className="relative z-10 -mt-5 bg-bg sm:-mt-6 md:-mt-7">
-      <div className="w-full rounded-t-[28px] border-t border-border bg-bg px-4 pb-10 pt-10 sm:rounded-t-[36px] sm:px-8 sm:pb-12 sm:pt-12 md:rounded-t-[44px] md:px-12 md:pt-14">
+    <footer className="relative z-10 bg-bg">
+      <div className="w-full border-t border-border bg-bg px-4 pb-10 pt-10 sm:px-8 sm:pb-12 sm:pt-12 md:px-12 md:pt-14">
         <div className="mx-auto max-w-[1100px]">
           {/* Top: logo + CTAs */}
           <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
@@ -38,13 +38,13 @@ export default function SiteFooter() {
 
             <div className="flex flex-wrap items-center gap-2.5">
               <Link
-                href="#"
+                href="/demo"
                 className="inline-flex items-center justify-center rounded-full bg-primary px-5 py-2.5 text-[13px] font-semibold text-bg transition-colors hover:bg-primary-dim sm:px-6 sm:text-[14px]"
               >
                 Get a free demo
               </Link>
               <Link
-                href="#"
+                href="/how-it-works"
                 className="inline-flex items-center justify-center rounded-full bg-surface px-5 py-2.5 text-[13px] font-semibold text-ink transition-colors hover:bg-parchment sm:px-6 sm:text-[14px]"
               >
                 See how it works
@@ -60,7 +60,7 @@ export default function SiteFooter() {
           </div>
 
           {/* Secondary columns */}
-          <div className="mt-10 grid grid-cols-2 gap-x-6 gap-y-10 sm:mt-12 sm:gap-x-8 md:grid-cols-3 md:gap-y-0 lg:max-w-[75%]">
+          <div className="mt-10 grid grid-cols-2 gap-x-6 gap-y-10 sm:mt-12 sm:gap-x-8 md:grid-cols-2 md:gap-y-0 lg:max-w-[50%]">
             {footerSecondaryColumns.map((column) => (
               <FooterColumnBlock key={column.title} column={column} />
             ))}

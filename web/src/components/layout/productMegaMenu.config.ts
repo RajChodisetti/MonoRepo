@@ -38,67 +38,64 @@ export type MegaMenuIconName =
   | "tablet"
   | "card";
 
+/**
+ * Product mega menu — grouped by job-to-be-done for restaurants.
+ */
 export const productMegaSections: MegaMenuSection[] = [
   {
-    title: "Grow online discovery",
+    title: "Get found online",
     items: [
       { label: "Restaurant Website", href: "/restaurant-website-ai", icon: "globe" },
       { label: "Restaurant SEO", href: "/product/seo", icon: "search" },
       { label: "Online Menu", href: "/product/menu", icon: "list" },
-      { label: "Reviews Engine", href: "/product/reviews", icon: "star" },
       { label: "Listings Management", href: "/product/listings", icon: "mapPin" },
+      { label: "Reviews Engine", href: "/product/reviews", icon: "star" },
     ],
   },
   {
-    title: "Grow online sales",
+    title: "Take more orders",
     items: [
       { label: "Online Ordering", href: "/product/ordering", icon: "bag" },
-      { label: "Smart Upsells", href: "/product/upsells", icon: "chartUp" },
+      { label: "AI Phone Ordering", href: "/product/ai-phone", icon: "phone" },
       { label: "Delivery", href: "/product/delivery", icon: "truck" },
       { label: "Catering", href: "/product/catering", icon: "cup" },
-      {
-        label: "AI Phone Ordering",
-        href: "/product/ai-phone",
-        icon: "phone",
-        badge: "Waitlist",
-      },
+      { label: "Branded Restaurant App", href: "/product/app", icon: "phoneDevice" },
     ],
   },
   {
-    title: "Grow repeat orders",
+    title: "Bring guests back",
     items: [
-      { label: "Branded Restaurant App", href: "/product/app", icon: "phoneDevice" },
       { label: "Marketing Campaigns", href: "/product/campaigns", icon: "megaphone" },
-      { label: "Email & Text Marketing", href: "/product/email", icon: "mail" },
+      { label: "Email & SMS Marketing", href: "/product/email", icon: "mail" },
       { label: "Push Notifications Marketing", href: "/product/push", icon: "bell" },
       { label: "Loyalty & Rewards", href: "/product/loyalty", icon: "medal" },
     ],
   },
   {
-    title: "Run your restaurant",
+    title: "Run the floor",
     items: [
       { label: "Owner App", href: "/product/owner-app", icon: "laptop" },
-      { label: "Reporting & Analytics", href: "/product/analytics", icon: "pie" },
       { label: "Kitchen Tablet", href: "/product/kitchen", icon: "tablet" },
       { label: "POS Integrations", href: "/product/pos", icon: "card" },
+      { label: "Reporting & Analytics", href: "/product/analytics", icon: "pie" },
     ],
   },
 ];
 
-/** Featured story cards — images from Unsplash */
+/** Featured story cards — fictional demo venues + Tuvi-generated imagery */
 export const productMegaFeatured: MegaMenuFeatured[] = [
   {
-    href: "/stories/talkin-tacos",
-    imageSrc:
-      "https://images.unsplash.com/photo-1559339352-11d035aa65de?auto=format&fit=crop&w=900&q=80",
-    imageAlt: "Restaurant founders smiling together",
-    title: "How Mo and Omar from Talkin Tacos grew direct online sales to $120K/m",
+    href: "/resources/case-studies/quillnest-kitchen",
+    imageSrc: "/resources/resource-marketing-hero.png",
+    imageAlt: "Warm evening dining room at Quillnest Kitchen",
+    title:
+      "How Riley from Quillnest Kitchen cut marketplace fees and grew +$72K in online sales",
   },
   {
-    href: "/stories/hillcrust-pizza",
-    imageSrc:
-      "https://images.unsplash.com/photo-1577219491135-ce391730fb2c?auto=format&fit=crop&w=900&q=80",
-    imageAlt: "Chef standing in a restaurant kitchen",
-    title: "How HillCrust Pizza saved thousands and ranked higher on Google with Tuvi",
+    href: "/resources/case-studies/brightkiln-kitchen",
+    imageSrc: "/resources/resource-seo-hero.png",
+    imageAlt: "Local search moment for Brightkiln Kitchen",
+    title:
+      "How Brightkiln Kitchen doubled Google bookings and filled weeknights with Tuvi SEO",
   },
 ];

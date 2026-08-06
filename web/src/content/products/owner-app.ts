@@ -2,25 +2,25 @@ import type { ProductPageConfig } from "@/content/products/types";
 
 export const ownerApp: ProductPageConfig = {
   meta: {
-    title: "Owner App | Tuvi",
+    title: "Operator App | Tuvi",
     description:
-      "Run your restaurant from your phone. Orders, sales, and guest insights in one owner app.",
+      "Run the floor from your phone. Sales, orders, and guest signals in one Tuvi operator app — wherever you are.",
   },
   hero: {
-    heading: "Your restaurant in your pocket.",
+    heading: "The venue in your pocket.",
     subheading:
-      "Check sales, manage orders, and stay on top of performance — whether you are in the dining room or away.",
-    primaryCta: { label: "Get a free demo", href: "#" },
-    secondaryCta: { label: "View pricing", href: "/pricing" },
+      "Check sales, manage orders, and stay across performance — whether you are on the pass or away from the dining room.",
+    primaryCta: { label: "Get a free demo", href: "/demo" },
+    secondaryCta: { label: "See how it works", href: "/how-it-works" },
     testimonial: {
-      imageSrc: "/product/alex-lambroulis.jpg",
-      imageAlt: "Restaurant owner using the Tuvi owner app",
-      title: "See how owners stay in control from anywhere",
-      attribution: "Alex Lambroulis — Olive & Oak",
+      imageSrc: "/resources/resource-app-hero.png",
+      imageAlt: "Sam Rivera from Brightkiln Kitchen",
+      title: "See how Sam stays across service from anywhere",
+      attribution: "Sam Rivera — Brightkiln Kitchen",
     },
   },
   featureSplit: {
-    heading: "Everything you need to run the business day to day",
+    heading: "Day-to-day control without living at the till",
     headingTone: "dark",
     visualPanel: "peach",
     visual: "owner-dashboard",
@@ -28,7 +28,7 @@ export const ownerApp: ProductPageConfig = {
       {
         icon: "gauge",
         title: "Live sales pulse",
-        body: "See today's orders, ticket size, and trends without waiting for end-of-night reports.",
+        body: "See today's orders, ticket size, and trends without waiting for end-of-night exports.",
       },
       {
         icon: "gear",
@@ -38,33 +38,33 @@ export const ownerApp: ProductPageConfig = {
       {
         icon: "users",
         title: "Know your guests",
-        body: "Spot regulars, new customers, and loyalty activity from one screen.",
+        body: "Spot regulars, new customers, and loyalty activity from one screen you actually own.",
       },
     ],
   },
   featureCards: {
-    sectionHeading: "Built for owners who cannot be everywhere at once.",
+    sectionHeading: "Built for operators who cannot be everywhere at once.",
     sectionBg: "beige",
     cards: [
       {
         layout: "full",
         theme: "cream-blue",
         label: "Clarity",
-        title: "A clean dashboard that answers “how are we doing?” instantly.",
+        title: "A clean dashboard that answers “how are we tracking?” instantly.",
         visual: "analytics-chart",
       },
       {
         layout: "half",
         theme: "white",
         label: "Alerts",
-        title: "Stay informed when something needs attention.",
+        title: "Stay informed when something needs a quick decision.",
         visual: "push-notif-stack",
       },
       {
         layout: "half",
         theme: "dark",
         label: "Peace of mind",
-        title: "Leave the floor without losing visibility.",
+        title: "Leave the floor without losing visibility of first-party orders.",
         visual: "owner-photo-fill",
       },
     ],
@@ -72,9 +72,9 @@ export const ownerApp: ProductPageConfig = {
   faq: {
     items: [
       {
-        question: "Is the Owner App separate from the guest app?",
+        question: "Is the operator app separate from the guest app?",
         answer:
-          "Yes. Guests get your branded ordering app. You get the Owner App for operations, sales, and controls.",
+          "Yes. Guests get your branded ordering app. You get the Tuvi operator app for sales, operations, and controls.",
       },
       {
         question: "Can multiple managers use it?",
@@ -84,7 +84,7 @@ export const ownerApp: ProductPageConfig = {
       {
         question: "Does it work with online ordering?",
         answer:
-          "It sits on top of your Tuvi stack — ordering, loyalty, and reporting stay connected.",
+          "It sits on top of your Tuvi stack — ordering, loyalty, and reporting stay connected so you own the guest relationship end to end.",
       },
     ],
   },

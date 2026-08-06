@@ -265,5 +265,5 @@ export function KitchenPhotoFillVisual() {
 }
 
 export function OwnerPhotoFillVisual() {
-  return <OpsPhotoFillVisual src="/product/reviews-owner.jpg" />;
+  return <OpsPhotoFillVisual src="/resources/resource-help-hero.png" />;
 }

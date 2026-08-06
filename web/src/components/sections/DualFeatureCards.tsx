@@ -143,7 +143,7 @@ function RankingCard() {
               <Image src="/menu/tacos.jpg" alt="" fill className="object-cover" sizes="52px" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-[15px] font-semibold tracking-[-0.02em] text-[#1a1a1a]">Talkin&apos; Tacos</p>
+              <p className="text-[15px] font-semibold tracking-[-0.02em] text-[#1a1a1a]">Verde Stack Cantina</p>
               <div className="mt-1.5 flex items-center gap-1.5">
                 <span className="text-[12px] font-semibold text-[#1a1a1a]">4.8</span>
                 <StarRow />
@@ -205,7 +205,7 @@ function OrderingCard() {
       </div>
 
       <p className="relative z-10 mt-8 max-w-[24ch] text-[clamp(1.15rem,2vw,1.35rem)] font-semibold leading-snug tracking-[-0.025em] text-ink">
-        Grow your sales with an online ordering system modeled after the big brands.
+        Grow your sales with commission-free ordering under your brand.
       </p>
     </div>
   );

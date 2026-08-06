@@ -4,19 +4,19 @@ export const posIntegrations: ProductPageConfig = {
   meta: {
     title: "POS Integrations | Tuvi",
     description:
-      "Connect Tuvi to your POS. Menus, orders, and items stay in sync so online and in-store stay aligned.",
+      "Connect Tuvi to your POS. Menus, modifiers, and orders stay aligned so online and in-store tell the same story.",
   },
   hero: {
-    heading: "Your POS and Tuvi, finally in sync.",
+    heading: "Your POS and Tuvi, finally aligned.",
     subheading:
-      "Connect supported POS systems so menus, modifiers, and orders stay accurate across online and in-store.",
-    primaryCta: { label: "Get a free demo", href: "#" },
-    secondaryCta: { label: "View pricing", href: "/pricing" },
+      "Connect supported POS systems so menus, modifiers, and tickets stay accurate across first-party online and in-store service.",
+    primaryCta: { label: "Get a free demo", href: "/demo" },
+    secondaryCta: { label: "See how it works", href: "/how-it-works" },
     testimonial: {
-      imageSrc: "/product/mo-farraj.jpg",
-      imageAlt: "Operator managing POS and online orders",
-      title: "See how POS sync removes double entry",
-      attribution: "Mo Farraj — Talkin' Tacos",
+      imageSrc: "/resources/resource-help-hero.png",
+      imageAlt: "Avery Knox from Nonna Parcel Kitchen",
+      title: "See how Avery stopped double-entering menus",
+      attribution: "Avery Knox — Nonna Parcel Kitchen",
     },
   },
   featureSplit: {
@@ -38,7 +38,7 @@ export const posIntegrations: ProductPageConfig = {
       {
         icon: "bolt",
         title: "Faster service",
-        body: "Orders flow without retyping — saving the counter and kitchen from busywork.",
+        body: "Orders flow without retyping — saving the counter and kitchen from busywork during rush.",
       },
     ],
   },
@@ -79,7 +79,7 @@ export const posIntegrations: ProductPageConfig = {
       {
         question: "What if I change POS later?",
         answer:
-          "We help you reconnect and rematch menu items so online ordering keeps running with minimal downtime.",
+          "We help you reconnect and rematch menu items so first-party ordering keeps running with minimal downtime.",
       },
       {
         question: "Do I still need to edit menus in two places?",

@@ -18,30 +18,6 @@ function StarIcon({ className }: { className?: string }) {
   );
 }
 
-function AwardIcon() {
-  return (
-    <svg viewBox="0 0 20 20" className="h-5 w-5 shrink-0" aria-hidden="true">
-      <path
-        d="M10 2.2 12.2 7l5.1.7-3.7 3.6.9 5.1L10 14.1 5.5 16.4l.9-5.1L2.7 7.7 7.8 7 10 2.2Z"
-        fill="#f5a623"
-      />
-      <path d="M10 6.2 11 8.4l2.3.3-1.7 1.6.4 2.3L10 11.5l-2 1.1.4-2.3-1.7-1.6 2.3-.3L10 6.2Z" fill="#fff" />
-      <circle cx="10" cy="10" r="2.2" fill="#3b82f6" opacity="0.9" />
-    </svg>
-  );
-}
-
-function G2Icon() {
-  return (
-    <span
-      className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#ff492c] text-[12px] font-bold text-white"
-      aria-hidden="true"
-    >
-      G
-    </span>
-  );
-}
-
 function ReviewCard({ review }: { review: RatingReview }) {
   return (
     <article
@@ -94,7 +70,6 @@ export default function RatingsProof() {
     <section className="bg-bg pt-10 sm:pt-14">
       <div className="tuvi-forest-panel relative w-full overflow-hidden rounded-t-[28px] sm:rounded-t-[36px] md:rounded-t-[44px]">
         <div className="relative pt-14 pb-10 sm:pt-16 sm:pb-12 md:pt-20 md:pb-14">
-          {/* Concentric arcs */}
           <svg
             className="pointer-events-none absolute inset-0 h-full w-full"
             viewBox="0 0 1440 900"
@@ -114,7 +89,6 @@ export default function RatingsProof() {
             ))}
           </svg>
 
-          {/* Grain */}
           <div
             className="pointer-events-none absolute inset-0 opacity-[0.18] mix-blend-overlay"
             style={{
@@ -126,33 +100,21 @@ export default function RatingsProof() {
 
           <div className="relative z-10 mx-auto max-w-[820px] px-6 text-center sm:px-8">
             <h2 className="font-display text-[clamp(2.5rem,5vw,4rem)] font-semibold leading-[1.1] tracking-[-0.03em] text-bg">
-              <span className="block">See why we&apos;re rated #1</span>
-              <span className="block">in restaurant tech</span>
+              <span className="block">See why owners switch</span>
+              <span className="block">to Tuvi</span>
             </h2>
 
-            <div className="mt-8 flex flex-wrap items-center justify-center gap-3 sm:mt-10 sm:gap-3.5">
-              <span className="inline-flex items-center gap-2.5 rounded-full bg-primary/70 px-4 py-2.5 text-[15px] font-semibold text-bg ring-1 ring-white/10 backdrop-blur-sm sm:px-5 sm:py-3 sm:text-[16px]">
-                <AwardIcon />
-                Rated #1 Restaurant Software
-              </span>
-              <span className="inline-flex items-center gap-2.5 rounded-full bg-primary/70 px-4 py-2.5 text-[15px] font-semibold text-bg ring-1 ring-white/10 backdrop-blur-sm sm:px-5 sm:py-3 sm:text-[16px]">
-                <G2Icon />
-                Leader in Summer 2026
-              </span>
-            </div>
-
-            <p className="mt-6 flex flex-wrap items-center justify-center gap-x-2.5 gap-y-1 text-[16px] font-medium text-bg/75 sm:mt-7 sm:text-[18px]">
+            <p className="mt-6 flex flex-wrap items-center justify-center gap-x-2.5 gap-y-1 text-[16px] font-medium text-bg/75 sm:mt-8 sm:text-[18px]">
               <span>4.8</span>
-              <span className="inline-flex items-center gap-1 text-bg" aria-label="5 stars">
+              <span className="inline-flex items-center gap-1 text-bg" aria-label="4.8 stars">
                 {Array.from({ length: 5 }).map((_, i) => (
                   <StarIcon key={i} className="h-4 w-4 sm:h-[18px] sm:w-[18px]" />
                 ))}
               </span>
-              <span>across 1,000+ reviews</span>
+              <span>Trusted by 200+ restaurants growing direct sales with Tuvi</span>
             </p>
           </div>
 
-          {/* Two-row continuous marquees */}
           <div className="relative z-10 mt-12 flex flex-col gap-3 sm:mt-14 sm:gap-3.5">
             <MarqueeRow reviews={ratingReviewsRow1} />
             <MarqueeRow reviews={ratingReviewsRow2} reverse />

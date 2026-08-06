@@ -2,69 +2,69 @@ import type { ProductPageConfig } from "@/content/products/types";
 
 export const smartUpsells: ProductPageConfig = {
   meta: {
-    title: "Smart Upsells | Tuvi",
+    title: "Guided Add-ons | Tuvi",
     description:
-      "More revenue on every order with smart upsells. Tuvi uses data from thousands of restaurants to suggest perfect add-ons.",
+      "Grow ticket size with guided add-ons. Suggest sides, drinks, and extras that fit the cart — without hard-selling guests.",
   },
   hero: {
-    heading: "More revenue on every order with smart upsells.",
+    heading: "Grow every ticket with guided add-ons.",
     subheading:
-      "Tuvi uses data from thousands of restaurants to suggest perfect upsells, maximizing your sales per ticket.",
-    primaryCta: { label: "Get a free demo", href: "#" },
-    secondaryCta: { label: "View pricing", href: "/pricing" },
+      "Tuvi surfaces sensible extras at the right moment — so guests build a fuller order and you lift average check size on direct sales.",
+    primaryCta: { label: "Get a free demo", href: "/demo" },
+    secondaryCta: { label: "See how it works", href: "/how-it-works" },
     testimonial: {
-      imageSrc: "/product/rahul-bhatia.jpg",
-      imageAlt: "Rahul Bhatia from Saffron Indian Kitchen",
-      title: "See how Smart Upsells helps Rahul grow average ticket size",
-      attribution: "Rahul Bhatia — Saffron Indian Kitchen",
+      imageSrc: "/resources/resource-email-hero.png",
+      imageAlt: "Riley Quinn from Quillnest Kitchen",
+      title: "See how guided add-ons lifted Riley's average ticket",
+      attribution: "Riley Quinn — Quillnest Kitchen",
     },
   },
   featureSplit: {
-    heading: "Online ordering that upsells like your best server.",
+    heading: "Ordering that helps guests build a better ticket",
     headingTone: "dark",
     visualPanel: "peach",
     visual: "upsell-flow",
     features: [
       {
         icon: "bolt",
-        title: "The perfect upsells every time",
-        body: "We use data to show the right upsell at the right moment, so guests spend more without feeling pushed.",
+        title: "The right add-on at the right step",
+        body: "Show sides, drinks, and desserts that fit what is already in the cart — helpful, not pushy.",
       },
       {
         icon: "gauge",
-        title: "Data from thousands of restaurants",
-        body: "Tuvi knows what to suggest and when, based on millions of datapoints and online guest interactions.",
+        title: "Tuned to how guests actually order",
+        body: "Suggestions lean on real cart patterns so attachment feels natural in your menu flow.",
       },
       {
         icon: "chart",
-        title: "Gets even smarter over time",
-        body: "Our team runs tests across the platform, so your upsells keep improving over time.",
+        title: "Keeps refining with you",
+        body: "As menus and seasons change, guided add-ons stay aligned so tickets keep climbing without extra staff coaching.",
       },
     ],
   },
   featureCards: {
-    sectionHeading: "Grow your average check size without lifting a finger.",
+    sectionHeading: "Lift average check size without nagging the guest.",
     sectionBg: "beige",
     cards: [
       {
         layout: "full",
         theme: "indigo",
         label: "More per order",
-        title: "The right add-on at checkout every time.",
+        title: "Sensible extras appear at checkout when they fit the cart.",
         visual: "upsell-checkout",
       },
       {
         layout: "half",
         theme: "white",
-        label: "Based on real data",
-        title: "Built on what works across thousands of restaurants.",
+        label: "Operator control",
+        title: "Set preferences and exclusions so suggestions match your kitchen.",
         visual: "upsell-data-avatars",
       },
       {
         layout: "half",
         theme: "dark",
-        label: "Always improving",
-        title: "Our team keeps testing so your upsells keep getting better.",
+        label: "Quietly effective",
+        title: "Small lifts per ticket compound across every first-party order.",
         visual: "upsell-improving-photo",
       },
     ],
@@ -72,19 +72,19 @@ export const smartUpsells: ProductPageConfig = {
   faq: {
     items: [
       {
-        question: "How do Smart Upsells work?",
+        question: "How do guided add-ons work?",
         answer:
-          "When a guest adds an item, Tuvi suggests the add-ons most likely to convert for that order — based on restaurant data and real guest behavior — right at checkout.",
+          "When a guest adds an item, Tuvi suggests extras that commonly pair well with that cart — right in the ordering flow — so more tickets include a drink, side, or dessert without awkward hard sells.",
       },
       {
         question: "Can I control what gets suggested?",
         answer:
-          "Yes. You can set preferences and exclusions, while still letting the system optimize which add-ons show for each cart so tickets grow without awkward hard sells.",
+          "Yes. You can set preferences and exclusions while still letting the flow highlight add-ons that fit each cart, so ticket size grows on your terms.",
       },
       {
-        question: "How does this actually increase revenue?",
+        question: "How does this increase revenue?",
         answer:
-          "Higher attachment rates on drinks, sides, and desserts lift average check size. Even a few extra dollars per order compounds across every direct order you take.",
+          "Higher attachment on drinks, sides, and desserts lifts average check size. Even a few extra dollars per order compounds across every commission-free order you take.",
       },
     ],
   },

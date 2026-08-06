@@ -4,19 +4,19 @@ export const loyaltyRewards: ProductPageConfig = {
   meta: {
     title: "Loyalty & Rewards | Tuvi",
     description:
-      "Restaurant loyalty that guests actually use. Points, rewards, and perks that grow repeat orders under your brand.",
+      "Restaurant loyalty guests actually use. Points and perks that grow repeat first-party orders under your brand.",
   },
   hero: {
     heading: "Loyalty that turns guests into regulars.",
     subheading:
       "Points, rewards, and VIP perks that live in your app and ordering flow — so guests come back for you, not a marketplace.",
-    primaryCta: { label: "Get a free demo", href: "#" },
-    secondaryCta: { label: "View pricing", href: "/pricing" },
+    primaryCta: { label: "Get a free demo", href: "/demo" },
+    secondaryCta: { label: "See how it works", href: "/how-it-works" },
     testimonial: {
-      imageSrc: "/product/enga-stanfield.jpg",
-      imageAlt: "Restaurant owner celebrating loyal guests",
-      title: "See how loyalty grows repeat weekly orders",
-      attribution: "Enga Stanfield — Mattenga's Pizzeria",
+      imageSrc: "/resources/resource-support-hero.png",
+      imageAlt: "Sam Rivera from Brightkiln Kitchen",
+      title: "See how loyalty grew Sam's midweek repeats",
+      attribution: "Sam Rivera — Brightkiln Kitchen",
     },
   },
   featureSplit: {
@@ -38,7 +38,7 @@ export const loyaltyRewards: ProductPageConfig = {
       {
         icon: "users",
         title: "Know your best guests",
-        body: "See who spends, who is slipping away, and who deserves a VIP nudge.",
+        body: "See who spends, who is slipping away, and who deserves a VIP nudge — on a list you own.",
       },
     ],
   },
@@ -74,17 +74,17 @@ export const loyaltyRewards: ProductPageConfig = {
       {
         question: "Does loyalty work with online ordering?",
         answer:
-          "Yes. Points earn and redeem across website, app, and supported ordering flows so the program stays consistent.",
+          "Yes. Points earn and redeem across website, app, and supported ordering flows so the program stays consistent and first-party.",
       },
       {
-        question: "Can I customize rewards?",
+        question: "Can I customise rewards?",
         answer:
           "Absolutely. Set point values, reward items, and member tiers to match how your restaurant operates.",
       },
       {
         question: "How do staff handle redemptions?",
         answer:
-          "Rewards show clearly on the order and kitchen ticket so your team can honor them without extra steps.",
+          "Rewards show clearly on the order and kitchen ticket so your team can honour them without extra steps.",
       },
     ],
   },

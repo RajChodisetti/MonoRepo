@@ -2,70 +2,70 @@ import type { ProductPageConfig } from "@/content/products/types";
 
 export const restaurantWebsite: ProductPageConfig = {
   meta: {
-    title: "Restaurant Website AI | Tuvi",
+    title: "Restaurant Website | Tuvi",
     description:
-      "Restaurant websites built for sales first, style second. Tuvi builds your website to drive sales, grow Google traffic, and beat the competition.",
+      "A restaurant website built to sell. Drive Google traffic, beat marketplace listings, and convert visitors into first-party orders.",
   },
   hero: {
-    heading: "Restaurant websites built for sales first, style second.",
+    heading: "A website built to sell food — not just look pretty.",
     subheading:
-      "Tuvi builds your website to drive sales. Our proven design grows Google traffic, outranks delivery apps, and beats your competition.",
-    primaryCta: { label: "Get a free demo", href: "#" },
-    secondaryCta: { label: "View pricing", href: "/pricing" },
+      "Tuvi builds restaurant sites that win local search, showcase your brand, and turn visits into commission-free online orders.",
+    primaryCta: { label: "Get a free demo", href: "/demo" },
+    secondaryCta: { label: "See how it works", href: "/how-it-works" },
     testimonial: {
-      imageSrc: "/product/matt-miller.jpg",
-      imageAlt: "Matt Miller from Mr M's Sandwich Shop",
+      imageSrc: "/resources/resource-website-hero.png",
+      imageAlt: "Sandy Sei from Lantern Ridge Kitchen",
       title:
-        "“We're getting more clicks, and we're getting more traffic. And those clicks are turning into sales.”",
-      attribution: "Matt Miller — Mr M's Sandwich Shop",
+        "“More clicks are landing on our site — and those clicks are turning into orders.”",
+      attribution: "Sandy Sei — Lantern Ridge Kitchen",
     },
   },
   featureSplit: {
-    heading: "Your website could be driving more online sales",
+    heading: "Your website should be a growth channel",
     headingTone: "muted",
     visualPanel: "peach",
     visual: "gyro-preview",
     features: [
       {
         icon: "badge",
-        title: "Upgrade your website to our proven design",
-        body: "Thousands of restaurants use Tuvi. We know exactly how to design restaurant websites to drive more online orders.",
+        title: "Proven restaurant layouts",
+        body: "Designs shaped around menus, ordering, and local discovery — so guests know what to do in seconds.",
       },
       {
         icon: "percent",
-        title: "We build websites that Google loves",
-        body: "We've analyzed the Google algorithm. We build your website with world-class SEO that gets you top rankings.",
+        title: "Pages Google can understand",
+        body: "Structure, speed, and local signals that help nearby searchers find you before they hit a marketplace.",
       },
       {
         icon: "gauge",
-        title: "A website that's always getting better",
-        body: "We're always studying the science of online sales. When we learn something new, we add it to your website right away.",
+        title: "Always getting sharper",
+        body: "As we learn what converts for venues like yours, those improvements flow into your site.",
       },
     ],
   },
   featureCards: {
-    sectionHeading: "A website that's built to grow your business.",
+    sectionHeading: "A site that grows first-party orders.",
     sectionBg: "beige",
     cards: [
       {
         layout: "full",
         theme: "blue",
-        label: "AI SEO",
-        title: "We use AI to grow your SEO and Google traffic.",
+        label: "Local search",
+        title: "Built to earn visibility when hungry locals search nearby.",
         visual: "ai-search-mock",
       },
       {
         layout: "half",
         theme: "beige",
-        label: "Online ordering built-in",
-        title: "Great ordering experience that grows your online sales.",
+        label: "Ordering built in",
+        title: "A guest-ready order path that grows direct sales.",
         visual: "ordering-ravioli",
       },
       {
         layout: "half",
         theme: "white-green",
-        label: "Never stops improving",
-        title: "You'll always get the latest best practices.",
+        label: "Keeps evolving",
+        title: "You get ongoing refinements — not a static brochure site.",
         visual: "phone-improving",
       },
     ],
@@ -75,17 +75,17 @@ export const restaurantWebsite: ProductPageConfig = {
       {
         question: "What happens to my current website?",
         answer:
-          "We keep what already works and rebuild the rest for growth. Your domain, brand, and content can carry over while Tuvi upgrades SEO, ordering, and conversion paths so you do not lose traffic during the switch.",
+          "We keep what already works and rebuild the rest for growth. Your domain, brand, and content can carry over while Tuvi upgrades search readiness, ordering, and conversion paths so you do not lose traffic during the switch.",
       },
       {
-        question: "How much can I customize my design?",
+        question: "How much can I customise the design?",
         answer:
-          "A lot. Colors, photos, menu layout, and key sections are tailored to your restaurant. You get a polished look that still feels on-brand, without needing a designer for every small change.",
+          "A lot. Colours, photos, menu layout, and key sections are tailored to your restaurant. You get a polished look that still feels on-brand, without needing a designer for every small change.",
       },
       {
         question: "How long will this take?",
         answer:
-          "Most restaurants go live in a few weeks. Timeline depends on how quickly we get your menu, photos, and feedback — once those are in, we move fast and keep you updated at every step.",
+          "Most restaurants go live in a few weeks. Timeline depends on how quickly we get your menu, photos, and feedback — once those are in, we move fast and keep you updated.",
       },
     ],
   },

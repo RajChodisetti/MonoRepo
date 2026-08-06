@@ -8,22 +8,31 @@ export type FooterColumn = {
   links: FooterLink[];
 };
 
-/** Top product row — 4 columns (order matches Owner.com footer) */
+/** Top product row — 4 columns, sorted by job-to-be-done */
 export const footerProductColumns: FooterColumn[] = [
   {
-    title: "Grow online discovery",
+    title: "Get found online",
     links: [
       { label: "Restaurant Website", href: "/restaurant-website-ai" },
       { label: "Restaurant SEO", href: "/product/seo" },
       { label: "Online Menu", href: "/product/menu" },
-      { label: "Reviews Engine", href: "/product/reviews" },
       { label: "Listings Management", href: "/product/listings" },
+      { label: "Reviews Engine", href: "/product/reviews" },
     ],
   },
   {
-    title: "Grow repeat orders",
+    title: "Take more orders",
     links: [
+      { label: "Online Ordering", href: "/product/ordering" },
+      { label: "AI Phone Ordering", href: "/product/ai-phone" },
+      { label: "Delivery", href: "/product/delivery" },
+      { label: "Catering", href: "/product/catering" },
       { label: "Branded Restaurant App", href: "/product/app" },
+    ],
+  },
+  {
+    title: "Bring guests back",
+    links: [
       { label: "Marketing Campaigns", href: "/product/campaigns" },
       { label: "Email & SMS Marketing", href: "/product/email" },
       { label: "Push Notifications Marketing", href: "/product/push" },
@@ -31,27 +40,17 @@ export const footerProductColumns: FooterColumn[] = [
     ],
   },
   {
-    title: "Grow online sales",
+    title: "Run the floor",
     links: [
-      { label: "Online Ordering", href: "/product/ordering" },
-      { label: "Smart Upsells", href: "/product/upsells" },
-      { label: "Delivery", href: "/product/delivery" },
-      { label: "Catering", href: "/product/catering" },
-      { label: "AI Phone Ordering", href: "/product/ai-phone" },
-    ],
-  },
-  {
-    title: "Run your restaurant",
-    links: [
-      { label: "Tuvi App", href: "/product/owner-app" },
-      { label: "Reporting & Analytics", href: "/product/analytics" },
+      { label: "Owner App", href: "/product/owner-app" },
       { label: "Kitchen Tablet", href: "/product/kitchen" },
       { label: "POS Integrations", href: "/product/pos" },
+      { label: "Reporting & Analytics", href: "/product/analytics" },
     ],
   },
 ];
 
-/** Bottom row — Resources, Company, Support */
+/** Bottom row — Resources, Support */
 export const footerSecondaryColumns: FooterColumn[] = [
   {
     title: "Resources",
@@ -66,21 +65,9 @@ export const footerSecondaryColumns: FooterColumn[] = [
     ],
   },
   {
-    title: "Company",
-    links: [
-      { label: "About", href: "/company/story" },
-      { label: "Careers", href: "/company/careers" },
-      { label: "Leadership", href: "/company/leadership" },
-      { label: "Builders Wanted", href: "/company/builders" },
-      { label: "Press", href: "/company/press" },
-      { label: "Partner with Tuvi", href: "/company/partners" },
-    ],
-  },
-  {
     title: "Support",
     links: [
-      { label: "1-844-24-TUVI", href: "tel:+1844248884" },
-      { label: "support@tuvi.com", href: "mailto:support@tuvi.com" },
+      { label: "contact@tuvisolutions.com", href: "mailto:contact@tuvisolutions.com" },
     ],
   },
 ];

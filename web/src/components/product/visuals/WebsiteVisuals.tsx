@@ -6,13 +6,13 @@ export function GyroPreviewVisual() {
       <div className="flex items-center justify-between gap-2 px-3.5 pb-2 pt-3.5 sm:px-4 sm:pt-4">
         <div className="flex min-w-0 items-center gap-2">
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#4a90d9] text-[10px] font-bold text-white">
-            GC
+            QK
           </span>
           <span className="min-w-0 leading-tight">
             <span className="block truncate text-[11px] font-bold tracking-[-0.02em] text-[#3b7fc4] sm:text-[12px]">
-              GYROCONCEPT
+              QUILLNEST
             </span>
-            <span className="block text-[9px] font-medium text-[#7aa8d8]">authentic greek</span>
+            <span className="block text-[9px] font-medium text-[#7aa8d8]">kitchen · melbourne</span>
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
@@ -28,7 +28,7 @@ export function GyroPreviewVisual() {
       </div>
 
       <div className="relative mx-3 mt-1 h-[210px] shrink-0 overflow-hidden rounded-2xl sm:mx-3.5 sm:h-[240px]">
-        <Image src="/product/gyro-hero.jpg" alt="" fill className="object-cover" sizes="420px" />
+        <Image src="/resources/resource-website-hero.png" alt="" fill className="object-cover" sizes="420px" />
         <div
           className="absolute inset-x-0 bottom-0 h-[55%]"
           style={{
@@ -39,10 +39,10 @@ export function GyroPreviewVisual() {
         />
         <div className="absolute inset-x-0 bottom-0 p-3.5 sm:p-4">
           <p className="text-[11px] font-medium text-white/90 sm:text-[12px]">
-            Best Greek Food in Pennsylvania
+            Neighbourhood favourites, ordered direct
           </p>
           <p className="mt-1 max-w-[18ch] text-[15px] font-bold leading-[1.2] tracking-[-0.02em] text-white sm:text-[17px]">
-            We Strive To Elevate The Food Experience To Its Top Shelf
+            Your brand. Your menu. Your guests.
           </p>
         </div>
       </div>
@@ -69,7 +69,7 @@ export function GyroPreviewVisual() {
           </span>
         </div>
         <div className="mt-2.5 flex gap-2">
-          {["/product/gyro-1.jpg", "/product/gyro-2.jpg", "/product/gyro-3.jpg"].map((src) => (
+          {["/menu/pepperoni-pizza.jpg", "/menu/pasta-alfredo.jpg", "/menu/classic-burger.jpg"].map((src) => (
             <div
               key={src}
               className="relative h-[100px] w-[90px] shrink-0 overflow-hidden rounded-2xl bg-[#f0f0f0]"
@@ -130,7 +130,7 @@ export function OrderingRavioliVisual() {
       <div className="relative flex items-center gap-3.5 rounded-2xl bg-white p-4 shadow-[0_12px_32px_rgba(0,0,0,0.1)]">
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
-            <p className="text-[16px] font-bold text-[#0f271f]">Chicken Ravioli</p>
+            <p className="text-[16px] font-bold text-[#0f271f]">Mushroom Ravioli</p>
             <span className="text-[#c45c5c]" aria-hidden="true">
               ♥
             </span>
@@ -142,7 +142,7 @@ export function OrderingRavioliVisual() {
           <p className="mt-2.5 text-[14px] font-semibold text-[#0f271f]">$13.00</p>
         </div>
         <div className="relative h-[72px] w-[72px] shrink-0 overflow-hidden rounded-full">
-          <Image src="/product/ravioli.jpg" alt="" fill className="object-cover" sizes="72px" />
+          <Image src="/menu/pasta-alfredo.jpg" alt="" fill className="object-cover" sizes="72px" />
         </div>
       </div>
     </div>

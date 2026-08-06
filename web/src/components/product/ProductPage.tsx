@@ -4,7 +4,6 @@ import ProductFeatureSplit from "@/components/product/ProductFeatureSplit";
 import ProductHero from "@/components/product/ProductHero";
 import SiteFooter from "@/components/layout/SiteFooter";
 import GrowOnlineCta from "@/components/sections/GrowOnlineCta";
-import TrustedByOwners from "@/components/sections/TrustedByOwners";
 import type { ProductPageConfig } from "@/content/products/types";
 
 type ProductPageProps = {
@@ -18,7 +17,6 @@ export default function ProductPage({ config }: ProductPageProps) {
       <ProductFeatureSplit config={config.featureSplit} />
       <ProductFeatureCards config={config.featureCards} />
       <ProductFaq items={config.faq.items} />
-      <TrustedByOwners />
       <GrowOnlineCta variant="centered" />
       <SiteFooter />
     </div>

@@ -4,19 +4,19 @@ export const reportingAnalytics: ProductPageConfig = {
   meta: {
     title: "Reporting & Analytics | Tuvi",
     description:
-      "Restaurant reporting that makes sense. Sales, guests, and channel performance in clear dashboards.",
+      "Restaurant reporting that makes sense. Sales, guests, and channel mix in clear dashboards — built for operators.",
   },
   hero: {
     heading: "Reports you can actually use.",
     subheading:
-      "Understand sales, channels, and guest behavior without exporting five CSVs every Monday.",
-    primaryCta: { label: "Get a free demo", href: "#" },
-    secondaryCta: { label: "View pricing", href: "/pricing" },
+      "Understand sales, channels, and guest behaviour without exporting five CSVs every Monday.",
+    primaryCta: { label: "Get a free demo", href: "/demo" },
+    secondaryCta: { label: "See how it works", href: "/how-it-works" },
     testimonial: {
-      imageSrc: "/product/rahul-bhatia.jpg",
-      imageAlt: "Owner reviewing restaurant analytics",
-      title: "See how clearer reports change weekly decisions",
-      attribution: "Rahul Bhatia — Saffron Indian Kitchen",
+      imageSrc: "/resources/resource-marketing-hero.png",
+      imageAlt: "Marco Reyes from Copperwick Table",
+      title: "See how clearer reports changed Marco's weekly decisions",
+      attribution: "Marco Reyes — Copperwick Table",
     },
   },
   featureSplit: {
@@ -28,12 +28,12 @@ export const reportingAnalytics: ProductPageConfig = {
       {
         icon: "chart",
         title: "Sales that tell a story",
-        body: "Daypart, channel, and item trends that show what is working — and what is not.",
+        body: "Daypart, channel, and item trends that show what is working — and what needs a nudge.",
       },
       {
         icon: "users",
-        title: "Guest insights",
-        body: "New vs returning, loyalty engagement, and campaign lift in one place.",
+        title: "Guest insights you own",
+        body: "New vs returning, loyalty engagement, and campaign lift from your first-party list.",
       },
       {
         icon: "gauge",
@@ -79,12 +79,12 @@ export const reportingAnalytics: ProductPageConfig = {
       {
         question: "Does reporting include loyalty and marketing?",
         answer:
-          "It connects sales with guest and campaign activity so you see the full picture of what drives repeats.",
+          "It connects sales with guest and campaign activity so you see the full picture of what drives repeats under your brand.",
       },
       {
         question: "How often does data refresh?",
         answer:
-          "Core operational metrics refresh continuously as orders come in through Tuvi.",
+          "Core operational metrics refresh continuously as first-party orders come in through Tuvi.",
       },
     ],
   },

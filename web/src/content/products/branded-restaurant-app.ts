@@ -4,23 +4,23 @@ export const brandedRestaurantApp: ProductPageConfig = {
   meta: {
     title: "Branded Restaurant App | Tuvi",
     description:
-      "Give your restaurant its own mobile app. Guests order, earn rewards, and come back — under your brand.",
+      "Your own restaurant app. Guests order, earn rewards, and come back — under your brand, commission-free.",
   },
   hero: {
     heading: "Your restaurant. Your app. Your customers.",
     subheading:
-      "Tuvi gives independent restaurants a branded mobile app so guests order direct, earn loyalty, and skip the marketplaces.",
-    primaryCta: { label: "Get a free demo", href: "#" },
-    secondaryCta: { label: "View pricing", href: "/pricing" },
+      "Tuvi gives independent venues a branded mobile app so guests order direct, earn loyalty, and skip the marketplaces.",
+    primaryCta: { label: "Get a free demo", href: "/demo" },
+    secondaryCta: { label: "See how it works", href: "/how-it-works" },
     testimonial: {
-      imageSrc: "/product/mo-farraj.jpg",
-      imageAlt: "Restaurant owner using a branded app",
-      title: "See how a branded app grows first-party orders",
-      attribution: "Mo Farraj — Talkin' Tacos",
+      imageSrc: "/resources/resource-app-hero.png",
+      imageAlt: "Priya Mehta from Steamrail Noodles",
+      title: "See how Priya grows first-party orders with a branded app",
+      attribution: "Priya Mehta — Steamrail Noodles",
     },
   },
   featureSplit: {
-    heading: "The same app experience guests expect from big brands",
+    heading: "An app experience that feels polished — and stays yours",
     headingTone: "dark",
     visualPanel: "peach",
     visual: "branded-app-phone",
@@ -28,12 +28,12 @@ export const brandedRestaurantApp: ProductPageConfig = {
       {
         icon: "phone",
         title: "Order ahead on your brand",
-        body: "Guests browse your menu, customize items, and checkout in an app that looks and feels like yours.",
+        body: "Guests browse your menu, customise items, and checkout in an app that looks and feels like yours.",
       },
       {
         icon: "trophy",
         title: "Loyalty built in",
-        body: "Points, rewards, and offers live inside the app — so every order brings guests back.",
+        body: "Points, rewards, and offers live inside the app — so every order brings guests back to you.",
       },
       {
         icon: "bolt",
@@ -50,7 +50,7 @@ export const brandedRestaurantApp: ProductPageConfig = {
         layout: "full",
         theme: "green",
         label: "Your brand",
-        title: "A polished app that looks like it belongs to a national chain.",
+        title: "A polished app that puts your name front and centre.",
         visual: "branded-app-showcase",
       },
       {

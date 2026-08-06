@@ -86,7 +86,7 @@ export function CateringSearchVisual() {
 const FOOD_TILES = [
   "/menu/pasta-alfredo.jpg",
   "/menu/caesar-salad.jpg",
-  "/product/ravioli.jpg",
+  "/menu/classic-burger.jpg",
   "/menu/pepperoni-pizza.jpg",
 ] as const;
 

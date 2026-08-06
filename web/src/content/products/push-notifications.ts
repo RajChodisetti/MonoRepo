@@ -2,21 +2,21 @@ import type { ProductPageConfig } from "@/content/products/types";
 
 export const pushNotifications: ProductPageConfig = {
   meta: {
-    title: "Push Notifications Marketing | Tuvi",
+    title: "Push Notifications | Tuvi",
     description:
-      "Push notifications that drive orders. Reach app guests with offers, updates, and reminders that feel timely.",
+      "Push notifications that drive orders. Reach app guests with offers, updates, and reminders under your brand.",
   },
   hero: {
     heading: "Push that gets guests to open and order.",
     subheading:
-      "Send timely notifications through your branded app — happy hour, order status, and loyalty wins.",
-    primaryCta: { label: "Get a free demo", href: "#" },
-    secondaryCta: { label: "View pricing", href: "/pricing" },
+      "Send timely notifications through your branded app — happy hour, order status, and loyalty wins — without a marketplace feed.",
+    primaryCta: { label: "Get a free demo", href: "/demo" },
+    secondaryCta: { label: "See how it works", href: "/how-it-works" },
     testimonial: {
-      imageSrc: "/product/matt-miller.jpg",
-      imageAlt: "Restaurant owner sending push offers",
-      title: "See how push notifications lift same-day orders",
-      attribution: "Matt Miller — Metro Bistro",
+      imageSrc: "/resources/resource-app-hero.png",
+      imageAlt: "Jules Maren from Clockspan Bistro",
+      title: "See how Jules lifts same-day orders with push",
+      attribution: "Jules Maren — Clockspan Bistro",
     },
   },
   featureSplit: {

@@ -4,8 +4,8 @@ export function ReviewsOwnerPhotoVisual() {
   return (
     <div className="absolute inset-0">
       <Image
-        src="/product/reviews-owner.jpg"
-        alt="Restaurant owner in the kitchen"
+        src="/resources/resource-help-hero.png"
+        alt="Restaurant operator reviewing service prep"
         fill
         className="object-cover object-[center_18%]"
         sizes="(max-width: 1024px) 90vw, 480px"

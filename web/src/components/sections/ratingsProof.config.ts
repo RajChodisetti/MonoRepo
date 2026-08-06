@@ -5,80 +5,81 @@ export type RatingReview = {
   avatar: string;
 };
 
+/** Fictional reviewers aligned with case-study / owner demo names. */
 export const ratingReviewsRow1: RatingReview[] = [
   {
     id: "r1-1",
-    title: "Owner.com + Small Business = BIG Business",
-    name: "Anil R.",
-    avatar: "/people/anil.jpg",
-  },
-  {
-    id: "r1-2",
-    title: "Seamless Delivery and Marketing Boost",
-    name: "Maria L.",
-    avatar: "/people/maria.jpg",
-  },
-  {
-    id: "r1-3",
-    title: "Effortless Setup and Remarkable Sales Boost",
-    name: "James K.",
-    avatar: "/people/james.jpg",
-  },
-  {
-    id: "r1-4",
-    title: "Seamless Integration and Marketing Powerhouse",
-    name: "Priya S.",
+    title: "Tuvi cut our marketplace fees and online sales jumped in the first month",
+    name: "Riley Quinn",
     avatar: "/people/priya.jpg",
   },
   {
-    id: "r1-5",
-    title: "From Setup to Scale Without the Tech Headaches",
-    name: "Kevin M.",
+    id: "r1-2",
+    title: "Setup was easy — we were taking first-party orders the same week",
+    name: "Jordan Hale",
+    avatar: "/people/james.jpg",
+  },
+  {
+    id: "r1-3",
+    title: "Catering inquiries finally live on our site thanks to Tuvi",
+    name: "Avery Knox",
     avatar: "/people/kevin.jpg",
   },
   {
-    id: "r1-6",
-    title: "Online Ordering That Finally Drove Real Growth",
-    name: "Sofia T.",
+    id: "r1-4",
+    title: "Google bookings doubled once our listings and SEO were fixed",
+    name: "Sam Rivera",
+    avatar: "/people/david.jpg",
+  },
+  {
+    id: "r1-5",
+    title: "Loyalty and SMS from Tuvi turned one-time guests into regulars",
+    name: "Priya Mehta",
     avatar: "/people/sofia.jpg",
+  },
+  {
+    id: "r1-6",
+    title: "We finally own the guest data — Tuvi made that simple",
+    name: "Jules Maren",
+    avatar: "/people/ciara.jpg",
   },
 ];
 
 export const ratingReviewsRow2: RatingReview[] = [
   {
     id: "r2-1",
-    title: "By far the best trained, competent and friendly customer support staff",
-    name: "David P.",
-    avatar: "/people/david.jpg",
-  },
-  {
-    id: "r2-2",
-    title: "Effortless Website Transformation with Outstanding Support",
-    name: "Lena W.",
+    title: "Support actually knows restaurants. I would recommend Tuvi to any owner",
+    name: "Sandy Sei",
     avatar: "/people/lena.jpg",
   },
   {
-    id: "r2-3",
-    title: "Our Guests Keep Coming Back Thanks to Smart Follow-ups",
-    name: "Ciara N.",
-    avatar: "/people/ciara.jpg",
-  },
-  {
-    id: "r2-4",
-    title: "Doubled our online orders in under 90 days",
-    name: "Anil R.",
+    id: "r2-2",
+    title: "Same ordering feel as the big chains — without giving away the guest",
+    name: "Marco Reyes",
     avatar: "/people/anil.jpg",
   },
   {
-    id: "r2-5",
-    title: "The easiest platform we've ever switched to",
-    name: "Maria L.",
+    id: "r2-3",
+    title: "Weeknights filled up after Tuvi cleaned up our Google presence",
+    name: "Mira Chen",
     avatar: "/people/maria.jpg",
   },
   {
-    id: "r2-6",
-    title: "Marketing and ordering finally work as one system",
-    name: "James K.",
+    id: "r2-4",
+    title: "Direct orders keep climbing and the kitchen tickets stay clear",
+    name: "Dev Hale",
     avatar: "/people/james.jpg",
+  },
+  {
+    id: "r2-5",
+    title: "Email and push from Tuvi bring guests back on our slowest nights",
+    name: "Noor Vale",
+    avatar: "/people/priya.jpg",
+  },
+  {
+    id: "r2-6",
+    title: "Website, ordering, and loyalty finally feel like one system",
+    name: "Kai Brooks",
+    avatar: "/people/kevin.jpg",
   },
 ];

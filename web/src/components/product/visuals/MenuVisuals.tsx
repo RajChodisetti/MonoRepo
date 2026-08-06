@@ -100,23 +100,23 @@ export function RewardsPhoneVisual() {
 export function PitaWrapsMenuVisual() {
   const items = [
     {
-      name: "Make Your Own Pita",
-      price: "$11.45",
-      description: "Your choice of pita, protein and sauce, wrapped with toppings of your choice.",
-      image: "/product/gyro-1.jpg",
+      name: "Build Your Bowl",
+      price: "$14.50",
+      description: "Pick a base, protein, and house sauces — topped your way.",
+      image: "/menu/caesar-salad.jpg",
     },
     {
-      name: "Chicken Gyro Wrap",
-      price: "$11.45",
+      name: "Charfold Chicken Wrap",
+      price: "$13.90",
       description:
-        "Your choice of pita, chicken gyro, lettuce, tomato, French fries, Gyro Concept sauce.",
-      image: "/product/gyro-2.jpg",
+        "Grilled chicken, crisp lettuce, tomato, fries, and house garlic sauce in a warm wrap.",
+      image: "/menu/classic-burger.jpg",
     },
   ] as const;
 
   return (
     <div className="w-full max-w-[340px] rounded-[22px] bg-white p-4 shadow-[0_12px_32px_rgba(0,0,0,0.1)] sm:p-5">
-      <p className="text-[16px] font-bold text-[#0f271f]">Pita Wraps</p>
+      <p className="text-[16px] font-bold text-[#0f271f]">Bowls & wraps</p>
       <div className="mt-3 space-y-4">
         {items.map((item) => (
           <div key={item.name} className="flex gap-3 border-t border-black/[0.06] pt-4 first:border-0 first:pt-0">

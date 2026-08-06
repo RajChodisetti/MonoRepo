@@ -5,5 +5,4 @@ export const primaryNavLinks: NavLink[] = [
   { type: "mega", label: "Product" },
   { type: "link", label: "Pricing", href: "/pricing" },
   { type: "link", label: "How it works", href: "/how-it-works" },
-  { type: "resources-mega", label: "Resources" },
 ];

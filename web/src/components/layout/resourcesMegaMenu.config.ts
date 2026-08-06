@@ -21,12 +21,11 @@ export const resourcesLinks: ResourcesLink[] = [
 
 export const resourcesFeatured: ResourcesFeaturedCard[] = [
   {
-    href: "/resources/case-studies/karv-greek-kouzina",
-    title: "How Alex from Karv Greek Kouzina grew online sales to $40K/month with Tuvi",
+    href: "/resources/case-studies/orzo-vale-kouzina",
+    title: "How Jordan from Orzo Vale Kouzina grew online sales to $40K/month with Tuvi",
     variant: "photo",
-    imageSrc:
-      "https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=900&q=80",
-    imageAlt: "Restaurant owner smiling in a professional setting",
+    imageSrc: "/resources/resource-ordering-hero.png",
+    imageAlt: "Kitchen pass ready for first-party orders",
   },
   {
     href: "/resources/case-studies",

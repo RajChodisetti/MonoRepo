@@ -7,7 +7,6 @@ import NavLinks from "@/components/layout/NavLinks";
 import NavActions from "@/components/layout/NavActions";
 import { primaryNavLinks } from "@/components/layout/nav.config";
 import { productMegaSections } from "@/components/layout/productMegaMenu.config";
-import { resourcesLinks } from "@/components/layout/resourcesMegaMenu.config";
 import { CloseIcon, MenuIcon } from "@/components/icons/NavIcons";
 
 export default function Navbar() {
@@ -34,15 +33,15 @@ export default function Navbar() {
     <header className="nav-glass sticky top-0 z-50 w-full">
       <nav
         aria-label="Primary"
-        className="mx-auto grid h-[4.5rem] w-full max-w-[1200px] grid-cols-[1fr_auto_1fr] items-center gap-4 px-6 md:px-10 lg:px-12"
+        className="mx-auto grid h-[4.5rem] w-full max-w-[1200px] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 px-6 md:px-10 lg:px-12"
       >
         <div className="justify-self-start">
           <BrandLogo onNavigate={closeMobile} />
         </div>
 
-        <NavLinks links={primaryNavLinks} className="hidden lg:flex" />
+        <NavLinks links={primaryNavLinks} className="hidden justify-center lg:flex" />
 
-        <div className="hidden justify-self-end lg:block">
+        <div className="hidden shrink-0 justify-self-end lg:block">
           <NavActions className="flex" />
         </div>
 
@@ -95,11 +94,6 @@ export default function Navbar() {
                                     className="block rounded-xl px-1 py-2.5 text-base font-medium text-[#1a1a1a] hover:bg-black/[0.04]"
                                   >
                                     {sub.label}
-                                    {sub.badge ? (
-                                      <span className="ml-2 rounded-full bg-[#ececec] px-2 py-0.5 text-[11px] font-medium text-[#6b6b6b]">
-                                        {sub.badge}
-                                      </span>
-                                    ) : null}
                                   </Link>
                                 </li>
                               ))}
@@ -107,29 +101,6 @@ export default function Navbar() {
                           </div>
                         ))}
                       </div>
-                    </li>
-                  );
-                }
-
-                if (item.type === "resources-mega") {
-                  return (
-                    <li key={item.label} className="px-3 py-2">
-                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-black/40">
-                        {item.label}
-                      </p>
-                      <ul className="mt-1">
-                        {resourcesLinks.map((sub) => (
-                          <li key={sub.href}>
-                            <Link
-                              href={sub.href}
-                              onClick={closeMobile}
-                              className="block rounded-xl px-1 py-2.5 text-base font-medium text-[#1a1a1a] hover:bg-black/[0.04]"
-                            >
-                              {sub.label}
-                            </Link>
-                          </li>
-                        ))}
-                      </ul>
                     </li>
                   );
                 }

@@ -171,6 +171,12 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 		log,
 	)
 	seoPublicHandler := handlers.NewSEOPublicHandler(seoService, cfg.AppURLs.PublicWebURL, writeJSON, writeError)
+	contactPublicHandler := handlers.NewContactPublicHandler(
+		seoMailer,
+		cfg.Consultations.NotifyEmail,
+		writeJSON,
+		writeError,
+	)
 
 	mux.HandleFunc("POST /api/v1/auth/signup", authHandler.Signup)
 	mux.HandleFunc("POST /api/v1/auth/login", authHandler.Login)
@@ -270,6 +276,7 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	mux.HandleFunc("POST /api/public/v1/seo/unlock/request", seoPublicHandler.RequestUnlock)
 	mux.HandleFunc("POST /api/public/v1/seo/unlock/verify", seoPublicHandler.VerifyUnlock)
 	mux.HandleFunc("GET /api/public/v1/seo/unlock/click/{token}", seoPublicHandler.ClickUnlock)
+	mux.HandleFunc("POST /api/public/v1/contact", contactPublicHandler.Submit)
 	mux.HandleFunc("GET /api/public/v1/restaurants/{id}/table-availability", reservationPublicHandler.GetTableAvailability)
 	mux.HandleFunc("PUT /api/public/v1/restaurants/{id}/reservations", reservationPublicHandler.PutReservation)
 

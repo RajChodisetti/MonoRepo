@@ -74,26 +74,30 @@ export default function AppDownloadsPanel({ onProgress, onComplete }: AppDownloa
   return (
     <div className="relative min-h-[520px] overflow-hidden rounded-[28px] sm:min-h-[560px] sm:rounded-[32px]">
       <Image
-        src="/app/app-downloads-hero.png"
-        alt=""
+        src="/app/app-downloads-burger.png"
+        alt="Fresh burger on a restaurant table"
         fill
         priority
-        className="object-cover object-[68%_center] sm:object-[72%_center]"
+        className="object-cover object-center"
         sizes="(max-width: 1100px) 100vw, 1100px"
       />
 
-      {/* Left fade so copy stays readable over wood */}
       <div
-        className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/35 to-transparent sm:from-black/65 sm:via-black/25"
+        className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/50 to-black/20 sm:from-black/75 sm:via-black/40 sm:to-transparent"
         aria-hidden="true"
       />
 
       <div className="relative z-10 flex min-h-[520px] items-center px-6 py-14 sm:min-h-[560px] sm:px-10 sm:py-16 lg:px-14 lg:py-20">
-        <div className="max-w-[420px]">
-          <p className="text-[14px] font-medium text-white/75 sm:text-[15px]">Reward your guests</p>
+        <div className="max-w-[440px]">
+          <p className="text-[14px] font-medium text-white/75 sm:text-[15px]">Your branded app</p>
           <h3 className="mt-3 text-[clamp(1.85rem,3.2vw,2.85rem)] font-bold leading-[1.12] tracking-[-0.04em] text-white">
-            Give guests points when they use your branded mobile app
+            <span className="block">Earn loyalty every</span>
+            <span className="block">time guests order</span>
+            <span className="block">under your brand</span>
           </h3>
+          <p className="mt-4 max-w-[36ch] text-[15px] leading-relaxed text-white/70">
+            Points, pushes, and reorder shortcuts — on an app that looks like your restaurant, not a marketplace.
+          </p>
         </div>
       </div>
     </div>

@@ -4,19 +4,19 @@ export const emailTextMarketing: ProductPageConfig = {
   meta: {
     title: "Email & Text Marketing | Tuvi",
     description:
-      "Email and SMS marketing for restaurants. Win back guests, announce specials, and drive direct orders.",
+      "Email and SMS for restaurants. Win back guests, announce specials, and drive commission-free direct orders.",
   },
   hero: {
     heading: "Email & text that bring guests back.",
     subheading:
-      "Send the right message at the right time — specials, loyalty rewards, and win-backs that turn into orders.",
-    primaryCta: { label: "Get a free demo", href: "#" },
-    secondaryCta: { label: "View pricing", href: "/pricing" },
+      "Send the right message at the right time — specials, loyalty rewards, and win-backs that turn into first-party orders.",
+    primaryCta: { label: "Get a free demo", href: "/demo" },
+    secondaryCta: { label: "See how it works", href: "/how-it-works" },
     testimonial: {
-      imageSrc: "/product/lisa-desisto.jpg",
-      imageAlt: "Restaurant owner reviewing guest messages",
-      title: "See how email and SMS refill slow nights",
-      attribution: "Lisa DeSisto — Neighborhood Kitchen",
+      imageSrc: "/resources/resource-email-hero.png",
+      imageAlt: "Avery Knox from Nonna Parcel Kitchen",
+      title: "See how Avery uses email and SMS to refill slow nights",
+      attribution: "Avery Knox — Nonna Parcel Kitchen",
     },
   },
   featureSplit: {
@@ -50,7 +50,7 @@ export const emailTextMarketing: ProductPageConfig = {
         layout: "full",
         theme: "cream-blue",
         label: "Email",
-        title: "Beautiful messages that showcase your food and offers.",
+        title: "Messages that showcase your food and offers clearly.",
         visual: "campaign-promo",
       },
       {
@@ -74,7 +74,7 @@ export const emailTextMarketing: ProductPageConfig = {
       {
         question: "Where does the guest list come from?",
         answer:
-          "Online orders, loyalty signups, and app users flow into one Tuvi list you can message anytime.",
+          "Online orders, loyalty signups, and app users flow into one Tuvi list you own and can message anytime.",
       },
       {
         question: "Can I send both email and SMS together?",
@@ -84,7 +84,7 @@ export const emailTextMarketing: ProductPageConfig = {
       {
         question: "Do I write everything from scratch?",
         answer:
-          "No. Start from restaurant-ready templates and customize the copy, offer, and timing.",
+          "No. Start from restaurant-ready templates and customise the copy, offer, and timing.",
       },
     ],
   },

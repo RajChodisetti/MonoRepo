@@ -4,23 +4,23 @@ export const onlineOrdering: ProductPageConfig = {
   meta: {
     title: "Online Ordering | Tuvi",
     description:
-      "Your online ordering should grow your business. Tuvi is built to grow direct orders — always testing what boosts your sales.",
+      "First-party online ordering built to grow direct sales. Commission-free orders, a guest list you own, and a checkout guests trust.",
   },
   hero: {
-    heading: "Your online ordering should grow your business.",
+    heading: "Online ordering that grows your business — not a marketplace.",
     subheading:
-      "Tuvi is the only ordering system that works to grow your orders. We're always running tests to see how we can boost your sales.",
-    primaryCta: { label: "Get a free demo", href: "#" },
-    secondaryCta: { label: "View pricing", href: "/pricing" },
+      "Tuvi turns website and app visitors into commission-free orders. You keep the margin, the data, and the relationship.",
+    primaryCta: { label: "Get a free demo", href: "/demo" },
+    secondaryCta: { label: "See how it works", href: "/how-it-works" },
     testimonial: {
-      imageSrc: "/product/mo-farraj.jpg",
-      imageAlt: "Mo Farraj from Talkin' Tacos",
-      title: "See how our online ordering helps Mo grow his business profitably",
-      attribution: "Mo Farraj — Talkin' Tacos",
+      imageSrc: "/resources/resource-ordering-hero.png",
+      imageAlt: "Jordan Hale from Orzo Vale Kouzina",
+      title: "See how Jordan grows profitable direct orders with Tuvi",
+      attribution: "Jordan Hale — Orzo Vale Kouzina",
     },
   },
   featureSplit: {
-    heading: "Online ordering built to grow your direct orders",
+    heading: "Built to grow first-party orders week after week",
     headingTone: "dark",
     visualPanel: "peach",
     visual: "ordering-phone-preview",
@@ -28,43 +28,43 @@ export const onlineOrdering: ProductPageConfig = {
       {
         icon: "bolt",
         title: "Always getting better",
-        body: "Tuvi is built to grow your direct orders over time. We're always testing what gets more customers ordering from you.",
+        body: "We keep refining the guest flow so more people who find you finish a direct order.",
       },
       {
         icon: "wallet",
         title: "Keep more profit",
-        body: "Keep more of every order. Direct orders through Tuvi come without the fees that eat into your margins.",
+        body: "Direct orders through Tuvi avoid the marketplace fees that quietly eat your margins.",
       },
       {
         icon: "users",
         title: "Your customers, yours to keep",
-        body: "Every direct order builds your customer list. More data, more connections, and more chances to bring them back.",
+        body: "Every order strengthens your guest list — more data, more follow-ups, more repeats under your brand.",
       },
     ],
   },
   featureCards: {
-    sectionHeading: "Online ordering that grows direct orders",
+    sectionHeading: "Ordering that puts you back in control",
     sectionBg: "beige",
     cards: [
       {
         layout: "full",
         theme: "cream-blue",
-        label: "Built like the best",
-        title: "Feels like the apps your customers use daily.",
+        label: "Guest-ready",
+        title: "A polished order experience that feels familiar and fast.",
         visual: "ordering-app-showcase",
       },
       {
         layout: "half",
         theme: "white",
-        label: "Grow your customer list",
-        title: "Own your data. Grow your list. Connect with your customers.",
+        label: "Own the list",
+        title: "Grow a first-party guest list you can message anytime.",
         visual: "ordering-customer-list",
       },
       {
         layout: "half",
         theme: "sky",
         label: "Save on fees",
-        title: "Direct orders: cheaper for guests, better for you.",
+        title: "Direct orders: fairer for guests, better for your P&L.",
         visual: "fee-savings-toast",
       },
     ],
@@ -74,7 +74,7 @@ export const onlineOrdering: ProductPageConfig = {
       {
         question: "How can I grow my direct orders?",
         answer:
-          "Tuvi's ordering experience is continuously tested for conversion — clearer menus, smarter upsells, and a checkout guests trust — so more visitors order from you instead of delivery apps.",
+          "Tuvi's ordering experience is tuned for conversion — clearer menus, guided add-ons, and a checkout guests trust — so more visitors order from you instead of delivery apps.",
       },
       {
         question: "What POS systems do you integrate with?",
@@ -82,7 +82,7 @@ export const onlineOrdering: ProductPageConfig = {
           "We integrate with the major restaurant POS systems. During onboarding we map your menu and order flow so tickets land where your kitchen already works.",
       },
       {
-        question: "My POS comes with online ordering, why should I switch to Tuvi?",
+        question: "My POS comes with online ordering — why switch to Tuvi?",
         answer:
           "POS ordering is built for ops. Tuvi is built to grow sales — better guest UX, lower fees than marketplaces, and a customer list you own so you can bring guests back.",
       },

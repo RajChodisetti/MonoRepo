@@ -4,46 +4,46 @@ export const onlineMenu: ProductPageConfig = {
   meta: {
     title: "Online Menu | Tuvi",
     description:
-      "An online menu that turns visitors into customers. Designed by experts and constantly optimized to grow your online orders.",
+      "A menu built to convert browsers into first-party orders. Clear layout, strong photos, and a checkout guests trust.",
   },
   hero: {
-    heading: "An online menu that turns visitors into customers.",
+    heading: "A menu that turns browsers into buyers.",
     subheading:
-      "Tuvi's online menu is designed by experts and constantly optimized for one thing: to grow your online orders.",
-    primaryCta: { label: "Get a free demo", href: "#" },
-    secondaryCta: { label: "View pricing", href: "/pricing" },
+      "Tuvi's online menu is shaped for conversion — so more people who land on your site place a commission-free order with you.",
+    primaryCta: { label: "Get a free demo", href: "/demo" },
+    secondaryCta: { label: "See how it works", href: "/how-it-works" },
     testimonial: {
-      imageSrc: "/product/alex-lambroulis.jpg",
-      imageAlt: "Alex Lambroulis from Karv Greek Kouzina",
-      title: "See how our online menus help Alex grow his online sales",
-      attribution: "Alex Lambroulis — Karv Greek Kouzina",
+      imageSrc: "/resources/resource-inline-dining.png",
+      imageAlt: "Jordan Hale from Orzo Vale Kouzina",
+      title: "See how Jordan's menu lifts direct online sales",
+      attribution: "Jordan Hale — Orzo Vale Kouzina",
     },
   },
   featureSplit: {
-    heading: "A menu that gets more guests to order.",
+    heading: "Designed so guests finish the order",
     headingTone: "dark",
     visualPanel: "peach",
     visual: "menu-items-stack",
     features: [
       {
         icon: "users",
-        title: "Turn more visitors into paying customers",
-        body: "Tuvi's menu is designed to turn browsers into buyers, just like the top restaurant brands.",
+        title: "Convert more of the traffic you already earn",
+        body: "Layout, modifiers, and flow are tuned so hungry locals check out instead of bouncing to a marketplace.",
       },
       {
         icon: "badge",
-        title: "Beautiful, familiar designs that guests love",
-        body: "A great-looking menu that's easy to navigate keeps guests engaged and drives more orders.",
+        title: "Clear, inviting menus guests enjoy using",
+        body: "Easy navigation and strong food photography keep people engaged long enough to order.",
       },
       {
         icon: "chart",
-        title: "Continuously optimized by our experts",
-        body: "Our team constantly tests and refines your online menu on your behalf.",
+        title: "Refined as you grow",
+        body: "We keep testing and tightening the experience so your direct order rate climbs over time.",
       },
     ],
   },
   featureCards: {
-    sectionHeading: "Always optimized. Always converting.",
+    sectionHeading: "Always clear. Always converting.",
     sectionBg: "beige",
     cards: [
       {
@@ -51,21 +51,21 @@ export const onlineMenu: ProductPageConfig = {
         theme: "cream-blue",
         visualSide: "right",
         label: "Built to convert",
-        title: "Designed to turn menu browsers into buyers.",
+        title: "Every screen nudges guests toward a completed first-party order.",
         visual: "rewards-phone",
       },
       {
         layout: "half",
         theme: "beige",
-        label: "Great-looking menus",
-        title: "Beautiful, easy menus guests enjoy using every time.",
+        label: "Looks the part",
+        title: "Menus that feel premium without confusing the guest.",
         visual: "pita-wraps-menu",
       },
       {
         layout: "half",
         theme: "dark",
-        label: "Always improving",
-        title: "We're always optimizing to grow your orders.",
+        label: "Keeps improving",
+        title: "Small refinements that compound into more weekly orders.",
         visual: "order-tracking-phone",
       },
     ],
@@ -73,19 +73,19 @@ export const onlineMenu: ProductPageConfig = {
   faq: {
     items: [
       {
-        question: "How is Tuvi's online menu different from a regular menu?",
+        question: "How is Tuvi's online menu different from a basic menu page?",
         answer:
-          "It's built to convert — not just list food. Layout, photos, upsells, and ordering flow are designed and continuously tested so more visitors place orders.",
+          "It is built to convert — not just list dishes. Layout, photos, guided add-ons, and checkout are designed so more visitors place first-party orders with you.",
       },
       {
-        question: "Can I customize my online menu?",
+        question: "Can I customise my online menu?",
         answer:
-          "Yes. Categories, items, photos, prices, modifiers, and branding can all be tailored to your restaurant while keeping a proven conversion-focused design.",
+          "Yes. Categories, items, photos, prices, modifiers, and branding stay yours — while the structure stays conversion-focused.",
       },
       {
-        question: "What if I already have an online menu through my POS?",
+        question: "What if my POS already has a menu online?",
         answer:
-          "We can replace or improve what you have. Many restaurants keep their POS for kitchen ops and use Tuvi's menu for a better guest experience and higher online sales.",
+          "Many venues keep the POS for kitchen ops and use Tuvi for a better guest experience and higher direct sales. We can replace or improve what you have today.",
       },
     ],
   },

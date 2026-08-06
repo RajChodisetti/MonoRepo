@@ -4,67 +4,67 @@ export const catering: ProductPageConfig = {
   meta: {
     title: "Catering | Tuvi",
     description:
-      "Take catering orders directly on your website. Grow catering with a simple menu guests can book from in minutes — no marketplace fees.",
+      "Take catering on your own site. Groups book a clear menu in minutes — commission-free, under your brand.",
   },
   hero: {
-    heading: "Take catering orders directly on your website.",
+    heading: "Catering bookings on your website.",
     subheading:
-      "Grow your catering orders with a simple menu guests can book from in minutes. No marketplace fees.",
-    primaryCta: { label: "Get a free demo", href: "#" },
-    secondaryCta: { label: "View pricing", href: "/pricing" },
+      "Grow high-value group orders with a simple menu guests can book from in minutes. No marketplace fees. You own the guest.",
+    primaryCta: { label: "Get a free demo", href: "/demo" },
+    secondaryCta: { label: "See how it works", href: "/how-it-works" },
     testimonial: {
-      imageSrc: "/product/lisa-desisto.jpg",
-      imageAlt: "Lisa Desisto from Rig A' Tony's",
-      title: '"Every time someone orders via Tuvi, it\'s more money in my pocket."',
-      attribution: "Lisa Desisto — Rig A' Tony's",
+      imageSrc: "/resources/resource-inline-street.png",
+      imageAlt: "Priya Mehta from Steamrail Noodles",
+      title: "“Every catering order via Tuvi stays ours — margin and guest.”",
+      attribution: "Priya Mehta — Steamrail Noodles",
     },
   },
   featureSplit: {
-    heading: "Catering built to win more\nhigh-margin orders",
+    heading: "Built to win more high-margin group orders",
     headingTone: "dark",
     visualPanel: "peach",
     visual: "catering-menu-stack",
     features: [
       {
         icon: "bolt",
-        title: "Earn more profit per order",
-        body: "Catering is included with Tuvi, so more profit goes right to you. Stop paying crazy fees for catering orders.",
+        title: "Keep more profit per booking",
+        body: "Catering sits inside Tuvi, so commission does not chew the ticket. More of every group order stays with you.",
       },
       {
         icon: "card",
-        title: "Make booking easy for guests",
-        body: "A simple, app-like menu and request form on your site. No PDFs. No endless back-and-forth.",
+        title: "Make booking easy for offices and events",
+        body: "A clear menu and request flow on your site. No PDFs. No endless email chains.",
       },
       {
         icon: "trophy",
-        title: "Get found by local businesses",
-        body: "Search-friendly pages on your domain help nearby groups and offices find and book with you.",
+        title: "Get found by local groups",
+        body: "Search-friendly catering pages on your domain help nearby businesses find and book with you directly.",
       },
     ],
   },
   featureCards: {
-    sectionHeading: "Commission-free orders, under your brand",
+    sectionHeading: "Commission-free catering under your brand",
     sectionBg: "beige",
     cards: [
       {
         layout: "full",
         theme: "blue",
-        label: "Grow catering orders",
-        title: "Get found on Google and drive commission-free orders.",
+        label: "Grow catering",
+        title: "Get found locally and convert groups without marketplace fees.",
         visual: "catering-search",
       },
       {
         layout: "half",
         theme: "white",
-        label: "Built for big orders",
-        title: "Booking that feels like the apps your guests use.",
+        label: "Built for big tickets",
+        title: "Booking that feels as smooth as everyday online ordering.",
         visual: "catering-food-collage",
       },
       {
         layout: "half",
         theme: "white-green",
-        label: "Easy to find",
-        title: "Guests order without leaving your website.",
+        label: "On your domain",
+        title: "Guests book without leaving your website or brand.",
         visual: "catering-phone-mockup",
       },
     ],
@@ -82,12 +82,12 @@ export const catering: ProductPageConfig = {
           "Yes. Set order minimums, lead times, delivery or pickup fees, and custom options so catering runs the way your kitchen needs.",
       },
       {
-        question: "I use a marketplace or an inquiry form for catering. Why switch?",
+        question: "I use a marketplace or an inquiry form. Why switch?",
         answer:
-          "Marketplaces take fees and own the guest. Inquiry forms are slow. Tuvi lets guests book a clear catering menu on your site in minutes — under your brand, commission-free.",
+          "Marketplaces take fees and own the guest. Inquiry forms are slow. Tuvi lets groups book a clear catering menu on your site in minutes — under your brand, commission-free.",
       },
       {
-        question: "How does Tuvi get me more direct catering orders?",
+        question: "How does Tuvi help me get more direct catering?",
         answer:
           "Search-friendly catering pages, a simple booking flow, and your existing website traffic convert more local businesses and groups without sending them to a marketplace.",
       },

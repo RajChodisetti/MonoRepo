@@ -4,41 +4,41 @@ export const restaurantSeo: ProductPageConfig = {
   meta: {
     title: "Restaurant SEO | Tuvi",
     description:
-      "Get more Google traffic with world-class SEO. Tuvi keeps your restaurant at the top of rankings, no matter how Google changes.",
+      "Show up when hungry locals search nearby. Tuvi keeps your restaurant visible on Google so first-party traffic finds you — not a marketplace.",
   },
   hero: {
-    heading: "Get more Google traffic with world-class SEO.",
+    heading: "Show up when locals are ready to order.",
     subheading:
-      "Our SEO is built to keep you at the top of rankings, no matter how Google changes.",
-    primaryCta: { label: "Get a free demo", href: "#" },
-    secondaryCta: { label: "View pricing", href: "/pricing" },
+      "Tuvi keeps your restaurant discoverable on Google so nearby guests land on your site — and order direct, commission-free.",
+    primaryCta: { label: "Get a free demo", href: "/demo" },
+    secondaryCta: { label: "See how it works", href: "/how-it-works" },
     testimonial: {
-      imageSrc: "/product/sarkis-panossian.jpg",
-      imageAlt: "Sarkis Panossian from Township Line Pizza",
-      title: "See how our SEO helped Sarkis get top Google rankings",
-      attribution: "Sarkis Panossian — Township Line Pizza",
+      imageSrc: "/resources/resource-seo-hero.png",
+      imageAlt: "Mira Chen from Tileoven Co.",
+      title: "See how Tuvi helped Mira climb local search results",
+      attribution: "Mira Chen — Tileoven Co.",
     },
   },
   featureSplit: {
-    heading: "World-class SEO that grows your online presence",
+    heading: "Local search tuned for restaurants that want direct orders",
     headingTone: "dark",
     visualPanel: "green",
     visual: "seo-score",
     features: [
       {
         icon: "chart",
-        title: "Get more traffic from places near you",
-        body: "Tuvi's SEO is designed to get you as much traffic as possible from neighborhoods near you.",
+        title: "Pull in traffic from your catchment",
+        body: "We focus on the neighbourhoods and suburbs that actually feed your kitchen — not vanity national rankings.",
       },
       {
         icon: "users",
-        title: "Beat your competition on Google",
-        body: "Our SEO studies your restaurant's competition and analyzes how to get you ahead.",
+        title: "Compete on the searches that matter",
+        body: "Tuvi studies nearby rivals and shapes your presence so hungry guests choose your site first.",
       },
       {
         icon: "pencil",
-        title: "Never worry about Google updates",
-        body: "Google's algorithm is always changing. Our experts handle every update so your rankings keep improving.",
+        title: "Stay steady when search shifts",
+        body: "When Google changes, your pages and listings get updated so visibility does not quietly slip overnight.",
       },
     ],
   },
@@ -48,22 +48,22 @@ export const restaurantSeo: ProductPageConfig = {
       {
         layout: "full",
         theme: "green",
-        label: "AI SEO",
-        title: "AI-optimized sites boost SEO and Google traffic.",
+        label: "Search-ready pages",
+        title: "Restaurant pages structured so Google understands your menu and location.",
         visual: "seo-ai-search",
       },
       {
         layout: "half",
         theme: "sky",
-        label: "Always up to date",
-        title: "We track every Google update so your rankings never slip.",
+        label: "Ongoing care",
+        title: "We watch ranking moves so your local presence keeps improving.",
         visual: "google-update",
       },
       {
         layout: "half",
         theme: "light",
-        label: "Run by experts",
-        title: "Our SEO experts constantly improve your restaurant's online visibility.",
+        label: "Operator-first",
+        title: "You run service. Tuvi keeps search and listings tidy in the background.",
         visual: "experts-avatars",
       },
     ],
@@ -71,19 +71,19 @@ export const restaurantSeo: ProductPageConfig = {
   faq: {
     items: [
       {
-        question: "How is Tuvi's SEO different from other platforms?",
+        question: "How is Tuvi SEO different for restaurants?",
         answer:
-          "Tuvi SEO is built specifically for restaurants — local search, menus, and nearby demand. We combine AI optimization with human experts who watch Google updates, so rankings keep climbing instead of stalling after a one-time audit.",
+          "It is built around local demand, menus, and first-party ordering — not generic agency checklists. We pair ongoing optimisation with humans who watch search changes so rankings keep moving instead of stalling after a one-off audit.",
       },
       {
-        question: "How long does it take to see results?",
+        question: "How long before we see movement?",
         answer:
-          "Most restaurants start seeing meaningful movement within a few weeks, with stronger gains over the first few months. Timing depends on competition in your area and how quickly we can optimize your site and listings.",
+          "Many venues notice clearer local visibility within a few weeks, with stronger gains over the first few months. Timing depends on competition nearby and how quickly we can tighten your site and listings.",
       },
       {
-        question: "Do I need to do anything to maintain my SEO?",
+        question: "Do I need to maintain SEO myself?",
         answer:
-          "Very little. Our team tracks algorithm changes and keeps improving your visibility. You focus on running the restaurant — we handle the SEO maintenance.",
+          "Very little. Your team focuses on food and service. Tuvi keeps pages, listings, and technical basics healthy so search stays a growth channel for direct orders.",
       },
     ],
   },
