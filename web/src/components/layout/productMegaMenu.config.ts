@@ -74,7 +74,7 @@ export const productMegaSections: MegaMenuSection[] = [
   {
     title: "Run the floor",
     items: [
-      { label: "Owner App", href: "/product/owner-app", icon: "laptop" },
+      { label: "Tuvi App", href: "/product/owner-app", icon: "laptop" },
       { label: "Kitchen Tablet", href: "/product/kitchen", icon: "tablet" },
       { label: "POS Integrations", href: "/product/pos", icon: "card" },
       { label: "Reporting & Analytics", href: "/product/analytics", icon: "pie" },

@@ -42,7 +42,7 @@ export const footerProductColumns: FooterColumn[] = [
   {
     title: "Run the floor",
     links: [
-      { label: "Owner App", href: "/product/owner-app" },
+      { label: "Tuvi App", href: "/product/owner-app" },
       { label: "Kitchen Tablet", href: "/product/kitchen" },
       { label: "POS Integrations", href: "/product/pos" },
       { label: "Reporting & Analytics", href: "/product/analytics" },
