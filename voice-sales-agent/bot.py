@@ -1343,7 +1343,6 @@ async def stream_websocket(websocket: WebSocket):
     llm = OpenAILLMService(
         api_key=os.environ["OPENAI_API_KEY"],
         model=os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
-        tools=phone_tools,
     )
 
     # Mutable closure state
@@ -1369,7 +1368,10 @@ async def stream_websocket(websocket: WebSocket):
     llm.register_function(None, handle_tool_call)
 
     # ── LLM Context ───────────────────────────────────────────────────────────
-    context = LLMContext(messages=[{"role": "system", "content": system_prompt}])
+    context = LLMContext(
+        messages=[{"role": "system", "content": system_prompt}],
+        tools=phone_tools,
+    )
     user_aggregator, assistant_aggregator = LLMContextAggregatorPair(context)
 
     # ── TTS ───────────────────────────────────────────────────────────────────
@@ -1614,7 +1616,6 @@ async def browser_stream(websocket: WebSocket):
     llm = OpenAILLMService(
         api_key=os.environ["OPENAI_API_KEY"],
         model=os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
-        tools=agent_tools,
     )
     tts = CartesiaTTSService(
         api_key=os.environ["CARTESIA_API_KEY"],
@@ -1747,7 +1748,10 @@ async def browser_stream(websocket: WebSocket):
     llm.register_function(None, handle_browser_tool)
 
     # ── LLM Context ───────────────────────────────────────────────────────────
-    context = LLMContext(messages=[{"role": "system", "content": system_prompt}])
+    context = LLMContext(
+        messages=[{"role": "system", "content": system_prompt}],
+        tools=agent_tools,
+    )
     user_aggregator, assistant_aggregator = LLMContextAggregatorPair(context)
 
     # ── Processors ────────────────────────────────────────────────────────────

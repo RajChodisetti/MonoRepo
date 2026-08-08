@@ -24,6 +24,39 @@ def load_isolated_function(name: str, globals_: dict | None = None):
 
 
 class InboundOnlyPolicyTests(unittest.TestCase):
+    def test_tool_schemas_are_attached_to_each_llm_context(self):
+        tree = ast.parse(BOT_PATH.read_text(encoding="utf-8"), filename=str(BOT_PATH))
+        functions = {
+            node.name: node
+            for node in tree.body
+            if isinstance(node, ast.AsyncFunctionDef)
+            and node.name in {"stream_websocket", "browser_stream"}
+        }
+
+        for function_name, expected_tools in (
+            ("stream_websocket", "phone_tools"),
+            ("browser_stream", "agent_tools"),
+        ):
+            with self.subTest(function=function_name):
+                calls = [node for node in ast.walk(functions[function_name]) if isinstance(node, ast.Call)]
+                service_call = next(
+                    node
+                    for node in calls
+                    if isinstance(node.func, ast.Name) and node.func.id == "OpenAILLMService"
+                )
+                context_call = next(
+                    node
+                    for node in calls
+                    if isinstance(node.func, ast.Name) and node.func.id == "LLMContext"
+                )
+
+                service_keywords = {keyword.arg for keyword in service_call.keywords}
+                context_keywords = {keyword.arg: keyword.value for keyword in context_call.keywords}
+
+                self.assertNotIn("tools", service_keywords)
+                self.assertIn("tools", context_keywords)
+                self.assertEqual(ast.unparse(context_keywords["tools"]), expected_tools)
+
     def test_forged_stream_parameters_cannot_select_sales_mode(self):
         parse_params = load_isolated_function("_stream_custom_params")
         normalize_mode = load_isolated_function("_normalize_agent_mode")
