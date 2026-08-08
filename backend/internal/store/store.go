@@ -108,7 +108,37 @@ func (store *Store) VerifyStartup(ctx context.Context) error {
 	if err := store.VerifyLeadWorkflow(ctx); err != nil {
 		return err
 	}
-	return store.verifyTableExists(ctx, "company_consultations", "company_consultations migration not applied: run make migrate-up")
+	if err := store.verifyTableExists(ctx, "company_consultations", "company_consultations migration not applied: run make migrate-up"); err != nil {
+		return err
+	}
+	if err := store.verifyTableExists(
+		ctx,
+		"company_consultation_slot_overrides",
+		"company_consultation_slot_overrides migration not applied: run make migrate-up",
+	); err != nil {
+		return err
+	}
+	if err := store.verifyTableExists(
+		ctx,
+		"company_consultation_calendar_months",
+		"company_consultation_calendar_months migration not applied: run make migrate-up",
+	); err != nil {
+		return err
+	}
+	if err := store.verifyConstraintExists(
+		ctx,
+		"company_consultations",
+		"company_consultations_confirmed_no_overlap",
+		"company consultation overlap migration not applied: run make migrate-up",
+	); err != nil {
+		return err
+	}
+	return store.verifyConstraintExists(
+		ctx,
+		"company_consultations",
+		"company_consultations_valid_interval",
+		"company consultation valid-interval migration not applied: run make migrate-up",
+	)
 }
 
 func (store *Store) VerifyEmailCampaigns(ctx context.Context) error {
@@ -220,6 +250,30 @@ func (store *Store) verifyTableExists(ctx context.Context, tableName, message st
 		return fmt.Errorf("verify %s table: %w", tableName, err)
 	}
 
+	return nil
+}
+
+func (store *Store) verifyConstraintExists(
+	ctx context.Context,
+	tableName, constraintName, message string,
+) error {
+	const query = `
+		SELECT 1
+		FROM pg_constraint AS constraint_row
+		JOIN pg_class AS table_row ON table_row.oid = constraint_row.conrelid
+		JOIN pg_namespace AS namespace_row ON namespace_row.oid = table_row.relnamespace
+		WHERE namespace_row.nspname = 'public'
+		  AND table_row.relname = $1
+		  AND constraint_row.conname = $2`
+
+	var exists int
+	err := store.Pool().QueryRow(ctx, query, tableName, constraintName).Scan(&exists)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("%s: %w", message, repository.ErrNotFound)
+	}
+	if err != nil {
+		return fmt.Errorf("verify constraint %s.%s: %w", tableName, constraintName, err)
+	}
 	return nil
 }
 

@@ -19,7 +19,9 @@ ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 ENV NEXT_PUBLIC_VOICE_AGENT_URL=${NEXT_PUBLIC_VOICE_AGENT_URL}
 ENV NEXT_PUBLIC_MEDIA_BASE_URL=${NEXT_PUBLIC_MEDIA_BASE_URL}
 
-RUN npm run build
+RUN npm run build \
+    && npm prune --omit=dev \
+    && rm -rf .next/cache
 
 FROM node:22-alpine
 

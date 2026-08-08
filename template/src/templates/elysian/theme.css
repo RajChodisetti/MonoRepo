@@ -552,7 +552,7 @@
 [data-template="3"] .elysian-root .scroll-top.show { opacity:1; visibility:visible; transform:translateY(0); }
 [data-template="3"] .elysian-root .scroll-top:hover { border-color:var(--gold); color:var(--gold); transform:translateY(-4px); }
 [data-template="3"] .elysian-root .scroll-top svg { width:18px; height:18px; }
-[data-template="3"] .elysian-root /* =========================================================
+/* =========================================================
    RESPONSIVE
    ========================================================= */
 @media (max-width:1200px) {

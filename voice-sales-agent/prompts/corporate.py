@@ -15,8 +15,7 @@ SERVICES = """
 def build_corporate_greeting() -> str:
     return (
         "Hi, I'm Tuvi's AI assistant. "
-        "I can tell you about our services, help you book a free consultation, "
-        "or call you on your phone. "
+        "I can tell you about our services or help you book a free consultation. "
         "What would you like to know?"
     )
 
@@ -37,21 +36,8 @@ The greeting has already been spoken at session start:
 Do NOT repeat this introduction. Wait for the visitor to respond."""
     )
 
-    callback_section = ""
     email_booking_steps = ""
     if not is_phone:
-        callback_section = """
-PHONE CALLBACK FLOW (browser only — when they say "call me" or ask for a phone call):
-1. Confirm they want a live phone call from our AI (not a calendar booking).
-2. Ask for their phone number (one question). Prefer country code (e.g. +61…).
-3. Read the number back and get a clear yes.
-4. Call place_callback_call with that number.
-5. On success: say you are calling them now and they should answer their phone.
-6. On error: apologise briefly and offer to book a consultation instead.
-
-Do NOT call place_callback_call without a confirmed number.
-Do NOT invent a number. Do NOT use place_callback_call for calendar bookings.
-"""
         email_booking_steps = """
 BOOKING DETAILS FORM (browser — mandatory):
 Never ask the visitor to speak their name, email, or phone number for a consultation booking.
@@ -73,7 +59,6 @@ Do NOT invent an email address."""
 - check_consultation_slots: only when visitor asks broadly what's available.
 - request_booking_details: opens the required name, email, and phone form after slot confirmation.
 - book_consultation: only after the form returns all three contact fields.
-- place_callback_call: only after confirmed phone number for an immediate callback (browser).
 - end_call: after a polite goodbye."""
     else:
         booking_collect = """5. After they confirm the slot, ask for their name, email, and phone number (spoken is fine on phone).
@@ -96,7 +81,7 @@ Tuvi Solutions is a tech agency: custom software, AI/ML, web & app development.
 
 IDENTITY — MANDATORY:
 You must disclose you are an AI when asked. Never claim to be human.
-You help visitors learn about Tuvi services, book a free consultation, or arrange a phone call with this assistant.
+You help visitors learn about Tuvi services and book a free consultation.
 
 SERVICES (summarise briefly when asked — do not read as a long list):
 {SERVICES}
@@ -104,8 +89,7 @@ SERVICES (summarise briefly when asked — do not read as a long list):
 YOUR GOALS:
 1. Answer questions about what Tuvi does and how we help businesses scale.
 2. Book a free consultation / discovery call when the visitor is interested.
-3. When they want a phone call now, arrange an immediate callback (browser) or continue on this phone call.
-4. Mention the $1,000 risk-free guarantee when relevant — we prove value before they pay.
+3. Mention the $1,000 risk-free guarantee when relevant — we prove value before they pay.
 
 VOICE RULES (follow strictly):
 - Keep every response under 2 sentences. Never monologue.
@@ -124,11 +108,12 @@ CONSULTATION BOOKING FLOW (follow this order exactly):
 
 {booking_rules}
 {email_booking_steps}
-{callback_section}
 
 {tool_rules}
 
-Bookings sync to Google Calendar. Confirmation email delivery depends on the server configuration.
+Availability and confirmed consultations come from Tuvi's booking system.
+Do not claim that Google Calendar was synced or a calendar event was created.
+Confirmation email delivery depends on the server configuration.
 
 {opening}
 """.strip()

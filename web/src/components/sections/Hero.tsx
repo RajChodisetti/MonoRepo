@@ -116,23 +116,9 @@ export default function Hero() {
 
   useEffect(() => {
     const q = query.trim();
-    if (selected && selected.name === query) {
-      setResults([]);
-      setOpen(false);
-      setLoading(false);
-      return;
-    }
-    if (q.length < 2) {
-      setResults([]);
-      setOpen(false);
-      setLoading(false);
-      setSearchError(null);
-      return;
-    }
+    if ((selected && selected.name === query) || q.length < 2) return;
 
     let cancelled = false;
-    setLoading(true);
-    setSearchError(null);
     const timer = window.setTimeout(async () => {
       try {
         const params = new URLSearchParams({
@@ -174,11 +160,26 @@ export default function Hero() {
     return () => document.removeEventListener("mousedown", onDocClick);
   }, []);
 
+  function prepareForSearch(nextQuery: string) {
+    setSelected(null);
+    if (nextQuery.trim().length < 2) {
+      setResults([]);
+      setOpen(false);
+      setLoading(false);
+      setSearchError(null);
+      return;
+    }
+    setLoading(true);
+    setSearchError(null);
+  }
+
   function goToReport(hit: SearchHit) {
     setSubmitting(true);
     setSelected(hit);
     setQuery(hit.name);
+    setResults([]);
     setOpen(false);
+    setLoading(false);
     const params = new URLSearchParams();
     params.set("name", hit.name);
     if (hit.address) params.set("address", hit.address);
@@ -293,7 +294,7 @@ export default function Hero() {
                   type="text"
                   value={location}
                   onChange={(e) => {
-                    setSelected(null);
+                    prepareForSearch(query);
                     setLocation(e.target.value);
                   }}
                   placeholder="City or postcode"
@@ -316,8 +317,9 @@ export default function Hero() {
                   aria-activedescendant={highlight >= 0 ? `${listId}-opt-${highlight}` : undefined}
                   value={query}
                   onChange={(e) => {
-                    setSelected(null);
-                    setQuery(e.target.value);
+                    const nextQuery = e.target.value;
+                    prepareForSearch(nextQuery);
+                    setQuery(nextQuery);
                   }}
                   onFocus={() => {
                     if (results.length || searchError) setOpen(true);

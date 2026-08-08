@@ -56,28 +56,11 @@ func TestStartAdminPreviewRecordsSelectedTemplate(t *testing.T) {
 	}
 }
 
-func TestStartAdminPreviewAcceptsFoodieTemplate(t *testing.T) {
-	repo := &engagementTestRepository{}
-	service := NewService(nil, repo)
-	restaurantID := uuid.New()
-
-	result, err := service.StartAdminPreview(context.Background(), restaurantID, "4")
-	if err != nil {
-		t.Fatalf("StartAdminPreview() error = %v", err)
-	}
-	if result.SessionID == uuid.Nil || result.SessionToken == "" {
-		t.Fatalf("StartAdminPreview() result = %+v, want capability", result)
-	}
-	if !repo.created || repo.templateID != "4" {
-		t.Fatalf("created session = %+v, want Foodie preview", repo)
-	}
-}
-
 func TestStartAdminPreviewRejectsUnknownTemplate(t *testing.T) {
 	repo := &engagementTestRepository{}
 	service := NewService(nil, repo)
 
-	if _, err := service.StartAdminPreview(context.Background(), uuid.New(), "5"); err == nil {
+	if _, err := service.StartAdminPreview(context.Background(), uuid.New(), "4"); err == nil {
 		t.Fatal("StartAdminPreview() error = nil, want invalid template")
 	}
 	if repo.created {

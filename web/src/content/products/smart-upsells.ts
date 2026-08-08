@@ -10,7 +10,7 @@ export const smartUpsells: ProductPageConfig = {
     heading: "Grow every ticket with guided add-ons.",
     subheading:
       "Tuvi surfaces sensible extras at the right moment — so guests build a fuller order and you lift average check size on direct sales.",
-    primaryCta: { label: "Get a free demo", href: "/demo" },
+    primaryCta: { label: "Get a free demo", href: "/book" },
     secondaryCta: { label: "See how it works", href: "/how-it-works" },
     testimonial: {
       imageSrc: "/resources/resource-email-hero.png",

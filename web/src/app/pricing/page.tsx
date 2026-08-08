@@ -160,7 +160,7 @@ export default function PricingPage() {
                 ))}
               </ul>
               <Link
-                href="/demo"
+                href="/book"
                 className={`mt-8 inline-flex items-center justify-center rounded-full px-5 py-3 text-[14px] font-semibold transition-colors ${
                   plan.featured
                     ? "bg-bg text-ink hover:bg-sage"

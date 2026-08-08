@@ -1,81 +1,73 @@
-# Twilio calling setup (Tuvi website + restaurant template)
+# Inbound voice setup (Tuvi website + restaurant template)
 
-Phone features need a **public HTTPS** base URL. Localhost alone cannot receive Twilio webhooks or Media Streams.
+Phase 1 supports inbound voice only. Browser WebSocket sessions and calls made
+by a person to the configured Twilio number are supported. The service never
+dials a visitor: `POST /call` returns `403`, callback tools are absent, and the
+central dial function fails closed.
 
-## 1. Tunnel the voice agent
+## 1. Public HTTPS endpoint
 
-```bash
-# Example with ngrok (agent on :8000)
-ngrok http 8000
-```
-
-Set in `voice-sales-agent/.env`:
+Twilio webhooks and Media Streams require a public HTTPS base URL. For local
+inbound testing, expose port 8000 with a tunnel and set:
 
 ```bash
 PUBLIC_BASE_URL=https://<your-subdomain>.ngrok-free.app
-CALL_API_SECRET=<same-secret-as-website-or-template>
 ```
 
-`PUBLIC_BASE_URL` must match the URL Twilio hits (no trailing slash issues — trailing slash is stripped in code).
+`PUBLIC_BASE_URL` must match the URL Twilio reaches. The runtime strips a
+trailing slash.
 
 ## 2. Twilio Console
 
 1. Open the phone number matching `TWILIO_PHONE_NUMBER`.
-2. Voice → A call comes in → Webhook: `POST https://<PUBLIC_BASE_URL>/twiml`
+2. Set Voice → A call comes in to
+   `POST https://<PUBLIC_BASE_URL>/twiml`.
 3. Save.
 
-Outbound calls use inline TwiML from `POST /call` (Stream → `wss://…/stream` with `agent=corporate` or `agent=restaurant`).
+Do not configure an outbound callback webhook or expose provider credentials to
+the browser.
 
-### Restaurant caller ID (template)
+## 3. Website configuration
 
-Scraped restaurant business phones can appear as the outbound caller ID **only** if they are verified in Twilio:
-
-1. Twilio Console → Phone Numbers → Verified Caller IDs → add each restaurant line.
-2. Add the same numbers (E.164) to `TWILIO_VERIFIED_CALLER_IDS` in `voice-sales-agent/.env`:
+Root corporate site:
 
 ```bash
-TWILIO_VERIFIED_CALLER_IDS=+61293279713,+61212345678
-```
-
-If a restaurant phone is not verified, calls still work using `TWILIO_PHONE_NUMBER`; the template UI shows the restaurant name and listed number.
-
-## 3. Website env (`tuvi-website/app/.env.local`)
-
-```bash
-NEXT_PUBLIC_CALL_IN_NUMBER=+61XXXXXXXXX   # display / tel: only
+NEXT_PUBLIC_CALL_IN_NUMBER=+61XXXXXXXXX
 NEXT_PUBLIC_VOICE_AGENT_URL=http://localhost:8000
-CALL_API_SECRET=<same as voice-sales-agent>
-# optional server-only override:
-# VOICE_AGENT_URL=http://localhost:8000
+# Optional server-only override:
+VOICE_AGENT_URL=http://localhost:8000
 ```
 
-## 4. Template env (`template/.env.local`)
+Restaurant template:
 
 ```bash
 NEXT_PUBLIC_VOICE_AGENT_URL=http://localhost:8000
 NEXT_PUBLIC_API_URL=http://localhost:8080
-CALL_API_SECRET=<same as voice-sales-agent>
-# optional:
-# VOICE_AGENT_URL=http://localhost:8000
+# Optional server-only override:
+VOICE_AGENT_URL=http://localhost:8000
 ```
 
-Never put `TWILIO_AUTH_TOKEN` or `CALL_API_SECRET` in `NEXT_PUBLIC_*` vars.
+Never put `TWILIO_AUTH_TOKEN` or another provider credential in a
+`NEXT_PUBLIC_*` variable.
 
-## 5. Manual test matrix
+## 4. Read-only test matrix
 
-| Path | Expect |
-|------|--------|
-| Call Twilio number | Corporate greeting (not restaurant sales) |
-| Tuvi website “Call me now” form | Phone rings → corporate agent |
-| Template `/?id=0` → phone icon → Call me | Phone rings → restaurant receptionist for that index |
-| Browser voice: say “call me” → give number (corporate) | Phone rings → corporate |
-| Browser voice: say “call me” (restaurant template) | Phone rings → restaurant receptionist |
-| Invalid / opt-out / outside ACMA window | Clear message (or `skip_compliance` in development) |
-| Wrong / missing HTTPS `PUBLIC_BASE_URL` | Twilio cannot connect Media Stream |
+| Path | Expected result |
+| --- | --- |
+| Call the Twilio number | Inbound corporate greeting |
+| Tuvi website voice widget | Browser connects to the corporate agent |
+| Restaurant template voice widget | Browser connects to the selected restaurant receptionist |
+| Browser asks for consultation times | Agent reads only database-backed availability |
+| `POST /call` with or without credentials | `403` disabled; no provider call |
+| Wrong or missing HTTPS `PUBLIC_BASE_URL` | Twilio cannot connect the inbound Media Stream |
 
-## 6. Common failures
+Deployment smoke tests must not create a fake booking, place a phone call, or
+submit personal data. A real inbound Twilio call requires separate approval.
 
-- **503 / TTS errors**: Cartesia/Deepgram/OpenAI keys invalid.
-- **No ring after form**: agent down, wrong `CALL_API_SECRET`, or Twilio credentials.
-- **Inbound silence / wrong persona**: webhook not pointing at `/twiml`, or stream missing `agent=corporate`.
-- **Wrong restaurant on phone call**: check `restaurant_index` in template URL `?id=N` and MonoRepo API `GET /api/public/v1/site/restaurants/{index}`.
+## 5. Common failures
+
+- **503 / TTS errors:** Cartesia, Deepgram, or OpenAI credentials are invalid.
+- **Inbound silence / wrong persona:** the webhook is not pointing at `/twiml`,
+  or the stream is missing the expected agent mode.
+- **Wrong restaurant in browser voice:** check `restaurant_index` in the
+  template URL and the MonoRepo restaurant endpoint.

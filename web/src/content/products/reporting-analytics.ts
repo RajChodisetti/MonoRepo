@@ -10,7 +10,7 @@ export const reportingAnalytics: ProductPageConfig = {
     heading: "Reports you can actually use.",
     subheading:
       "Understand sales, channels, and guest behaviour without exporting five CSVs every Monday.",
-    primaryCta: { label: "Get a free demo", href: "/demo" },
+    primaryCta: { label: "Get a free demo", href: "/book" },
     secondaryCta: { label: "See how it works", href: "/how-it-works" },
     testimonial: {
       imageSrc: "/resources/resource-marketing-hero.png",

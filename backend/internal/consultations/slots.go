@@ -100,12 +100,18 @@ func GenerateConfirmationCode() (string, error) {
 }
 
 func GenerateCandidateSlots(cfg SlotConfig, startDate time.Time, numDays int) []time.Time {
+	return generateCandidateSlotsAt(cfg, startDate, numDays, time.Now().In(cfg.Timezone))
+}
+
+func generateCandidateSlotsAt(cfg SlotConfig, startDate time.Time, numDays int, now time.Time) []time.Time {
 	if numDays < 1 {
 		numDays = 1
 	}
 	loc := cfg.Timezone
-	now := time.Now().In(loc)
+	now = now.In(loc)
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
+	localStart := startDate.In(loc)
+	startDate = time.Date(localStart.Year(), localStart.Month(), localStart.Day(), 0, 0, 0, 0, loc)
 
 	if startDate.Before(today) {
 		startDate = today
@@ -121,21 +127,9 @@ func GenerateCandidateSlots(cfg SlotConfig, startDate time.Time, numDays int) []
 			continue
 		}
 
-		for hour := cfg.BusinessHourStart; hour < cfg.BusinessHourEnd; hour++ {
-			for minute := 0; minute < 60; minute += cfg.SlotDurationMinutes {
-				endMinute := minute + cfg.SlotDurationMinutes
-				endHour := hour
-				if endMinute >= 60 {
-					endHour++
-					endMinute -= 60
-				}
-				if endHour > cfg.BusinessHourEnd || (endHour == cfg.BusinessHourEnd && endMinute > 0) {
-					continue
-				}
-				slot := time.Date(cursor.Year(), cursor.Month(), cursor.Day(), hour, minute, 0, 0, loc)
-				if slot.After(now) {
-					slots = append(slots, slot)
-				}
+		for _, slot := range GenerateDayCandidateSlots(cfg, cursor) {
+			if slot.After(now) {
+				slots = append(slots, slot)
 			}
 		}
 
@@ -146,6 +140,81 @@ func GenerateCandidateSlots(cfg SlotConfig, startDate time.Time, numDays int) []
 	return slots
 }
 
+func GenerateDayCandidateSlots(cfg SlotConfig, date time.Time) []time.Time {
+	loc := cfg.Timezone
+	localDate := date.In(loc)
+	if localDate.Weekday() == time.Saturday || localDate.Weekday() == time.Sunday {
+		return nil
+	}
+	if cfg.SlotDurationMinutes < 1 {
+		return nil
+	}
+
+	dayStart := time.Date(
+		localDate.Year(),
+		localDate.Month(),
+		localDate.Day(),
+		cfg.BusinessHourStart,
+		0,
+		0,
+		0,
+		loc,
+	)
+	dayEnd := time.Date(
+		localDate.Year(),
+		localDate.Month(),
+		localDate.Day(),
+		cfg.BusinessHourEnd,
+		0,
+		0,
+		0,
+		loc,
+	)
+	duration := time.Duration(cfg.SlotDurationMinutes) * time.Minute
+
+	var slots []time.Time
+	for slot := dayStart; !slot.Add(duration).After(dayEnd); slot = slot.Add(duration) {
+		slots = append(slots, slot)
+	}
+	return slots
+}
+
+func GenerateMonthCandidateSlots(cfg SlotConfig, monthStart time.Time) []time.Time {
+	loc := cfg.Timezone
+	localMonth := monthStart.In(loc)
+	cursor := time.Date(localMonth.Year(), localMonth.Month(), 1, 0, 0, 0, 0, loc)
+	monthEnd := cursor.AddDate(0, 1, 0)
+
+	var slots []time.Time
+	for cursor.Before(monthEnd) {
+		slots = append(slots, GenerateDayCandidateSlots(cfg, cursor)...)
+		cursor = cursor.AddDate(0, 0, 1)
+	}
+	return slots
+}
+
+func IsCandidateSlot(cfg SlotConfig, candidate time.Time) bool {
+	local := candidate.In(cfg.Timezone)
+	if local.Second() != 0 || local.Nanosecond() != 0 {
+		return false
+	}
+	for _, slot := range GenerateDayCandidateSlots(cfg, local) {
+		if slot.Equal(candidate) {
+			return true
+		}
+	}
+	return false
+}
+
+func ParseMonth(month string, loc *time.Location) (time.Time, error) {
+	month = strings.TrimSpace(month)
+	parsed, err := time.ParseInLocation("2006-01", month, loc)
+	if err != nil || parsed.Format("2006-01") != month {
+		return time.Time{}, fmt.Errorf("invalid month format, use YYYY-MM")
+	}
+	return parsed, nil
+}
+
 func ToSlotDTO(t time.Time, available bool) Slot {
 	return Slot{
 		Date:      t.Format("2006-01-02"),
@@ -153,13 +222,4 @@ func ToSlotDTO(t time.Time, available bool) Slot {
 		ISO:       t.Format(time.RFC3339),
 		Available: available,
 	}
-}
-
-func ContainsTime(times []time.Time, target time.Time) bool {
-	for _, t := range times {
-		if t.Equal(target) {
-			return true
-		}
-	}
-	return false
 }

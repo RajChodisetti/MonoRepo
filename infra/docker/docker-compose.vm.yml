@@ -179,7 +179,6 @@ services:
       NEXT_PUBLIC_VOICE_AGENT_URL: ${NEXT_PUBLIC_VOICE_AGENT_URL:-https://voice.tuvisolutions.com}
       NEXT_PUBLIC_CALL_IN_NUMBER: ${NEXT_PUBLIC_CALL_IN_NUMBER:-}
       VOICE_AGENT_URL: http://voice-agent:8000
-      CALL_API_SECRET: ${CALL_API_SECRET:?CALL_API_SECRET is required}
     ports:
       - "127.0.0.1:${TUVI_WEBSITE_PORT:-15174}:3000"
     depends_on:

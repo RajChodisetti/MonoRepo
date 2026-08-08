@@ -10,7 +10,7 @@ export const pushNotifications: ProductPageConfig = {
     heading: "Push that gets guests to open and order.",
     subheading:
       "Send timely notifications through your branded app — happy hour, order status, and loyalty wins — without a marketplace feed.",
-    primaryCta: { label: "Get a free demo", href: "/demo" },
+    primaryCta: { label: "Get a free demo", href: "/book" },
     secondaryCta: { label: "See how it works", href: "/how-it-works" },
     testimonial: {
       imageSrc: "/resources/resource-app-hero.png",

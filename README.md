@@ -348,17 +348,22 @@ See `.env.example` for the full list.
 
 ## Tuvi corporate website
 
-Standalone marketing site (not the restaurant demo template):
+The canonical marketing, SEO-report, legal, consultation-booking, and corporate
+voice site lives in root `web/` (it is not the personalized restaurant demo
+renderer):
 
 ```bash
-cd tuvi-website/app && npm install && npm run dev
+npm --prefix web install
+npm --prefix web run dev -- -p 3001
 ```
 
-Runs at **http://localhost:3001** so it can run alongside the restaurant template on **http://localhost:3000**. See [tuvi-website/README.md](tuvi-website/README.md).
+It runs at **http://localhost:3001** so it can run alongside the restaurant
+template on **http://localhost:3000**. See [web/README.md](web/README.md).
 
-The corporate website's scheduler uses the main API on **http://localhost:8080**
-via `/api/v1/company/consultations/*`; the older `tuvi-website/backend` service is
-legacy reference code.
+The corporate website proxies consultation requests through same-origin
+`/api/consultations/*` handlers to the main API on **http://localhost:8080**.
+PostgreSQL is the booking and availability authority; this flow does not query
+or update Google Calendar.
 
 ## Documentation
 

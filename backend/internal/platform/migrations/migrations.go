@@ -47,13 +47,16 @@ func ApplyUp(ctx context.Context, pool *pgxpool.Pool, dir string) error {
 		return err
 	}
 
-	applied, err := appliedVersions(ctx, tx)
+	applied, err := appliedMigrations(ctx, tx)
 	if err != nil {
+		return err
+	}
+	if err := validateAppliedMigrations(discovered, applied); err != nil {
 		return err
 	}
 
 	for _, migration := range discovered {
-		if applied[migration.Version] {
+		if _, ok := applied[migration.Version]; ok {
 			continue
 		}
 		sqlBytes, err := os.ReadFile(migration.UpPath)
@@ -95,13 +98,22 @@ func ApplyDown(ctx context.Context, pool *pgxpool.Pool, dir string) error {
 		return err
 	}
 
-	var version int64
-	err = tx.QueryRow(ctx, `SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1`).Scan(&version)
-	if err == pgx.ErrNoRows {
-		return tx.Commit(ctx)
-	}
+	applied, err := appliedMigrations(ctx, tx)
 	if err != nil {
 		return err
+	}
+	if err := validateAppliedMigrations(discovered, applied); err != nil {
+		return err
+	}
+	if len(applied) == 0 {
+		return tx.Commit(ctx)
+	}
+
+	var version int64
+	for candidate := range applied {
+		if candidate > version {
+			version = candidate
+		}
 	}
 
 	migration, ok := byVersion[version]
@@ -204,25 +216,60 @@ func parseMigrationFilename(filename string) (int64, string, string, bool) {
 	return version, nameParts[1], direction, true
 }
 
-func appliedVersions(ctx context.Context, tx pgx.Tx) (map[int64]bool, error) {
-	rows, err := tx.Query(ctx, `SELECT version FROM schema_migrations`)
+func appliedMigrations(ctx context.Context, tx pgx.Tx) (map[int64]string, error) {
+	rows, err := tx.Query(ctx, `SELECT version, name FROM schema_migrations`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	versions := map[int64]bool{}
+	migrations := map[int64]string{}
 	for rows.Next() {
 		var version int64
-		if err := rows.Scan(&version); err != nil {
+		var name string
+		if err := rows.Scan(&version, &name); err != nil {
 			return nil, err
 		}
-		versions[version] = true
+		migrations[version] = name
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	return versions, nil
+	return migrations, nil
+}
+
+func validateAppliedMigrations(discovered []Migration, applied map[int64]string) error {
+	localByVersion := make(map[int64]string, len(discovered))
+	for _, migration := range discovered {
+		localByVersion[migration.Version] = migration.Name
+	}
+
+	versions := make([]int64, 0, len(applied))
+	for version := range applied {
+		versions = append(versions, version)
+	}
+	sort.Slice(versions, func(i, j int) bool { return versions[i] < versions[j] })
+
+	for _, version := range versions {
+		appliedName := applied[version]
+		localName, ok := localByVersion[version]
+		if !ok {
+			return fmt.Errorf(
+				"applied migration %d_%s has no matching local files",
+				version,
+				appliedName,
+			)
+		}
+		if appliedName != localName {
+			return fmt.Errorf(
+				"migration lineage mismatch at version %d: database has %q, local files have %q",
+				version,
+				appliedName,
+				localName,
+			)
+		}
+	}
+	return nil
 }
 
 func rollback(ctx context.Context, tx pgx.Tx) {

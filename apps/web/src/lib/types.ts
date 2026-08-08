@@ -354,3 +354,25 @@ export type Member = {
   full_name?: string;
   created_at?: string;
 };
+
+export type ConsultationCalendarSlot = {
+  date: string;
+  time: string;
+  iso: string;
+  is_available: boolean;
+  booked: boolean;
+  past: boolean;
+  effective_available: boolean;
+  on_grid: boolean;
+};
+
+export type ConsultationCalendarMonth = {
+  month: string;
+  revision: number;
+  booked_call_count: number;
+  timezone: string;
+  slot_duration_minutes: number;
+  business_hour_start: string;
+  business_hour_end: string;
+  slots: ConsultationCalendarSlot[];
+};

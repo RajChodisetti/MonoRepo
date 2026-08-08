@@ -39,7 +39,7 @@ export default function GrowOnlineCta({ variant = "split" }: GrowOnlineCtaProps)
             </h2>
 
             <Link
-              href="#"
+              href="/book"
               className="mt-7 inline-flex items-center justify-center rounded-full bg-bg px-7 py-3 text-[14px] font-semibold text-ink transition-colors hover:bg-sage sm:mt-8 sm:px-8 sm:py-3.5 sm:text-[15px]"
             >
               Get a free demo
@@ -80,13 +80,13 @@ export default function GrowOnlineCta({ variant = "split" }: GrowOnlineCtaProps)
 
             <div className="mt-5 flex flex-wrap items-center gap-2.5 sm:mt-6 sm:gap-3">
               <Link
-                href="#"
+                href="/book"
                 className="inline-flex items-center justify-center rounded-full bg-bg px-5 py-2.5 text-[13px] font-semibold text-ink transition-colors hover:bg-sage sm:px-6 sm:text-[14px]"
               >
                 Get a free demo
               </Link>
               <Link
-                href="#"
+                href="/how-it-works"
                 className="inline-flex items-center justify-center rounded-full bg-white/10 px-5 py-2.5 text-[13px] font-semibold text-bg ring-1 ring-white/20 backdrop-blur-sm transition-colors hover:bg-white/20 sm:px-6 sm:text-[14px]"
               >
                 See how it works

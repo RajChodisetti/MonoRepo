@@ -176,6 +176,31 @@ function ReviewCardsOverlay({
   );
 }
 
+function RevealingReviewCards({
+  reviews,
+  placeRating,
+}: {
+  reviews: ScanReview[];
+  placeRating?: number;
+}) {
+  const [visibleCount, setVisibleCount] = useState(1);
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setVisibleCount((count) => Math.min(count + 1, Math.min(4, reviews.length)));
+    }, 1800);
+    return () => window.clearInterval(id);
+  }, [reviews.length]);
+
+  return (
+    <ReviewCardsOverlay
+      reviews={reviews}
+      visibleCount={visibleCount}
+      placeRating={placeRating}
+    />
+  );
+}
+
 function MobilePhoneMockup({
   screenshot,
   hostname,
@@ -326,7 +351,6 @@ export default function ScanExperience({
   restaurantName = "Your restaurant",
   address,
   rating,
-  category = "Restaurant",
   website,
   placeId,
   latitude,
@@ -364,11 +388,13 @@ export default function ScanExperience({
   const [activeIndex, setActiveIndex] = useState(0);
   const [secondsLeft, setSecondsLeft] = useState(TARGET_SECONDS);
   const [finishing, setFinishing] = useState(false);
-  const [visiblePhotoCount, setVisiblePhotoCount] = useState(0);
-  const [visibleReviewCount, setVisibleReviewCount] = useState(0);
-  const startedAtRef = useRef<number>(Date.now());
+  const [visiblePhotoCount, setVisiblePhotoCount] = useState(1);
+  const startedAtRef = useRef<number>(0);
   const onReadyRef = useRef(onReady);
-  onReadyRef.current = onReady;
+
+  useEffect(() => {
+    onReadyRef.current = onReady;
+  }, [onReady]);
 
   const gallery = useMemo(() => {
     const seen = new Set<string>();
@@ -391,36 +417,30 @@ export default function ScanExperience({
     return restaurantName;
   }, [restaurantName, address]);
 
-  // Lock the first good map URL so we never flash a generic fallback / remount the iframe
-  const lockedEmbedRef = useRef<string | null>(null);
-  const embedSrc = useMemo(() => {
-    const next = mapEmbedSrc({ restaurantName, address, placeId, latitude, longitude });
-    if (!next) return lockedEmbedRef.current;
-    const hasExact =
-      typeof latitude === "number" &&
-      typeof longitude === "number" &&
-      Number.isFinite(latitude) &&
-      Number.isFinite(longitude);
-    // Prefer exact coords once; otherwise keep first place_id/name embed stable
-    if (hasExact) {
-      lockedEmbedRef.current = next;
-      return next;
-    }
-    if (!lockedEmbedRef.current) {
-      lockedEmbedRef.current = next;
-    }
-    return lockedEmbedRef.current;
-  }, [restaurantName, address, placeId, latitude, longitude]);
-
   const hasExactPin =
     typeof latitude === "number" &&
     typeof longitude === "number" &&
     Number.isFinite(latitude) &&
     Number.isFinite(longitude);
 
+  const candidateEmbedSrc = useMemo(
+    () => mapEmbedSrc({ restaurantName, address, placeId, latitude, longitude }),
+    [restaurantName, address, placeId, latitude, longitude],
+  );
+  // Keep the first useful map stable, while still promoting exact coordinates once available.
+  const [initialEmbedSrc] = useState(candidateEmbedSrc);
+  const embedSrc =
+    hasExactPin && candidateEmbedSrc
+      ? candidateEmbedSrc
+      : initialEmbedSrc ?? candidateEmbedSrc;
+
   const photoStepIndex = 2; // "Photo quality and quantity"
   const reviewStepIndex = 3; // "Google review sentiment"
   const mobileStepIndex = steps.length - 1;
+  const displayedPhotoCount =
+    activeIndex >= photoStepIndex
+      ? gallery.length
+      : Math.min(visiblePhotoCount, gallery.length);
   const showMobileMockup =
     (Boolean(mobileScreenshot) || Boolean(websiteUrl) || Boolean(website)) &&
     (finishing || activeIndex >= mobileStepIndex);
@@ -451,36 +471,13 @@ export default function ScanExperience({
       setActiveIndex((i) => Math.min(i + 1, steps.length - 1));
       setVisiblePhotoCount((n) => Math.min(n + 1, gallery.length));
     }, STEP_INTERVAL_MS);
-    setVisiblePhotoCount((n) => Math.max(n, 1));
     return () => window.clearInterval(id);
   }, [finishing, steps.length, gallery.length]);
-
-  // Ensure all photos are visible by the time we leave the photo step
-  useEffect(() => {
-    if (activeIndex >= photoStepIndex) {
-      setVisiblePhotoCount(gallery.length);
-    }
-  }, [activeIndex, photoStepIndex, gallery.length]);
-
-  // Reveal review cards only during the review phase (after photos)
-  useEffect(() => {
-    if (!showReviews || reviews.length === 0) {
-      if (!showReviews) setVisibleReviewCount(0);
-      return;
-    }
-    setVisibleReviewCount(1);
-    const id = window.setInterval(() => {
-      setVisibleReviewCount((n) => Math.min(n + 1, Math.min(4, reviews.length)));
-    }, 1800);
-    return () => window.clearInterval(id);
-  }, [showReviews, reviews.length]);
 
   // Finish only after min 60s AND fetch complete
   useEffect(() => {
     let cancelled = false;
     let finishTimer: number | undefined;
-    let safetyTimer: number | undefined;
-    let pollTimer: number | undefined;
 
     const tryFinish = () => {
       if (cancelled) return;
@@ -491,17 +488,16 @@ export default function ScanExperience({
       setFinishing(true);
       setActiveIndex(steps.length);
       setVisiblePhotoCount(gallery.length);
-      setVisibleReviewCount(Math.min(4, reviews.length));
 
       finishTimer = window.setTimeout(() => {
         if (!cancelled) onReadyRef.current?.();
       }, FINISH_HOLD_MS);
     };
 
-    pollTimer = window.setInterval(tryFinish, 400);
+    const pollTimer = window.setInterval(tryFinish, 400);
     tryFinish();
 
-    safetyTimer = window.setTimeout(() => {
+    const safetyTimer = window.setTimeout(() => {
       if (!cancelled) {
         setFinishing(true);
         onReadyRef.current?.();
@@ -631,16 +627,15 @@ export default function ScanExperience({
 
           {/* Google reviews — only after photos phase */}
           {showReviews ? (
-            <ReviewCardsOverlay
+            <RevealingReviewCards
               reviews={reviews}
-              visibleCount={visibleReviewCount}
               placeRating={rating}
             />
           ) : null}
 
           {/* Scraped photos — hidden once reviews / mobile take over */}
           {showPhotosOverlay
-            ? gallery.slice(0, visiblePhotoCount).map((photo, i) => {
+            ? gallery.slice(0, displayedPhotoCount).map((photo, i) => {
                 const slot = PHOTO_SLOTS[i % PHOTO_SLOTS.length];
                 return (
                   <div

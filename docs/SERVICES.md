@@ -25,7 +25,7 @@ This repo contains long-running services, one-shot jobs, static sites, and autom
 | Worker | `make worker` | PostgreSQL + `make migrate-up` | Polls leased `job_runs`, creates post-OCR demo/campaign drafts, and runs quota-managed outreach through HTTP API providers. |
 | City scrape worker | Compose `scrape-worker` | PostgreSQL, migrations, Places key, Apollo key by default | Long-running durable grid worker; Places first, targeted Apollo second, 500 combined provider calls per 24-hour window. |
 | Restaurant template | `cd template && npm run dev` | Node deps; optionally main API and voice agent | Reads local JSON by default; uses `NEXT_PUBLIC_API_URL=http://localhost:8080` for DB-backed site data and `NEXT_PUBLIC_VOICE_AGENT_URL=http://localhost:8000` for voice. |
-| Tuvi corporate website | `cd tuvi-website/app && npm run dev` | Node deps; main API for booking | Runs on `3001`, proxies bookings to `CONSULTATION_API_URL=http://localhost:8080`, uses voice agent with `agent=corporate`. |
+| Tuvi corporate website | `npm --prefix web run dev -- -p 3001` | Node deps; main API for SEO reports and booking | Runs on `3001`, proxies bookings to `CONSULTATION_API_URL=http://localhost:8080`, uses voice agent with `agent=corporate`. |
 | Voice sales agent | `cd voice-sales-agent && make dev` or Docker compose | Provider keys and service env | Expected to expose `GET /readyz/browser` and `WS /browser-stream`. Restaurant template passes `restaurant_index`; corporate site passes `agent=corporate`; corporate bookings call main API company consultation endpoints. |
 | Restaurant services catalog | `cd apps/restaurant-services-catalog && npm run dev` | Node deps | Standalone Vite site; deploys with Wrangler. |
 | Presentation site | `cd presentation && python3 -m http.server 5500` | Python | Standalone static presentation. |
@@ -101,7 +101,6 @@ tuvi corporate website :3001
 
 main API company consultations
   -> PostgreSQL restaurant_platform.company_consultations
-  -> optional Google Calendar
   -> configured Resend or Zoho generic HTTP API provider
   <- voice-sales-agent corporate flow via MONOREPO_API_URL=http://localhost:8080
 
@@ -115,4 +114,5 @@ admin portal (apps/web) :3002
 
 - `apps/web` is the internal admin console (Next.js, port `3002`) for the lead workflow: scrape jobs, restaurant/profile review, demo + campaign approval, and bulk outreach. It calls the main API only through its own same-origin proxy route, never directly from the browser.
 - The voice agent source lives at `voice-sales-agent/`; use `make voice-up` from the MonoRepo root for the Docker profile.
-- `tuvi-website/backend` is legacy reference code. Normal runtime uses the main API for consultation scheduling.
+- Company consultation availability and confirmed bookings are PostgreSQL-only;
+  the current runtime does not query or update Google Calendar.

@@ -1,5 +1,11 @@
 # Pipecat Voice Sales Agent — Architecture Guide for Australian Outbound Calls
 
+> **Historical research only — not the current runtime contract.** Tuvi Phase 1
+> is inbound-only: `POST /call` returns `403`, callback tools are absent, and no
+> deployed code can create a Twilio outbound call. Do not implement or deploy
+> the outbound sections below without a separately approved ADR, compliance
+> review, and customer-facing policy change.
+
 **Recommended stack:** Twilio Programmable Voice + Twilio Media Streams + Pipecat + Deepgram Flux + OpenAI `gpt-5.4-mini` + Cartesia Sonic-3.5 Australian English voice.
 
 **Deployment target:** Australia-first production deployment with Sydney/Australia-region infrastructure, ultra-low-latency barge-in, human-sounding voice, and a clean path to lower costs at scale via BYOC.

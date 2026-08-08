@@ -802,7 +802,7 @@ Automation includes durable PostgreSQL-backed Python city scrape and background 
 HTTP layer: internal/http with handlers and middleware; backend/internal/developer backs the protected read-only SQL/schema console.
 Platform: internal/platform/{config,db,logger,errors,metadata,migrations,telemetry}.
 SQL migrations: backend/migrations, including durable scrape/OCR/outreach workflow, restaurant-media, demo-ready backfill, template-removal, OCR-reset, and outreach ghost-link cleanup migrations through deployed 000036. Integration test slot: backend/tests.
-Frontend apps: tuvi-website/app canonical Next.js corporate site, apps/web internal admin portal (Next.js, port 3002, BFF-proxied to the main API — no longer a placeholder), apps/restaurant-services-catalog Vite restaurant-services catalog, and template/ personalized demo sites with three active templates.
+Frontend apps: web/ canonical Next.js corporate site, apps/web internal admin portal (Next.js, port 3002, BFF-proxied to the main API), apps/restaurant-services-catalog Vite restaurant-services catalog, and template/ personalized demo sites with three active templates.
 Codex project skills: .codex/skills/ui-ux-pro-max from `uipro init --ai codex`.
 Phase 1 docs: docs/phase1/PHASE1_IMPLEMENTATION_GUIDE.md and PHASE1_TECHNICAL_BACKLOG.md.
 Phase 2 docs: docs/phase2/ (placeholders). ADRs: docs/adr/.

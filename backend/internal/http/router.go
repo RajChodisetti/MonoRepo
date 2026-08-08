@@ -137,6 +137,11 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	reservationService := reservations.NewService(dataStore.Reservations)
 	reservationPublicHandler := handlers.NewReservationPublicHandler(reservationService, writeJSON, writeError)
 	companyConsultationHandler := handlers.NewCompanyConsultationHandler(consultationService, writeJSON)
+	companyConsultationAdminHandler := handlers.NewCompanyConsultationAdminHandler(
+		consultationService,
+		writeJSON,
+		writeError,
+	)
 	developerHandler := handlers.NewDeveloperHandler(
 		developer.NewService(dataStore.Pool()),
 		writeJSON,
@@ -207,6 +212,8 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	mux.Handle("GET /healthz", protectDeveloper(http.HandlerFunc(healthz(cfg))))
 	mux.Handle("GET /readyz", protectDeveloper(http.HandlerFunc(readyz(readiness))))
 	mux.Handle("GET /api/v1/admin/me", protectInternalAdmin(http.HandlerFunc(adminHandler.Me)))
+	mux.Handle("GET /api/v1/admin/consultation-calendar/{month}", protectInternalAdmin(http.HandlerFunc(companyConsultationAdminHandler.GetCalendar)))
+	mux.Handle("PUT /api/v1/admin/consultation-calendar/{month}", protectInternalAdmin(http.HandlerFunc(companyConsultationAdminHandler.PutCalendar)))
 	mux.Handle("GET /api/v1/user/me", protectRestaurantUser(http.HandlerFunc(userHandler.Me)))
 
 	mux.Handle("GET /api/v1/restaurants", protectAuthenticated(RequireAnyRole(auth.RoleInternalAdmin, auth.RoleRestaurantOwner)(

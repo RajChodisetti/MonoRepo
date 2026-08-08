@@ -14,7 +14,7 @@ kill_port() {
 }
 
 echo "==> Stopping Tuvi website services"
-pkill -f 'tuvi-website/app' 2>/dev/null || true
+pkill -f "$ROOT/web" 2>/dev/null || true
 pkill -f 'next dev -p 3001' 2>/dev/null || true
 pkill -f 'next-server' 2>/dev/null || true
 kill_port 3001

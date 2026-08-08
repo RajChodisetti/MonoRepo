@@ -5,9 +5,10 @@ info:
     Phase 1 backend API — auth, restaurant leads, durable city scraping, OCR/review gates,
     demo sites, and **email outreach campaigns**.
 
-    This document covers the Phase 1 lead-to-outreach and reservation surface. The router
-    remains the source of truth for separate company-consultation and legacy public asset
-    routes that are outside this workflow specification.
+    This document covers the Phase 1 lead-to-outreach and reservation surface, the
+    static-token company consultation API used by the corporate voice agent, and the
+    internal consultation-calendar controls. The router remains the source of truth for
+    legacy public asset routes outside this workflow specification.
 
     ## Authentication
     Protected routes use `Authorization: Bearer <access_token>` from signup or login.
@@ -69,6 +70,10 @@ tags:
     description: Public signup/login and session identity
   - name: Admin
     description: Internal admin profile
+  - name: Consultation Calendar
+    description: Internal-admin monthly availability controls for Tuvi consultations
+  - name: Company Consultations
+    description: Static-token availability, slot checking, and booking for Tuvi consultation clients
   - name: Developer
     description: Internal-admin database inspection tools
   - name: User
@@ -193,6 +198,318 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+
+  /api/v1/admin/consultation-calendar/{month}:
+    parameters:
+      - name: month
+        in: path
+        required: true
+        description: Calendar month in the configured consultation timezone.
+        schema:
+          type: string
+          pattern: '^\d{4}-(0[1-9]|1[0-2])$'
+          example: '2026-08'
+    get:
+      tags: [Consultation Calendar]
+      summary: Get a monthly consultation calendar
+      operationId: getAdminConsultationCalendar
+      security:
+        - bearerAuth: []
+      description: |
+        Requires `internal_admin`. Returns every configured candidate in the month,
+        persisted availability intent, confirmed-booking state, and any historical
+        confirmed booking that falls outside the current candidate grid. Missing
+        override rows use the configured business-hours default.
+      responses:
+        '200':
+          description: Monthly consultation calendar
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsultationCalendar'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    put:
+      tags: [Consultation Calendar]
+      summary: Save monthly consultation availability
+      operationId: putAdminConsultationCalendar
+      security:
+        - bearerAuth: []
+      description: |
+        Requires `internal_admin`. Uses optimistic concurrency: send the `revision`
+        returned by GET as `expected_revision`. The request must contain every future
+        on-grid candidate for the month. A canonical same-month candidate that became
+        past after GET is accepted and ignored, allowing a save to cross a slot boundary.
+        Duplicate, off-grid, or wrong-offset values are rejected. Saving availability
+        never cancels or changes a confirmed consultation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsultationCalendarUpdate'
+      responses:
+        '200':
+          description: Saved monthly consultation calendar
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsultationCalendar'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/ConsultationCalendarConflict'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/company/consultations/availability:
+    get:
+      tags: [Company Consultations]
+      summary: List available company consultation slots
+      operationId: getCompanyConsultationAvailability
+      security:
+        - consultationStaticBearer: []
+      parameters:
+        - name: date
+          in: query
+          description: Optional starting local date; defaults to today in the configured timezone.
+          schema:
+            type: string
+            format: date
+        - name: days
+          in: query
+          description: Number of weekdays to scan, capped by the configured availability horizon.
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Available future on-grid slots
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsultationAvailabilityResult'
+        '400':
+          description: Invalid date or availability request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsultationStatusError'
+        '401':
+          description: Missing or incorrect static bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsultationStatusError'
+
+  /api/v1/company/consultations/availability/check:
+    get:
+      tags: [Company Consultations]
+      summary: Check one company consultation slot
+      operationId: checkCompanyConsultationAvailability
+      security:
+        - consultationStaticBearer: []
+      parameters:
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: time
+          in: query
+          required: true
+          description: Local time on the configured consultation grid.
+          schema:
+            type: string
+            example: '09:30'
+      responses:
+        '200':
+          description: Slot state and alternatives when unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsultationCheckResult'
+        '400':
+          description: Missing, invalid, off-grid, or past slot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsultationStatusError'
+        '401':
+          description: Missing or incorrect static bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsultationStatusError'
+
+  /api/v1/company/consultations:
+    post:
+      tags: [Company Consultations]
+      summary: Book a company consultation
+      operationId: bookCompanyConsultation
+      security:
+        - consultationStaticBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsultationBookRequest'
+      responses:
+        '201':
+          description: Confirmed consultation created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsultationBookSuccess'
+        '400':
+          description: Invalid booking request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsultationStatusError'
+        '401':
+          description: Missing or incorrect static bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsultationStatusError'
+        '409':
+          description: Slot is disabled or overlaps an existing confirmed consultation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsultationBookConflict'
+
+  /api/v1/consultations/availability:
+    get:
+      deprecated: true
+      tags: [Company Consultations]
+      summary: List consultation slots (legacy alias)
+      operationId: getLegacyConsultationAvailability
+      description: Deprecated alias of `/api/v1/company/consultations/availability`.
+      security:
+        - consultationStaticBearer: []
+      parameters:
+        - name: date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: days
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Available future on-grid slots
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsultationAvailabilityResult'
+        '400':
+          description: Invalid availability request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsultationStatusError'
+        '401':
+          description: Missing or incorrect static bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsultationStatusError'
+
+  /api/v1/consultations/availability/check:
+    get:
+      deprecated: true
+      tags: [Company Consultations]
+      summary: Check a consultation slot (legacy alias)
+      operationId: checkLegacyConsultationAvailability
+      description: Deprecated alias of `/api/v1/company/consultations/availability/check`.
+      security:
+        - consultationStaticBearer: []
+      parameters:
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: time
+          in: query
+          required: true
+          schema:
+            type: string
+            example: '09:30'
+      responses:
+        '200':
+          description: Slot state and alternatives when unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsultationCheckResult'
+        '400':
+          description: Invalid slot request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsultationStatusError'
+        '401':
+          description: Missing or incorrect static bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsultationStatusError'
+
+  /api/v1/consultations:
+    post:
+      deprecated: true
+      tags: [Company Consultations]
+      summary: Book a consultation (legacy alias)
+      operationId: bookLegacyConsultation
+      description: Deprecated alias of `/api/v1/company/consultations`.
+      security:
+        - consultationStaticBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsultationBookRequest'
+      responses:
+        '201':
+          description: Confirmed consultation created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsultationBookSuccess'
+        '400':
+          description: Invalid booking request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsultationStatusError'
+        '401':
+          description: Missing or incorrect static bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsultationStatusError'
+        '409':
+          description: Slot is disabled or overlaps an existing confirmed consultation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsultationBookConflict'
 
   /api/v1/user/me:
     get:
@@ -1883,6 +2200,10 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: Access token from signup or login
+    consultationStaticBearer:
+      type: http
+      scheme: bearer
+      description: Static token configured as `TUVI_API_TOKEN`; used by approved company consultation clients such as the corporate voice agent.
 
   parameters:
     restaurantId:
@@ -2004,6 +2325,16 @@ components:
             error:
               code: conflict
               message: Email is already registered.
+    ConsultationCalendarConflict:
+      description: The month changed after the client loaded it
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: consultation_calendar_conflict
+              message: The consultation calendar changed after it was loaded. Refresh the month and reapply your changes.
     CampaignConflict:
       description: Campaign state conflict (e.g. already stopped)
       content:
@@ -3257,6 +3588,249 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/EmailEvent'
+
+    ConsultationCalendarSlot:
+      type: object
+      required:
+        - date
+        - time
+        - iso
+        - is_available
+        - booked
+        - past
+        - effective_available
+        - on_grid
+      properties:
+        date:
+          type: string
+          format: date
+        time:
+          type: string
+          pattern: '^([01]\d|2[0-3]):[0-5]\d$'
+        iso:
+          type: string
+          format: date-time
+          description: Canonical RFC3339 slot start with the configured timezone offset.
+        is_available:
+          type: boolean
+          description: Persisted override value, or the configured-hours default when no override exists.
+        booked:
+          type: boolean
+          description: True when any confirmed consultation interval overlaps this candidate interval.
+        past:
+          type: boolean
+        effective_available:
+          type: boolean
+          description: True only when the slot is enabled, unbooked, on-grid, and in the future.
+        on_grid:
+          type: boolean
+          description: False only for a historical confirmed booking outside the current candidate grid.
+
+    ConsultationCalendar:
+      type: object
+      required:
+        - month
+        - revision
+        - booked_call_count
+        - timezone
+        - slot_duration_minutes
+        - business_hour_start
+        - business_hour_end
+        - slots
+      properties:
+        month:
+          type: string
+          pattern: '^\d{4}-(0[1-9]|1[0-2])$'
+        revision:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Month revision to send as `expected_revision` on the next save.
+        booked_call_count:
+          type: integer
+          minimum: 0
+          description: Number of unique confirmed call records overlapping the month, independent of how many grid candidates each call blocks.
+        timezone:
+          type: string
+          example: Australia/Sydney
+        slot_duration_minutes:
+          type: integer
+          minimum: 1
+        business_hour_start:
+          type: string
+          example: '09:00'
+        business_hour_end:
+          type: string
+          example: '17:00'
+        slots:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConsultationCalendarSlot'
+
+    ConsultationCalendarUpdate:
+      type: object
+      required: [expected_revision, slots]
+      additionalProperties: false
+      properties:
+        expected_revision:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Exact revision returned by the calendar GET or preceding successful PUT.
+        slots:
+          type: array
+          description: Complete set of future on-grid candidates plus any canonical same-month candidates that crossed into the past after loading.
+          items:
+            type: object
+            required: [iso, is_available]
+            additionalProperties: false
+            properties:
+              iso:
+                type: string
+                format: date-time
+                description: Exact canonical RFC3339 value returned by the calendar GET.
+              is_available:
+                type: boolean
+
+    ConsultationSlot:
+      type: object
+      required: [date, time, iso, available]
+      properties:
+        date:
+          type: string
+          format: date
+        time:
+          type: string
+          pattern: '^([01]\d|2[0-3]):[0-5]\d$'
+        iso:
+          type: string
+          format: date-time
+          description: Canonical slot start using the configured consultation timezone offset.
+        available:
+          type: boolean
+
+    ConsultationAvailabilityResult:
+      type: object
+      required: [status, slots]
+      properties:
+        status:
+          type: string
+          enum: [success]
+        slots:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConsultationSlot'
+
+    ConsultationCheckResult:
+      type: object
+      required: [available, slot, date, time]
+      properties:
+        available:
+          type: boolean
+        alternatives:
+          type: array
+          description: Nearest enabled, unbooked candidates when the requested slot is unavailable.
+          items:
+            type: string
+            format: date-time
+        slot:
+          type: string
+          format: date-time
+        date:
+          type: string
+          format: date
+        time:
+          type: string
+          pattern: '^([01]\d|2[0-3]):[0-5]\d$'
+
+    ConsultationBookRequest:
+      type: object
+      required: [date, time, prospect_name, prospect_email]
+      properties:
+        date:
+          type: string
+          format: date
+        time:
+          type: string
+          description: Local time aligned to the configured consultation grid.
+          example: '09:30'
+        prospect_name:
+          type: string
+          minLength: 1
+        prospect_email:
+          type: string
+          format: email
+        prospect_phone:
+          type: string
+        source:
+          type: string
+          enum: [voice, web]
+          default: voice
+
+    ConsultationBookSuccess:
+      type: object
+      required:
+        - status
+        - confirmation_code
+        - prospect_name
+        - prospect_email
+        - prospect_phone
+        - slot
+        - booking_date
+        - booking_time
+        - calendar_link
+        - message
+      properties:
+        status:
+          type: string
+          enum: [success]
+        confirmation_code:
+          type: string
+          example: TVI-A1B2C3
+        prospect_name:
+          type: string
+        prospect_email:
+          type: string
+          format: email
+        prospect_phone:
+          type: string
+        slot:
+          type: string
+          format: date-time
+        booking_date:
+          type: string
+          format: date
+        booking_time:
+          type: string
+        calendar_link:
+          type: string
+        message:
+          type: string
+
+    ConsultationBookConflict:
+      type: object
+      required: [status, message, alternatives]
+      properties:
+        status:
+          type: string
+          enum: [conflict]
+        message:
+          type: string
+        alternatives:
+          type: array
+          items:
+            type: string
+            format: date-time
+
+    ConsultationStatusError:
+      type: object
+      required: [status, message]
+      properties:
+        status:
+          type: string
+          enum: [error]
+        message:
+          type: string
 
     ReservationAvailability:
       type: object

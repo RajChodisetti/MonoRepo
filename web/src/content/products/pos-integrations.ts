@@ -10,7 +10,7 @@ export const posIntegrations: ProductPageConfig = {
     heading: "Your POS and Tuvi, finally aligned.",
     subheading:
       "Connect supported POS systems so menus, modifiers, and tickets stay accurate across first-party online and in-store service.",
-    primaryCta: { label: "Get a free demo", href: "/demo" },
+    primaryCta: { label: "Get a free demo", href: "/book" },
     secondaryCta: { label: "See how it works", href: "/how-it-works" },
     testimonial: {
       imageSrc: "/resources/resource-help-hero.png",

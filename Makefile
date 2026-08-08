@@ -1,10 +1,11 @@
-.PHONY: api worker test fmt db-up db-down db-reset migrate-up migrate-down setup dev seed-admin seed-demo-fixture seed-restaurants-data import-outreach ocr-all sanitize-import verify-leads-ocr ocr-job import-restaurants-outreach ingest-daily openapi swagger up down logs start stop-all voice-up voice-down voice-logs andre-voice-dev andre-voice-install restaurant-services-catalog-dev restaurant-services-catalog-build
+.PHONY: api worker test fmt db-up db-down db-reset migrate-up migrate-down setup dev seed-admin seed-demo-fixture seed-restaurants-data import-outreach ocr-all sanitize-import verify-leads-ocr ocr-job import-restaurants-outreach ingest-daily openapi swagger up down logs start stop-all voice-up voice-down voice-logs andre-voice-dev andre-voice-install tuvi-website-dev tuvi-website-build restaurant-services-catalog-dev restaurant-services-catalog-build
 
 GO ?= go
 COMPOSE_FILE ?= infra/docker/docker-compose.yml
 COMPOSE_DIR ?= infra/docker
 RESTAURANT_SERVICES_CATALOG_DIR ?= apps/restaurant-services-catalog
 ANDRE_VOICE_DIR ?= andre-voice-agent
+TUVI_WEBSITE_DIR ?= web
 
 OPENAPI_SPEC ?= docs/openapi/openapi.yaml
 OPENAPI_DIR ?= docs/openapi
@@ -133,6 +134,12 @@ andre-voice-dev:
 	@test -f $(ANDRE_VOICE_DIR)/.env || (echo "Missing $(ANDRE_VOICE_DIR)/.env — copy from .env.example"; exit 1)
 	@test -x $(ANDRE_VOICE_DIR)/.venv/bin/uvicorn || (echo "Run: make andre-voice-install"; exit 1)
 	cd $(ANDRE_VOICE_DIR) && .venv/bin/uvicorn bot:app --host 0.0.0.0 --port 8001
+
+tuvi-website-dev:
+	npm --prefix $(TUVI_WEBSITE_DIR) run dev -- -p 3001
+
+tuvi-website-build:
+	npm --prefix $(TUVI_WEBSITE_DIR) run build
 
 restaurant-services-catalog-dev:
 	npm --prefix $(RESTAURANT_SERVICES_CATALOG_DIR) run dev

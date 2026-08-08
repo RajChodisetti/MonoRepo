@@ -10,7 +10,7 @@ const nextConfig: NextConfig = {
   experimental: {
     // The admin proxy forwards restaurant image uploads. Keep this slightly
     // above the backend's 15 MB hard limit without allowing unbounded bodies.
-    middlewareClientMaxBodySize: "16mb",
+    proxyClientMaxBodySize: 16 * 1024 * 1024,
   },
 };
 

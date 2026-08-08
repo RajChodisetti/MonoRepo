@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useId, useRef, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import type { RestaurantDetails } from "@/lib/places";
 import type { RestaurantReport } from "@/lib/report";
@@ -32,6 +33,7 @@ export default function ReportClient({ placeId }: { placeId: string }) {
   const [phase, setPhase] = useState<"scan" | "ready">("scan");
   const [fetchComplete, setFetchComplete] = useState(false);
   const bootstrappingRef = useRef(true);
+  const activePlaceIdRef = useRef<string | null>(null);
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
   const [unlockToken, setUnlockToken] = useState(unlockFromLink);
@@ -46,20 +48,18 @@ export default function ReportClient({ placeId }: { placeId: string }) {
   const otpId = useId();
 
   useEffect(() => {
-    bootstrappingRef.current = true;
-    setPhase("scan");
-    setFetchComplete(false);
-    setData(null);
-    setError(null);
-  }, [placeId]);
-
-  useEffect(() => {
     let cancelled = false;
+    if (activePlaceIdRef.current !== placeId) {
+      activePlaceIdRef.current = placeId;
+      bootstrappingRef.current = true;
+    }
+
     async function load() {
       const quiet = !bootstrappingRef.current;
       if (!quiet) {
         setPhase("scan");
         setFetchComplete(false);
+        setData(null);
         setError(null);
       }
       try {
@@ -232,9 +232,9 @@ export default function ReportClient({ placeId }: { placeId: string }) {
       <div className="mx-auto max-w-3xl px-6 py-24 text-center">
         <p className="font-display text-2xl font-semibold text-ink">Report unavailable</p>
         <p className="mt-2 text-muted">{error || "Restaurant not found."}</p>
-        <a href="/" className="mt-6 inline-block font-semibold text-primary underline">
+        <Link href="/" className="mt-6 inline-block font-semibold text-primary underline">
           Search again
-        </a>
+        </Link>
       </div>
     );
   }

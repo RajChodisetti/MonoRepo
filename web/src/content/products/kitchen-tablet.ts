@@ -10,7 +10,7 @@ export const kitchenTablet: ProductPageConfig = {
     heading: "Tickets the kitchen can cook from.",
     subheading:
       "Online, app, and phone orders show up clearly on a kitchen tablet — so nothing gets lost between the counter and the line.",
-    primaryCta: { label: "Get a free demo", href: "/demo" },
+    primaryCta: { label: "Get a free demo", href: "/book" },
     secondaryCta: { label: "See how it works", href: "/how-it-works" },
     testimonial: {
       imageSrc: "/resources/resource-seo-hero.png",

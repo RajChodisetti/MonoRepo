@@ -5,18 +5,18 @@ const guides = {
   featured: {
     title: "Interview: How To Build a $7M/year Restaurant Business",
     image: "/guides/interview.jpg",
-    href: "#",
+    href: "/resources/case-studies",
   },
   secondary: [
     {
       title: "Restaurant SEO is Easier Than You Think (3 Big Wins)",
       image: "/guides/seo.jpg",
-      href: "#",
+      href: "/resources/seo-guide",
     },
     {
       title: "Buyer's Guide: The Best Restaurant Website Builders",
       image: "/guides/builders.jpg",
-      href: "#",
+      href: "/resources/website-builders",
     },
   ],
 } as const;
@@ -126,7 +126,7 @@ export default function GuidesResources() {
             </div>
 
             <Link
-              href="#"
+              href="/resources"
               className="group flex items-center justify-between gap-4 rounded-[22px] bg-sage px-5 py-4 sm:rounded-[26px] sm:px-6 sm:py-5"
             >
               <div className="min-w-0">

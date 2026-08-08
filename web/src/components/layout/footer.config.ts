@@ -74,8 +74,8 @@ export const footerSecondaryColumns: FooterColumn[] = [
 
 export const footerLegalLinks: FooterLink[] = [
   { label: "Cookie Settings", href: "/legal/cookies" },
-  { label: "Privacy", href: "/legal/privacy" },
-  { label: "Website Terms", href: "/legal/website-terms" },
+  { label: "Privacy", href: "/privacy" },
+  { label: "Website Terms", href: "/terms" },
   { label: "Disclaimer", href: "/legal/disclaimer" },
   { label: "Restaurant Agreements", href: "/legal/restaurant-agreements" },
   { label: "Platform Terms", href: "/legal/platform-terms" },

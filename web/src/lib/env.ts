@@ -2,6 +2,10 @@ export function getCallInNumber(): string {
   return (process.env.NEXT_PUBLIC_CALL_IN_NUMBER || "").trim();
 }
 
+export function getContactEmail(): string {
+  return (process.env.NEXT_PUBLIC_CONTACT_EMAIL || "contact@tuvisolutions.com").trim();
+}
+
 export function getCallInDisplay(): string {
   const n = getCallInNumber();
   if (!n) return "";

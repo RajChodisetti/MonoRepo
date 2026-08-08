@@ -41,7 +41,7 @@ func (handler *DemoEngagementHandler) Start(w http.ResponseWriter, r *http.Reque
 	result, err := handler.service.StartSession(r.Context(), r.PathValue("slug"), request.DemoToken, request.TemplateID)
 	if err != nil {
 		if errors.Is(err, analytics.ErrInvalidEvent) {
-			handler.writeError(w, http.StatusBadRequest, "invalid_request", "template_id must be 1, 2, 3, or 4.")
+			handler.writeError(w, http.StatusBadRequest, "invalid_request", "template_id must be 1, 2, or 3.")
 			return
 		}
 		if errors.Is(err, demos.ErrDemoNotFound) {
@@ -72,7 +72,7 @@ func (handler *DemoEngagementHandler) StartAdminPreview(w http.ResponseWriter, r
 	}
 	result, err := handler.service.StartAdminPreview(r.Context(), restaurantID, request.TemplateID)
 	if errors.Is(err, analytics.ErrInvalidEvent) {
-		handler.writeError(w, http.StatusBadRequest, "invalid_request", "template_id must be 1, 2, 3, or 4.")
+		handler.writeError(w, http.StatusBadRequest, "invalid_request", "template_id must be 1, 2, or 3.")
 		return
 	}
 	if err != nil {
