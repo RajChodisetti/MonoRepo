@@ -24,6 +24,46 @@ def load_isolated_function(name: str, globals_: dict | None = None):
 
 
 class InboundOnlyPolicyTests(unittest.TestCase):
+    def test_openai_tool_constants_convert_to_pipecat_schema(self):
+        class FunctionSchemaStub:
+            def __init__(self, name, description, properties, required):
+                self.name = name
+                self.description = description
+                self.properties = properties
+                self.required = required
+
+        class ToolsSchemaStub:
+            def __init__(self, standard_tools):
+                self.standard_tools = standard_tools
+
+        build_schema = load_isolated_function(
+            "_build_tools_schema",
+            {
+                "FunctionSchema": FunctionSchemaStub,
+                "ToolsSchema": ToolsSchemaStub,
+            },
+        )
+        schema = build_schema(
+            [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "check_consultation_slots",
+                        "description": "List open slots.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {"days": {"type": "integer"}},
+                            "required": [],
+                        },
+                    },
+                }
+            ]
+        )
+
+        self.assertEqual(len(schema.standard_tools), 1)
+        self.assertEqual(schema.standard_tools[0].name, "check_consultation_slots")
+        self.assertEqual(schema.standard_tools[0].properties, {"days": {"type": "integer"}})
+
     def test_tool_schemas_are_attached_to_each_llm_context(self):
         tree = ast.parse(BOT_PATH.read_text(encoding="utf-8"), filename=str(BOT_PATH))
         functions = {
@@ -55,7 +95,10 @@ class InboundOnlyPolicyTests(unittest.TestCase):
 
                 self.assertNotIn("tools", service_keywords)
                 self.assertIn("tools", context_keywords)
-                self.assertEqual(ast.unparse(context_keywords["tools"]), expected_tools)
+                self.assertEqual(
+                    ast.unparse(context_keywords["tools"]),
+                    f"_build_tools_schema({expected_tools})",
+                )
 
     def test_forged_stream_parameters_cannot_select_sales_mode(self):
         parse_params = load_isolated_function("_stream_custom_params")

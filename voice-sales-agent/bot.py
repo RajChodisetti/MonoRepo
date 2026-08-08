@@ -53,6 +53,8 @@ from pipecat.services.deepgram.stt import DeepgramSTTService
 
 # ── LLM ───────────────────────────────────────────────────────────────────────
 from pipecat.services.openai.llm import OpenAILLMService
+from pipecat.adapters.schemas.function_schema import FunctionSchema
+from pipecat.adapters.schemas.tools_schema import ToolsSchema
 from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.aggregators.llm_response_universal import LLMContextAggregatorPair
 
@@ -91,6 +93,25 @@ logging.basicConfig(
 logger = logging.getLogger("VoiceSalesAgent")
 
 init_db()
+
+
+def _build_tools_schema(tool_definitions):
+    """Convert the repository's OpenAI-style tool constants for Pipecat 0.0.108."""
+    schemas = []
+    for tool in tool_definitions:
+        if tool.get("type") != "function" or not isinstance(tool.get("function"), dict):
+            raise ValueError("voice tool definition must contain a function schema")
+        function = tool["function"]
+        parameters = function.get("parameters") or {}
+        schemas.append(
+            FunctionSchema(
+                name=function["name"],
+                description=function.get("description", ""),
+                properties=parameters.get("properties") or {},
+                required=parameters.get("required") or [],
+            )
+        )
+    return ToolsSchema(standard_tools=schemas)
 
 
 def _cartesia_pipecat_language() -> Language:
@@ -1370,7 +1391,7 @@ async def stream_websocket(websocket: WebSocket):
     # ── LLM Context ───────────────────────────────────────────────────────────
     context = LLMContext(
         messages=[{"role": "system", "content": system_prompt}],
-        tools=phone_tools,
+        tools=_build_tools_schema(phone_tools),
     )
     user_aggregator, assistant_aggregator = LLMContextAggregatorPair(context)
 
@@ -1750,7 +1771,7 @@ async def browser_stream(websocket: WebSocket):
     # ── LLM Context ───────────────────────────────────────────────────────────
     context = LLMContext(
         messages=[{"role": "system", "content": system_prompt}],
-        tools=agent_tools,
+        tools=_build_tools_schema(agent_tools),
     )
     user_aggregator, assistant_aggregator = LLMContextAggregatorPair(context)
 
