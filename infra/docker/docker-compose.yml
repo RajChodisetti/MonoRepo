@@ -180,7 +180,6 @@ services:
     volumes:
       - ../../voice-sales-agent/data:/app/data
       - ../../voice-sales-agent/bot.py:/app/bot.py
-      - ../../voice-sales-agent/caller_id.py:/app/caller_id.py
       - ../../voice-sales-agent/logger_db.py:/app/logger_db.py
       - ../../voice-sales-agent/browser_serializer.py:/app/browser_serializer.py
       - ../../voice-sales-agent/api_client.py:/app/api_client.py
