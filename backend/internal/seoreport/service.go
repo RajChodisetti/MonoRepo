@@ -363,7 +363,7 @@ func (s *Service) generateReport(ctx context.Context, placeID string) (ReportRes
 			scoreIn.WebsiteMobileScreenshot = audit.MobileScreenshot
 		}
 		if audit.Source == "fallback" {
-			s.log.WarnContext(ctx, "seo_website_audit_fallback", "website", place.Website, "source", audit.Source)
+			s.log.WarnContext(ctx, "seo_website_audit_fallback", "website", place.Website, "source", audit.Source, "reason", audit.FailureReason)
 		}
 	}
 

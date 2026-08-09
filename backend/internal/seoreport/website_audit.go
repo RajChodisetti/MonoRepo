@@ -22,9 +22,9 @@ import (
 )
 
 const (
-	websiteAuditBudget         = 10 * time.Second
-	websiteCaptureBudget       = 6500 * time.Millisecond
-	websiteVisionBudget        = 3200 * time.Millisecond
+	websiteAuditBudget         = 13 * time.Second
+	websiteCaptureBudget       = 9 * time.Second
+	websiteVisionBudget        = 3 * time.Second
 	maxParallelWebsiteCaptures = 4
 )
 
@@ -40,6 +40,7 @@ type WebsiteAudit struct {
 	Screenshot       string // data:image/jpeg;base64,... (desktop)
 	MobileScreenshot string // data:image/jpeg;base64,... (phone viewport for scan mockup)
 	Source           string // "vision" | "fallback" | "social" | "none"
+	FailureReason    string // internal observability only; never serialized publicly
 }
 
 func isSocialWebsite(website string) bool {
@@ -198,15 +199,15 @@ Return ONLY compact JSON (no markdown):
 }
 
 func fallbackWebsiteAudit(website, reason string) WebsiteAudit {
-	_ = reason
 	score := 32
 	if hasHTTPSWebsite(website) {
 		score = 38
 	}
 	return WebsiteAudit{
-		QualityScore: score,
-		Review:       "We could not fully review the live homepage visuals, so this is a conservative estimate. A dedicated site helps, but design, menu clarity, and order CTAs still need a human-quality pass.",
-		Source:       "fallback",
+		QualityScore:  score,
+		Review:        "We could not fully review the live homepage visuals, so this is a conservative estimate. A dedicated site helps, but design, menu clarity, and order CTAs still need a human-quality pass.",
+		Source:        "fallback",
+		FailureReason: strings.TrimSpace(reason),
 	}
 }
 
