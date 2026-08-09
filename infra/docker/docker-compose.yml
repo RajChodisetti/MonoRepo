@@ -50,6 +50,15 @@ services:
       dockerfile: infra/docker/Dockerfile.backend
     container_name: restaurant_platform_api
     command: ["/app/api"]
+    # The API runs as UID 10001 with no effective capabilities. Chromium's
+    # setuid sandbox helper needs only these two capabilities in the bounding
+    # set to create and chroot its isolated browser namespace under Docker's
+    # default seccomp profile.
+    cap_drop:
+      - ALL
+    cap_add:
+      - SYS_ADMIN
+      - SYS_CHROOT
     ports:
       - "8080:8080"
     env_file:

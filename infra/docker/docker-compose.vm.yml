@@ -55,6 +55,15 @@ services:
       context: ../..
       dockerfile: infra/docker/Dockerfile.backend
     command: ["/app/api"]
+    # The API runs as UID 10001 with no effective capabilities. Chromium's
+    # setuid sandbox helper needs only these two capabilities in the bounding
+    # set to create and chroot its isolated browser namespace under Docker's
+    # default seccomp profile.
+    cap_drop:
+      - ALL
+    cap_add:
+      - SYS_ADMIN
+      - SYS_CHROOT
     env_file:
       - path: ${TUVI_ENV_DIR:-/opt/tuvi/env}/stack.env
         required: false
