@@ -24,8 +24,7 @@ export const caseStudies: CaseStudy[] = [
     role: "Owner",
     metricValue: "+$72,000",
     metricDescription: "Online sales",
-    imageUrl:
-      "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=800&q=80",
+    imageUrl: "/owners/case-studies/riley-quinn-natural-v2.jpg",
     location: "Melbourne, VIC",
     services: ["Website", "Online ordering", "SEO", "Loyalty"],
     summary:
@@ -52,8 +51,7 @@ export const caseStudies: CaseStudy[] = [
     role: "Owner",
     metricValue: "+$40,000",
     metricDescription: "Monthly online sales",
-    imageUrl:
-      "https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=800&q=80",
+    imageUrl: "/owners/case-studies/jordan-hale-natural-v2.jpg",
     location: "Sydney, NSW",
     services: ["Online ordering", "Upsells", "Email & SMS", "Analytics"],
     summary:
@@ -80,8 +78,7 @@ export const caseStudies: CaseStudy[] = [
     role: "Owner",
     metricValue: "+180%",
     metricDescription: "Growth in online catering",
-    imageUrl:
-      "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=800&q=80",
+    imageUrl: "/owners/case-studies/avery-knox-natural-v2.jpg",
     location: "Brisbane, QLD",
     services: ["Catering", "Website", "Campaigns", "Reviews"],
     summary:
@@ -108,8 +105,7 @@ export const caseStudies: CaseStudy[] = [
     role: "Owner",
     metricValue: "+100%",
     metricDescription: "Growth in Google bookings",
-    imageUrl:
-      "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=800&q=80",
+    imageUrl: "/owners/case-studies/sam-rivera-natural-v2.jpg",
     location: "Perth, WA",
     services: ["Restaurant SEO", "Listings", "Reviews", "Menu"],
     summary:
@@ -136,8 +132,7 @@ export const caseStudies: CaseStudy[] = [
     role: "Owner",
     metricValue: "+65%",
     metricDescription: "Repeat guest bookings",
-    imageUrl:
-      "https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&w=800&q=80",
+    imageUrl: "/owners/case-studies/priya-mehta-natural-v2.jpg",
     location: "Adelaide, SA",
     services: ["Loyalty", "Push & SMS", "Owner app", "Ordering"],
     summary:
@@ -156,6 +151,60 @@ export const caseStudies: CaseStudy[] = [
     ],
     quote:
       "Our regulars finally have a reason to come back through us — not through another app’s homepage.",
+  },
+  {
+    slug: "saffron-kite-mezze",
+    name: "Leila Haddad",
+    restaurant: "Saffron Kite Mezze",
+    role: "Owner",
+    metricValue: "+29%",
+    metricDescription: "Average online order value",
+    imageUrl: "/owners/case-studies/leila-haddad-natural-v2.jpg",
+    location: "Canberra, ACT",
+    services: ["Online ordering", "Upsells", "Menu", "Analytics"],
+    summary:
+      "Saffron Kite Mezze made mobile ordering easier to explore, using thoughtful bundles and relevant add-ons to grow every direct ticket without blanket discounts.",
+    challenge:
+      "Mobile guests defaulted to one familiar dish and checked out quickly. Share plates, sides, and drinks were buried, so direct orders rarely matched the value of a table booking.",
+    approach: [
+      "Rebuilt the mobile menu around clear mezze groupings and fast paths for solo, couple, and family orders.",
+      "Added useful cart suggestions based on what a guest had already chosen instead of showing the same generic offer.",
+      "Used order analytics to refine bundles while protecting the restaurant’s strongest-margin dishes.",
+    ],
+    results: [
+      { value: "+29%", label: "Average online order value" },
+      { value: "+17%", label: "Mobile checkout conversion" },
+      { value: "36%", label: "Orders with a relevant add-on" },
+    ],
+    quote:
+      "Guests still order what they came for, but now the menu helps them build a complete meal without us discounting everything.",
+  },
+  {
+    slug: "copperfern-canteen",
+    name: "Marcus Chen",
+    restaurant: "Copperfern Canteen",
+    role: "Owner",
+    metricValue: "14 hrs",
+    metricDescription: "Saved every week",
+    imageUrl: "/owners/case-studies/marcus-chen-natural-v2.jpg",
+    location: "Hobart, TAS",
+    services: ["Owner app", "POS integrations", "Ordering", "Analytics"],
+    summary:
+      "Copperfern Canteen connected ordering, POS reconciliation, and owner reporting so routine admin stopped consuming Marcus’s evenings.",
+    challenge:
+      "Online orders, till totals, and weekly reports lived in separate systems. Marcus spent hours copying figures, chasing mismatches, and rebuilding the same spreadsheet after service.",
+    approach: [
+      "Connected first-party orders and POS activity into one daily operating view.",
+      "Automated reconciliation flags so the team only reviewed genuine mismatches instead of every ticket.",
+      "Delivered concise owner reports with sales, repeat guests, and channel performance already organized.",
+    ],
+    results: [
+      { value: "14 hrs", label: "Owner time saved each week" },
+      { value: "1 view", label: "For ordering and POS performance" },
+      { value: "-31%", label: "Manual reconciliation work" },
+    ],
+    quote:
+      "I can check the numbers before I leave instead of rebuilding them at home. That time goes back into the restaurant — or back to my family.",
   },
 ];
 

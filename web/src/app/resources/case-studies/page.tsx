@@ -5,9 +5,9 @@ import SiteFooter from "@/components/layout/SiteFooter";
 import { caseStudies, caseStudyPath } from "@/content/caseStudies";
 
 export const metadata: Metadata = {
-  title: "Case studies | Tuvi",
+  title: "Restaurant growth examples | Tuvi",
   description:
-    "See how restaurants use Tuvi to grow discovery, first-party orders, and repeat guests — under their own brand.",
+    "Explore fictional, illustrative examples of restaurants growing discovery, first-party orders, and repeat guests under their own brand.",
 };
 
 export default function CaseStudiesIndexPage() {
@@ -24,11 +24,11 @@ export default function CaseStudiesIndexPage() {
             Case studies
           </p>
           <h1 className="mt-4 font-display text-[clamp(2.2rem,5vw,3.75rem)] font-semibold leading-[1.05] tracking-[-0.03em] text-ink">
-            How restaurants grow with Tuvi
+            What restaurant growth can look like
           </h1>
           <p className="mx-auto mt-4 max-w-[46ch] text-[16px] leading-relaxed text-muted sm:text-[17px]">
-            Short stories from restaurants using Tuvi — each one shows a different path to more
-            discovery, orders, or repeats.
+            Fictional, illustrative stories built around common restaurant goals — each one shows
+            a different path to more discovery, orders, or repeats. Results vary.
           </p>
         </div>
       </section>
