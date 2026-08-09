@@ -2727,3 +2727,47 @@ without screenshots rather than exceed the 15-second budget. Do not run the old
 API/worker against schema 43; before any sequence progress, rollback requires
 stopping writers and using the new migrator down to 41, while any uncertain or
 real send requires a forward fix.
+
+## 2026-08-09 — Accessible Restaurant Motion and Repeat-Order Flow
+
+**Role:** Coordinating Product, Frontend, Accessibility, Release, and DevOps
+Agent
+
+**Delivered:** Shipped a continuously moving horizontal restaurant-owner
+gallery with an explicit pause/resume control, hover and keyboard-focus pause,
+reduced-motion manual scrolling, and non-focusable duplicate marquee content.
+Replaced the stale vertical Celine/Ciara repeat-order timeline with the latest
+horizontal five-stop Jules journey, then removed the unrelated person image and
+made the completed journey static for reduced-motion users. Audited feature
+commit `1116cb9` and carried only the intended repeat-order component instead of
+merging its unrelated report and contact-form changes.
+
+**Production Deployment:** User-approved website-only release `64c2dc2` is
+active at `/opt/tuvi/releases/monorepo-64c2dc2`. The prior website image is
+preserved as `tuvi-tuvi-website:rollback-fc5bbc3-20260809`; only
+`tuvi-tuvi-website-1` was recreated. All API, worker, database, voice, QA, and
+other infrastructure container IDs and start times remained unchanged.
+
+**Checks Run:** Corporate-web ESLint, TypeScript with incremental compilation
+disabled, Next.js production build for all 61 routes, and `git diff --check`
+passed locally. The exact VM archive checksum matched before extraction, the VM
+Compose config validated, and the production Docker build completed with zero
+npm vulnerabilities. Loopback and public HTTPS smokes returned 200 for `/`,
+`/resources/case-studies`, `/book`, `/privacy`, `/terms`, and
+`/google-workspace`. Production browser QA at the active mobile viewport
+confirmed the natural owner gallery, the complete horizontal Jules path, no
+Celine/Ciara content, the reduced-motion fallback, and inaccessible duplicate
+links. The website container is running with restart count zero and clean
+startup logs.
+
+**Business Value / Plan Fit:** Restaurant stories now feel alive without
+excluding motion-sensitive or keyboard users, and the repeat-order explanation
+communicates the product journey immediately on mobile instead of showing a
+stale employee-style portrait and vertical flow.
+
+**Risks / Follow-ups:** The deeper digital-footprint review implementation was
+not promoted. Its proposed use of Google Places content for cached, derived AI
+scores and summaries needs a Google-compliant product architecture and explicit
+provider/billing approval before production. No API, scoring, competitor,
+report-document, migration, provider, or billing change shipped in this
+release.

@@ -1,7 +1,7 @@
 # Session Summary
 
-Production is deployed from commit `ee553c4` at `/opt/tuvi/releases/monorepo-ee553c4`; PostgreSQL is at migration `000043` and the pre-deploy backup is validated.
-The active, extensible plain-text outreach sequence has three approved steps at `0/72/72` hours; 955 eligible inferred-business leads are enrolled, while the email job remains disabled and no real email was sent.
-OCR code and runtime configuration are retired; active release examples and live local/production/QA envs are clean, production/QA env history has been scrubbed, and no OCR container, process, timer, or cron entry remains.
-The API-only reused OpenAI key powers `gpt-4.1-nano`; a complete production AI review with desktop/mobile captures took 10.76 seconds, and two concurrent reviews stayed within 11.9 seconds with truthful partial fallback for a slower site.
-Mobile production QA at 390×844 confirms identity, exact map, Google listing photo, scan status, score, visibility, and timing above the fold; outreach must remain disabled until an operator intentionally enables it.
+The production corporate website is deployed from `64c2dc2` at `/opt/tuvi/releases/monorepo-64c2dc2`; only `tuvi-website` was recreated, and every API, worker, database, voice, QA, and infrastructure container remained unchanged.
+Restaurant growth stories now auto-scroll horizontally with a visible pause control, pause on hover/focus, and a reduced-motion manual-scroll fallback; duplicate marquee links are excluded from the accessibility tree.
+“More Repeat Orders” now uses the latest horizontal five-stop Jules flow and no longer renders the stale Celine/Ciara portrait; mobile production QA confirms the complete flow fits without clipping.
+The latest feature-branch commit `1116cb9` was audited and selectively integrated because its full diff regressed the report experience and included unrelated public contact code.
+The comprehensive digital-footprint review redesign remains unreleased pending approval of a Google-compliant data/AI architecture; no provider, billing, migration, API, worker, or AI-review production change was made in this release.
