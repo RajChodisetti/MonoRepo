@@ -4,10 +4,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { successStories, type SuccessStory } from "@/components/sections/ownerStories.config";
 
-function StoryCard({ story }: { story: SuccessStory }) {
+function StoryCard({ story, isDuplicate = false }: { story: SuccessStory; isDuplicate?: boolean }) {
   return (
     <Link
       href={story.href}
+      tabIndex={isDuplicate ? -1 : undefined}
       className="relative block h-[440px] w-[320px] shrink-0 overflow-hidden rounded-[28px] outline-none transition-[transform,box-shadow] duration-300 hover:-translate-y-1 hover:shadow-[0_18px_40px_rgba(0,0,0,0.18)] focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 sm:h-[480px] sm:w-[340px]"
       aria-label={`Read case study: ${story.name} at ${story.business}`}
     >
@@ -33,8 +34,6 @@ function StoryCard({ story }: { story: SuccessStory }) {
 }
 
 export default function OwnerStories() {
-  const loop = [...successStories, ...successStories];
-
   return (
     <section className="overflow-hidden bg-bg py-14 sm:py-20">
       <div className="mx-auto max-w-[1100px] px-4 sm:px-8 md:px-12">
@@ -47,10 +46,18 @@ export default function OwnerStories() {
         </p>
       </div>
 
-      <div className="group/marquee mt-8 motion-reduce:overflow-x-auto motion-reduce:pb-2 sm:mt-10">
-        <div className="owner-marquee-track flex w-max gap-4 pl-4 [animation-duration:63s] group-hover/marquee:[animation-play-state:paused] sm:gap-5 sm:pl-8 md:pl-12">
-          {loop.map((story, index) => (
-            <StoryCard key={`${story.id}-${index}`} story={story} />
+      <div className="mt-8 overflow-hidden pl-4 motion-reduce:overflow-x-auto motion-reduce:pb-2 sm:mt-10 sm:pl-8 md:pl-12">
+        <div data-owner-marquee-track className="owner-stories-marquee-track flex w-max">
+          {[false, true].map((isDuplicate) => (
+            <div
+              key={isDuplicate ? "duplicate" : "original"}
+              aria-hidden={isDuplicate || undefined}
+              className="flex shrink-0 gap-4 pr-4 sm:gap-5 sm:pr-5"
+            >
+              {successStories.map((story) => (
+                <StoryCard key={story.id} story={story} isDuplicate={isDuplicate} />
+              ))}
+            </div>
           ))}
         </div>
       </div>
