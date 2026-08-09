@@ -239,16 +239,18 @@ func captureWebsiteJPEGPair(ctx context.Context, pageURL string) ([]byte, []byte
 	if err != nil {
 		return nil, nil, err
 	}
-	mobileJPEG, err := pngToJPEG(mobilePNG, 82)
-	if err != nil {
-		return nil, nil, err
+	var mobileJPEG, desktopJPEG []byte
+	if len(mobilePNG) > 0 {
+		mobileJPEG, err = pngToJPEG(mobilePNG, 82)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
-	if len(desktopPNG) == 0 {
-		return mobileJPEG, nil, nil
-	}
-	desktopJPEG, err := pngToJPEG(desktopPNG, 82)
-	if err != nil {
-		return mobileJPEG, nil, nil
+	if len(desktopPNG) > 0 {
+		desktopJPEG, err = pngToJPEG(desktopPNG, 82)
+		if err != nil && len(mobileJPEG) == 0 {
+			return nil, nil, err
+		}
 	}
 	return mobileJPEG, desktopJPEG, nil
 }
@@ -333,9 +335,43 @@ func capturePairWithChromedp(ctx context.Context, pageURL string) ([]byte, []byt
 	installBrowserRequestGuard(browserCtx, browserCancel, net.DefaultResolver)
 
 	var mobilePNG, desktopPNG []byte
-	var title, bodyText string
+	waitForUsablePage := func(wait time.Duration, title, bodyText *string) chromedp.Tasks {
+		return chromedp.Tasks{
+			chromedp.Sleep(wait),
+			chromedp.ActionFunc(func(ctx context.Context) error {
+				// Wait out Cloudflare / bot interstitial when present.
+				deadline := time.Now().Add(2500 * time.Millisecond)
+				for time.Now().Before(deadline) {
+					var currentTitle, currentBody string
+					if err := chromedp.Title(&currentTitle).Do(ctx); err != nil {
+						return err
+					}
+					_ = chromedp.Evaluate(`document.body ? (document.body.innerText || '').slice(0, 2000) : ''`, &currentBody).Do(ctx)
+					if isBotBlockPage(currentTitle, currentBody) {
+						return fmt.Errorf("bot blocked by website waf")
+					}
+					if !isTransientChallenge(currentTitle, currentBody) {
+						return nil
+					}
+					if err := chromedp.Sleep(900 * time.Millisecond).Do(ctx); err != nil {
+						return err
+					}
+				}
+				return nil
+			}),
+			chromedp.Title(title),
+			chromedp.Evaluate(`document.body ? (document.body.innerText || '').slice(0, 12000) : ''`, bodyText),
+			chromedp.ActionFunc(func(context.Context) error {
+				if isBotBlockPage(*title, *bodyText) || isTransientChallenge(*title, *bodyText) {
+					return fmt.Errorf("bot blocked by website waf")
+				}
+				return nil
+			}),
+		}
+	}
 
-	err = chromedp.Run(browserCtx,
+	var mobileTitle, mobileBody string
+	mobileActions := chromedp.Tasks{
 		fetch.Enable(),
 		chromedp.EmulateViewport(mobileWidth, mobileHeight,
 			chromedp.EmulateScale(2),
@@ -344,56 +380,36 @@ func capturePairWithChromedp(ctx context.Context, pageURL string) ([]byte, []byt
 			chromedp.EmulatePortrait,
 		),
 		chromedp.Navigate(pageURL),
-		chromedp.Sleep(1200*time.Millisecond),
-		chromedp.ActionFunc(func(ctx context.Context) error {
-			// Wait out Cloudflare / bot interstitial when present.
-			deadline := time.Now().Add(2500 * time.Millisecond)
-			for time.Now().Before(deadline) {
-				var t, b string
-				if err := chromedp.Title(&t).Do(ctx); err != nil {
-					return err
-				}
-				_ = chromedp.Evaluate(`document.body ? (document.body.innerText || '').slice(0, 2000) : ''`, &b).Do(ctx)
-				if isBotBlockPage(t, b) {
-					return fmt.Errorf("bot blocked by website waf")
-				}
-				if !isTransientChallenge(t, b) {
-					return nil
-				}
-				if err := chromedp.Sleep(900 * time.Millisecond).Do(ctx); err != nil {
-					return err
-				}
-			}
-			return nil
-		}),
-		chromedp.Title(&title),
-		chromedp.Evaluate(`document.body ? (document.body.innerText || '').slice(0, 12000) : ''`, &bodyText),
-		chromedp.ActionFunc(func(ctx context.Context) error {
-			if isBotBlockPage(title, bodyText) || isTransientChallenge(title, bodyText) {
-				return fmt.Errorf("bot blocked by website waf")
-			}
-			return nil
-		}),
-		chromedp.CaptureScreenshot(&mobilePNG),
-	)
-	if err != nil {
-		return nil, nil, err
 	}
+	mobileActions = append(mobileActions, waitForUsablePage(1200*time.Millisecond, &mobileTitle, &mobileBody)...)
+	mobileActions = append(mobileActions, chromedp.CaptureScreenshot(&mobilePNG))
+	mobileErr := chromedp.Run(browserCtx, mobileActions)
 	if len(mobilePNG) < 100 {
-		return nil, nil, fmt.Errorf("empty mobile chromedp screenshot")
+		mobilePNG = nil
+		if mobileErr == nil {
+			mobileErr = fmt.Errorf("empty mobile chromedp screenshot")
+		}
 	}
 
-	// Reuse the already guarded, loaded page for the desktop view. This avoids
-	// a second Chromium process and a second navigation while still letting
-	// responsive CSS and resize handlers render the desktop layout.
-	desktopErr := chromedp.Run(browserCtx,
+	// Reuse the sandboxed process and proxy, but reload after switching the UA
+	// and viewport so server-rendered and load-time desktop variants are real.
+	var desktopTitle, desktopBody string
+	desktopActions := chromedp.Tasks{
 		emulation.SetUserAgentOverride(desktopUA),
 		chromedp.EmulateViewport(desktopWidth, desktopHeight, chromedp.EmulateScale(1)),
-		chromedp.Sleep(350*time.Millisecond),
-		chromedp.CaptureScreenshot(&desktopPNG),
-	)
-	if desktopErr != nil || len(desktopPNG) < 100 {
-		return mobilePNG, nil, nil
+		chromedp.Navigate(pageURL),
+	}
+	desktopActions = append(desktopActions, waitForUsablePage(900*time.Millisecond, &desktopTitle, &desktopBody)...)
+	desktopActions = append(desktopActions, chromedp.CaptureScreenshot(&desktopPNG))
+	desktopErr := chromedp.Run(browserCtx, desktopActions)
+	if len(desktopPNG) < 100 {
+		desktopPNG = nil
+		if desktopErr == nil {
+			desktopErr = fmt.Errorf("empty desktop chromedp screenshot")
+		}
+	}
+	if len(mobilePNG) == 0 && len(desktopPNG) == 0 {
+		return nil, nil, fmt.Errorf("mobile capture: %v; desktop capture: %v", mobileErr, desktopErr)
 	}
 	return mobilePNG, desktopPNG, nil
 }
