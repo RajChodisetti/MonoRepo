@@ -222,6 +222,11 @@
   animation: tuvi-marquee 45s linear infinite;
 }
 
+.owner-stories-marquee-track {
+  animation: tuvi-marquee 63s linear infinite;
+  will-change: transform;
+}
+
 .owner-marquee-track-reverse,
 .tuvi-marquee-track-reverse {
   animation: tuvi-marquee-reverse 50s linear infinite;
@@ -299,6 +304,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .owner-stories-marquee-track,
   .owner-marquee-track,
   .tuvi-marquee-track,
   .owner-marquee-track-reverse,
