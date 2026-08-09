@@ -96,7 +96,6 @@ type CreateInput struct {
 type SendContext struct {
 	RestaurantEmail      string
 	RestaurantName       string
-	OCRStatus            string
 	ReviewStatus         string
 	ProfileReviewAudited bool
 	DemoStatus           string

@@ -1,13 +1,6 @@
-import imageClassifications from "../../../../../data/image_classifications.json";
-
-/** Skip printed-menu photos; only show actual food shots on menu cards. */
+/** Menu images now arrive only through approved owner/licensed media. */
 export function isFoodMenuImage(url: string): boolean {
-  const entry =
-    imageClassifications.classifications[
-      url as keyof typeof imageClassifications.classifications
-    ];
-  if (!entry) return true;
-  return entry.type === "food";
+  return url.trim().length > 0;
 }
 
 export function shortenCategoryLabel(cat: string): string {

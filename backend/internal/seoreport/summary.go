@@ -9,16 +9,25 @@ import (
 	llmlib "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/llm"
 )
 
-// Summarizer builds a short constructive AI summary.
+// SummaryResult carries both the copy and whether an LLM actually contributed.
+type SummaryResult struct {
+	Text   string
+	Source string // "ai-assisted" | "automated"
+}
+
+// Summarizer builds a short constructive summary.
 type Summarizer interface {
-	Summarize(ctx context.Context, place PlaceDetails, report Report, reviews []Review) (string, error)
+	Summarize(ctx context.Context, place PlaceDetails, report Report, reviews []Review) (SummaryResult, error)
 }
 
 // DeterministicSummarizer creates a 3–4 line improvement summary without an LLM.
 type DeterministicSummarizer struct{}
 
-func (DeterministicSummarizer) Summarize(_ context.Context, place PlaceDetails, report Report, reviews []Review) (string, error) {
-	return buildDeterministicSummary(place, report, reviews), nil
+func (DeterministicSummarizer) Summarize(_ context.Context, place PlaceDetails, report Report, reviews []Review) (SummaryResult, error) {
+	return SummaryResult{
+		Text:   buildDeterministicSummary(place, report, reviews),
+		Source: "automated",
+	}, nil
 }
 
 // LLMSummarizer tries an LLM first, then falls back to the deterministic summary.
@@ -27,7 +36,7 @@ type LLMSummarizer struct {
 	Fallback Summarizer
 }
 
-func (s LLMSummarizer) Summarize(ctx context.Context, place PlaceDetails, report Report, reviews []Review) (string, error) {
+func (s LLMSummarizer) Summarize(ctx context.Context, place PlaceDetails, report Report, reviews []Review) (SummaryResult, error) {
 	fallback := s.Fallback
 	if fallback == nil {
 		fallback = DeterministicSummarizer{}
@@ -65,7 +74,7 @@ func (s LLMSummarizer) Summarize(ctx context.Context, place PlaceDetails, report
 	if err != nil || strings.TrimSpace(out) == "" {
 		return fallback.Summarize(ctx, place, report, reviews)
 	}
-	return normalizeSummary(out), nil
+	return SummaryResult{Text: normalizeSummary(out), Source: "ai-assisted"}, nil
 }
 
 func buildDeterministicSummary(place PlaceDetails, report Report, reviews []Review) string {

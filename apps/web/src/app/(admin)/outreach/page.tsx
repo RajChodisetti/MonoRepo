@@ -1,89 +1,135 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { OutreachRecipients } from "@/components/OutreachRecipients";
+import { OutreachSequenceEditor } from "@/components/OutreachSequenceEditor";
+import { EmptyState, ErrorBanner, PageHeader, StatusBadge } from "@/components/ui";
 import { adminFetch } from "@/lib/client-api";
 import { formatDate } from "@/lib/constants";
-import type { BulkSendStatus, EmailAccountHealthResponse } from "@/lib/types";
-import { EmptyState, ErrorBanner, PageHeader, StatusBadge } from "@/components/ui";
+import type {
+  BulkSendStatus,
+  EmailAccountHealthResponse,
+  OutreachSequence,
+  OutreachSequenceListResponse,
+} from "@/lib/types";
+
+type View = "sequence" | "recipients" | "operations";
 
 export default function OutreachPage() {
+  const [view, setView] = useState<View>("sequence");
   const [status, setStatus] = useState<BulkSendStatus | null>(null);
   const [emailHealth, setEmailHealth] = useState<EmailAccountHealthResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [sequences, setSequences] = useState<OutreachSequence[]>([]);
+  const [activeSequenceId, setActiveSequenceId] = useState<string | undefined>();
+  const [operationsError, setOperationsError] = useState<string | null>(null);
+  const [sequenceError, setSequenceError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loadingOperations, setLoadingOperations] = useState(true);
+  const [loadingSequences, setLoadingSequences] = useState(true);
   const [settingJob, setSettingJob] = useState(false);
 
-  const load = useCallback(async () => {
-    setError(null);
+  const activeSequence = useMemo(
+    () => sequences.find((sequence) => sequence.id === activeSequenceId || sequence.is_active),
+    [activeSequenceId, sequences],
+  );
+
+  const loadOperations = useCallback(async () => {
+    setOperationsError(null);
+    const [bulkResult, healthResult] = await Promise.allSettled([
+      adminFetch<BulkSendStatus>("outreach/bulk-send/status"),
+      adminFetch<EmailAccountHealthResponse>("outreach/email-accounts/health"),
+    ]);
+    if (bulkResult.status === "fulfilled") {
+      setStatus(bulkResult.value);
+    } else {
+      setOperationsError(
+        bulkResult.reason instanceof Error
+          ? bulkResult.reason.message
+          : "Failed to load outreach status",
+      );
+    }
+    if (healthResult.status === "fulfilled") {
+      setEmailHealth(healthResult.value);
+    }
+    setLoadingOperations(false);
+  }, []);
+
+  const loadSequences = useCallback(async () => {
+    setSequenceError(null);
     try {
-      const [bulkData, healthData] = await Promise.all([
-        adminFetch<BulkSendStatus>("outreach/bulk-send/status"),
-        adminFetch<EmailAccountHealthResponse>("outreach/email-accounts/health"),
-      ]);
-      setStatus(bulkData);
-      setEmailHealth(healthData);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load outreach status");
+      const result = await adminFetch<OutreachSequenceListResponse>("outreach/sequences");
+      setSequences(result.sequences || []);
+      setActiveSequenceId(result.active_sequence_id);
+    } catch (reason) {
+      setSequenceError(reason instanceof Error ? reason.message : "Failed to load sequences");
     } finally {
-      setLoading(false);
+      setLoadingSequences(false);
     }
   }, []);
 
   useEffect(() => {
-    load();
-    const t = setInterval(load, 5000);
-    return () => clearInterval(t);
-  }, [load]);
+    void Promise.all([loadOperations(), loadSequences()]);
+    const timer = window.setInterval(loadOperations, 15_000);
+    return () => window.clearInterval(timer);
+  }, [loadOperations, loadSequences]);
 
   async function setEmailJob(enabled: boolean) {
+    if (enabled && !activeSequence) {
+      setOperationsError("Approve an outreach sequence before enabling the email job.");
+      setView("sequence");
+      return;
+    }
     if (
       !confirm(
         enabled
-          ? "Enable the email job now? This starts real Gmail outreach to OCR-verified leads that also have approved profiles, published demos, approved campaigns, and valid unsuppressed email addresses."
+          ? `Enable real Gmail outreach using “${activeSequence?.name}” version ${activeSequence?.version}? Due follow-ups will be sent before new restaurants, subject to pacing, lifecycle, consent, and suppression checks.`
           : "Disable the email job? No new Gmail delivery will begin after the current provider request finishes.",
       )
     ) {
       return;
     }
     setSettingJob(true);
-    setError(null);
+    setOperationsError(null);
     setMessage(null);
     try {
-      const res = await adminFetch<{
+      const result = await adminFetch<{
         job_id?: string;
         status?: string;
-        pending_eligible_count?: number;
-        max_sends?: number;
       }>("outreach/email-job", { method: "PATCH", body: { enabled } });
       setMessage(
         enabled
-          ? `Email job enabled${res.job_id ? ` (job ${res.job_id})` : ""}. Status: ${res.status || "queued"}.`
-          : "Email job disabled. No additional leads will be sent until you enable it again.",
+          ? `Email job enabled${result.job_id ? ` (job ${result.job_id})` : ""}. Follow-ups remain first in the queue.`
+          : "Email job disabled. Recipient progress and due dates are preserved.",
       );
-      await load();
-    } catch (err) {
-      const e = err as Error & { status?: number };
-      setError(
-        e.message ||
-          "Email job update failed. Gmail OAuth accounts may not be configured.",
+      await loadOperations();
+    } catch (reason) {
+      setOperationsError(
+        reason instanceof Error
+          ? reason.message
+          : "Email job update failed. Check the approved sequence and Gmail configuration.",
       );
     } finally {
       setSettingJob(false);
     }
   }
 
+  const tabs: { id: View; label: string }[] = [
+    { id: "sequence", label: "Email sequence" },
+    { id: "recipients", label: "Recipient progress" },
+    { id: "operations", label: "Sending & health" },
+  ];
+
   return (
     <div>
       <PageHeader
         title="Outreach"
-        subtitle="UI-controlled, quota-managed Gmail outreach for approved leads"
+        subtitle="Approved plain-text sequences with durable follow-up scheduling"
         actions={
           <button
             className={status?.email_job.enabled ? "btn btn-danger" : "btn btn-primary"}
             type="button"
             onClick={() => setEmailJob(!status?.email_job.enabled)}
-            disabled={settingJob || !status}
+            disabled={settingJob || !status || (!status.email_job.enabled && !activeSequence)}
           >
             {settingJob
               ? "Updating…"
@@ -93,149 +139,170 @@ export default function OutreachPage() {
           </button>
         }
       />
-      <ErrorBanner message={error} />
+
+      <ErrorBanner message={view === "sequence" ? sequenceError : operationsError} />
       {message ? (
-        <div className="alert alert-info" style={{ marginBottom: "1rem" }}>
+        <div className="alert alert-info" style={{ marginBottom: "1rem" }} role="status" aria-live="polite">
           {message}
         </div>
       ) : null}
 
-      {loading && !status ? <EmptyState message="Loading outreach status…" /> : null}
+      <div className="outreach-view-tabs" role="tablist" aria-label="Outreach sections">
+        {tabs.map((tab) => (
+          <button
+            className="outreach-view-tab"
+            type="button"
+            role="tab"
+            id={`outreach-tab-${tab.id}`}
+            aria-controls={`outreach-panel-${tab.id}`}
+            aria-selected={view === tab.id}
+            tabIndex={view === tab.id ? 0 : -1}
+            onClick={() => setView(tab.id)}
+            key={tab.id}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
 
-      {status ? (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-            gap: "0.85rem",
-            marginBottom: "1rem",
-          }}
-        >
-          <div className="card">
-            <div style={{ color: "var(--muted)", fontSize: "0.8rem" }}>
-              Email job control
-            </div>
-            <div style={{ marginTop: "0.35rem" }}>
-              <StatusBadge status={status.email_job.enabled ? "enabled" : "disabled"} />
-            </div>
-            <div style={{ marginTop: "0.45rem", color: "var(--muted)", fontSize: "0.8rem" }}>
-              {status.email_job.enabled_at
-                ? `Enabled ${formatDate(status.email_job.enabled_at)}`
-                : "Enable from this page to start a run"}
-            </div>
-          </div>
-          <div className="card">
-            <div style={{ color: "var(--muted)", fontSize: "0.8rem" }}>
-              Pending eligible
-            </div>
-            <div style={{ fontSize: "1.8rem", fontWeight: 700 }}>
-              {status.pending_eligible_count}
-            </div>
-          </div>
-          <div className="card">
-            <div style={{ color: "var(--muted)", fontSize: "0.8rem" }}>
-              Max sends / activation
-            </div>
-            <div style={{ fontSize: "1.8rem", fontWeight: 700 }}>
-              {status.max_sends}
-            </div>
-          </div>
-          <div className="card">
-            <div style={{ color: "var(--muted)", fontSize: "0.8rem" }}>
-              Active job
-            </div>
-            <div style={{ marginTop: "0.35rem" }}>
-              <StatusBadge status={status.active_job?.status || "none"} />
-            </div>
-            {status.active_job?.job_id ? (
-              <div
-                style={{
-                  marginTop: "0.45rem",
-                  fontSize: "0.8rem",
-                  fontFamily: "monospace",
-                  color: "var(--muted)",
-                }}
-              >
-                {status.active_job.job_id}
-              </div>
-            ) : null}
-          </div>
-          <div className="card">
-            <div style={{ color: "var(--muted)", fontSize: "0.8rem" }}>
-              Last completed
-            </div>
-            <div style={{ marginTop: "0.35rem" }}>
-              <StatusBadge
-                status={status.last_completed_job?.status || "none"}
-              />
-            </div>
-            <div style={{ marginTop: "0.45rem", color: "var(--muted)", fontSize: "0.85rem" }}>
-              {status.last_completed_job?.summary
-                ? `${status.last_completed_job.summary.sent} sent · ${status.last_completed_job.summary.failed} failed`
-                : "No completed run yet"}
-            </div>
-          </div>
+      {view === "sequence" ? (
+        <div role="tabpanel" id="outreach-panel-sequence" aria-labelledby="outreach-tab-sequence">
+          <OutreachSequenceEditor
+            sequences={sequences}
+            activeSequenceId={activeSequenceId}
+            loading={loadingSequences}
+            onReload={loadSequences}
+          />
         </div>
       ) : null}
 
-      <div className="card" style={{ marginBottom: "1rem" }}>
-        <h2 style={{ marginTop: 0, fontSize: "1.05rem" }}>Gmail sender health</h2>
-        <p style={{ color: "var(--muted)", marginTop: 0 }}>
-          Each configured Gmail OAuth mailbox sends a real health-check message to {emailHealth?.recipient || "the configured recipient"} every {emailHealth?.interval_hours || 24} hours.
-        </p>
-        {!emailHealth || emailHealth.accounts.length === 0 ? (
-          <EmptyState message="No Gmail outreach accounts are configured in OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON." />
-        ) : (
-          <div className="table-wrap">
-            <table className="data">
-              <thead>
-                <tr>
-                  <th>Sender</th>
-                  <th>Status</th>
-                  <th>Last checked</th>
-                  <th>Next check</th>
-                  <th>Result</th>
-                </tr>
-              </thead>
-              <tbody>
-                {emailHealth.accounts.map((account) => (
-                  <tr key={account.provider_identity}>
-                    <td>{account.from_email}</td>
-                    <td><StatusBadge status={account.status} /></td>
-                    <td>{formatDate(account.last_checked_at)}</td>
-                    <td>{formatDate(account.next_check_at)}</td>
-                    <td style={{ color: account.last_error ? "var(--danger)" : "var(--muted)" }}>
-                      {account.last_error || (account.provider_message_id ? "Accepted by Gmail" : "Waiting for first check")}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      {view === "recipients" ? (
+        <div role="tabpanel" id="outreach-panel-recipients" aria-labelledby="outreach-tab-recipients">
+          <OutreachRecipients />
+        </div>
+      ) : null}
 
-      <div className="card">
-        <h2 style={{ marginTop: 0, fontSize: "1.05rem" }}>Eligibility checklist</h2>
-        <ul style={{ margin: 0, paddingLeft: "1.1rem", color: "var(--muted)" }}>
-          <li>OCR status verified</li>
-          <li>Profile approved</li>
-          <li>Demo published and unexpired</li>
-          <li>Campaign approved</li>
-          <li>Contact email present and not suppressed</li>
-          <li>No prior confirmed send (`email_sent = false`)</li>
-        </ul>
-        <p style={{ marginBottom: 0, marginTop: "0.85rem", color: "var(--muted)" }}>
-          Mailbox credentials stay in secret configuration through <code>OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON</code>.
-          The job itself is enabled and disabled only from this page. Each mailbox needs an OAuth client ID,
-          client secret, and refresh token authorized for Gmail send access; Google API keys are not mailbox credentials.
-        </p>
-        {status?.next_available_at ? (
-          <p style={{ marginBottom: 0, marginTop: "0.5rem" }}>
-            Next available: {formatDate(status.next_available_at)}
-          </p>
-        ) : null}
-      </div>
+      {view === "operations" ? (
+        <div role="tabpanel" id="outreach-panel-operations" aria-labelledby="outreach-tab-operations">
+          {loadingOperations && !status ? <EmptyState message="Loading outreach status…" /> : null}
+
+          {status ? (
+            <div className="outreach-metrics">
+              <div className="card">
+                <div className="outreach-metric-label">Email job</div>
+                <div style={{ marginTop: "0.4rem" }}>
+                  <StatusBadge status={status.email_job.enabled ? "enabled" : "disabled"} />
+                </div>
+                <div className="field-help" style={{ marginTop: "0.45rem" }}>
+                  {status.email_job.enabled_at
+                    ? `Enabled ${formatDate(status.email_job.enabled_at)}`
+                    : "Sending remains off until explicitly enabled"}
+                </div>
+              </div>
+              <div className="card">
+                <div className="outreach-metric-label">Due follow-ups</div>
+                <div className="outreach-metric-value">{status.due_followup_count ?? "—"}</div>
+              </div>
+              <div className="card">
+                <div className="outreach-metric-label">New eligible</div>
+                <div className="outreach-metric-value">
+                  {status.new_recipient_count ?? status.pending_eligible_count}
+                </div>
+              </div>
+              <div className="card">
+                <div className="outreach-metric-label">Active job</div>
+                <div style={{ marginTop: "0.4rem" }}>
+                  <StatusBadge status={status.active_job?.status || "none"} />
+                </div>
+              </div>
+              <div className="card">
+                <div className="outreach-metric-label">Last completed run</div>
+                <div style={{ marginTop: "0.4rem" }}>
+                  <StatusBadge status={status.last_completed_job?.status || "none"} />
+                </div>
+                <div className="field-help" style={{ marginTop: "0.45rem" }}>
+                  {status.last_completed_job?.summary
+                    ? `${status.last_completed_job.summary.sent} sent · ${status.last_completed_job.summary.failed} failed`
+                    : "No completed run yet"}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="card" style={{ marginBottom: "1rem" }}>
+            <h2 style={{ marginTop: 0, fontSize: "1.05rem" }}>Active sequence</h2>
+            {activeSequence ? (
+              <div style={{ display: "flex", gap: "0.65rem", alignItems: "center", flexWrap: "wrap" }}>
+                <StatusBadge status="active" />
+                <strong>{activeSequence.name} · version {activeSequence.version}</strong>
+                <span style={{ color: "var(--muted)" }}>
+                  {activeSequence.steps.filter((step) => step.enabled).length} enabled emails
+                </span>
+              </div>
+            ) : (
+              <p style={{ color: "var(--muted)", marginBottom: 0 }}>
+                No approved active sequence. Create and approve one before enabling sending.
+              </p>
+            )}
+          </div>
+
+          <div className="card" style={{ marginBottom: "1rem" }}>
+            <h2 style={{ marginTop: 0, fontSize: "1.05rem" }}>Gmail sender health</h2>
+            <p style={{ color: "var(--muted)", marginTop: 0 }}>
+              Mailboxes remain quota-managed and paced. Credentials stay in protected server configuration.
+            </p>
+            {!emailHealth || emailHealth.accounts.length === 0 ? (
+              <EmptyState message="No Gmail outreach accounts are configured." />
+            ) : (
+              <div className="table-wrap">
+                <table className="data">
+                  <thead>
+                    <tr>
+                      <th>Sender</th>
+                      <th>Status</th>
+                      <th>Last checked</th>
+                      <th>Next check</th>
+                      <th>Result</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {emailHealth.accounts.map((account) => (
+                      <tr key={account.provider_identity}>
+                        <td>{account.from_email}</td>
+                        <td><StatusBadge status={account.status} /></td>
+                        <td>{formatDate(account.last_checked_at)}</td>
+                        <td>{formatDate(account.next_check_at)}</td>
+                        <td style={{ color: account.last_error ? "var(--bad)" : "var(--muted)", whiteSpace: "normal" }}>
+                          {account.last_error || (account.provider_message_id ? "Accepted by Gmail" : "Waiting for first check")}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          <div className="card">
+            <h2 style={{ marginTop: 0, fontSize: "1.05rem" }}>Eligibility and stop rules</h2>
+            <ul style={{ margin: 0, paddingLeft: "1.1rem", color: "var(--muted)", lineHeight: 1.65 }}>
+              <li>Restaurant name and a valid, unsuppressed email are present.</li>
+              <li>Imported business leads carry recorded <code>inferred_business</code> consent evidence.</li>
+              <li>Lifecycle is <code>lead</code> or <code>emailed</code>.</li>
+              <li>Interest pauses automation for human follow-up.</li>
+              <li>Lost, archived, onboarding, and active-client restaurants are excluded.</li>
+              <li>An approved active plain-text sequence is available.</li>
+              <li>Each email contains only the Tuvi Solutions site and personalized opt-out links.</li>
+              <li>Due follow-ups are exhausted before new recipients are selected.</li>
+            </ul>
+            {status?.next_available_at ? (
+              <p style={{ marginBottom: 0, color: "var(--muted)" }}>
+                Next mailbox slot: {formatDate(status.next_available_at)}
+              </p>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

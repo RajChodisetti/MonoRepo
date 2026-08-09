@@ -45,15 +45,15 @@ export function StatusBadge({ status }: { status?: string | null }) {
   const s = status.toLowerCase();
   let cls = "badge-neutral";
   if (
-    ["running", "approved", "published", "verified", "completed", "sent"].includes(
+    ["running", "active", "enabled", "eligible", "approved", "published", "verified", "completed", "sent"].includes(
       s,
     )
   ) {
     cls = "badge-ok";
-  } else if (["queued", "waiting", "draft", "pending"].includes(s)) {
+  } else if (["queued", "waiting", "paused", "draft", "pending"].includes(s)) {
     cls = "badge-warn";
   } else if (
-    ["failed", "rejected", "cancelled", "lost", "archived"].includes(s)
+    ["failed", "rejected", "cancelled", "lost", "archived", "suppressed"].includes(s)
   ) {
     cls = "badge-bad";
   }

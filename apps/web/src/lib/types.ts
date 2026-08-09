@@ -44,7 +44,6 @@ export type Restaurant = {
   email?: string;
   phone?: string;
   address?: string;
-  ocr_status?: string;
   status: string;
   is_contacted?: boolean;
   shown_interest?: boolean;
@@ -57,6 +56,10 @@ export type Restaurant = {
 
 export type BulkSendStatus = {
   pending_eligible_count: number;
+  due_followup_count?: number;
+  new_recipient_count?: number;
+  paused_recipient_count?: number;
+  completed_recipient_count?: number;
   max_sends: number;
   next_available_at?: string;
   active_job?: {
@@ -102,19 +105,6 @@ export type EmailAccountHealthResponse = {
   accounts: EmailAccountHealth[];
 };
 
-export type Campaign = {
-  id: string;
-  restaurant_id?: string;
-  status: string;
-  subject?: string;
-  body_html?: string;
-  body_text?: string;
-  approved_at?: string;
-  approved_by?: string;
-  updated_at: string;
-  created_at?: string;
-};
-
 export type DemoSite = {
   id: string;
   restaurant_id?: string;
@@ -154,20 +144,6 @@ export type ProfileReviewPreview = {
   restaurant_id: string;
   restaurant_name?: string;
   contact_email?: string;
-  ocr_status?: string;
-  ocr_checked?: boolean;
-  ocr_input_fingerprint?: string;
-  ocr_started_at?: string;
-  ocr_completed_at?: string;
-  ocr_attempts?: number;
-  ocr_verification_errors?: unknown[];
-  ocr_images_discovered?: number;
-  ocr_images_analyzed?: number;
-  ocr_images_succeeded?: number;
-  ocr_images_failed?: number;
-  ocr_all_images_processed?: boolean;
-  ocr_provider?: string;
-  ocr_model?: string;
   apollo_status?: string;
   apollo_email_found?: boolean;
   review_status?: string;
@@ -299,9 +275,6 @@ export type RestaurantOwnedMedia = {
   placement_role?: string;
   approval_status?: "draft" | "approved" | "rejected";
   rights_status?: "owner_granted" | "licensed";
-  vision_status?: "pending" | "running" | "verified" | "failed";
-  vision_last_error?: string;
-  vision_analyzed_at?: string;
   hidden_at?: string;
 };
 
@@ -330,19 +303,68 @@ export type GeneratedSite = {
   shareable: boolean;
 };
 
-export type AdHocPreview = {
-  restaurant_id: string;
-  restaurant_name?: string;
-  recipient_email?: string;
-  subject: string;
-  body_html: string;
-  body_text: string;
+export type OutreachSequenceStep = {
+  id?: string;
+  position: number;
+  enabled: boolean;
+  delay_hours: number;
+  subject_template: string;
+  body_text_template: string;
 };
 
-export type AdHocSendResult = {
+export type OutreachSequence = {
+  id: string;
+  name: string;
+  version: number;
+  status: "draft" | "active" | "archived" | string;
+  is_active: boolean;
+  approved_at?: string;
+  approved_by?: string;
+  created_at: string;
+  updated_at: string;
+  steps: OutreachSequenceStep[];
+};
+
+export type OutreachSequenceListResponse = {
+  active_sequence_id?: string;
+  sequences: OutreachSequence[];
+};
+
+export type OutreachSequencePreviewStep = {
+  position: number;
+  subject: string;
+  body_text: string;
+  url_count: number;
+};
+
+export type OutreachSequencePreview = {
+  restaurant_name: string;
+  owner_first_name?: string;
+  greeting?: string;
+  steps: OutreachSequencePreviewStep[];
+};
+
+export type OutreachRecipient = {
   restaurant_id: string;
-  sent: boolean;
-  error?: string;
+  restaurant_name: string;
+  email: string;
+  lifecycle_status: string;
+  consent_basis: string;
+  current_step: number;
+  next_step?: number | null;
+  last_sent_at?: string;
+  next_send_at?: string;
+  completed_at?: string;
+  campaign_status: string;
+  email_send_count: number;
+  suppressed: boolean;
+  eligible: boolean;
+  hold_reason?: string;
+};
+
+export type OutreachRecipientListResponse = {
+  recipients: OutreachRecipient[];
+  total: number;
 };
 
 export type Member = {

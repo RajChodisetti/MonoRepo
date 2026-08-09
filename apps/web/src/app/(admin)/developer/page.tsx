@@ -58,10 +58,10 @@ ORDER BY dataset`,
   r.name,
   r.email,
   r.status,
-  rp.ocr_status,
+  r.email_send_count,
+  r.last_email_sent_at,
   r.updated_at
 FROM restaurants r
-LEFT JOIN restaurant_profiles rp ON rp.restaurant_id = r.id
 ORDER BY r.updated_at DESC
 LIMIT 50`,
   },

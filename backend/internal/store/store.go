@@ -159,13 +159,9 @@ func (store *Store) VerifyLeadWorkflow(ctx context.Context) error {
 		table  string
 		column string
 	}{
-		{table: "restaurant_profiles", column: "ocr_status"},
-		{table: "restaurant_profiles", column: "ocr_claim_id"},
 		{table: "restaurant_profiles", column: "reviewed_by"},
 		{table: "demo_sites", column: "published_by"},
-		{table: "demo_sites", column: "source_ocr_fingerprint"},
 		{table: "demo_sites", column: "source_profile_fingerprint"},
-		{table: "email_campaigns", column: "source_ocr_fingerprint"},
 		{table: "email_campaigns", column: "source_profile_fingerprint"},
 		{table: "job_runs", column: "locked_by"},
 		{table: "job_runs", column: "lease_expires_at"},

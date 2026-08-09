@@ -50,6 +50,12 @@ export type RestaurantReport = {
   /** Strict visual quality 0–100 (typical 20–60). */
   websiteQualityScore?: number;
   websiteReview?: string;
+  /** "ai-assisted" only when the provider actually contributed. */
+  analysisSource?: "ai-assisted" | "automated" | string;
+  /** Partial reports use conservative fallbacks for timed-out live signals. */
+  analysisStatus?: "complete" | "partial" | string;
+  analysisNotice?: string;
+  generatedInMs?: number;
   /** Live Google reviews for the scan map UI. */
   recentReviews?: RecentReview[];
 };

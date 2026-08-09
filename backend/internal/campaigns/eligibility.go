@@ -9,7 +9,6 @@ import (
 
 type EligibilityInput struct {
 	RestaurantEmail         string
-	OCRStatus               string
 	ReviewStatus            string
 	ProfileReviewAudited    bool
 	DemoStatus              string
@@ -22,7 +21,6 @@ type EligibilityInput struct {
 
 type BulkEligibilityInput struct {
 	RestaurantEmail         string
-	OCRStatus               string
 	ReviewStatus            string
 	ProfileReviewAudited    bool
 	DemoStatus              string
@@ -36,7 +34,6 @@ type BulkEligibilityInput struct {
 func CheckBulkEligibility(input BulkEligibilityInput) error {
 	return CheckEligibility(EligibilityInput{
 		RestaurantEmail:         input.RestaurantEmail,
-		OCRStatus:               input.OCRStatus,
 		ReviewStatus:            input.ReviewStatus,
 		ProfileReviewAudited:    input.ProfileReviewAudited,
 		DemoStatus:              input.DemoStatus,
@@ -54,9 +51,6 @@ func CheckEligibility(input EligibilityInput) error {
 	}
 	if input.Suppressed {
 		return fmt.Errorf("%w: recipient is suppressed", ErrNotEligible)
-	}
-	if strings.TrimSpace(input.OCRStatus) != "verified" {
-		return fmt.Errorf("%w: restaurant OCR is not verified", ErrNotEligible)
 	}
 	if input.DemoStatus != demos.StatusPublished {
 		return fmt.Errorf("%w: demo site is not published", ErrNotEligible)

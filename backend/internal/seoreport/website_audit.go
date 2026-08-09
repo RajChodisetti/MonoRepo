@@ -9,17 +9,29 @@ import (
 	"image"
 	"image/jpeg"
 	_ "image/png"
+	"net"
 	"net/url"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 
+	"github.com/chromedp/cdproto/cdp"
+	"github.com/chromedp/cdproto/fetch"
+	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 	llmlib "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/llm"
 )
+
+const (
+	websiteAuditBudget         = 10 * time.Second
+	websiteCaptureBudget       = 6500 * time.Millisecond
+	websiteVisionBudget        = 3200 * time.Millisecond
+	maxParallelWebsiteCaptures = 4
+)
+
+// Browser work is the heaviest part of a report. Four slots allow the mobile
+// and desktop views of two reports to run together without unbounded Chromium
+// fan-out under traffic spikes.
+var websiteCaptureSlots = make(chan struct{}, maxParallelWebsiteCaptures)
 
 // WebsiteAudit is the visual review of a restaurant website homepage.
 type WebsiteAudit struct {
@@ -69,8 +81,8 @@ func normalizeWebsiteURL(raw string) string {
 	return parsed.String()
 }
 
-// AuditWebsite screenshots the homepage (Playwright if available, else ChromeDP)
-// and scores design/UX via vision LLM. Strict by design.
+// AuditWebsite screenshots the homepage with bounded ChromeDP workers and
+// scores design/UX via vision LLM. Strict by design.
 func AuditWebsite(ctx context.Context, website string, llm llmlib.Client) WebsiteAudit {
 	website = strings.TrimSpace(website)
 	if website == "" {
@@ -89,27 +101,46 @@ func AuditWebsite(ctx context.Context, website string, llm llmlib.Client) Websit
 		}
 	}
 
-	shotCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
-	defer cancel()
+	auditCtx, auditCancel := context.WithTimeout(ctx, websiteAuditBudget)
+	defer auditCancel()
+	validationCtx, validationCancel := context.WithTimeout(auditCtx, websiteDNSBudget)
+	_, validationErr := validatePublicWebsiteURL(validationCtx, website, net.DefaultResolver)
+	validationCancel()
+	if validationErr != nil {
+		return fallbackWebsiteAudit(website, fmt.Sprintf("unsafe website destination: %v", validationErr))
+	}
+	shotCtx, shotCancel := context.WithTimeout(auditCtx, websiteCaptureBudget)
 
 	// Mobile-first: iPhone UA often clears CF faster, and the scan phone mockup needs it.
 	type shotResult struct {
-		jpeg []byte
-		err  error
+		mobile bool
+		jpeg   []byte
+		err    error
 	}
-	mobileCh := make(chan shotResult, 1)
-	deskCh := make(chan shotResult, 1)
-	go func() {
-		b, err := captureWebsiteJPEG(shotCtx, website, true)
-		mobileCh <- shotResult{jpeg: b, err: err}
-	}()
-	go func() {
-		b, err := captureWebsiteJPEG(shotCtx, website, false)
-		deskCh <- shotResult{jpeg: b, err: err}
-	}()
+	shots := make(chan shotResult, 2)
+	for _, mobile := range []bool{true, false} {
+		mobile := mobile
+		go func() {
+			b, err := captureWebsiteJPEG(shotCtx, website, mobile)
+			shots <- shotResult{mobile: mobile, jpeg: b, err: err}
+		}()
+	}
 
-	mobileRes := <-mobileCh
-	deskRes := <-deskCh
+	var mobileRes, deskRes shotResult
+	for received := 0; received < 2; {
+		select {
+		case result := <-shots:
+			if result.mobile {
+				mobileRes = result
+			} else {
+				deskRes = result
+			}
+			received++
+		case <-shotCtx.Done():
+			received = 2
+		}
+	}
+	shotCancel()
 
 	jpegBytes := deskRes.jpeg
 	if len(jpegBytes) == 0 {
@@ -136,7 +167,7 @@ func AuditWebsite(ctx context.Context, website string, llm llmlib.Client) Websit
 		return attachShots(fallbackWebsiteAudit(website, "llm unavailable"))
 	}
 
-	visionCtx, visionCancel := context.WithTimeout(ctx, 40*time.Second)
+	visionCtx, visionCancel := context.WithTimeout(auditCtx, websiteVisionBudget)
 	defer visionCancel()
 
 	prompt := `You are auditing a restaurant website homepage screenshot for local SEO and guest conversion.
@@ -224,10 +255,13 @@ func parseWebsiteVisionJSON(raw string) (int, string) {
 }
 
 func captureWebsiteJPEG(ctx context.Context, pageURL string, mobile bool) ([]byte, error) {
-	// Prefer Playwright script when Node + playwright are available.
-	if png, err := captureWithPlaywright(ctx, pageURL, mobile); err == nil && len(png) > 0 {
-		return pngToJPEG(png, 82)
+	select {
+	case websiteCaptureSlots <- struct{}{}:
+		defer func() { <-websiteCaptureSlots }()
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	}
+
 	png, err := captureWithChromedp(ctx, pageURL, mobile)
 	if err != nil {
 		return nil, err
@@ -269,40 +303,19 @@ func isTransientChallenge(title, body string) bool {
 		strings.Contains(blob, "this will only take a few seconds")
 }
 
-func captureWithPlaywright(ctx context.Context, pageURL string, mobile bool) ([]byte, error) {
-	_, thisFile, _, ok := runtime.Caller(0)
-	if !ok {
-		return nil, fmt.Errorf("runtime caller unavailable")
-	}
-	script := filepath.Join(filepath.Dir(thisFile), "scripts", "seo_screenshot.mjs")
-	if _, err := os.Stat(script); err != nil {
-		return nil, err
-	}
-	if _, err := exec.LookPath("node"); err != nil {
-		return nil, err
-	}
-	mode := "desktop"
-	if mobile {
-		mode = "mobile"
-	}
-	cmd := exec.CommandContext(ctx, "node", script, pageURL, mode)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		msg := strings.TrimSpace(stderr.String())
-		if strings.Contains(msg, "blocked_by_waf") || (cmd.ProcessState != nil && cmd.ProcessState.ExitCode() == 3) {
-			return nil, fmt.Errorf("bot blocked by website waf")
-		}
-		return nil, fmt.Errorf("playwright: %w (%s)", err, msg)
-	}
-	if stdout.Len() < 100 {
-		return nil, fmt.Errorf("playwright returned empty screenshot")
-	}
-	return stdout.Bytes(), nil
-}
-
 func captureWithChromedp(ctx context.Context, pageURL string, mobile bool) ([]byte, error) {
+	validationCtx, validationCancel := context.WithTimeout(ctx, websiteDNSBudget)
+	_, err := validatePublicWebsiteURL(validationCtx, pageURL, net.DefaultResolver)
+	validationCancel()
+	if err != nil {
+		return nil, fmt.Errorf("website destination blocked: %w", err)
+	}
+	proxy, err := startSafeBrowserProxy(net.DefaultResolver)
+	if err != nil {
+		return nil, fmt.Errorf("start safe browser proxy: %w", err)
+	}
+	defer proxy.Close()
+
 	width, height := 1280, 800
 	ua := "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
 	if mobile {
@@ -312,9 +325,17 @@ func captureWithChromedp(ctx context.Context, pageURL string, mobile bool) ([]by
 	allocOpts := append(chromedp.DefaultExecAllocatorOptions[:],
 		chromedp.Flag("headless", true),
 		chromedp.Flag("disable-gpu", true),
-		chromedp.Flag("no-sandbox", true),
 		chromedp.Flag("disable-dev-shm-usage", true),
+		chromedp.Flag("disable-dns-prefetch", true),
+		chromedp.Flag("disable-preconnect", true),
+		chromedp.Flag("disable-quic", true),
+		chromedp.Flag("site-per-process", true),
+		chromedp.Flag("enable-features", "NetworkService"),
+		chromedp.Flag("disable-features", "Translate,BlinkGenPropertyTrees,ServiceWorker"),
+		chromedp.Flag("force-webrtc-ip-handling-policy", "disable_non_proxied_udp"),
+		chromedp.Flag("proxy-bypass-list", "<-loopback>"),
 		chromedp.Flag("disable-blink-features", "AutomationControlled"),
+		chromedp.ProxyServer(proxy.URL()),
 		chromedp.UserAgent(ua),
 		chromedp.WindowSize(width, height),
 	)
@@ -323,12 +344,13 @@ func captureWithChromedp(ctx context.Context, pageURL string, mobile bool) ([]by
 
 	browserCtx, browserCancel := chromedp.NewContext(allocCtx)
 	defer browserCancel()
+	installBrowserRequestGuard(browserCtx, browserCancel, net.DefaultResolver)
 
 	var png []byte
 	var title, bodyText string
 
 	viewportOpts := []chromedp.EmulateViewportOption{chromedp.EmulateScale(1)}
-	wait := 2500 * time.Millisecond
+	wait := 900 * time.Millisecond
 	if mobile {
 		viewportOpts = []chromedp.EmulateViewportOption{
 			chromedp.EmulateScale(2),
@@ -336,16 +358,17 @@ func captureWithChromedp(ctx context.Context, pageURL string, mobile bool) ([]by
 			chromedp.EmulateTouch,
 			chromedp.EmulatePortrait,
 		}
-		wait = 2800 * time.Millisecond
+		wait = 1200 * time.Millisecond
 	}
 
-	err := chromedp.Run(browserCtx,
+	err = chromedp.Run(browserCtx,
+		fetch.Enable(),
 		chromedp.EmulateViewport(int64(width), int64(height), viewportOpts...),
 		chromedp.Navigate(pageURL),
 		chromedp.Sleep(wait),
 		chromedp.ActionFunc(func(ctx context.Context) error {
 			// Wait out Cloudflare / bot interstitial when present.
-			deadline := time.Now().Add(14 * time.Second)
+			deadline := time.Now().Add(2500 * time.Millisecond)
 			for time.Now().Before(deadline) {
 				var t, b string
 				if err := chromedp.Title(&t).Do(ctx); err != nil {
@@ -381,6 +404,67 @@ func captureWithChromedp(ctx context.Context, pageURL string, mobile bool) ([]by
 		return nil, fmt.Errorf("empty chromedp screenshot")
 	}
 	return png, nil
+}
+
+const (
+	browserRequestGuardWorkers = 8
+	browserRequestGuardQueue   = 256
+)
+
+// installBrowserRequestGuard pauses every network request before it is sent.
+// Redirect hops and subresources produce their own Fetch.requestPaused event.
+// The safe proxy remains the final socket-level enforcement boundary, so a DNS
+// answer changing after this check still cannot redirect Chromium internally.
+func installBrowserRequestGuard(
+	browserCtx context.Context,
+	cancelBrowser context.CancelFunc,
+	resolver websiteHostResolver,
+) {
+	requests := make(chan *fetch.EventRequestPaused, browserRequestGuardQueue)
+	for range browserRequestGuardWorkers {
+		go func() {
+			for {
+				select {
+				case <-browserCtx.Done():
+					return
+				case event := <-requests:
+					if event == nil || event.Request == nil {
+						continue
+					}
+					chromedpContext := chromedp.FromContext(browserCtx)
+					if chromedpContext == nil || chromedpContext.Target == nil {
+						cancelBrowser()
+						return
+					}
+					executorCtx := cdp.WithExecutor(browserCtx, chromedpContext.Target)
+					_ = guardBrowserRequest(
+						executorCtx,
+						resolver,
+						event.Request.URL,
+						func(ctx context.Context) error {
+							return fetch.ContinueRequest(event.RequestID).Do(ctx)
+						},
+						func(ctx context.Context) error {
+							return fetch.FailRequest(event.RequestID, network.ErrorReasonBlockedByClient).Do(ctx)
+						},
+					)
+				}
+			}
+		}()
+	}
+	chromedp.ListenTarget(browserCtx, func(event any) {
+		paused, ok := event.(*fetch.EventRequestPaused)
+		if !ok {
+			return
+		}
+		select {
+		case requests <- paused:
+		default:
+			// An adversarial page cannot create unbounded validation goroutines.
+			// Cancel the capture and let the report return its bounded fallback.
+			cancelBrowser()
+		}
+	})
 }
 
 func pngToJPEG(src []byte, quality int) ([]byte, error) {

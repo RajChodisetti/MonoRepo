@@ -109,14 +109,15 @@ func (c *openAIClient) CompleteVision(ctx context.Context, prompt string, image 
 					map[string]any{
 						"type": "image_url",
 						"image_url": map[string]any{
-							"url": dataURL,
+							"url":    dataURL,
+							"detail": "low",
 						},
 					},
 				},
 			},
 		},
 		"temperature": 0.2,
-		"max_tokens":  450,
+		"max_tokens":  220,
 	}
 	return c.chat(ctx, body)
 }

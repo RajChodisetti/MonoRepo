@@ -12,7 +12,6 @@ type Restaurant struct {
 	Email                 string
 	Phone                 string
 	Address               string
-	OCRStatus             string
 	Status                string
 	IsContacted           bool
 	ShownInterest         bool
@@ -34,7 +33,6 @@ type ListFilter struct {
 	Status          string
 	IsContacted     *bool
 	ShownInterest   *bool
-	OCRStatus       string
 	IncludeArchived bool
 }
 

@@ -6,4 +6,5 @@ type EligibleLead struct {
 	CampaignID   uuid.UUID
 	RestaurantID uuid.UUID
 	DemoSiteID   uuid.UUID
+	Step         int
 }

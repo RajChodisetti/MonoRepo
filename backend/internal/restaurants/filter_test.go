@@ -23,14 +23,3 @@ func TestMatchesFilterExcludesArchivedByDefault(t *testing.T) {
 		t.Fatal("archived restaurant should be included when requested")
 	}
 }
-
-func TestMatchesFilterByOCRStatus(t *testing.T) {
-	record := Restaurant{Name: "Verified Cafe", Status: StatusLead, OCRStatus: "verified"}
-
-	if !MatchesFilter(record, ListFilter{OCRStatus: "verified"}) {
-		t.Fatal("expected verified OCR filter to match")
-	}
-	if MatchesFilter(record, ListFilter{OCRStatus: "failed"}) {
-		t.Fatal("expected failed OCR filter not to match verified restaurant")
-	}
-}

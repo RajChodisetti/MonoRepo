@@ -4,6 +4,7 @@ PostgreSQL scrape ledger — dedup lookup, skip decisions, upsert, audit runs.
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import uuid
@@ -119,16 +120,19 @@ def should_scrape(
     return "refresh_stale"
 
 
-def first_menu_image_url(images) -> str:
-    if not images:
-        return ""
-    if isinstance(images, list) and images:
-        first = images[0]
-        if isinstance(first, dict):
-            return str(first.get("url") or first.get("thumbnail") or "")
-        if isinstance(first, str):
-            return first
-    return ""
+def without_scraped_media(record: dict) -> dict:
+    """Strip third-party media before hashing or durable persistence."""
+    durable = copy.deepcopy(record)
+    durable["images"] = {}
+    for review in durable.get("reviews") or []:
+        if isinstance(review, dict):
+            review["images"] = []
+    for item in durable.get("menu_items") or []:
+        if isinstance(item, dict):
+            item["image_url"] = ""
+            item["image"] = ""
+            item["images"] = []
+    return durable
 
 
 def upsert_after_scrape(
@@ -143,15 +147,16 @@ def upsert_after_scrape(
     Upsert restaurant + profile + menus/reviews after a successful scrape.
     Returns restaurant_id.
     """
-    google = record.get("google") or {}
+    durable_record = without_scraped_media(record)
+    google = durable_record.get("google") or {}
     place_id = (google.get("place_id") or "").strip()
-    chash = content_hash(record)
-    contact = record.get("contact") or {}
-    location = record.get("location") or {}
+    chash = content_hash(durable_record)
+    contact = durable_record.get("contact") or {}
+    location = durable_record.get("location") or {}
     coords = location.get("coordinates") or {}
     email = (contact.get("email") or "").strip()
-    name = (record.get("name") or "").strip()
-    raw_record = json.dumps(record)
+    name = (durable_record.get("name") or "").strip()
+    raw_record = json.dumps(durable_record)
 
     existing = lookup_restaurant(cur, place_id, identity_hash)
     if existing:
@@ -180,7 +185,7 @@ def upsert_after_scrape(
             %s, %s, %s, %s, %s, %s,
             %s, %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb, %s, %s::jsonb,
             %s::jsonb, %s::jsonb, %s, %s, %s,
-            {"now()" if set_scraped_at and record.get("scrape_status") == "success" else "NULL"}
+            {"now()" if set_scraped_at and durable_record.get("scrape_status") == "success" else "NULL"}
         )
         ON CONFLICT (restaurant_id) DO UPDATE SET
             opening_hours = EXCLUDED.opening_hours,
@@ -216,7 +221,7 @@ def upsert_after_scrape(
         """,
         (
             restaurant_id,
-            jdump(record.get("hours") or {}),
+            jdump(durable_record.get("hours") or {}),
             (contact.get("phone") or "").strip(),
             (contact.get("website") or "").strip(),
             (location.get("address") or "").strip(),
@@ -227,18 +232,18 @@ def upsert_after_scrape(
             coords.get("longitude"),
             place_id or None,
             (google.get("data_id") or "").strip() or None,
-            record.get("rating"),
-            record.get("reviews_count"),
-            (record.get("price_level") or "").strip(),
-            jdump(record.get("cuisines") or []),
-            jdump(record.get("owners") or []),
-            jdump(record.get("images") or {}),
-            jdump(record.get("apollo_lead") or {}),
-            (record.get("scrape_status") or "unknown").strip(),
-            jdump(record.get("errors") or []),
-            jdump(record.get("cuisines") or []),
+            durable_record.get("rating"),
+            durable_record.get("reviews_count"),
+            (durable_record.get("price_level") or "").strip(),
+            jdump(durable_record.get("cuisines") or []),
+            jdump(durable_record.get("owners") or []),
+            jdump({}),
+            jdump(durable_record.get("apollo_lead") or {}),
+            (durable_record.get("scrape_status") or "unknown").strip(),
+            jdump(durable_record.get("errors") or []),
+            jdump(durable_record.get("cuisines") or []),
             raw_record,
-            identity_hash or identity_hash_from_record(record) or None,
+            identity_hash or identity_hash_from_record(durable_record) or None,
             chash,
             discovery_rank,
         ),
@@ -260,7 +265,7 @@ def upsert_after_scrape(
         menu_id = cur.fetchone()[0]
 
     cur.execute("DELETE FROM menu_items WHERE menu_id = %s", (menu_id,))
-    for i, item in enumerate(record.get("menu_items") or []):
+    for i, item in enumerate(durable_record.get("menu_items") or []):
         item_name = (item.get("name") or "").strip()
         category = (item.get("category") or "").strip()
         if not item_name and not category:
@@ -281,14 +286,14 @@ def upsert_after_scrape(
                 item.get("price_numeric"),
                 (item.get("price") or "").strip(),
                 category,
-                first_menu_image_url(item.get("images")),
-                jdump(item.get("images") or []),
+                "",
+                jdump([]),
                 i,
             ),
         )
 
     cur.execute("DELETE FROM restaurant_reviews WHERE restaurant_id = %s", (restaurant_id,))
-    for i, rev in enumerate(record.get("reviews") or []):
+    for i, rev in enumerate(durable_record.get("reviews") or []):
         cur.execute(
             """
             INSERT INTO restaurant_reviews (
@@ -301,7 +306,7 @@ def upsert_after_scrape(
                 (rev.get("review") or "").strip(),
                 rev.get("stars"),
                 (rev.get("date") or "").strip(),
-                jdump(rev.get("images") or []),
+                jdump([]),
                 (rev.get("source") or "").strip(),
                 i,
             ),

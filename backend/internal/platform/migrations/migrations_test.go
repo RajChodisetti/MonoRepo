@@ -113,7 +113,7 @@ func TestRepositoryMigrationsIncludeConsultationSlotOverrides(t *testing.T) {
 	t.Fatal("repository migrations do not include 39_company_consultation_slot_overrides")
 }
 
-func TestRepositoryLatestMigrationAddsConsultationOverlapAndCalendarRevisions(t *testing.T) {
+func TestRepositoryMigrationAddsConsultationOverlapAndCalendarRevisions(t *testing.T) {
 	_, currentFile, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("runtime.Caller() did not return this test file")
@@ -127,11 +127,17 @@ func TestRepositoryLatestMigrationAddsConsultationOverlapAndCalendarRevisions(t 
 	if len(migrations) == 0 {
 		t.Fatal("Discover(repository migrations) returned no migrations")
 	}
-	latest := migrations[len(migrations)-1]
-	if latest.Version != 41 || latest.Name != "consultation_overlap_and_calendar_revisions" {
-		t.Fatalf("latest migration = %d_%s, want 41_consultation_overlap_and_calendar_revisions", latest.Version, latest.Name)
+	var target *Migration
+	for index := range migrations {
+		if migrations[index].Version == 41 && migrations[index].Name == "consultation_overlap_and_calendar_revisions" {
+			target = &migrations[index]
+			break
+		}
 	}
-	upSQL, err := os.ReadFile(latest.UpPath)
+	if target == nil {
+		t.Fatal("repository migrations do not include 41_consultation_overlap_and_calendar_revisions")
+	}
+	upSQL, err := os.ReadFile(target.UpPath)
 	if err != nil {
 		t.Fatalf("read latest up migration: %v", err)
 	}
@@ -147,7 +153,7 @@ func TestRepositoryLatestMigrationAddsConsultationOverlapAndCalendarRevisions(t 
 			t.Fatalf("latest up migration missing %q", required)
 		}
 	}
-	downSQL, err := os.ReadFile(latest.DownPath)
+	downSQL, err := os.ReadFile(target.DownPath)
 	if err != nil {
 		t.Fatalf("read latest down migration: %v", err)
 	}
@@ -158,6 +164,63 @@ func TestRepositoryLatestMigrationAddsConsultationOverlapAndCalendarRevisions(t 
 	} {
 		if !strings.Contains(string(downSQL), required) {
 			t.Fatalf("latest down migration missing %q", required)
+		}
+	}
+}
+
+func TestPlainTextOutreachMigrationFailsClosedBeforeEnrollment(t *testing.T) {
+	_, currentFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller() did not return this test file")
+	}
+	dir := filepath.Join(filepath.Dir(currentFile), "..", "..", "..", "migrations")
+
+	migrations, err := Discover(dir)
+	if err != nil {
+		t.Fatalf("Discover(repository migrations) error = %v", err)
+	}
+	var target *Migration
+	for index := range migrations {
+		if migrations[index].Version == 42 && migrations[index].Name == "plain_text_outreach_sequences" {
+			target = &migrations[index]
+			break
+		}
+	}
+	if target == nil {
+		t.Fatal("repository migrations do not include 42_plain_text_outreach_sequences")
+	}
+
+	upSQL, err := os.ReadFile(target.UpPath)
+	if err != nil {
+		t.Fatalf("read outreach up migration: %v", err)
+	}
+	up := string(upSQL)
+	for _, required := range []string{
+		"VALUES ('email_job', false, NULL, NULL, now())",
+		"WHERE job_type = 'outreach.bulk_send'",
+		"AND status IN ('queued', 'running')",
+		"explicitly enable the plain-text sequence sender",
+	} {
+		if !strings.Contains(up, required) {
+			t.Fatalf("outreach up migration missing fail-closed guard %q", required)
+		}
+	}
+	if disabledAt, enrollmentAt := strings.Index(up, "VALUES ('email_job', false"), strings.Index(up, "SELECT ensure_outreach_sequence_enrollment(id)"); disabledAt < 0 || enrollmentAt < 0 || disabledAt > enrollmentAt {
+		t.Fatal("outreach up migration must disable sending before enrolling restaurants")
+	}
+
+	downSQL, err := os.ReadFile(target.DownPath)
+	if err != nil {
+		t.Fatalf("read outreach down migration: %v", err)
+	}
+	down := string(downSQL)
+	for _, required := range []string{
+		"VALUES ('email_job', false, NULL, NULL, now())",
+		"WHERE job_type = 'outreach.bulk_send'",
+		"explicitly enable outreach after rollback verification",
+	} {
+		if !strings.Contains(down, required) {
+			t.Fatalf("outreach down migration missing fail-closed guard %q", required)
 		}
 	}
 }

@@ -2,11 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-const MIN_SCAN_MS = 70_000;
-const STEP_INTERVAL_MS = 11_000;
-const FINISH_HOLD_MS = 1_400;
-const SAFETY_EXIT_MS = 85_000;
-const TARGET_SECONDS = 70;
+const MIN_SCAN_MS = 800;
+const STEP_INTERVAL_MS = 2_200;
+const FINISH_HOLD_MS = 320;
+const TARGET_SECONDS = 15;
 
 export type ScanPhoto = {
   src: string;
@@ -474,7 +473,8 @@ export default function ScanExperience({
     return () => window.clearInterval(id);
   }, [finishing, steps.length, gallery.length]);
 
-  // Finish only after min 60s AND fetch complete
+  // Hand off as soon as the real response is ready; the short floor prevents a
+  // jarring flash on cached responses without manufacturing a long scan.
   useEffect(() => {
     let cancelled = false;
     let finishTimer: number | undefined;
@@ -497,17 +497,9 @@ export default function ScanExperience({
     const pollTimer = window.setInterval(tryFinish, 400);
     tryFinish();
 
-    const safetyTimer = window.setTimeout(() => {
-      if (!cancelled) {
-        setFinishing(true);
-        onReadyRef.current?.();
-      }
-    }, SAFETY_EXIT_MS);
-
     return () => {
       cancelled = true;
       if (finishTimer) window.clearTimeout(finishTimer);
-      if (safetyTimer) window.clearTimeout(safetyTimer);
       if (pollTimer) window.clearInterval(pollTimer);
     };
   }, [fetchComplete, steps.length, gallery.length, reviews.length]);
@@ -527,9 +519,9 @@ export default function ScanExperience({
   return (
     <div className={`relative min-h-[calc(100dvh-4.5rem)] overflow-hidden bg-[#f3f1ed] ${className}`}>
       <div className="relative grid min-h-[calc(100dvh-4.5rem)] w-full lg:grid-cols-[minmax(260px,320px)_minmax(0,1fr)]">
-        {/* Left — interactive checklist */}
-        <aside className="relative z-20 flex flex-col border-b border-black/5 bg-white/95 px-6 py-7 backdrop-blur-md sm:px-7 lg:border-b-0 lg:border-r lg:py-10">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">AI grader</p>
+        {/* Desktop — expanded checklist. Mobile keeps identity, map, media and progress above fold. */}
+        <aside className="relative z-20 order-2 hidden flex-col border-b border-black/5 bg-white/95 px-6 py-7 backdrop-blur-md sm:px-7 lg:order-1 lg:flex lg:border-b-0 lg:border-r lg:py-10">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">Digital footprint scan</p>
           <h1 className="mt-2 font-display text-[2rem] font-semibold leading-none tracking-[-0.04em] text-ink">
             Scanning…
           </h1>
@@ -589,7 +581,7 @@ export default function ScanExperience({
         </aside>
 
         {/* Right — Google Map stage + floating scraped photos */}
-        <section className="relative min-h-[52vh] overflow-hidden bg-[#e8e4dc] lg:min-h-0">
+        <section className="relative order-1 min-h-[calc(100dvh-4.5rem)] overflow-hidden bg-[#e8e4dc] lg:order-2 lg:min-h-0">
           {embedSrc ? (
             <iframe
               title={`Map of ${restaurantName}`}
@@ -677,7 +669,7 @@ export default function ScanExperience({
             <div className="scan-beam absolute left-0 right-0 h-[2px] opacity-70" />
           </div>
 
-          <div className="absolute bottom-4 left-4 z-20 rounded-full bg-white/90 px-3 py-1.5 text-[11px] font-medium text-muted shadow-sm">
+          <div className="absolute bottom-4 left-4 z-20 hidden rounded-full bg-white/90 px-3 py-1.5 text-[11px] font-medium text-muted shadow-sm lg:block">
             {showMobileMockup
               ? "Checking mobile experience…"
               : showReviews
@@ -687,6 +679,30 @@ export default function ScanExperience({
                   : hasExactPin
                     ? "Google Maps · pinned to listing"
                     : "Live Google listing scan"}
+          </div>
+
+          <div
+            className="absolute inset-x-4 bottom-24 z-50 rounded-2xl border border-black/5 bg-white/95 p-4 shadow-[0_18px_50px_rgba(15,39,31,0.2)] backdrop-blur lg:hidden"
+            role="status"
+            aria-live="polite"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
+                  Digital footprint scan
+                </p>
+                <p className="mt-1 truncate text-[14px] font-semibold text-ink">
+                  {finishing ? "Building your scorecard" : steps[Math.min(activeIndex, steps.length - 1)]}
+                </p>
+              </div>
+              <span className="shrink-0 text-[12px] font-semibold tabular-nums text-primary">{statusLine}</span>
+            </div>
+            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#ebe6de]">
+              <div
+                className="scan-progress-fill h-full rounded-full transition-[width] duration-500 ease-out"
+                style={{ width: `${Math.max(8, progress * 100)}%` }}
+              />
+            </div>
           </div>
         </section>
       </div>

@@ -12,9 +12,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/campaigns"
-	"github.com/rajchodisetti/restaurant-platform/backend/internal/demos"
 	platformdb "github.com/rajchodisetti/restaurant-platform/backend/internal/platform/db"
 	emailprovider "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/email"
 )
@@ -22,6 +22,188 @@ import (
 const emailDeliveryLease = 5 * time.Minute
 
 var errDeliveryAttemptNotSending = errors.New("delivery attempt is not in sending state")
+
+type SequenceDeliveryFinalization struct {
+	CampaignID        uuid.UUID
+	RestaurantID      uuid.UUID
+	Step              int
+	RecipientEmail    string
+	Outcome           string
+	ProviderMessageID string
+	Skipped           bool
+	Redirected        bool
+	ErrorCode         string
+}
+
+const (
+	sequenceOutcomeSent    = "sent"
+	sequenceOutcomeSkipped = "skipped"
+	sequenceOutcomeUnknown = "unknown"
+)
+
+// FinalizeSequenceDelivery applies the same progression rules for local/fake
+// account pools that durable quota-managed delivery applies after a provider
+// outcome. Only a confirmed acceptance advances the sequence. A skip retains
+// the due step; an ambiguous provider failure retains it and fails closed as
+// send_unknown for operator reconciliation.
+func (repo *Postgres) FinalizeSequenceDelivery(
+	ctx context.Context,
+	finalization SequenceDeliveryFinalization,
+) error {
+	if repo.pool == nil {
+		return fmt.Errorf("database pool is not configured")
+	}
+	if finalization.CampaignID == uuid.Nil || finalization.RestaurantID == uuid.Nil || finalization.Step < 1 {
+		return fmt.Errorf("campaign, restaurant, and a 1-based step are required")
+	}
+	if finalization.Outcome != sequenceOutcomeSent &&
+		finalization.Outcome != sequenceOutcomeSkipped &&
+		finalization.Outcome != sequenceOutcomeUnknown {
+		return fmt.Errorf("unsupported sequence delivery outcome %q", finalization.Outcome)
+	}
+
+	tx, err := repo.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin sequence delivery finalization: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := platformdb.LockRestaurantWorkflow(ctx, tx, finalization.RestaurantID); err != nil {
+		return err
+	}
+
+	var currentRestaurantID uuid.UUID
+	var currentStep int
+	var nextStep *int
+	var campaignStatus string
+	if err := tx.QueryRow(ctx, `
+		SELECT restaurant_id, current_step, next_step, status
+		FROM email_campaigns
+		WHERE id = $1 AND sequence_id IS NOT NULL
+		FOR UPDATE`, finalization.CampaignID).Scan(
+		&currentRestaurantID, &currentStep, &nextStep, &campaignStatus,
+	); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("%w: sequence campaign is unavailable", campaigns.ErrNotEligible)
+		}
+		return fmt.Errorf("lock sequence campaign: %w", err)
+	}
+	if currentRestaurantID != finalization.RestaurantID || nextStep == nil || *nextStep != finalization.Step || currentStep >= finalization.Step {
+		return fmt.Errorf("%w: sequence step changed before finalization", campaigns.ErrNotEligible)
+	}
+	if campaignStatus != campaigns.StatusApproved && campaignStatus != campaigns.StatusStopped {
+		return fmt.Errorf("%w: sequence campaign is not awaiting delivery", campaigns.ErrNotEligible)
+	}
+
+	eventType := campaigns.EventFailed
+	if finalization.Outcome == sequenceOutcomeSent {
+		eventType = campaigns.EventSent
+	} else if finalization.Outcome == sequenceOutcomeSkipped {
+		eventType = campaigns.EventSkipped
+	}
+	metadata, err := json.Marshal(map[string]any{
+		"step":             finalization.Step,
+		"provider_message": strings.TrimSpace(finalization.ProviderMessageID),
+		"bulk_outreach":    true,
+		"quota_managed":    false,
+		"skipped":          finalization.Skipped,
+		"redirected":       finalization.Redirected,
+		"error_code":       strings.TrimSpace(finalization.ErrorCode),
+	})
+	if err != nil {
+		return fmt.Errorf("encode sequence delivery event: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO email_events (campaign_id, restaurant_id, event_type, metadata)
+		VALUES ($1, $2, $3, $4)`,
+		finalization.CampaignID, finalization.RestaurantID, eventType, metadata,
+	); err != nil {
+		return fmt.Errorf("insert sequence delivery event: %w", err)
+	}
+
+	if finalization.Outcome == sequenceOutcomeSent {
+		result, err := tx.Exec(ctx, `
+			WITH next_enabled AS (
+			  SELECT step.position, step.delay_hours
+			  FROM email_campaigns current_campaign
+			  JOIN outreach_email_sequence_steps step
+			    ON step.sequence_id = current_campaign.sequence_id
+			  WHERE current_campaign.id = $1
+			    AND step.enabled = true
+			    AND step.position > $3
+			  ORDER BY step.position
+			  LIMIT 1
+			)
+			UPDATE email_campaigns campaign
+			SET current_step = $3,
+			    next_step = CASE
+			      WHEN campaign.status = $4 THEN NULL
+			      ELSE (SELECT position FROM next_enabled)
+			    END,
+			    next_send_at = CASE
+			      WHEN campaign.status = $4 OR NOT EXISTS (SELECT 1 FROM next_enabled) THEN NULL
+			      ELSE now() + ((SELECT delay_hours FROM next_enabled) * interval '1 hour')
+			    END,
+			    completed_at = CASE
+			      WHEN campaign.status = $4 OR NOT EXISTS (SELECT 1 FROM next_enabled) THEN now()
+			      ELSE NULL
+			    END,
+			    status = CASE
+			      WHEN campaign.status = $4 THEN $4
+			      WHEN EXISTS (SELECT 1 FROM next_enabled) THEN $5
+			      ELSE $6
+			    END,
+			    last_sent_at = now(),
+			    updated_at = now()
+			WHERE campaign.id = $1
+			  AND campaign.restaurant_id = $2
+			  AND campaign.next_step = $3
+			  AND campaign.status IN ($4, $5)`,
+			finalization.CampaignID,
+			finalization.RestaurantID,
+			finalization.Step,
+			campaigns.StatusStopped,
+			campaigns.StatusApproved,
+			campaigns.StatusSent,
+		)
+		if err != nil {
+			return fmt.Errorf("advance sequence campaign: %w", err)
+		}
+		if result.RowsAffected() != 1 {
+			return fmt.Errorf("%w: sequence campaign changed before advancement", campaigns.ErrNotEligible)
+		}
+		result, err = tx.Exec(ctx, `
+			UPDATE restaurants
+			SET is_contacted = true,
+			    email_sent = true,
+			    email_send_count = email_send_count + 1,
+			    last_email_sent_at = now(),
+			    last_email_send_sequence = nextval('email_send_sequence'),
+			    last_email_recipient = lower(trim($2)),
+			    status = CASE WHEN status = 'lead' THEN 'emailed' ELSE status END,
+			    updated_at = now()
+			WHERE id = $1`, finalization.RestaurantID, finalization.RecipientEmail)
+		if err != nil {
+			return fmt.Errorf("record confirmed restaurant email: %w", err)
+		}
+		if result.RowsAffected() != 1 {
+			return fmt.Errorf("restaurant was not found while recording confirmed email")
+		}
+	} else if finalization.Outcome == sequenceOutcomeUnknown && campaignStatus != campaigns.StatusStopped {
+		if _, err := tx.Exec(ctx, `
+			UPDATE email_campaigns
+			SET status = $2, updated_at = now()
+			WHERE id = $1 AND status = $3`,
+			finalization.CampaignID, campaigns.StatusSendUnknown, campaigns.StatusApproved,
+		); err != nil {
+			return fmt.Errorf("mark sequence delivery unknown: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit sequence delivery finalization: %w", err)
+	}
+	return nil
+}
 
 func (repo *Postgres) SyncEmailAccounts(
 	ctx context.Context,
@@ -163,44 +345,27 @@ func (repo *Postgres) ClaimEmailDelivery(
 		       campaign.body_html,
 		       campaign.body_text,
 		       campaign.demo_token,
+		       restaurant.name,
 		       restaurant.email,
-		       restaurant.email_sent,
-		       restaurant.email_send_count,
-		       profile.ocr_status,
-		       profile.review_status,
-		       (profile.reviewed_at IS NOT NULL
-		        AND profile.reviewed_by IS NOT NULL
-		        AND profile.reviewed_at >= profile.updated_at
-		        AND profile.reviewed_at >= restaurant.updated_at),
-		       demo.status,
-		       demo.token_hash,
-		       (demo.published_at IS NOT NULL AND demo.published_by IS NOT NULL),
-		       demo.expires_at,
-		       (campaign.approved_at IS NOT NULL AND campaign.approved_by IS NOT NULL),
-		       (
-		         NOT campaign.auto_generated
-		         OR (
-		           campaign.source_ocr_fingerprint <> ''
-		           AND campaign.source_ocr_fingerprint = profile.ocr_input_fingerprint
-		           AND campaign.source_profile_fingerprint <> ''
-		           AND campaign.source_profile_fingerprint = COALESCE(lead_artifact_current_profile_fingerprint(restaurant.id), '')
-		         )
-		       ),
-		       (
-		         NOT demo.auto_generated
-		         OR (
-		           demo.source_ocr_fingerprint <> ''
-		           AND demo.source_ocr_fingerprint = profile.ocr_input_fingerprint
-		           AND demo.source_profile_fingerprint <> ''
-		           AND demo.source_profile_fingerprint = COALESCE(lead_artifact_current_profile_fingerprint(restaurant.id), '')
-		         )
-		       )
+		       restaurant.status,
+		       restaurant.shown_interest,
+		       restaurant.outreach_consent_basis,
+		       restaurant.outreach_consent_source,
+		       restaurant.outreach_consent_recorded_at,
+		       restaurant.outreach_consent_evidence,
+		       campaign.next_step,
+		       campaign.next_send_at,
+		       sequence.status,
+		       sequence.approved_at IS NOT NULL,
+		       step.enabled
 		FROM email_campaigns AS campaign
 		JOIN restaurants AS restaurant ON restaurant.id = campaign.restaurant_id
-		JOIN restaurant_profiles AS profile ON profile.restaurant_id = campaign.restaurant_id
-		JOIN demo_sites AS demo ON demo.id = campaign.demo_site_id
+		JOIN outreach_email_sequences AS sequence ON sequence.id = campaign.sequence_id
+		JOIN outreach_email_sequence_steps AS step
+		  ON step.sequence_id = campaign.sequence_id
+		 AND step.position = campaign.next_step
 		WHERE campaign.id = $1
-		FOR UPDATE OF campaign, restaurant, profile, demo`
+		FOR UPDATE OF campaign, restaurant`
 	var restaurantID uuid.UUID
 	var campaignStatus string
 	var campaignType string
@@ -208,19 +373,19 @@ func (repo *Postgres) ClaimEmailDelivery(
 	var campaignBodyHTML string
 	var campaignBodyText string
 	var campaignDemoToken string
+	var restaurantName string
 	var restaurantEmail string
-	var restaurantEmailSent bool
-	var restaurantEmailSendCount int
-	var ocrStatus string
-	var reviewStatus string
-	var profileReviewAudited bool
-	var demoStatus string
-	var demoTokenHash string
-	var demoPublishAudited bool
-	var demoExpiresAt *time.Time
-	var campaignApprovalAudited bool
-	var campaignProvenanceCurrent bool
-	var demoProvenanceCurrent bool
+	var lifecycleStatus string
+	var shownInterest bool
+	var consentBasis string
+	var consentSource string
+	var consentRecordedAt *time.Time
+	var consentEvidence json.RawMessage
+	var nextStep *int
+	var nextSendAt *time.Time
+	var sequenceStatus string
+	var sequenceApprovalAudited bool
+	var stepEnabled bool
 	if err := tx.QueryRow(ctx, lockCampaign, delivery.CampaignID).Scan(
 		&restaurantID,
 		&campaignStatus,
@@ -229,19 +394,19 @@ func (repo *Postgres) ClaimEmailDelivery(
 		&campaignBodyHTML,
 		&campaignBodyText,
 		&campaignDemoToken,
+		&restaurantName,
 		&restaurantEmail,
-		&restaurantEmailSent,
-		&restaurantEmailSendCount,
-		&ocrStatus,
-		&reviewStatus,
-		&profileReviewAudited,
-		&demoStatus,
-		&demoTokenHash,
-		&demoPublishAudited,
-		&demoExpiresAt,
-		&campaignApprovalAudited,
-		&campaignProvenanceCurrent,
-		&demoProvenanceCurrent,
+		&lifecycleStatus,
+		&shownInterest,
+		&consentBasis,
+		&consentSource,
+		&consentRecordedAt,
+		&consentEvidence,
+		&nextStep,
+		&nextSendAt,
+		&sequenceStatus,
+		&sequenceApprovalAudited,
+		&stepEnabled,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return emailprovider.DeliveryClaim{}, fmt.Errorf("%w: campaign review context is unavailable", campaigns.ErrNotEligible)
@@ -257,8 +422,11 @@ func (repo *Postgres) ClaimEmailDelivery(
 	if campaignStatus != campaigns.StatusApproved {
 		return emailprovider.DeliveryClaim{}, fmt.Errorf("%w: campaign must remain approved while claiming email quota", campaigns.ErrNotEligible)
 	}
-	if !campaignProvenanceCurrent || !demoProvenanceCurrent {
-		return emailprovider.DeliveryClaim{}, fmt.Errorf("%w: automatic draft provenance changed after approval", campaigns.ErrNotEligible)
+	if nextStep == nil || *nextStep != delivery.Step || nextSendAt == nil || nextSendAt.After(time.Now().UTC()) {
+		return emailprovider.DeliveryClaim{}, fmt.Errorf("%w: sequence step is not due", campaigns.ErrNotEligible)
+	}
+	if !sequenceApprovalAudited || (sequenceStatus != SequenceStatusApproved && sequenceStatus != SequenceStatusArchived) || !stepEnabled {
+		return emailprovider.DeliveryClaim{}, fmt.Errorf("%w: sequence version or step is not approved", campaigns.ErrNotEligible)
 	}
 	actualRecipient := strings.ToLower(strings.TrimSpace(restaurantEmail))
 	expectedRecipient := strings.ToLower(strings.TrimSpace(delivery.Recipient))
@@ -274,13 +442,6 @@ func (repo *Postgres) ClaimEmailDelivery(
 	)
 	if expectedArtifact == "" || expectedArtifact != currentArtifact {
 		return emailprovider.DeliveryClaim{}, fmt.Errorf("%w: campaign content changed before quota claim", campaigns.ErrNotEligible)
-	}
-	if strings.TrimSpace(campaignDemoToken) == "" || demos.CheckDemoToken(demoTokenHash, campaignDemoToken) != nil {
-		return emailprovider.DeliveryClaim{}, fmt.Errorf("%w: campaign demo token is no longer valid", campaigns.ErrNotEligible)
-	}
-	demoExpired := demoExpiresAt != nil && !demoExpiresAt.After(time.Now().UTC())
-	if restaurantEmailSent || restaurantEmailSendCount != 0 {
-		return emailprovider.DeliveryClaim{}, fmt.Errorf("%w: restaurant already has a confirmed outreach send", campaigns.ErrNotEligible)
 	}
 
 	// Serialize the final suppression check with unsubscribe writes. The row may
@@ -300,18 +461,18 @@ func (repo *Postgres) ClaimEmailDelivery(
 	).Scan(&suppressed); err != nil {
 		return emailprovider.DeliveryClaim{}, fmt.Errorf("recheck outreach suppression: %w", err)
 	}
-	if err := campaigns.CheckEligibility(campaigns.EligibilityInput{
-		RestaurantEmail:         restaurantEmail,
-		OCRStatus:               ocrStatus,
-		ReviewStatus:            reviewStatus,
-		ProfileReviewAudited:    profileReviewAudited,
-		DemoStatus:              demoStatus,
-		DemoPublishAudited:      demoPublishAudited,
-		DemoExpired:             demoExpired,
-		CampaignStatus:          campaignStatus,
-		CampaignApprovalAudited: campaignApprovalAudited,
-		Suppressed:              suppressed,
-	}); err != nil {
+	if err := checkSequenceDeliveryEligibility(SequenceDelivery{
+		RestaurantName:    restaurantName,
+		RecipientEmail:    restaurantEmail,
+		LifecycleStatus:   lifecycleStatus,
+		ShownInterest:     shownInterest,
+		ConsentBasis:      consentBasis,
+		ConsentSource:     consentSource,
+		ConsentRecordedAt: consentRecordedAt,
+		ConsentEvidence:   consentEvidence,
+		SequenceStatus:    sequenceStatus,
+		Step:              SequenceStep{Position: delivery.Step, Enabled: stepEnabled},
+	}, suppressed); err != nil {
 		return emailprovider.DeliveryClaim{}, err
 	}
 
@@ -472,14 +633,13 @@ func (repo *Postgres) ClaimEmailDelivery(
 
 	const markSending = `
 		UPDATE email_campaigns
-		SET status = $2, current_step = $3, updated_at = now()
-		WHERE id = $1 AND status = $4`
+		SET status = $2, updated_at = now()
+		WHERE id = $1 AND status = $3`
 	result, err := tx.Exec(
 		ctx,
 		markSending,
 		delivery.CampaignID,
 		campaigns.StatusSending,
-		delivery.Step,
 		campaigns.StatusApproved,
 	)
 	if err != nil {
@@ -781,13 +941,14 @@ func (repo *Postgres) finalizeEmailDelivery(
 		  AND status = 'sending'
 		  AND ($2 = 'unknown' OR lease_expires_at > now())
 		RETURNING campaign_id, restaurant_id, send_sequence, account_cycle, account_sequence,
-		          recipient_email`
+		          recipient_email, campaign_step`
 	var campaignID uuid.UUID
 	var restaurantID uuid.UUID
 	var sendSequence int64
 	var accountCycle int64
 	var accountSequence int
 	var recipientEmail string
+	var campaignStep int
 	err = tx.QueryRow(
 		ctx,
 		updateAttempt,
@@ -795,7 +956,7 @@ func (repo *Postgres) finalizeEmailDelivery(
 		finalization.status,
 		finalization.providerMessageID,
 		finalization.errorCode,
-	).Scan(&campaignID, &restaurantID, &sendSequence, &accountCycle, &accountSequence, &recipientEmail)
+	).Scan(&campaignID, &restaurantID, &sendSequence, &accountCycle, &accountSequence, &recipientEmail, &campaignStep)
 	if errors.Is(err, pgx.ErrNoRows) {
 		var existingStatus string
 		if statusErr := tx.QueryRow(ctx, `SELECT status FROM email_delivery_attempts WHERE id = $1`, claim.AttemptID).Scan(&existingStatus); statusErr == nil && existingStatus == finalization.status {
@@ -808,7 +969,7 @@ func (repo *Postgres) finalizeEmailDelivery(
 	}
 
 	metadata, err := json.Marshal(map[string]any{
-		"step":                claim.CampaignStep,
+		"step":                campaignStep,
 		"provider_message":    finalization.providerMessageID,
 		"bulk_outreach":       true,
 		"account_key":         claim.AccountKey,
@@ -835,37 +996,65 @@ func (repo *Postgres) finalizeEmailDelivery(
 		return fmt.Errorf("insert email delivery event: %w", err)
 	}
 
-	campaignStatus := campaigns.StatusApproved
+	var result pgconn.CommandTag
 	if finalization.status == "sent" {
-		campaignStatus = campaigns.StatusSent
-	} else if finalization.status == "unknown" {
-		campaignStatus = campaigns.StatusSendUnknown
+		const advanceCampaign = `
+			WITH next_enabled AS (
+			  SELECT step.position, step.delay_hours
+			  FROM email_campaigns current_campaign
+			  JOIN outreach_email_sequence_steps step
+			    ON step.sequence_id = current_campaign.sequence_id
+			  WHERE current_campaign.id = $1
+			    AND step.enabled = true
+			    AND step.position > $2
+			  ORDER BY step.position
+			  LIMIT 1
+			)
+			UPDATE email_campaigns campaign
+			SET current_step = $2,
+			    next_step = CASE
+			      WHEN campaign.status = $4 THEN NULL
+			      ELSE (SELECT position FROM next_enabled)
+			    END,
+			    next_send_at = CASE
+			      WHEN campaign.status = $4 OR NOT EXISTS (SELECT 1 FROM next_enabled) THEN NULL
+			      ELSE now() + ((SELECT delay_hours FROM next_enabled) * interval '1 hour')
+			    END,
+			    completed_at = CASE
+			      WHEN campaign.status = $4 OR NOT EXISTS (SELECT 1 FROM next_enabled) THEN now()
+			      ELSE NULL
+			    END,
+			    status = CASE
+			      WHEN campaign.status = $4 THEN $4
+			      WHEN EXISTS (SELECT 1 FROM next_enabled) THEN $5
+			      ELSE $6
+			    END,
+			    last_sent_at = now(),
+			    updated_at = now()
+			WHERE campaign.id = $1
+			  AND campaign.current_step < $2
+			  AND campaign.status IN ($3, $4)`
+		result, err = tx.Exec(
+			ctx, advanceCampaign, campaignID, campaignStep,
+			campaigns.StatusSending, campaigns.StatusStopped,
+			campaigns.StatusApproved, campaigns.StatusSent,
+		)
+	} else {
+		nextStatus := campaigns.StatusApproved
+		if finalization.status == "unknown" {
+			nextStatus = campaigns.StatusSendUnknown
+		}
+		const retainCampaignProgress = `
+			UPDATE email_campaigns
+			SET status = CASE WHEN status = $3 THEN $3 ELSE $2 END,
+			    updated_at = now()
+			WHERE id = $1
+			  AND status IN ($4, $3)`
+		result, err = tx.Exec(
+			ctx, retainCampaignProgress, campaignID, nextStatus,
+			campaigns.StatusStopped, campaigns.StatusSending,
+		)
 	}
-	const updateCampaign = `
-		UPDATE email_campaigns
-		SET status = CASE
-		      WHEN $2 = $7 THEN $7
-		      WHEN status = $5 THEN status
-		      ELSE $2
-		    END,
-		    last_sent_at = CASE WHEN $2 = $3 THEN now() ELSE last_sent_at END,
-		    updated_at = now()
-		WHERE id = $1
-		  AND (
-		    ($2 = $7 AND status <> $3)
-		    OR ($2 <> $7 AND status IN ($4, $6, $5))
-		  )`
-	result, err := tx.Exec(
-		ctx,
-		updateCampaign,
-		campaignID,
-		campaignStatus,
-		campaigns.StatusSent,
-		campaigns.StatusSending,
-		campaigns.StatusStopped,
-		campaigns.StatusApproved,
-		campaigns.StatusSendUnknown,
-	)
 	if err != nil {
 		return fmt.Errorf("finalize outreach campaign: %w", err)
 	}

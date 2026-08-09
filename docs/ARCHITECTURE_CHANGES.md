@@ -1,24 +1,28 @@
 # Crucial Architecture Changes
 
-Date: 2026-07-14
+Date: 2026-08-08
 
-This is the short version of the changes made to the restaurant lead workflow.
+This is the short current contract for restaurant lead outreach, restaurant
+media, and the public digital-footprint review.
 
-| Area | Before / missing | Current state |
-|---|---|---|
-| City scraping | Scraping was effectively a one-shot process with no durable city job, checkpoint, or reliable rate-limit recovery. | A private HTTP API creates durable city jobs. PostgreSQL stores grid cells, page/candidate progress, provider-call counts, status, and `resume_at`. Work stops at 500 combined Places/Apollo calls, resumes after 24 hours, dynamically subdivides dense cells, deduplicates Place IDs, and revisits cities for new listings. |
-| Places and Apollo | Provider order and fallback behavior did not reliably preserve valid restaurant leads or control Apollo usage. | Google Places is the discovery source. Apollo runs afterward only when owner or work-email details are missing. An Apollo no-match does not discard the Places lead. |
-| OCR and lead readiness | OCR used a boolean-style completion signal, so failures and missing images could look complete. | OCR is a durable state machine: `pending`, `running`, `verified`, `no_images`, and `failed`. Only `verified` leads proceed; missing images remain visibly unresolved, and retries/claims survive worker restarts. |
-| Demo and campaign creation | OCR completion was not safely connected to reusable sales artifacts or proof of what was reviewed. | Verified OCR queues idempotent creation of a demo draft and campaign draft. Artifacts retain OCR/profile provenance, and real outreach still requires human profile approval, demo publication, campaign approval, and an administrator starting the send. |
-| Demo access | Preview access did not have a fully defined expiry, revocation, rotation, and safe-payload contract. | Each demo uses a random opaque token whose bcrypt hash is stored in PostgreSQL. Payloads stay server-side; access is expiring, revocable, rotatable, and limited to public-safe data. |
-| Email delivery | Send limits and account rotation were not durable enough for restarts or multiple workers, and delivery sequencing was incomplete. | Google Workspace Gmail API and Zoho are supported through HTTP(S) only. PostgreSQL enforces 40 attempts per account, account rotation, a 24-hour cooldown, leases, immutable recipient attribution, and global/per-account send sequences. Ambiguous sends fail closed instead of being retried blindly. |
-| Email pacing | A fixed in-process interval could still create high-velocity bursts and was lost on worker restart. | Local code divides each account's 40-attempt allowance into durable slots across eight hours, adds persisted 2-5 minute jitter and a global minimum-delay guard, and permits only one provider attempt per job activation. The worker releases between attempts; production migration/deployment remains approval-gated. |
-| Production data and recovery | The application lacked a dedicated least-privilege database boundary and a fully reproducible migrated deployment for this workflow. | The VM now runs the application against an isolated `monorepo` PostgreSQL role/database with all 23 migrations applied. Credentials are kept in ignored mode-`0600` env files, database access is loopback/tunnel-only, and pre/post migration backups plus the previous release are retained. |
+| Area | Current contract |
+| --- | --- |
+| Lead ingestion | Google Places remains the discovery source. Apollo runs afterward only when owner or work-email details are missing. A no-match never discards a Places lead. Imports persist a nonempty inferred-business source record and enroll only restaurants with a name and valid business email. |
+| Outreach eligibility | `lead` and `emailed` restaurants with recorded `inferred_business` evidence are eligible. Expressed interest pauses automation. Suppressed, lost, archived, onboarding, and active-client restaurants are excluded. OCR, profile approval, demo publication, and legacy campaign readiness are not gates. |
+| Email content | Outreach is a versioned, administrator-approved, plain-text sequence. It starts with three concise approved messages but supports adding, removing, disabling, and reordering steps. Each enabled message renders exactly two direct URLs: `https://tuvisolutions.com` and its recipient-specific unsubscribe URL. No HTML body, redirect link, open pixel, ABN, or postal address is added. |
+| Addressing | The renderer greets a known owner by first name. If owner details are absent, it uses `Hi {restaurant name} team,`. |
+| Sequence progress | Each enrollment stores integer `current_step` and `next_step`, plus last-send and next-send timestamps. Only confirmed provider acceptance advances a step. Failed, skipped, or ambiguous delivery does not advance it. The next enabled step defaults to a 72-hour delay. |
+| Send ordering | Any unfinished recipient follow-up phase blocks first messages to new recipients, including while the follow-up is waiting for its due time. This completes the existing list before starting new restaurants. |
+| Runtime control | A persisted admin switch is the authoritative outreach gate. Disabling it cancels deferred work and prevents another provider boundary; enabling it creates or safely resumes one fenced bulk workflow. Deployment verification never enables it or sends to real leads. |
+| Sequence versions | Editing creates a draft version. Approval archives the previous active version, moves only untouched enrollments to the new version, and leaves in-progress recipients pinned to the immutable version they already received. |
+| Unsubscribe | The email URL opens a non-mutating confirmation page with an opt-out button and a Tuvi Solutions website link. Only the POST confirmation suppresses the exact recipient and stops its campaign; repeated confirmation is safe. |
+| Admin portal | The outreach page provides sequence draft/version editing, add/remove/reorder/enable controls, delays, preview and approval, recipient progress, sender health, and the persisted email-job switch. Restaurant media is approved or rejected manually. |
+| OCR | OCR workers, cron wrappers, provider code, image-classification jobs, configuration, and provider credentials are retired. Historical database columns and old migrations remain temporarily for audit and rollback compatibility but have no runtime role. |
+| Restaurant media | Scrapers persist text/menu facts without third-party image URLs or bytes. Public Google photos are resolved live with attribution and are not stored. Durable public media must be owner-granted or licensed and manually approved. Legacy scraped images fail closed on public API, report, and template boundaries. |
+| Public AI review | The digital-footprint report runs independent sources concurrently under a 15-second server budget. Same-place requests coalesce, global report/browser work is bounded, and slow providers produce a clearly labeled conservative partial result. Chromium runs as an unprivileged sandboxed user behind DNS-rebinding-resistant public-network enforcement. |
+| Mobile report | Restaurant identity, score/status, live attributed photos, and map are placed near the top of the mobile report instead of being hidden below long analysis sections. |
+| AI provider | The API reads the vision-capable model and key only from protected host configuration. The production rollout reuses the existing protected OpenAI key in place; no key is copied into source or logs. |
 
-## Current production position
-
-The architecture is deployed and the Places, Apollo, optional SerpAPI, and Hugging Face credentials are stored in protected env files. External automation remains intentionally safe: email and OCR are disabled, Google Workspace mailbox OAuth credentials are not configured, and no Melbourne scrape, OCR run, or real email send was triggered during this update. The operator procedure is in [lead-scrape-ocr-outreach.md](runbooks/lead-scrape-ocr-outreach.md).
-
-The durable 8-hour outreach pacing change and migration 24 are local only until
-an explicitly approved production deployment and migration. Sending must remain
-disabled during that rollout and still requires the existing human gates.
+Operational details and rollback checks are in
+[lead-scrape-outreach.md](runbooks/lead-scrape-outreach.md) and
+[vm-deployment-plan.md](runbooks/vm-deployment-plan.md).

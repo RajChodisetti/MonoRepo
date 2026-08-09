@@ -13,7 +13,6 @@ import (
 
 type repositoryStub struct {
 	assets []Asset
-	hints  []ClassificationHint
 }
 
 func (stub repositoryStub) ListPublic(context.Context, uuid.UUID) ([]Asset, error) {
@@ -22,12 +21,12 @@ func (stub repositoryStub) ListPublic(context.Context, uuid.UUID) ([]Asset, erro
 func (stub repositoryStub) ListAdmin(context.Context, uuid.UUID) ([]Asset, error) {
 	return stub.assets, nil
 }
-func (stub repositoryStub) ListClassificationHints(context.Context, uuid.UUID) ([]ClassificationHint, error) {
-	return stub.hints, nil
-}
 func (repositoryStub) Create(context.Context, CreateAssetInput) (Asset, error) { return Asset{}, nil }
 func (repositoryStub) SetHidden(context.Context, uuid.UUID, uuid.UUID, *uuid.UUID) error {
 	return nil
+}
+func (repositoryStub) SetApproval(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, string, string) (Asset, error) {
+	return Asset{}, nil
 }
 
 type profilesStub struct{ placeID string }
@@ -49,20 +48,16 @@ func (objectsStub) Put(context.Context, string, string, io.Reader, int64) error 
 func (objectsStub) Delete(context.Context, string) error                        { return nil }
 func (objectsStub) PublicURL(key string) string                                 { return "https://cdn.example.test/" + key }
 
-func TestPublicForRestaurantExcludesMenuIneligibleAndUnclassifiedGooglePhotos(t *testing.T) {
+func TestPublicForRestaurantIncludesFreshAttributedGooglePhotos(t *testing.T) {
 	restaurantID := uuid.New()
 	service := NewService(
-		repositoryStub{hints: []ClassificationHint{
-			{SourceIndex: 0, SourceFingerprint: "menu-fingerprint", MediaType: "menu_document", Confidence: 0.99, PublicEligible: false},
-			{SourceIndex: 1, SourceFingerprint: "room-fingerprint", MediaType: "interior", Confidence: 0.92, PublicEligible: true},
-			{SourceIndex: 2, SourceFingerprint: "uncertain-fingerprint", MediaType: "exterior", Confidence: 0.3, PublicEligible: false},
-		}},
+		repositoryStub{},
 		profilesStub{placeID: "place-1"},
 		photosStub{photos: []placesprovider.Photo{
-			{URL: "https://images.example.test/menu.jpg", SourceIndex: 0, SourceFingerprint: "menu-fingerprint"},
-			{URL: "https://images.example.test/room.jpg", SourceIndex: 1, SourceFingerprint: "room-fingerprint"},
-			{URL: "https://images.example.test/uncertain.jpg", SourceIndex: 2, SourceFingerprint: "uncertain-fingerprint"},
-			{URL: "https://images.example.test/unknown.jpg", SourceIndex: 3, SourceFingerprint: "unknown-fingerprint"},
+			{
+				URL:                "https://images.example.test/room.jpg",
+				AuthorAttributions: []placesprovider.Attribution{{DisplayName: "Restaurant owner"}},
+			},
 		}},
 		objectsStub{},
 		slog.Default(),
@@ -70,10 +65,13 @@ func TestPublicForRestaurantExcludesMenuIneligibleAndUnclassifiedGooglePhotos(t 
 
 	items := service.PublicForRestaurant(context.Background(), restaurantID, 6)
 	if len(items) != 1 {
-		t.Fatalf("items = %#v, want one OCR-approved photo", items)
+		t.Fatalf("items = %#v, want one live photo", items)
 	}
-	if items[0].URL != "https://images.example.test/room.jpg" || items[0].MediaType != "interior" {
-		t.Fatalf("item = %#v", items[0])
+	if items[0].URL != "https://images.example.test/room.jpg" ||
+		items[0].SourceKind != SourceGoogleLive ||
+		!items[0].Unoptimized ||
+		len(items[0].AuthorAttributions) != 1 {
+		t.Fatalf("item = %#v, want attributed no-store Google media", items[0])
 	}
 }
 
@@ -138,7 +136,7 @@ func TestPreviewForRestaurantKeepsApprovedMediaWhenAvailable(t *testing.T) {
 	)
 
 	items := service.PreviewForRestaurant(context.Background(), uuid.New(), 6)
-	if len(items) != 1 || items[0].ID == nil || *items[0].ID != validID {
-		t.Fatalf("items = %#v, want approved owned media before preview fallback", items)
+	if len(items) != 2 || items[0].ID == nil || *items[0].ID != validID || items[1].SourceKind != SourceGoogleLive {
+		t.Fatalf("items = %#v, want approved owned media followed by live Google media", items)
 	}
 }

@@ -103,8 +103,9 @@ export default async function HomePage({ searchParams }: PageProps) {
             </p>
           ) : (
             <p className="mt-2 text-sm text-white/40">
-              Use ?id=0–{total - 1} · Template {template} active
-              {template === "3" ? " (API-backed templates require NEXT_PUBLIC_API_URL)" : ""}
+              {total > 0
+                ? `Use ?id=0–${total - 1} · Template ${template} active`
+                : "The restaurant API is unavailable or has no public restaurants."}
             </p>
           )}
         </div>

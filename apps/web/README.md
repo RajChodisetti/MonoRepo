@@ -1,6 +1,7 @@
 # Tuvi Admin Portal (`apps/web`)
 
-Next.js internal_admin console for the MonoRepo lead workflow: scrape jobs, restaurant review, demos/campaigns, and bulk outreach.
+Next.js `internal_admin` console for the MonoRepo lead workflow: scrape jobs,
+restaurant review, demos, and plain-text outreach sequences.
 
 ## Stack
 
@@ -49,17 +50,21 @@ to local `.env` / VM `stack.env`.
 | `/scrape-jobs` | Trigger / list / poll / retry |
 | `/scrape-jobs/[id]` | Live progress |
 | `/restaurants` | Filterable lead table |
-| `/restaurants/[id]` | Overview, profile OCR review, demo, campaign, members |
-| `/outreach` | Bulk-send trigger + status |
+| `/restaurants/[id]` | Overview, contact details, approved media, demo, and members |
+| `/outreach` | Sequence editor, recipient progress, email job, and sender health |
 
 ### Lead workflow order
 
-1. Scrape city → restaurants appear  
-2. OCR verified (worker/job)  
-3. Profile approve  
-4. Create + publish demo  
-5. Create + approve campaign  
-6. Outreach → Start bulk send  
+1. Scrape city → restaurants with a name and valid business email are enrolled.
+2. Confirm the imported lead has recorded `inferred_business` source evidence.
+3. Review or edit the plain-text outreach sequence, then approve its version.
+4. Review recipient progress and sender health.
+5. Explicitly enable the email job when real sending is authorized.
+
+Due follow-ups are selected before new restaurants. Confirmed provider delivery
+advances the recipient's integer sequence step; failed or unknown outcomes do
+not. Interest pauses automation, while lost, archived, onboarding, and active
+client restaurants are excluded.
 
 ## Scripts
 

@@ -6,7 +6,6 @@ import { FormEvent, Suspense, useCallback, useEffect, useState } from "react";
 import { adminFetch } from "@/lib/client-api";
 import { RESTAURANT_STATUSES, formatDate } from "@/lib/constants";
 import type {
-  Campaign,
   DemoLink,
   DemoSession,
   DemoSite,
@@ -17,9 +16,8 @@ import type {
 } from "@/lib/types";
 import { EmptyState, ErrorBanner, PageHeader, StatusBadge } from "@/components/ui";
 import { PhotoGallery } from "@/components/PhotoGallery";
-import { SendPreviewModal } from "@/components/SendPreviewModal";
 
-type Tab = "overview" | "photos" | "profile" | "demo" | "campaign" | "engagement" | "members";
+type Tab = "overview" | "photos" | "profile" | "demo" | "engagement" | "members";
 
 function formatDuration(seconds: number) {
   const safe = Math.max(0, Math.round(seconds || 0));
@@ -78,16 +76,8 @@ function RestaurantDetailInner() {
     null,
   );
   const [demoLinks, setDemoLinks] = useState<DemoLink[]>([]);
-  const [demoToken, setDemoToken] = useState("");
   const [generatedSite, setGeneratedSite] = useState<GeneratedSite | null>(null);
   const [generatedSiteError, setGeneratedSiteError] = useState<string | null>(null);
-
-  // ad hoc send
-  const [sendPreviewOpen, setSendPreviewOpen] = useState(false);
-
-  // campaigns
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
 
   // demo engagement
   const [demoSessions, setDemoSessions] = useState<DemoSession[]>([]);
@@ -111,13 +101,6 @@ function RestaurantDetailInner() {
       `restaurants/${id}/profile/review-preview`,
     );
     setPreview(data);
-  }, [id]);
-
-  const loadCampaigns = useCallback(async () => {
-    const data = await adminFetch<{ items: Campaign[] }>(
-      `restaurants/${id}/campaigns`,
-    );
-    setCampaigns(data.items || []);
   }, [id]);
 
   const loadEngagement = useCallback(async () => {
@@ -185,7 +168,6 @@ function RestaurantDetailInner() {
     async function loadTab() {
       try {
         if (tab === "profile") await loadProfile();
-        if (tab === "campaign") await loadCampaigns();
         if (tab === "engagement") await loadEngagement();
         if (tab === "members") await loadMembers();
         if (tab === "demo") {
@@ -199,7 +181,6 @@ function RestaurantDetailInner() {
   }, [
     tab,
     loadProfile,
-    loadCampaigns,
     loadEngagement,
     loadMembers,
     loadDemoLinks,
@@ -300,11 +281,8 @@ function RestaurantDetailInner() {
         );
         setDemoPreview(previewRes);
       }
-      setDemoToken(typeof res.token === "string" ? res.token : "");
       await loadDemoLinks();
-      setMessage(
-        `Restaurant-specific demo draft created (${slug}). Its one-time token is held in this browser session so you can create a campaign draft.`,
-      );
+      setMessage(`Restaurant-specific demo draft created (${slug}).`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Demo create failed");
     } finally {
@@ -314,7 +292,6 @@ function RestaurantDetailInner() {
 
   async function selectDemo(link: DemoLink) {
     setDemoId(link.demo_site_id);
-    setDemoToken("");
     setDemoPreview(null);
     setBusy(true);
     setError(null);
@@ -381,108 +358,6 @@ function RestaurantDetailInner() {
     }
   }
 
-  async function createCampaign() {
-    if (!demoId || !demoToken) {
-      setError(
-        "Create a demo draft in this browser session first. Existing demo tokens are intentionally not returned by the API.",
-      );
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await adminFetch<Campaign>(`restaurants/${id}/campaigns`, {
-        method: "POST",
-        body: {
-          demo_site_id: demoId,
-          demo_token: demoToken,
-          campaign_type: "outreach",
-        },
-      });
-      await loadCampaigns();
-      await loadDemoLinks();
-      setSelectedCampaign(res);
-      setMessage("Campaign draft created.");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Campaign create failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function openCampaign(campaignId: string) {
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await adminFetch<{ campaign: Campaign }>(
-        `campaigns/${campaignId}`,
-      );
-      setSelectedCampaign(res.campaign);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load campaign");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function approveCampaign() {
-    if (!selectedCampaign) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await adminFetch<Campaign>(
-        `campaigns/${selectedCampaign.id}/approve`,
-        {
-          method: "POST",
-          body: { expected_updated_at: selectedCampaign.updated_at },
-        },
-      );
-      setSelectedCampaign(res);
-      await loadCampaigns();
-      setMessage("Campaign approved.");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Approve failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function regenerateCampaign() {
-    if (!selectedCampaign) return;
-    setBusy(true);
-    try {
-      const res = await adminFetch<Campaign>(
-        `campaigns/${selectedCampaign.id}/regenerate`,
-        { method: "POST", body: {} },
-      );
-      setSelectedCampaign(res);
-      await loadCampaigns();
-      setMessage("Campaign regenerated.");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Regenerate failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function stopCampaign() {
-    if (!selectedCampaign) return;
-    setBusy(true);
-    try {
-      const res = await adminFetch<Campaign>(
-        `campaigns/${selectedCampaign.id}/stop`,
-        { method: "POST", body: {} },
-      );
-      setSelectedCampaign(res);
-      await loadCampaigns();
-      setMessage("Campaign stopped.");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Stop failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function addMember(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -515,29 +390,9 @@ function RestaurantDetailInner() {
     { id: "photos", label: "Photos" },
     { id: "profile", label: "Profile review" },
     { id: "demo", label: "Demo" },
-    { id: "campaign", label: "Campaign" },
     { id: "engagement", label: "Engagement" },
     { id: "members", label: "Members" },
   ];
-  const ocrStatus = preview?.ocr_status || "unknown";
-  const ocrChecked = Boolean(preview?.ocr_checked || (preview?.ocr_attempts || 0) > 0);
-  const ocrStateLabel =
-    ocrStatus === "running"
-      ? "OCR is checking this restaurant now"
-      : ocrStatus === "pending" && !ocrChecked
-        ? "Not checked by OCR yet"
-        : ocrStatus === "verified"
-          ? "Checked and verified"
-          : ocrStatus === "no_images"
-            ? "Checked — no usable images found"
-            : ocrStatus === "failed"
-              ? "Checked — OCR failed"
-              : ocrChecked
-                ? `Checked — ${ocrStatus}`
-                : "OCR state unavailable";
-  const ocrErrors = Array.isArray(preview?.ocr_verification_errors)
-    ? preview.ocr_verification_errors.map(String)
-    : [];
 
   return (
     <div>
@@ -546,25 +401,14 @@ function RestaurantDetailInner() {
         subtitle={restaurant?.email || restaurant?.id}
         actions={
           <>
-            <button
-              className="btn btn-primary"
-              type="button"
-              onClick={() => setSendPreviewOpen(true)}
-              disabled={!restaurant}
-            >
-              Send email
-            </button>
+            <Link className="btn btn-primary" href="/outreach">
+              View outreach progress
+            </Link>
             <Link className="btn btn-secondary" href="/restaurants">
               All restaurants
             </Link>
           </>
         }
-      />
-      <SendPreviewModal
-        open={sendPreviewOpen}
-        restaurantIds={restaurant ? [restaurant.id] : []}
-        onClose={() => setSendPreviewOpen(false)}
-        onSent={loadRestaurant}
       />
       <ErrorBanner message={error} />
       {message ? (
@@ -635,7 +479,8 @@ function RestaurantDetailInner() {
             Shown interest
           </label>
           <div style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
-            Contacted is set after Gmail confirms a send. Shown interest is set after a tracked email link is clicked.
+            Contacted is set after Gmail confirms a send. When an owner responds or expresses
+            interest, mark the lifecycle accordingly so automated follow-ups pause for a person.
           </div>
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
             <button className="btn btn-primary" type="submit" disabled={busy}>
@@ -646,19 +491,12 @@ function RestaurantDetailInner() {
             </button>
           </div>
           <div style={{ color: "var(--muted)", fontSize: "0.9rem" }}>
-            Email sent: {restaurant.email_sent ? "Yes" : "No"} · send count:{" "}
-            {restaurant.email_send_count ?? 0} · last:{" "}
+            Confirmed sequence sends: {restaurant.email_send_count ?? 0} · last:{" "}
             {formatDate(restaurant.last_email_sent_at)}
           </div>
           <div className="alert alert-info" style={{ margin: 0 }}>
-            <strong>OCR:</strong> {ocrStateLabel} · status {ocrStatus} · attempts{" "}
-            {preview?.ocr_attempts ?? 0}
-            {(preview?.ocr_images_discovered ?? 0) > 0
-              ? ` · photos ${preview?.ocr_images_succeeded ?? 0}/${preview?.ocr_images_discovered ?? 0} successful`
-              : ""}
-            {preview?.ocr_completed_at
-              ? ` · completed ${formatDate(preview.ocr_completed_at)}`
-              : ""}
+            Outreach eligibility uses restaurant name, valid email, recorded business-consent
+            evidence, lifecycle, and suppression state. Profile approval is managed separately.
           </div>
         </form>
       ) : null}
@@ -677,35 +515,6 @@ function RestaurantDetailInner() {
             <>
               <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
                 <StatusBadge status={preview.review_status || "draft"} />
-                <StatusBadge status={preview.ocr_status || "ocr"} />
-              </div>
-              <div className="alert alert-info" style={{ margin: 0 }}>
-                <strong>{ocrStateLabel}</strong>
-                <div style={{ marginTop: "0.3rem", fontSize: "0.85rem" }}>
-                  Attempts: {preview.ocr_attempts ?? 0} · started:{" "}
-                  {formatDate(preview.ocr_started_at)} · completed:{" "}
-                  {formatDate(preview.ocr_completed_at)}
-                </div>
-                <div style={{ marginTop: "0.3rem", fontSize: "0.85rem" }}>
-                  Photos discovered: {preview.ocr_images_discovered ?? 0} · analyzed:{" "}
-                  {preview.ocr_images_analyzed ?? 0} · successful:{" "}
-                  {preview.ocr_images_succeeded ?? 0} · failed:{" "}
-                  {preview.ocr_images_failed ?? 0} · all processed:{" "}
-                  {preview.ocr_all_images_processed ? "yes" : "no"}
-                </div>
-                {preview.ocr_model ? (
-                  <div style={{ marginTop: "0.3rem", fontSize: "0.85rem" }}>
-                    Model: <code>{preview.ocr_model}</code>
-                    {preview.ocr_provider ? ` · provider: ${preview.ocr_provider}` : ""}
-                  </div>
-                ) : null}
-                {ocrErrors.length > 0 ? (
-                  <ul style={{ margin: "0.45rem 0 0", paddingLeft: "1.2rem" }}>
-                    {ocrErrors.map((ocrError, index) => (
-                      <li key={`${ocrError}-${index}`}>{ocrError}</li>
-                    ))}
-                  </ul>
-                ) : null}
               </div>
               <div>
                 <strong>Contact:</strong> {preview.contact_email || "—"}
@@ -807,8 +616,8 @@ function RestaurantDetailInner() {
             <h3 style={{ margin: 0, fontSize: "0.95rem" }}>Token-gated demo records</h3>
             {demoLinks.length === 0 ? (
               <p style={{ color: "var(--muted)", margin: 0 }}>
-                No demo snapshot exists yet. OCR automatically creates one after a successful check,
-                or you can create one manually below.
+                No demo snapshot exists yet. Create one manually below when a reviewed public
+                payload is needed.
               </p>
             ) : (
               <div className="table-wrap">
@@ -860,12 +669,6 @@ function RestaurantDetailInner() {
                 Selected demo: <code>{demoId}</code>
               </div>
             ) : null}
-            {demoToken ? (
-              <div className="alert alert-info" style={{ margin: 0 }}>
-                The new demo&apos;s one-time token is held only in this page session. Create a campaign
-                draft before leaving if you need a retained shareable link.
-              </div>
-            ) : null}
             {demoPreview ? (
               <div>
                 <h4 style={{ margin: "0 0 0.45rem", fontSize: "0.9rem" }}>Reviewed public payload</h4>
@@ -892,119 +695,12 @@ function RestaurantDetailInner() {
         </div>
       ) : null}
 
-      {tab === "campaign" ? (
-        <div style={{ display: "grid", gap: "1rem" }}>
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-            <button
-              className="btn btn-primary"
-              type="button"
-              disabled={busy || !demoId || !demoToken}
-              onClick={createCampaign}
-            >
-              Create campaign draft
-            </button>
-            <button className="btn btn-secondary" type="button" disabled={busy} onClick={loadCampaigns}>
-              Refresh list
-            </button>
-          </div>
-          {!demoToken ? (
-            <p style={{ color: "var(--muted)", margin: 0, fontSize: "0.86rem" }}>
-              Create a new demo draft in the Demo tab first. Demo access tokens are returned only
-              once and are intentionally not recoverable from existing records.
-            </p>
-          ) : null}
-          <div className="table-wrap">
-            <table className="data">
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Status</th>
-                  <th>Subject</th>
-                  <th>Updated</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {campaigns.map((c) => (
-                  <tr key={c.id}>
-                    <td style={{ fontFamily: "monospace", fontSize: "0.8rem" }}>
-                      {c.id.slice(0, 8)}…
-                    </td>
-                    <td>
-                      <StatusBadge status={c.status} />
-                    </td>
-                    <td>{c.subject || "—"}</td>
-                    <td>{formatDate(c.updated_at)}</td>
-                    <td>
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        onClick={() => openCampaign(c.id)}
-                      >
-                        Inspect
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {campaigns.length === 0 ? (
-            <EmptyState message="No campaigns yet for this restaurant." />
-          ) : null}
-          {selectedCampaign ? (
-            <div className="card" style={{ display: "grid", gap: "0.75rem" }}>
-              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-                <strong>Selected campaign</strong>
-                <StatusBadge status={selectedCampaign.status} />
-              </div>
-              <div>
-                <strong>Subject:</strong> {selectedCampaign.subject || "—"}
-              </div>
-              <div
-                style={{
-                  border: "1px solid var(--line)",
-                  padding: "0.85rem",
-                  background: "var(--bg)",
-                  maxHeight: 280,
-                  overflow: "auto",
-                }}
-                dangerouslySetInnerHTML={{
-                  __html: selectedCampaign.body_html || "<em>No HTML body</em>",
-                }}
-              />
-              <pre
-                style={{
-                  margin: 0,
-                  whiteSpace: "pre-wrap",
-                  fontSize: "0.82rem",
-                  maxHeight: 160,
-                  overflow: "auto",
-                }}
-              >
-                {selectedCampaign.body_text || ""}
-              </pre>
-              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                <button className="btn btn-primary" type="button" disabled={busy} onClick={approveCampaign}>
-                  Approve
-                </button>
-                <button className="btn btn-secondary" type="button" disabled={busy} onClick={regenerateCampaign}>
-                  Regenerate
-                </button>
-                <button className="btn btn-danger" type="button" disabled={busy} onClick={stopCampaign}>
-                  Stop
-                </button>
-              </div>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-
       {tab === "engagement" ? (
         <div style={{ display: "grid", gap: "1rem" }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "center" }}>
             <p style={{ color: "var(--muted)", margin: 0 }}>
-              Outreach-link and admin-preview visits, selected template, active time, and AI receptionist transcript turns for this restaurant.
+              Personalized-site and admin-preview visits, selected template, active time, and AI
+              receptionist transcript turns for this restaurant.
             </p>
             <button className="btn btn-secondary" type="button" onClick={loadEngagement}>
               Refresh

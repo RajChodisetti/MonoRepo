@@ -2,9 +2,11 @@ package media
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -35,7 +37,8 @@ func (repo *Postgres) list(ctx context.Context, restaurantID uuid.UUID, includeH
 		SELECT id, restaurant_id, source_kind, storage_key, media_type,
 		       caption, alt_text, tags, quality_score, hero_score, orientation,
 		       subject_position, contains_people, contains_text, placement_role,
-		       approval_status, rights_status, mime_type, width_px, height_px,
+		       approval_status, reviewed_at, reviewed_by, review_note,
+		       rights_status, mime_type, width_px, height_px,
 		       byte_size, sha256, sort_order, vision_status, vision_attempts,
 		       vision_last_error, vision_result, vision_analyzed_at,
 		       hidden_at, hidden_by, created_by,
@@ -81,6 +84,9 @@ func (repo *Postgres) list(ctx context.Context, restaurantID uuid.UUID, includeH
 			&asset.ContainsText,
 			&asset.PlacementRole,
 			&asset.ApprovalStatus,
+			&asset.ReviewedAt,
+			&asset.ReviewedBy,
+			&asset.ReviewNote,
 			&asset.RightsStatus,
 			&asset.MimeType,
 			&asset.WidthPx,
@@ -109,51 +115,6 @@ func (repo *Postgres) list(ctx context.Context, restaurantID uuid.UUID, includeH
 	return assets, nil
 }
 
-func (repo *Postgres) ListClassificationHints(ctx context.Context, restaurantID uuid.UUID) ([]ClassificationHint, error) {
-	if repo.pool == nil {
-		return []ClassificationHint{}, nil
-	}
-	rows, err := repo.pool.Query(ctx, `
-		SELECT
-		  COALESCE(
-		    CASE WHEN classification.value ? 'source_index'
-		      THEN (classification.value->>'source_index')::int
-		    END,
-		    classification.ordinality::int - 1
-		  ) AS source_index,
-		  COALESCE(classification.value->>'source_fingerprint', ''),
-		  COALESCE(classification.value->>'image_type', 'other'),
-		  COALESCE((classification.value->>'confidence')::double precision, 0),
-		  COALESCE((classification.value->>'public_eligible')::boolean, false)
-		FROM restaurant_profiles rp
-		CROSS JOIN LATERAL jsonb_array_elements(
-		  CASE
-		    WHEN jsonb_typeof(rp.raw_public_data->'menu_ocr'->'classifications') = 'array'
-		    THEN rp.raw_public_data->'menu_ocr'->'classifications'
-		    ELSE '[]'::jsonb
-		  END
-		) WITH ORDINALITY AS classification(value, ordinality)
-		WHERE rp.restaurant_id = $1
-		ORDER BY source_index`, restaurantID)
-	if err != nil {
-		return nil, fmt.Errorf("list media classification hints: %w", err)
-	}
-	defer rows.Close()
-
-	hints := make([]ClassificationHint, 0)
-	for rows.Next() {
-		var hint ClassificationHint
-		if err := rows.Scan(&hint.SourceIndex, &hint.SourceFingerprint, &hint.MediaType, &hint.Confidence, &hint.PublicEligible); err != nil {
-			return nil, fmt.Errorf("scan media classification hint: %w", err)
-		}
-		hints = append(hints, hint)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list media classification hint rows: %w", err)
-	}
-	return hints, nil
-}
-
 func (repo *Postgres) Create(ctx context.Context, input CreateAssetInput) (Asset, error) {
 	if repo.pool == nil {
 		return Asset{}, fmt.Errorf("database pool is not configured")
@@ -172,7 +133,8 @@ func (repo *Postgres) Create(ctx context.Context, input CreateAssetInput) (Asset
 		RETURNING id, restaurant_id, source_kind, storage_key, media_type,
 		  caption, alt_text, tags, quality_score, hero_score, orientation,
 		  subject_position, contains_people, contains_text, placement_role,
-		  approval_status, rights_status, mime_type, width_px, height_px,
+		  approval_status, reviewed_at, reviewed_by, review_note,
+		  rights_status, mime_type, width_px, height_px,
 		  byte_size, sha256, sort_order, vision_status, vision_attempts,
 		  vision_last_error, vision_result, vision_analyzed_at,
 		  hidden_at, hidden_by, created_by,
@@ -211,6 +173,9 @@ func (repo *Postgres) Create(ctx context.Context, input CreateAssetInput) (Asset
 		&asset.ContainsText,
 		&asset.PlacementRole,
 		&asset.ApprovalStatus,
+		&asset.ReviewedAt,
+		&asset.ReviewedBy,
+		&asset.ReviewNote,
 		&asset.RightsStatus,
 		&asset.MimeType,
 		&asset.WidthPx,
@@ -231,6 +196,57 @@ func (repo *Postgres) Create(ctx context.Context, input CreateAssetInput) (Asset
 	)
 	if err != nil {
 		return Asset{}, fmt.Errorf("create restaurant media asset: %w", err)
+	}
+	return asset, nil
+}
+
+func (repo *Postgres) SetApproval(
+	ctx context.Context,
+	restaurantID, assetID, reviewedBy uuid.UUID,
+	approvalStatus, note string,
+) (Asset, error) {
+	if repo.pool == nil {
+		return Asset{}, fmt.Errorf("database pool is not configured")
+	}
+	var asset Asset
+	err := repo.pool.QueryRow(ctx, `
+		UPDATE restaurant_media_assets
+		SET approval_status = $4,
+		    reviewed_at = now(),
+		    reviewed_by = $3,
+		    review_note = $5,
+		    metadata = metadata - 'manual_review_grandfathered',
+		    updated_at = now()
+		WHERE restaurant_id = $1
+		  AND id = $2
+		  AND source_kind IN ('owner_upload', 'licensed')
+		RETURNING id, restaurant_id, source_kind, storage_key, media_type,
+		  caption, alt_text, tags, quality_score, hero_score, orientation,
+		  subject_position, contains_people, contains_text, placement_role,
+		  approval_status, reviewed_at, reviewed_by, review_note,
+		  rights_status, mime_type, width_px, height_px,
+		  byte_size, sha256, sort_order, vision_status, vision_attempts,
+		  vision_last_error, vision_result, vision_analyzed_at,
+		  hidden_at, hidden_by, created_by, created_at, updated_at`,
+		restaurantID, assetID, reviewedBy, approvalStatus, note,
+	).Scan(
+		&asset.ID, &asset.RestaurantID, &asset.SourceKind, &asset.StorageKey,
+		&asset.MediaType, &asset.Caption, &asset.AltText, &asset.Tags,
+		&asset.QualityScore, &asset.HeroScore, &asset.Orientation,
+		&asset.SubjectPosition, &asset.ContainsPeople, &asset.ContainsText,
+		&asset.PlacementRole, &asset.ApprovalStatus, &asset.ReviewedAt,
+		&asset.ReviewedBy, &asset.ReviewNote, &asset.RightsStatus,
+		&asset.MimeType, &asset.WidthPx, &asset.HeightPx, &asset.ByteSize,
+		&asset.SHA256, &asset.SortOrder, &asset.VisionStatus,
+		&asset.VisionAttempts, &asset.VisionLastError, &asset.VisionResult,
+		&asset.VisionAnalyzedAt, &asset.HiddenAt, &asset.HiddenBy,
+		&asset.CreatedBy, &asset.CreatedAt, &asset.UpdatedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Asset{}, repository.ErrNotFound
+	}
+	if err != nil {
+		return Asset{}, fmt.Errorf("review restaurant media asset: %w", err)
 	}
 	return asset, nil
 }

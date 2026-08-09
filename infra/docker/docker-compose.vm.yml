@@ -59,8 +59,12 @@ services:
       - path: ${TUVI_ENV_DIR:-/opt/tuvi/env}/stack.env
         required: false
       # Restrict the Places key to the API photo resolver instead of sharing the
-      # ingestion file (which also contains Apollo and OCR credentials).
+      # ingestion file (which also contains Apollo credentials).
       - path: ${TUVI_ENV_DIR:-/opt/tuvi/env}/places-api.env
+        required: false
+      # Restrict the OpenAI key to the public report API. Worker, scraper, and
+      # frontend containers must not inherit this credential.
+      - path: ${TUVI_ENV_DIR:-/opt/tuvi/env}/llm.env
         required: false
     environment:
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
@@ -113,41 +117,6 @@ services:
       api:
         condition: service_started
     restart: unless-stopped
-
-  ocr-worker:
-    build:
-      context: ../..
-      dockerfile: infra/docker/Dockerfile.ocr
-    command: ["python", "verify_leads_from_db.py", "--watch"]
-    env_file:
-      - path: ${TUVI_ENV_DIR:-/opt/tuvi/env}/stack.env
-        required: false
-      - path: ${TUVI_ENV_DIR:-/opt/tuvi/env}/ingestion.env
-        required: false
-    environment:
-      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
-    restart: unless-stopped
-
-  ocr-job:
-    profiles: [jobs]
-    build:
-      context: ../..
-      dockerfile: infra/docker/Dockerfile.ocr
-    command: ["python", "verify_leads_from_db.py"]
-    env_file:
-      - path: ${TUVI_ENV_DIR:-/opt/tuvi/env}/stack.env
-        required: false
-      - path: ${TUVI_ENV_DIR:-/opt/tuvi/env}/ingestion.env
-        required: false
-    environment:
-      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
-    restart: "no"
 
   restaurant-services-catalog:
     build:

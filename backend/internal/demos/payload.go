@@ -55,9 +55,9 @@ func MapPublicPayload(raw json.RawMessage) PublicDemoPayload {
 	if value, ok := source["ai_receptionist_cta"]; ok {
 		_ = json.Unmarshal(value, &payload.AIReceptionistCTA)
 	}
-	if value, ok := source["media_manifest"]; ok {
-		payload.MediaManifest = value
-	}
+	// Historical generated media manifests may contain scraped URLs. Public
+	// handlers populate Media only through the live/no-store or manually
+	// approved media service.
 
 	return payload
 }

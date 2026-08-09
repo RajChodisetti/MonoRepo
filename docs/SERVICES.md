@@ -1,118 +1,72 @@
-# Service Inventory
+# Service inventory
 
-This repo contains long-running services, one-shot jobs, static sites, and automation pipelines. Run commands from the repo root unless a service row says otherwise.
+Run commands from the repository root unless noted otherwise.
 
-## Port Plan
+## Ports
 
-| Port | Service | Notes |
+| Port | Service |
+| --- | --- |
+| `3000` | Restaurant template |
+| `3001` | Tuvi corporate website and public AI review |
+| `3002` | Internal admin portal |
+| `5432` | PostgreSQL |
+| `8080` | Main Go API |
+| `8081` | Swagger UI |
+| `8000` | Voice sales agent |
+| `5173` | Restaurant services catalog |
+
+## Long-running services
+
+| Service | Start | Purpose |
 | --- | --- | --- |
-| `3000` | Restaurant template Next app | Customer/demo website renderer. Kept on `3000` because main API demo URLs and defaults point here. |
-| `3001` | Tuvi corporate website Next app | Moved off `3000` so both websites can run at the same time. |
-| `5432` | PostgreSQL | Shared local Docker Postgres. Main app, worker, restaurant data, and company consultations use `restaurant_platform`. |
-| `8080` | Main restaurant platform API | Go `net/http` API. |
-| `8081` | Swagger UI | Local OpenAPI viewer. |
-| `8000` | Voice sales agent | Expected in-repo service at `voice-sales-agent/`; FastAPI/WebSocket voice runtime used by both websites. |
-| `5173` | Restaurant services catalog | Vite default dev port. |
-| `5500` | Presentation site | Static Python HTTP server. |
-| `3002` | Admin portal (`apps/web`) | Next.js internal_admin console; proxies to the main API through same-origin `/api/admin/*` BFF routes with an httpOnly session cookie. |
+| PostgreSQL | `make db-up` | Source of truth for restaurants, sequence state, jobs, quotas, and consultations. |
+| API | `make api` | Private/admin APIs, public restaurant reports, unsubscribe confirmation, and delivery controls. |
+| Worker | `make worker` | Durable jobs and quota-managed plain-text outreach. |
+| Scrape worker | Compose `scrape-worker` | Places-first discovery, targeted Apollo enrichment, and direct import. |
+| Admin | `cd apps/web && npm run dev` | Sequence editor, recipient progress, restaurants, scrape jobs, and controls. |
+| Corporate website | `npm --prefix web run dev -- -p 3001` | Marketing pages, consultation booking, and digital-footprint AI review. |
+| Restaurant template | `cd template && npm run dev` | Public restaurant/demo renderer. |
+| Voice agent | `cd voice-sales-agent && make dev` | Corporate and restaurant browser voice runtime. |
 
-## Long-Running Services
+OCR is retired. There is no OCR service, one-shot OCR job, OCR cron, or OCR
+provider configuration.
 
-| Service | Start | Dependencies | Links |
-| --- | --- | --- | --- |
-| PostgreSQL | `make db-up` | Docker | Required by main API, worker, migrations, imports, seeders, and company consultations. |
-| Main API | `make api` | PostgreSQL + `make migrate-up` | Serves private admin/restaurant APIs, public demo/site/reservation APIs, tracking routes, and campaign controls. |
-| Worker | `make worker` | PostgreSQL + `make migrate-up` | Polls leased `job_runs`, creates post-OCR demo/campaign drafts, and runs quota-managed outreach through HTTP API providers. |
-| City scrape worker | Compose `scrape-worker` | PostgreSQL, migrations, Places key, Apollo key by default | Long-running durable grid worker; Places first, targeted Apollo second, 500 combined provider calls per 24-hour window. |
-| Restaurant template | `cd template && npm run dev` | Node deps; optionally main API and voice agent | Reads local JSON by default; uses `NEXT_PUBLIC_API_URL=http://localhost:8080` for DB-backed site data and `NEXT_PUBLIC_VOICE_AGENT_URL=http://localhost:8000` for voice. |
-| Tuvi corporate website | `npm --prefix web run dev -- -p 3001` | Node deps; main API for SEO reports and booking | Runs on `3001`, proxies bookings to `CONSULTATION_API_URL=http://localhost:8080`, uses voice agent with `agent=corporate`. |
-| Voice sales agent | `cd voice-sales-agent && make dev` or Docker compose | Provider keys and service env | Expected to expose `GET /readyz/browser` and `WS /browser-stream`. Restaurant template passes `restaurant_index`; corporate site passes `agent=corporate`; corporate bookings call main API company consultation endpoints. |
-| Restaurant services catalog | `cd apps/restaurant-services-catalog && npm run dev` | Node deps | Standalone Vite site; deploys with Wrangler. |
-| Presentation site | `cd presentation && python3 -m http.server 5500` | Python | Standalone static presentation. |
-| Admin portal | `cd apps/web && npm run dev` | Node deps; main API for `internal_admin` login | Runs on `3002`. Screens: dashboard, scrape-jobs (list/detail/retry), restaurants (list/detail: profile review, demo, campaign, members), outreach bulk-send. Requires an `internal_admin` user (`make seed-admin`). |
-
-## Stack Commands
+## Stack commands
 
 | Command | Starts |
 | --- | --- |
-| `make setup` | PostgreSQL + main migrations |
-| `make dev` | PostgreSQL + main migrations + main API |
-| `make start` | PostgreSQL + main migrations + main API + worker |
-| `make up` | Docker stack profile: PostgreSQL + Redis + migrate + API + worker + durable scrape worker (OCR remains one-shot) |
-| `make swagger` | Swagger UI for OpenAPI docs |
+| `make setup` | PostgreSQL and migrations |
+| `make dev` | PostgreSQL, migrations, and API |
+| `make start` | PostgreSQL, migrations, API, and worker |
+| `make up` | Full Docker stack including scrape worker |
+| `make swagger` | Local OpenAPI viewer |
 
-## One-Shot Jobs And Pipelines
-
-| Job | Start | Purpose |
-| --- | --- | --- |
-| Main migrations | `make migrate-up`, `make migrate-down` | Apply or roll back SQL migrations for `restaurant_platform`. |
-| Seed admin | `make seed-admin` | Create first internal admin from `ADMIN_*` env. |
-| Seed demo fixture | `make seed-demo-fixture` | Create restaurant, owner membership, and published demo site. |
-| Seed restaurant data | `make seed-restaurants-data` | Import `data/restaurants_data.json` through Go. |
-| Import outreach data | `make import-outreach` | Import automation/outreach restaurant JSON into local DB. |
-| Sanitize import | `make sanitize-import` | Strip bad menu-board image matches and import. |
-| OCR all | `make ocr-all` | Run menu image OCR/classification and import. |
-| Verify leads OCR | `make verify-leads-ocr` | OCR-verify unverified `restaurant_profiles` rows in DB (batch/cron). |
-| Database-networked OCR job | `make ocr-job` | One-shot claimed OCR batch; resolves Places photo resources, writes explicit OCR state, and enqueues `lead.prepare`. |
-| Retired daily lead ingestion | `make ingest-daily` | Legacy Places/Apollo entrypoint retained for reference; do not run after durable scrape migrations are installed. |
-| Legacy outreach city pipeline | `cd automation/outreach && python city_pipeline.py --city Sydney --total 100` | Manual Apollo + Places workflow. |
-| Legacy fetch leads | `cd automation/outreach && python fetch_restaurant_leads.py --city Sydney` | Manual Apollo restaurant decision-maker leads. |
-| Scrape places | `cd automation/outreach && python scrape_restaurant_places.py --city Sydney --total 100` | Google Places API (New) enrichment for existing lead files. |
-| Legacy SerpAPI scrape | `cd automation/outreach && python scrape_restaurant_data.py --city Sydney` | Older SerpAPI scrape path. |
-| Filter no-website leads | `cd automation/outreach && python fetch_restaurants_no_website.py --all-cities` | Filter scraped output. |
-| Outreach drafts | `cd automation/outreach && python tuvi_outreach_agent.py --csv sample_leads.csv --no-zoho --no-slack` | Draft outreach without external writes. |
-| Melbourne image scraper | `cd automation && python scrape.py` | Browser-based food image collection. |
-| OpenAPI validation | `make openapi` | Validate `docs/openapi/openapi.yaml`. |
-
-## Interlinks
+## Data and outreach flow
 
 ```text
-main API :8080
-  -> PostgreSQL restaurant_platform
-  -> job_runs table for worker jobs
-  -> public restaurant/site/demo data consumed by template :3000
-
-worker
-  -> PostgreSQL job_runs
-  -> draft demo/campaign preparation after verified OCR
-  -> Gmail API or Zoho quota-managed outreach adapter (disabled by default)
-
 scrape-worker
-  -> PostgreSQL scrape_jobs/cells/candidates
-  -> Google Places API (New)
-  -> targeted Apollo owner/work-email enrichment
+  -> Google Places discovery
+  -> optional targeted Apollo work-email/owner enrichment
+  -> PostgreSQL restaurant + inferred-business source evidence
+  -> active approved sequence enrollment when name + valid email exist
 
-scheduled ocr-job
-  -> PostgreSQL pending restaurant_profiles
-  -> short-lived Places photo media + configured vision provider
-  -> lead.prepare job_runs -> worker
+worker (only when persisted email job is enabled)
+  -> due follow-ups first
+  -> then new recipients
+  -> Gmail quota claim + idempotent delivery attempt
+  -> confirmed send advances integer sequence step and next-due timestamp
+  -> failure/unknown leaves the step unchanged
 
-template :3000
-  -> optional main API :8080
-  -> voice-sales-agent :8000
-       /readyz/browser
-       /browser-stream?restaurant_index=N
-
-tuvi corporate website :3001
-  -> main API :8080 /api/v1/company/consultations/*
-  -> voice-sales-agent :8000
-       /readyz/browser
-       /browser-stream?agent=corporate
-
-main API company consultations
-  -> PostgreSQL restaurant_platform.company_consultations
-  -> configured Resend or Zoho generic HTTP API provider
-  <- voice-sales-agent corporate flow via MONOREPO_API_URL=http://localhost:8080
-
-admin portal (apps/web) :3002
-  -> Next.js BFF routes /api/admin/* (login/logout/me/proxy), httpOnly session cookie
-  -> proxy forwards to main API :8080 /api/v1/* with Bearer token (API_BASE_URL, default https://api.tuvisolutions.com)
-  -> restaurants, campaigns, scrape-jobs, outreach bulk-send admin endpoints
+public AI review
+  -> Places details/reviews/media
+  -> concurrent website capture and low-latency vision review
+  -> deterministic partial fallback within the response deadline
 ```
 
-## Notes
+The outreach path does not require image analysis, a generated profile, a
+published demo, or a restaurant-specific approved campaign. Suppression and
+lifecycle gates still fail closed. Google listing media is resolved live with
+attribution; owner/licensed media requires explicit admin approval.
 
-- `apps/web` is the internal admin console (Next.js, port `3002`) for the lead workflow: scrape jobs, restaurant/profile review, demo + campaign approval, and bulk outreach. It calls the main API only through its own same-origin proxy route, never directly from the browser.
-- The voice agent source lives at `voice-sales-agent/`; use `make voice-up` from the MonoRepo root for the Docker profile.
-- Company consultation availability and confirmed bookings are PostgreSQL-only;
-  the current runtime does not query or update Google Calendar.
+See [lead-scrape-outreach.md](./runbooks/lead-scrape-outreach.md) for deployment
+and operational checks.

@@ -12,12 +12,26 @@ import (
 	repository "github.com/rajchodisetti/restaurant-platform/backend/internal/platform/errors"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/profiles"
 	llmlib "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/llm"
+	"golang.org/x/sync/singleflight"
 )
 
-const reportCacheTTL = 12 * time.Minute
+const (
+	reportCacheTTL         = 12 * time.Minute
+	reportGenerationBudget = 15 * time.Second
+	reportSummaryBudget    = 2200 * time.Millisecond
+	maxConcurrentReports   = 2
+)
 
-// ErrNotFound indicates the restaurant could not be resolved.
-var ErrNotFound = errors.New("seo report restaurant not found")
+var (
+	// ErrNotFound indicates the restaurant could not be resolved.
+	ErrNotFound = errors.New("seo report restaurant not found")
+	// ErrReportBusy fails fast before any provider work when public generation
+	// capacity is exhausted. Callers can retry after an in-flight report lands
+	// in the cache.
+	ErrReportBusy = errors.New("seo report generation is at capacity")
+)
+
+var sharedReportGenerationSlots = make(chan struct{}, maxConcurrentReports)
 
 // Service orchestrates Places + inventory enrichment + scoring + summary.
 type Service struct {
@@ -36,6 +50,16 @@ type Service struct {
 
 	mu    sync.Mutex
 	cache map[string]cachedReport
+
+	reportCalls singleflight.Group
+	reportSlots chan struct{}
+
+	// Private hooks keep orchestration testable without provider calls. Production
+	// constructors always wire the concrete Places, profile, and website clients.
+	fetchPlaceDetails func(context.Context, string) (*placeSnapshot, error)
+	fetchSiteContent  func(context.Context, string) (profiles.SiteContent, bool)
+	auditWebsite      func(context.Context, string, llmlib.Client) WebsiteAudit
+	reportBudget      time.Duration
 }
 
 type cachedReport struct {
@@ -57,14 +81,20 @@ func NewService(
 	if llmClient != nil && llmClient.Enabled() {
 		summarizer = LLMSummarizer{Client: llmClient, Fallback: DeterministicSummarizer{}}
 	}
-	return &Service{
-		places:     NewPlacesClient(placesCfg),
-		profiles:   profilesRepo,
-		summarizer: summarizer,
-		llm:        llmClient,
-		log:        log,
-		cache:      make(map[string]cachedReport),
+	service := &Service{
+		places:       NewPlacesClient(placesCfg),
+		profiles:     profilesRepo,
+		summarizer:   summarizer,
+		llm:          llmClient,
+		log:          log,
+		cache:        make(map[string]cachedReport),
+		reportBudget: reportGenerationBudget,
+		reportSlots:  sharedReportGenerationSlots,
 	}
+	service.fetchPlaceDetails = service.places.GetPlaceDetails
+	service.fetchSiteContent = service.loadSiteContent
+	service.auditWebsite = AuditWebsite
+	return service
 }
 
 // SearchRestaurants merges inventory + Places search results.
@@ -140,16 +170,132 @@ func (s *Service) GetReport(ctx context.Context, placeID string) (ReportResponse
 		return cached, nil
 	}
 
-	var snap *placeSnapshot
-	var err error
-	if s.places.Enabled() {
-		snap, err = s.places.GetPlaceDetails(ctx, placeID)
-		if err != nil {
-			s.log.WarnContext(ctx, "seo_places_details_failed", "error", err, "place_id", placeID)
+	// DoChan lets each HTTP caller stop waiting independently while the shared,
+	// 15-second-bounded generation finishes for remaining callers and cache.
+	result := s.reportCalls.DoChan(placeID, func() (any, error) {
+		if cached, ok := s.getCached(placeID); ok {
+			return cached, nil
 		}
+		return s.generateReport(context.WithoutCancel(ctx), placeID)
+	})
+	select {
+	case <-ctx.Done():
+		return ReportResponse{}, ctx.Err()
+	case completed := <-result:
+		if completed.Err != nil {
+			return ReportResponse{}, completed.Err
+		}
+		payload, ok := completed.Val.(ReportResponse)
+		if !ok {
+			return ReportResponse{}, errors.New("invalid shared report result")
+		}
+		return payload, nil
+	}
+}
+
+func (s *Service) generateReport(ctx context.Context, placeID string) (ReportResponse, error) {
+	if cached, ok := s.getCached(placeID); ok {
+		return cached, nil
+	}
+	reportSlots := s.reportSlots
+	if reportSlots == nil {
+		reportSlots = sharedReportGenerationSlots
+	}
+	select {
+	case reportSlots <- struct{}{}:
+		defer func() { <-reportSlots }()
+	default:
+		return ReportResponse{}, ErrReportBusy
 	}
 
-	enrichment := s.loadEnrichment(ctx, placeID)
+	startedAt := time.Now()
+
+	budget := s.reportBudget
+	if budget <= 0 {
+		budget = reportGenerationBudget
+	}
+	reportCtx, cancel := context.WithTimeout(ctx, budget)
+	defer cancel()
+
+	// Places and profile inventory are independent. Starting both immediately
+	// removes a full network/database waterfall from the critical path.
+	type placeResult struct {
+		snapshot *placeSnapshot
+		err      error
+	}
+	type contentResult struct {
+		content profiles.SiteContent
+		ok      bool
+	}
+	placeCh := make(chan placeResult, 1)
+	contentCh := make(chan contentResult, 1)
+	fetchPlaceDetails := s.fetchPlaceDetails
+	if fetchPlaceDetails == nil && s.places != nil {
+		fetchPlaceDetails = s.places.GetPlaceDetails
+	}
+	fetchSiteContent := s.fetchSiteContent
+	if fetchSiteContent == nil {
+		fetchSiteContent = s.loadSiteContent
+	}
+
+	go func() {
+		if fetchPlaceDetails == nil {
+			placeCh <- placeResult{}
+			return
+		}
+		snapshot, err := fetchPlaceDetails(reportCtx, placeID)
+		placeCh <- placeResult{snapshot: snapshot, err: err}
+	}()
+	go func() {
+		content, ok := fetchSiteContent(reportCtx, placeID)
+		contentCh <- contentResult{content: content, ok: ok}
+	}()
+
+	var (
+		snap       *placeSnapshot
+		detailsErr error
+		content    profiles.SiteContent
+		hasContent bool
+	)
+	for pending := 2; pending > 0; {
+		select {
+		case result := <-placeCh:
+			snap = result.snapshot
+			detailsErr = result.err
+			placeCh = nil
+			pending--
+		case result := <-contentCh:
+			content = result.content
+			hasContent = result.ok
+			contentCh = nil
+			pending--
+		case <-reportCtx.Done():
+			pending = 0
+		}
+	}
+	// A source can finish in the same scheduler tick as the deadline. Prefer an
+	// already-buffered useful result over dropping it because Done won the select.
+	if placeCh != nil {
+		select {
+		case result := <-placeCh:
+			snap = result.snapshot
+			detailsErr = result.err
+		default:
+		}
+	}
+	if contentCh != nil {
+		select {
+		case result := <-contentCh:
+			content = result.content
+			hasContent = result.ok
+		default:
+		}
+	}
+	if detailsErr != nil {
+		s.log.WarnContext(ctx, "seo_places_details_failed", "error", detailsErr, "place_id", placeID)
+	}
+
+	enrichment := enrichmentFromSiteContent(content, hasContent)
 
 	place := PlaceDetails{PlaceID: placeID, Source: "places"}
 	reviews := []Review(nil)
@@ -168,7 +314,7 @@ func (s *Service) GetReport(ctx context.Context, placeID string) (ReportResponse
 		scoreIn.DeliveryKnown = snap.DeliveryKnown
 		scoreIn.TakeoutKnown = snap.TakeoutKnown
 		scoreIn.ReservableKnown = snap.ReservableKnown
-	} else if content, ok := s.loadSiteContent(ctx, placeID); ok && strings.TrimSpace(content.Name) != "" {
+	} else if hasContent && strings.TrimSpace(content.Name) != "" {
 		place = placeFromSite(content)
 	} else {
 		return ReportResponse{}, ErrNotFound
@@ -189,18 +335,26 @@ func (s *Service) GetReport(ctx context.Context, placeID string) (ReportResponse
 	scoreIn.PhotoCount = photoCount
 	scoreIn.HasHours = hasHours || enrichment.HasHours
 
-	var siteMedia *profilesSiteMedia
-	if content, ok := s.loadSiteContent(ctx, placeID); ok {
-		siteMedia = siteMediaFromContent(content)
-	}
 	var photos []placePhoto
 	if snap != nil {
 		photos = snap.Photos
 	}
-	place.Media = buildPlaceMedia(place, photos, siteMedia)
+	// Public report visuals come only from live Places photo resource names.
+	// Historical profile URLs can contain legacy/third-party assets without a
+	// current public-use contract and must never cross this boundary.
+	place.Media = buildPlaceMedia(place, photos)
 
+	audit := WebsiteAudit{Source: "none"}
 	if strings.TrimSpace(place.Website) != "" {
-		audit := AuditWebsite(ctx, place.Website, s.llm)
+		auditWebsite := s.auditWebsite
+		if auditWebsite == nil {
+			auditWebsite = AuditWebsite
+		}
+		if reportCtx.Err() == nil {
+			audit = auditWebsite(reportCtx, place.Website, s.llm)
+		} else {
+			audit = fallbackWebsiteAudit(place.Website, "report budget exhausted")
+		}
 		if audit.QualityScore > 0 || audit.Source == "social" || audit.Source == "fallback" || audit.Source == "vision" {
 			scoreIn.WebsiteQualityKnown = true
 			scoreIn.WebsiteQualityScore = audit.QualityScore
@@ -214,12 +368,53 @@ func (s *Service) GetReport(ctx context.Context, placeID string) (ReportResponse
 	}
 
 	report := BuildReport(scoreIn)
-	summary, sumErr := s.summarizer.Summarize(ctx, place, report, reviews)
+	summaryResult := SummaryResult{
+		Text:   buildDeterministicSummary(place, report, reviews),
+		Source: "automated",
+	}
+	var sumErr error
+	if s.summarizer != nil {
+		summaryCtx, summaryCancel := context.WithTimeout(reportCtx, reportSummaryBudget)
+		summaryResult, sumErr = s.summarizer.Summarize(summaryCtx, place, report, reviews)
+		summaryCancel()
+	}
 	if sumErr != nil {
 		s.log.WarnContext(ctx, "seo_summary_failed", "error", sumErr)
-		summary = buildDeterministicSummary(place, report, reviews)
+		summaryResult = SummaryResult{
+			Text:   buildDeterministicSummary(place, report, reviews),
+			Source: "automated",
+		}
 	}
-	report.AISummary = summary
+	if strings.TrimSpace(summaryResult.Text) == "" {
+		summaryResult.Text = buildDeterministicSummary(place, report, reviews)
+		summaryResult.Source = "automated"
+	}
+	report.AISummary = summaryResult.Text
+	report.AnalysisSource = "automated"
+	if audit.Source == "vision" || summaryResult.Source == "ai-assisted" {
+		report.AnalysisSource = "ai-assisted"
+	}
+	partial := detailsErr != nil || reportCtx.Err() != nil
+	if strings.TrimSpace(place.Website) != "" && (audit.Source == "fallback" || audit.Source == "none") {
+		partial = true
+	}
+	if s.places != nil && s.places.Enabled() && snap == nil && hasContent {
+		partial = true
+	}
+	if partial {
+		report.AnalysisStatus = "partial"
+		report.AnalysisNotice = "Some live signals did not finish within the scan window, so conservative fallback scoring was used."
+	} else {
+		report.AnalysisStatus = "complete"
+		if audit.Source == "vision" {
+			report.AnalysisNotice = "AI-assisted analysis used live listing signals and the captured website homepage."
+		} else if summaryResult.Source == "ai-assisted" {
+			report.AnalysisNotice = "An AI-assisted summary was generated from the live listing signals; website visuals were not analyzed by AI."
+		} else {
+			report.AnalysisNotice = "Live listing signals were scored automatically; AI visual analysis was not used for this run."
+		}
+	}
+	report.GeneratedInMS = time.Since(startedAt).Milliseconds()
 
 	payload := ReportResponse{Place: place, Report: report}
 	s.putCached(placeID, payload)
@@ -279,6 +474,10 @@ func normalizeSearchLocation(location string) string {
 
 func (s *Service) loadEnrichment(ctx context.Context, placeID string) Enrichment {
 	content, ok := s.loadSiteContent(ctx, placeID)
+	return enrichmentFromSiteContent(content, ok)
+}
+
+func enrichmentFromSiteContent(content profiles.SiteContent, ok bool) Enrichment {
 	if !ok {
 		return Enrichment{}
 	}
@@ -323,31 +522,6 @@ func placeFromSite(content profiles.SiteContent) PlaceDetails {
 		place.UserRatingCount = content.ReviewsCount
 	}
 	return place
-}
-
-func siteMediaFromContent(content profiles.SiteContent) *profilesSiteMedia {
-	out := &profilesSiteMedia{
-		MenuItems: make([]siteMenuMedia, 0, len(content.MenuItems)),
-		Gallery:   make([]siteGalleryMedia, 0, len(content.GalleryImages)),
-	}
-	for _, item := range content.MenuItems {
-		img := strings.TrimSpace(item.ImageURL)
-		if img == "" {
-			continue
-		}
-		out.MenuItems = append(out.MenuItems, siteMenuMedia{
-			Name:     strings.TrimSpace(item.Name),
-			ImageURL: img,
-		})
-	}
-	for _, g := range content.GalleryImages {
-		out.Gallery = append(out.Gallery, siteGalleryMedia{
-			Title:        g.Title,
-			URL:          g.URL,
-			ThumbnailURL: g.ThumbnailURL,
-		})
-	}
-	return out
 }
 
 // FetchPlacePhoto proxies a Google Places photo through the server.

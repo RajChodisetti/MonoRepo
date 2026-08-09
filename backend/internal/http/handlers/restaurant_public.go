@@ -46,9 +46,11 @@ func (handler *RestaurantPublicHandler) GetSiteImagesByID(w http.ResponseWriter,
 		return
 	}
 
+	// Legacy scraped profile images are admin-only. Public media is resolved by
+	// the media service on full site payloads.
 	handler.writeJSON(w, http.StatusOK, map[string]any{
 		"restaurant_id":  payload.RestaurantID,
-		"gallery_images": payload.GalleryImages,
+		"gallery_images": []profiles.GalleryImage{},
 	})
 }
 
@@ -67,7 +69,7 @@ func (handler *RestaurantPublicHandler) GetSiteImagesByPlaceID(w http.ResponseWr
 
 	handler.writeJSON(w, http.StatusOK, map[string]any{
 		"restaurant_id":  payload.RestaurantID,
-		"gallery_images": payload.GalleryImages,
+		"gallery_images": []profiles.GalleryImage{},
 	})
 }
 
@@ -136,6 +138,7 @@ func (handler *RestaurantPublicHandler) writeSiteContent(
 	payload profiles.SiteContent,
 ) {
 	w.Header().Set("Cache-Control", "no-store, max-age=0")
+	payload = profiles.SanitizePublicSiteContent(payload)
 	mediaItems := []media.PublicMedia{}
 	if handler.media != nil && payload.RestaurantID != uuid.Nil {
 		if r.URL.Query().Get("preview_media") == "google_live" {

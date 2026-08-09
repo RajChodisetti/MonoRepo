@@ -1,4 +1,4 @@
-.PHONY: api worker test fmt db-up db-down db-reset migrate-up migrate-down setup dev seed-admin seed-demo-fixture seed-restaurants-data import-outreach ocr-all sanitize-import verify-leads-ocr ocr-job import-restaurants-outreach ingest-daily openapi swagger up down logs start stop-all voice-up voice-down voice-logs andre-voice-dev andre-voice-install tuvi-website-dev tuvi-website-build restaurant-services-catalog-dev restaurant-services-catalog-build
+.PHONY: api worker test fmt db-up db-down db-reset migrate-up migrate-down setup dev seed-admin seed-demo-fixture seed-restaurants-data import-outreach import-restaurants-outreach ingest-daily openapi swagger up down logs start stop-all voice-up voice-down voice-logs andre-voice-dev andre-voice-install tuvi-website-dev tuvi-website-build restaurant-services-catalog-dev restaurant-services-catalog-build
 
 GO ?= go
 COMPOSE_FILE ?= infra/docker/docker-compose.yml
@@ -26,39 +26,14 @@ seed-demo-fixture:
 seed-restaurants-data:
 	$(GO) run ./backend/cmd/seed-restaurants-data
 
-# Run OCR on all restaurant JSON + import to local Docker DB
-ocr-all: db-up migrate-up
-	cd automation/outreach && \
-	(test -d .venv && . .venv/bin/activate; \
-	python menu_image_ocr.py --sanitize-data ../../data/restaurants_data.json && \
-	python menu_image_ocr.py --batch-data ../../data/restaurants_data.json && \
-	python import_to_db.py --restaurants-only)
-
-# Quick fix: strip menu boards from dish cards + re-import (no API calls)
-sanitize-import: db-up migrate-up
-	cd automation/outreach && \
-	(test -d .venv && . .venv/bin/activate; \
-	python menu_image_ocr.py --sanitize-data ../../data/restaurants_data.json && \
-	python import_to_db.py --restaurants-only)
-
 # Import restaurant JSON to local Docker DB
 import-outreach: db-up migrate-up
 	cd automation/outreach && \
 	(test -d .venv && . .venv/bin/activate; python import_to_db.py --restaurants-only)
 
-# Verify unverified DB leads via menu OCR (nightly cron or manual)
-verify-leads-ocr: db-up migrate-up
-	cd automation/outreach && \
-	(test -d .venv && . .venv/bin/activate; \
-	LEAD_OCR_VERIFICATION_ENABLED=true python verify_leads_from_db.py --force)
-
-# Run OCR inside the database-networked Compose job image.
-ocr-job:
-	docker compose -f $(COMPOSE_FILE) --profile stack --profile jobs run --rm ocr-job
-
 # Retired: durable city ingestion must enter through POST /api/v1/scrape-jobs.
 ingest-daily:
-	@echo "ingest-daily is retired; use the private city-scrape API and scrape-worker (see docs/runbooks/lead-scrape-ocr-outreach.md)." >&2
+	@echo "ingest-daily is retired; use the private city-scrape API and scrape-worker." >&2
 	@exit 1
 
 # Legacy: Go seed (uses backend/.env DATABASE_URL)

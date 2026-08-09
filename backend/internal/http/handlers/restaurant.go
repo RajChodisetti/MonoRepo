@@ -363,15 +363,6 @@ func parseListFilter(r *http.Request) (restaurants.ListFilter, error) {
 		}
 		filter.ShownInterest = &parsed
 	}
-	if value := strings.TrimSpace(query.Get("ocr_status")); value != "" {
-		switch value {
-		case "pending", "running", "verified", "no_images", "failed":
-			filter.OCRStatus = value
-		default:
-			return restaurants.ListFilter{}, errors.New("ocr_status must be pending, running, verified, no_images, or failed.")
-		}
-	}
-
 	if value := strings.TrimSpace(query.Get("include_archived")); value != "" {
 		parsed, err := strconv.ParseBool(value)
 		if err != nil {
@@ -394,7 +385,6 @@ func restaurantResponse(record restaurants.Restaurant) map[string]any {
 		"email":                    record.Email,
 		"phone":                    record.Phone,
 		"address":                  record.Address,
-		"ocr_status":               record.OCRStatus,
 		"status":                   record.Status,
 		"is_contacted":             record.IsContacted,
 		"shown_interest":           record.ShownInterest,

@@ -4,7 +4,7 @@ Restaurant Data Scraping Pipeline (SerpAPI)
 ============================================
 Reads leads/lead.json and enriches each restaurant with:
   • name, cuisines, rating, reviews count
-  • menu items (with images)
+  • menu items (text only)
   • reviews (reviewer, text, stars)
   • phone, email, website
   • owner names (from Apollo lead + Google data)
@@ -33,8 +33,6 @@ from typing import Any
 import requests
 
 from env_loader import load_project_env
-from hf_llm import hf_api_key, hf_enabled
-
 load_project_env()
 
 from tuvi_outreach_agent import (  # noqa: E402
@@ -47,13 +45,6 @@ from tuvi_outreach_agent import (  # noqa: E402
     resolve_cities,
     with_retry,
 )
-
-try:
-    from menu_image_ocr import MenuOCRConfig, enrich_restaurant_with_menu_ocr
-except ImportError:
-    enrich_restaurant_with_menu_ocr = None  # type: ignore
-    MenuOCRConfig = None  # type: ignore
-
 
 def filter_leads_by_city(leads_data: list[dict], city: str) -> list[dict]:
     """Keep only leads matching the given city (case-insensitive)."""
@@ -109,7 +100,8 @@ def _find_place(company_name: str, city: str, cfg: Config) -> dict:
     if not place_id and not data_id:
         return place
 
-    # Always fetch full place details for menu, reviews, images
+    # Fetch full place details for contact, menu text, and reviews. Third-party
+    # media is deliberately not copied into the durable scrape document.
     params: dict[str, Any] = {"engine": "google_maps", "type": "place", "hl": "en", "gl": "au"}
     if place_id:
         params["place_id"] = place_id
@@ -162,21 +154,12 @@ def _fetch_reviews(
 
         for rev in data.get("reviews") or []:
             user = rev.get("user") or {}
-            images = []
-            for img in rev.get("images") or []:
-                if isinstance(img, str):
-                    images.append(img)
-                else:
-                    url = img.get("image") or img.get("thumbnail")
-                    if url:
-                        images.append(url)
-
             collected.append({
                 "reviewer": user.get("name", ""),
                 "review": rev.get("snippet") or (rev.get("extracted_snippet") or {}).get("original", ""),
                 "stars": rev.get("rating"),
                 "date": rev.get("date") or rev.get("iso_date", ""),
-                "images": images,
+                "images": [],
                 "source": rev.get("source", "google_maps"),
             })
             if len(collected) >= max_reviews:
@@ -195,20 +178,12 @@ def _parse_place_reviews(place: dict, max_reviews: int) -> list[dict]:
     """Fallback reviews from place_results.user_reviews.most_relevant."""
     reviews = []
     for rev in (place.get("user_reviews") or {}).get("most_relevant") or []:
-        images = []
-        for img in rev.get("images") or []:
-            if isinstance(img, str):
-                images.append(img)
-            else:
-                url = img.get("image") or img.get("thumbnail")
-                if url:
-                    images.append(url)
         reviews.append({
             "reviewer": rev.get("username", ""),
             "review": rev.get("description", ""),
             "stars": rev.get("rating"),
             "date": rev.get("date") or rev.get("date_iso8601", ""),
-            "images": images,
+            "images": [],
             "source": "google_maps_place",
         })
         if len(reviews) >= max_reviews:
@@ -273,46 +248,21 @@ def _find_restaurant_email(
 
 
 def _build_menu_items(place: dict) -> list[dict]:
-    """Parse menu categories + highlights into items with images."""
+    """Parse menu categories and highlights without retaining media."""
     menu = place.get("menu") or {}
-    highlight_map: dict[str, dict] = {}
-    for h in menu.get("highlights") or []:
-        title = (h.get("title") or "").strip().lower()
-        if title:
-            highlight_map[title] = h
-
-    menu_images = []
-    for img in menu.get("images") or []:
-        url = img.get("image") or img.get("thumbnail")
-        if url:
-            menu_images.append({
-                "url": url,
-                "thumbnail": img.get("thumbnail", url),
-                "date": img.get("date", ""),
-            })
 
     items: list[dict] = []
     for category in menu.get("categories") or []:
         cat_name = category.get("title", "")
         for raw in category.get("items") or []:
             name = raw.get("title", "")
-            images: list[dict] = []
-
-            hl = highlight_map.get(name.strip().lower())
-            if hl:
-                images.append({
-                    "url": hl.get("image") or hl.get("thumbnail", ""),
-                    "thumbnail": hl.get("thumbnail", ""),
-                    "popular": hl.get("popular", False),
-                })
-
             items.append({
                 "name": name,
                 "category": cat_name,
                 "description": raw.get("description", ""),
                 "price": raw.get("price", ""),
                 "price_numeric": raw.get("extracted_price"),
-                "images": images,
+                "images": [],
             })
 
     # Highlights not already in categories
@@ -327,14 +277,8 @@ def _build_menu_items(place: dict) -> list[dict]:
             "description": "",
             "price": "",
             "price_numeric": None,
-            "images": [{
-                "url": h.get("image") or h.get("thumbnail", ""),
-                "thumbnail": h.get("thumbnail", ""),
-                "popular": h.get("popular", False),
-            }],
+            "images": [],
         })
-
-    # Do NOT attach menu board photos to dish cards — menu_photos stay in images.menu_photos only.
 
     return items
 
@@ -383,7 +327,7 @@ def _extract_owners(lead_contact: dict, place: dict) -> list[str]:
     return list(dict.fromkeys(owners))
 
 
-def scrape_single_restaurant(lead_dict: dict, cfg: Config, max_reviews: int, menu_ocr: bool = True) -> dict:
+def scrape_single_restaurant(lead_dict: dict, cfg: Config, max_reviews: int) -> dict:
     """Scrape full restaurant profile for one lead entry."""
     lead = _lead_from_dict(lead_dict)
     company = lead_dict.get("company") or {}
@@ -411,11 +355,7 @@ def scrape_single_restaurant(lead_dict: dict, cfg: Config, max_reviews: int, men
         },
         "menu_items": [],
         "reviews": [],
-        "images": {
-            "thumbnail": "",
-            "gallery": [],
-            "menu_photos": [],
-        },
+        "images": {},
         "hours": {},
         "price_level": "",
         "apollo_lead": lead_dict,
@@ -458,29 +398,6 @@ def scrape_single_restaurant(lead_dict: dict, cfg: Config, max_reviews: int, men
         }
         result["google"]["place_id"] = place.get("place_id") or ""
         result["google"]["data_id"] = place.get("data_id") or ""
-        result["images"]["thumbnail"] = place.get("thumbnail") or ""
-
-        for img in place.get("images") or []:
-            if isinstance(img, str):
-                result["images"]["gallery"].append({"title": "", "url": img})
-            else:
-                url = img.get("thumbnail") or img.get("image")
-                if url:
-                    result["images"]["gallery"].append({
-                        "title": img.get("title", ""),
-                        "url": url,
-                    })
-
-        menu = place.get("menu") or {}
-        for img in menu.get("images") or []:
-            url = img.get("image") or img.get("thumbnail")
-            if url:
-                result["images"]["menu_photos"].append({
-                    "url": url,
-                    "thumbnail": img.get("thumbnail", url),
-                    "date": img.get("date", ""),
-                })
-
         result["menu_items"] = _build_menu_items(place)
         result["owners"] = _extract_owners(contact, place)
 
@@ -506,22 +423,6 @@ def scrape_single_restaurant(lead_dict: dict, cfg: Config, max_reviews: int, men
             )
 
         result["scrape_status"] = "success"
-
-        if menu_ocr and cfg.MENU_OCR_ENABLED and enrich_restaurant_with_menu_ocr and (
-            hf_enabled() or os.getenv("OPENAI_API_KEY") or os.getenv("GEMINI_API_KEY")
-        ):
-            try:
-                ocr_cfg = MenuOCRConfig(
-                    huggingface_api_key=hf_api_key(),
-                    hf_vision_model=cfg.MENU_OCR_MODEL,
-                    openai_api_key=os.getenv("OPENAI_API_KEY", ""),
-                    openai_model=os.getenv("MENU_OCR_MODEL", "gpt-4o-mini"),
-                    max_images=cfg.MENU_OCR_MAX_IMAGES,
-                )
-                enrich_restaurant_with_menu_ocr(result, ocr_cfg)
-            except Exception as exc:
-                result.setdefault("errors", []).append(f"menu_ocr: {exc}")
-                log.warning(f"  Menu OCR failed: {exc}")
 
     except Exception as exc:
         result["scrape_status"] = "error"
@@ -550,7 +451,7 @@ def _build_document(
             "source": "serpapi",
             "data_fields": [
                 "name", "cuisines", "menu_items", "reviews",
-                "rating", "contact", "owners", "images",
+                "rating", "contact", "owners",
             ],
             **meta_extra,
         },
@@ -566,7 +467,6 @@ def run_restaurant_scrape_pipeline(
     max_size_mb: float = 50.0,
     max_reviews: int = 40,
     limit: int | None = None,
-    menu_ocr: bool = True,
 ) -> tuple[list[dict], Path]:
     """
     Scrape restaurant data for all leads in lead.json.
@@ -638,7 +538,7 @@ def run_restaurant_scrape_pipeline(
         name = (lead_dict.get("company") or {}).get("name", "Unknown")
         log.info(f"[{idx}/{len(leads_data)}] Scraping: {name}")
 
-        record = scrape_single_restaurant(lead_dict, cfg, max_reviews, menu_ocr=menu_ocr)
+        record = scrape_single_restaurant(lead_dict, cfg, max_reviews)
         restaurants.append(record)
 
         doc = _build_document(restaurants, {**meta_extra, "total_scraped": len(restaurants)})
@@ -718,8 +618,6 @@ def main() -> int:
                         help="Scrape first N leads (default: 100 when --city is set)")
     parser.add_argument("--limit", type=int, default=None,
                         help="Alias for --total (scrape first N leads only)")
-    parser.add_argument("--no-menu-ocr", action="store_true",
-                        help="Skip menu image classification + OCR (Hugging Face / OpenAI / Gemini)")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
 
@@ -741,7 +639,6 @@ def main() -> int:
             max_size_mb=args.max_size_mb,
             max_reviews=args.max_reviews,
             limit=total,
-            menu_ocr=not args.no_menu_ocr,
         )
     except ValueError as e:
         log.error(str(e))

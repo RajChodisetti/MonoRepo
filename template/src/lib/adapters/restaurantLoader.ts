@@ -1,13 +1,20 @@
 import type { RestaurantContent } from "@/data/types/restaurant";
 import { fetchSignedDemo, fetchSiteRestaurant, fetchSiteRestaurantByID, getRestaurantCountFromApi } from "./restaurantSiteApi";
-import { loadRestaurant as loadRestaurantFromJson, getRestaurantCount as getJsonRestaurantCount } from "./scrapedRestaurant";
 
-export { parseRestaurantIndex } from "./scrapedRestaurant";
+export function parseRestaurantIndex(raw?: string | string[] | null): number {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  const parsed = Number.parseInt(value ?? "0", 10);
+  return Number.isNaN(parsed) || parsed < 0 ? 0 : parsed;
+}
 
 export async function loadRestaurant(index: number): Promise<RestaurantContent> {
   const fromApi = await fetchSiteRestaurant(index);
-  if (fromApi) return fromApi;
-  return loadRestaurantFromJson(index);
+  if (!fromApi) {
+    throw new Error(
+      `Restaurant index ${index} was not found via the restaurant API.`,
+    );
+  }
+  return fromApi;
 }
 
 export async function loadRestaurantFromApiOnly(index: number): Promise<RestaurantContent> {
@@ -38,6 +45,5 @@ export async function loadSignedDemo(slug: string, token: string, index: number)
 
 export async function getRestaurantCount(): Promise<number> {
   const apiCount = await getRestaurantCountFromApi();
-  if (apiCount != null && apiCount > 0) return apiCount;
-  return getJsonRestaurantCount();
+  return apiCount ?? 0;
 }

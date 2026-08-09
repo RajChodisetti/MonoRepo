@@ -45,10 +45,10 @@ export default function LiveCompetitorsCard({
         Who&apos;s beating you on Google
       </p>
       <p className="mt-1 text-[12px] leading-snug" style={{ color: MUTED }}>
-        Nearby restaurants ranking above you right now — free AI scoring review included.
+        Nearby restaurants ranking above you right now — scoring review included.
       </p>
 
-      <LockedBlur locked={locked} label="Verify email — free AI competitor review" className="mt-3 rounded-xl">
+      <LockedBlur locked={locked} label="Verify email — free competitor review" className="mt-3 rounded-xl">
         <ul className="space-y-3">
           {rows.map((row, index) => {
             const strength = row.highlight
@@ -92,13 +92,13 @@ export default function LiveCompetitorsCard({
         <button
           type="button"
           onClick={onUnlock}
-          className="mt-3.5 w-full cursor-pointer rounded-full bg-[#111111] px-4 py-2.5 text-[12.5px] font-semibold text-white"
+          className="mt-3.5 min-h-11 w-full cursor-pointer rounded-full bg-[#111111] px-4 py-2.5 text-[12.5px] font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
         >
-          Unlock free AI scoring review
+          Unlock free scoring review
         </button>
       ) : (
         <p className="mt-3.5 text-center text-[11.5px] font-medium" style={{ color: MUTED }}>
-          Full competitor AI scoring unlocked
+          Full competitor scoring unlocked
         </p>
       )}
     </div>

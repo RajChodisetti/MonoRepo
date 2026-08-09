@@ -14,25 +14,25 @@ type PlaceSummary struct {
 
 // PlaceDetails is the restaurant identity returned with a report.
 type PlaceDetails struct {
-	PlaceID           string   `json:"placeId"`
-	Name              string   `json:"name"`
-	Address           string   `json:"address"`
-	Phone             string   `json:"phone,omitempty"`
-	Email             string   `json:"email,omitempty"`
-	Website           string   `json:"website,omitempty"`
-	MapsURI           string   `json:"mapsUri,omitempty"`
+	PlaceID string `json:"placeId"`
+	Name    string `json:"name"`
+	Address string `json:"address"`
+	Phone   string `json:"phone,omitempty"`
+	Email   string `json:"email,omitempty"`
+	Website string `json:"website,omitempty"`
+	MapsURI string `json:"mapsUri,omitempty"`
 	// Latitude / Longitude from Places location (WGS84) for map pin.
-	Latitude          *float64 `json:"latitude,omitempty"`
-	Longitude         *float64 `json:"longitude,omitempty"`
-	Rating            *float64 `json:"rating,omitempty"`
-	UserRatingCount   *int     `json:"userRatingCount,omitempty"`
-	PriceLevel        string   `json:"priceLevel,omitempty"`
-	BusinessStatus    string   `json:"businessStatus,omitempty"`
-	Types             []string `json:"types,omitempty"`
-	EditorialSummary  string   `json:"editorialSummary,omitempty"`
-	Source            string   `json:"source"`
-	// Media is Google Maps-style menu/highlights + photos scraped from Places / inventory.
-	Media             *PlaceMedia `json:"media,omitempty"`
+	Latitude         *float64 `json:"latitude,omitempty"`
+	Longitude        *float64 `json:"longitude,omitempty"`
+	Rating           *float64 `json:"rating,omitempty"`
+	UserRatingCount  *int     `json:"userRatingCount,omitempty"`
+	PriceLevel       string   `json:"priceLevel,omitempty"`
+	BusinessStatus   string   `json:"businessStatus,omitempty"`
+	Types            []string `json:"types,omitempty"`
+	EditorialSummary string   `json:"editorialSummary,omitempty"`
+	Source           string   `json:"source"`
+	// Media contains only live Google Places photo resource names and attribution links.
+	Media *PlaceMedia `json:"media,omitempty"`
 }
 
 // MediaCard is one tile in the listing media carousels.
@@ -109,6 +109,15 @@ type Report struct {
 	WebsiteMobileScreenshot string `json:"websiteMobileScreenshot,omitempty"`
 	WebsiteQualityScore     int    `json:"websiteQualityScore,omitempty"`
 	WebsiteReview           string `json:"websiteReview,omitempty"`
+	// AnalysisSource is "ai-assisted" only when an LLM actually contributed.
+	// Rule-based fallbacks are reported as "automated" so the public UI does
+	// not imply that AI ran when the provider is disabled or timed out.
+	AnalysisSource string `json:"analysisSource"`
+	// AnalysisStatus is "complete" or "partial". Partial reports remain useful
+	// but use conservative scoring when a live dependency misses the time budget.
+	AnalysisStatus string `json:"analysisStatus"`
+	AnalysisNotice string `json:"analysisNotice,omitempty"`
+	GeneratedInMS  int64  `json:"generatedInMs"`
 	// RecentReviews are live Google reviews shown during the scan experience.
 	RecentReviews []Review `json:"recentReviews,omitempty"`
 }
@@ -127,16 +136,16 @@ type SearchResponse struct {
 
 // SearchMeta describes which backends contributed to search.
 type SearchMeta struct {
-	PlacesEnabled   bool `json:"placesEnabled"`
+	PlacesEnabled    bool `json:"placesEnabled"`
 	InventoryEnabled bool `json:"inventoryEnabled"`
 }
 
 // Enrichment holds optional MonoRepo profile data used to fill scoring gaps.
 type Enrichment struct {
-	Email         string
-	Phone         string
-	Website       string
-	MenuItemCount int
+	Email          string
+	Phone          string
+	Website        string
+	MenuItemCount  int
 	MenuImageCount int
-	HasHours      bool
+	HasHours       bool
 }

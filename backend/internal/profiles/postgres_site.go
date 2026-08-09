@@ -6,8 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"net/url"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -143,7 +141,7 @@ func (repo *Postgres) buildSiteContent(ctx context.Context, summary SiteRestaura
 			rp.latitude,
 			rp.longitude,
 			COALESCE(rp.opening_hours, '{}'::jsonb),
-			COALESCE(rp.images->>'thumbnail', ''),
+			'',
 			rp.updated_at
 		FROM restaurants r
 		JOIN restaurant_profiles rp ON rp.restaurant_id = r.id
@@ -183,28 +181,7 @@ func (repo *Postgres) buildSiteContent(ctx context.Context, summary SiteRestaura
 	if err != nil {
 		return SiteContent{}, fmt.Errorf("load site profile: %w", err)
 	}
-	if isTemporaryGoogleMediaURL(content.Thumbnail) {
-		content.Thumbnail = ""
-	}
-
-	// Include hidden menu documents in the exclusion set as well. Hiding an
-	// admin-only menu scan must never let the same URL fall through to a dish
-	// card or any public website surface.
-	menuImages, err := repo.ListMenuImagesAdmin(ctx, summary.ID)
-	if err != nil {
-		return SiteContent{}, err
-	}
-	galleryImages, err := repo.ListGalleryImages(ctx, summary.ID)
-	if err != nil {
-		return SiteContent{}, err
-	}
-
-	menuBoardURLs := make(map[string]struct{}, len(menuImages))
-	for _, image := range menuImages {
-		menuBoardURLs[image.URL] = struct{}{}
-	}
-
-	menuItems, err := repo.listSiteMenuItems(ctx, summary.ID, menuBoardURLs)
+	menuItems, err := repo.listSiteMenuItems(ctx, summary.ID)
 	if err != nil {
 		return SiteContent{}, err
 	}
@@ -215,16 +192,16 @@ func (repo *Postgres) buildSiteContent(ctx context.Context, summary SiteRestaura
 	}
 
 	content.MenuItems = menuItems
-	content.GalleryImages = galleryImages
+	content.GalleryImages = []GalleryImage{}
 	content.Reviews = reviews
 
 	return content, nil
 }
 
-func (repo *Postgres) listSiteMenuItems(ctx context.Context, restaurantID uuid.UUID, menuBoardURLs map[string]struct{}) ([]SiteMenuItem, error) {
+func (repo *Postgres) listSiteMenuItems(ctx context.Context, restaurantID uuid.UUID) ([]SiteMenuItem, error) {
 	const query = `
 		SELECT mi.name, mi.category, mi.description,
-		       COALESCE(mi.price_text, ''), mi.price, mi.image_url, mi.images
+		       COALESCE(mi.price_text, ''), mi.price
 		FROM menu_items mi
 		JOIN menus m ON m.id = mi.menu_id
 		WHERE m.restaurant_id = $1 AND m.name = $2
@@ -246,8 +223,6 @@ func (repo *Postgres) listSiteMenuItems(ctx context.Context, restaurantID uuid.U
 			&item.Description,
 			&item.Price,
 			&priceNumeric,
-			&item.ImageURL,
-			&item.Images,
 		); err != nil {
 			return nil, fmt.Errorf("scan site menu item: %w", err)
 		}
@@ -259,7 +234,10 @@ func (repo *Postgres) listSiteMenuItems(ctx context.Context, restaurantID uuid.U
 			}
 		}
 
-		item.ImageURL = pickFoodImageURL(item.ImageURL, item.Images, menuBoardURLs)
+		// Legacy scraped image fields are intentionally not read into the public
+		// menu model. Text and pricing remain available.
+		item.ImageURL = ""
+		item.Images = nil
 		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil {
@@ -296,60 +274,4 @@ func (repo *Postgres) listSiteReviews(ctx context.Context, restaurantID uuid.UUI
 	}
 
 	return reviews, nil
-}
-
-func pickFoodImageURL(imageURL string, imagesJSON json.RawMessage, menuBoardURLs map[string]struct{}) string {
-	if imageURL != "" && !isTemporaryGoogleMediaURL(imageURL) {
-		if _, isMenu := menuBoardURLs[imageURL]; !isMenu {
-			return imageURL
-		}
-	}
-
-	var images []struct {
-		URL       string `json:"url"`
-		Thumbnail string `json:"thumbnail"`
-		ImageType string `json:"image_type"`
-		Source    string `json:"source"`
-	}
-	if len(imagesJSON) == 0 || json.Unmarshal(imagesJSON, &images) != nil {
-		return ""
-	}
-
-	for _, image := range images {
-		url := image.URL
-		if url == "" {
-			url = image.Thumbnail
-		}
-		if url == "" {
-			continue
-		}
-		if isTemporaryGoogleMediaURL(url) {
-			continue
-		}
-		if _, isMenu := menuBoardURLs[url]; isMenu {
-			continue
-		}
-		imageType := image.ImageType
-		if imageType == "" {
-			imageType = image.Source
-		}
-		switch imageType {
-		case "menu_document", "menu_ocr", "menu_list":
-			continue
-		default:
-			return url
-		}
-	}
-
-	return ""
-}
-
-func isTemporaryGoogleMediaURL(value string) bool {
-	parsed, err := url.Parse(strings.TrimSpace(value))
-	if err != nil {
-		return false
-	}
-	hostname := strings.ToLower(strings.TrimSuffix(parsed.Hostname(), "."))
-	return hostname == "googleusercontent.com" || strings.HasSuffix(hostname, ".googleusercontent.com") ||
-		hostname == "ggpht.com" || strings.HasSuffix(hostname, ".ggpht.com")
 }

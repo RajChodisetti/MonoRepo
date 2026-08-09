@@ -22,7 +22,7 @@ const restaurantWithProfileSelectColumns = `
 	r.id, r.name, r.email, r.status, r.is_contacted, r.shown_interest,
 	r.email_sent, r.email_send_count, r.last_email_sent_at, r.last_email_send_sequence,
 	r.created_at, r.updated_at,
-	COALESCE(rp.phone, ''), COALESCE(rp.address, ''), COALESCE(rp.ocr_status, 'pending')`
+	COALESCE(rp.phone, ''), COALESCE(rp.address, '')`
 
 type Postgres struct {
 	pool *pgxpool.Pool
@@ -54,7 +54,6 @@ func scanRestaurantAndExtras(scanner interface {
 		&record.UpdatedAt,
 		&record.Phone,
 		&record.Address,
-		&record.OCRStatus,
 	)
 	return record, err
 }
@@ -155,12 +154,6 @@ func (repo *Postgres) queryList(ctx context.Context, ids []uuid.UUID, filter Lis
 	if filter.ShownInterest != nil {
 		query += fmt.Sprintf(" AND r.shown_interest = $%d", argPos)
 		args = append(args, *filter.ShownInterest)
-		argPos++
-	}
-
-	if filter.OCRStatus != "" {
-		query += fmt.Sprintf(" AND COALESCE(rp.ocr_status, 'pending') = $%d", argPos)
-		args = append(args, filter.OCRStatus)
 		argPos++
 	}
 
@@ -290,31 +283,10 @@ func (repo *Postgres) Update(ctx context.Context, id uuid.UUID, input UpdateInpu
 			    approved_at = NULL,
 			    approved_by = NULL,
 			    updated_at = now()
-			WHERE restaurant_id = $1 AND status = 'approved'`, id); err != nil {
+			WHERE restaurant_id = $1
+			  AND status = 'approved'
+			  AND sequence_id IS NULL`, id); err != nil {
 			return Restaurant{}, fmt.Errorf("invalidate campaign approval after identity update: %w", err)
-		}
-		if _, err := tx.Exec(ctx, `
-			INSERT INTO job_runs (job_type, status, payload, idempotency_key, max_attempts)
-			SELECT 'lead.prepare',
-			       'queued',
-			       jsonb_build_object('restaurant_id', rp.restaurant_id::text),
-			       'lead.prepare:' || rp.restaurant_id::text || ':' ||
-			         rp.ocr_input_fingerprint || ':' ||
-			         lead_artifact_current_profile_fingerprint(rp.restaurant_id),
-			       3
-			FROM restaurant_profiles rp
-			WHERE rp.restaurant_id = $1
-			  AND rp.ocr_status = 'verified'
-			  AND lead_artifact_current_profile_fingerprint(rp.restaurant_id) IS NOT NULL
-			ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL
-			DO UPDATE SET
-			    status = 'queued', payload = EXCLUDED.payload, attempts = 0,
-			    max_attempts = EXCLUDED.max_attempts, last_error = NULL,
-			    available_at = now(), locked_at = NULL, locked_by = NULL,
-			    lease_expires_at = NULL, updated_at = now()
-			WHERE job_runs.job_type = 'lead.prepare'
-			  AND job_runs.status IN ('completed', 'failed')`, id); err != nil {
-			return Restaurant{}, fmt.Errorf("enqueue lead preparation after identity update: %w", err)
 		}
 	}
 

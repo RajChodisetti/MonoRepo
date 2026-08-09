@@ -2,6 +2,14 @@
 .run
 logs
 
+# Never admit runtime secret files into a Docker build context. Examples are
+# named `*.env.example` and are unaffected by these patterns.
+.env
+.env.*
+**/.env
+**/.env.*
+**/*.env
+
 **/node_modules
 **/.next
 **/dist
