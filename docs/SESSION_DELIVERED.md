@@ -2771,3 +2771,54 @@ scores and summaries needs a Google-compliant product architecture and explicit
 provider/billing approval before production. No API, scoring, competitor,
 report-document, migration, provider, or billing change shipped in this
 release.
+
+## 2026-08-09 — Animated Review Evidence and Restaurant Flows
+
+**Role:** Coordinating Product, Frontend, Backend, Accessibility, QA, and
+Release Agent
+
+**Delivered:** Restored continuous owner-story auto-scroll for normal-motion
+visitors while keeping an explicit Start/Pause control, and restored the small
+five-stop Repeat Orders journey with Play/Stop/Replay controls. Rebuilt the
+digital-footprint scan as a real bordered, tilted evidence collage over the
+map: listing photos, reviews, and independent desktop/mobile captures display
+in four-card batches that replace every four seconds. The scan now runs for at
+least 15 seconds, waits four seconds for late real evidence, handles failed
+images and missing viewports honestly, and exposes visible source links.
+Backend media cards now preserve available contributor names and photo-specific
+Google Maps links, do not infer that an arbitrary photo is a menu, and never
+publish one captured viewport under both desktop and mobile labels.
+
+**Production Deployment:** User-approved release `591ffd7` is active at
+`/opt/tuvi/releases/monorepo-591ffd7`. Only `tuvi-api-1` and
+`tuvi-tuvi-website-1` were recreated; no migration ran. The prior source remains
+at `/opt/tuvi/releases/monorepo-64c2dc2`, with rollback images
+`tuvi-api:rollback-64c2dc2-20260809` and
+`tuvi-tuvi-website:rollback-64c2dc2-20260809`. Worker, scraper, admin, template,
+voice, PostgreSQL, Redis, catalog, and QA container identities remained
+unchanged with zero restarts. The latest release also serves locally from the
+reviewed worktree on port 3001.
+
+**Checks Run:** Go format, all 266 backend tests across 45 packages, backend
+vet, and API build passed. Corporate-web ESLint, TypeScript, all seven focused
+content/timing tests, the 61-route Next.js production build, both Compose
+configurations, and `git diff --check` passed. The deployment archive checksum
+matched before extraction, both production Docker images built successfully,
+loopback and all required public routes returned 200, and the live API returned
+independent viewport fields plus an attributed generic listing-photo card.
+Production browser QA measured a 15.93-second scan, observed a genuine
+four-second evidence-batch change, confirmed the desktop-unavailable/mobile-
+available state, source link, owner-gallery control, and Repeat Orders Stop 2/5
+playback. Both recreated containers are running with restart count zero and
+clean startup logs; the outreach email job remains disabled.
+
+**Business Value / Plan Fit:** Prospects can now see the exact listing, review,
+and website evidence Tuvi is evaluating instead of waiting on an empty map, and
+the two restaurant-growth sections visibly demonstrate motion without hiding
+controls from reduced-motion visitors.
+
+**Risks / Follow-ups:** Some source images can briefly show a loading state when
+a new four-card batch opens. Website capture remains fail-closed when a viewport
+cannot be collected. This release does not change database schema, competitor
+scoring, outreach sending, voice behavior, protected configuration, DNS, or
+billing.

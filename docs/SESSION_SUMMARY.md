@@ -1,7 +1,7 @@
 # Session Summary
 
-The production corporate website is deployed from `64c2dc2` at `/opt/tuvi/releases/monorepo-64c2dc2`; only `tuvi-website` was recreated, and every API, worker, database, voice, QA, and infrastructure container remained unchanged.
-Restaurant growth stories now auto-scroll horizontally with a visible pause control, pause on hover/focus, and a reduced-motion manual-scroll fallback; duplicate marquee links are excluded from the accessibility tree.
-“More Repeat Orders” now uses the latest horizontal five-stop Jules flow and no longer renders the stale Celine/Ciara portrait; mobile production QA confirms the complete flow fits without clipping.
-The latest feature-branch commit `1116cb9` was audited and selectively integrated because its full diff regressed the report experience and included unrelated public contact code.
-The comprehensive digital-footprint review redesign remains unreleased pending approval of a Google-compliant data/AI architecture; no provider, billing, migration, API, worker, or AI-review production change was made in this release.
+Production release `591ffd7` is active at `/opt/tuvi/releases/monorepo-591ffd7`; only the API and corporate website were recreated, with zero restarts and explicit `64c2dc2` rollback images/source preserved.
+Owner stories auto-scroll with Start/Pause controls, and More Repeat Orders now plays the compact horizontal Jules journey with Play/Stop/Replay instead of remaining static.
+The digital-footprint scan presents real listing, review, desktop, and mobile evidence in tilted four-card map collages, replaces batches every four seconds, and measured 15.93 seconds in production.
+Backend evidence now preserves available photo attribution/source links, avoids false menu classification, and keeps desktop/mobile capture provenance independent and fail-closed.
+All backend/web/build/Compose checks and production route/browser smokes passed; no migration, worker, outreach-send, voice, DNS, protected-config, or billing change occurred, and the reviewed build also serves locally on port 3001.
