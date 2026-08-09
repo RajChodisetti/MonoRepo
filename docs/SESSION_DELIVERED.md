@@ -2727,3 +2727,57 @@ without screenshots rather than exceed the 15-second budget. Do not run the old
 API/worker against schema 43; before any sequence progress, rollback requires
 stopping writers and using the new migrator down to 41, while any uncertain or
 real send requires a forward fix.
+
+## 2026-08-09 — Natural Restaurant-Owner Gallery Production Release
+
+**Role:** Coordinating Frontend, Visual QA, Test, Release, and DevOps Agent
+
+**Delivered:** Replaced the five remote owner-story portraits with project-local
+1024×768 documentary-style images and added two distinct Fal Flux 2 Max scenes:
+Leila Haddad sourcing wholesale produce before dawn and Marcus Chen repairing a
+dining chair before opening. The shared case-study source now drives seven
+linked homepage cards, listing cards, and static detail routes. Wide detail
+heroes use a top-biased crop to preserve faces, the longer marquee retains the
+previous motion pace, and reduced-motion users can horizontally scroll it.
+
+Because the source explicitly defines the venues as fictional, the homepage,
+listing, detail label, metadata, image alt text, and CTA now identify the
+stories as fictional illustrative examples with variable results. A regression
+test enforces seven unique slugs and local images, complete content, three-step
+approaches/results, valid paths, and on-disk asset presence.
+
+**Production Deployment:** Created scoped commit `fc5bbc3` on
+`release/owner-gallery-20260809` from deployed source `9e89508`, excluding the
+unrelated `1116cb9` website changes. A SHA-256-verified git archive was extracted
+to `/opt/tuvi/releases/monorepo-fc5bbc3`; Compose validated before build. Only
+`tuvi-website` was built and recreated with `--no-deps`. The active source
+symlink now targets that immutable release and the running image is
+`sha256:135eccf79d586e4528d7f2f0073ad6f12adde63e8d24251b5f60aa450f0312b0`
+with zero restarts. The previous image remains tagged
+`tuvi-tuvi-website:rollback-pre-fc5bbc3` at
+`sha256:2f57e2ecd65539cc0b77f97e420cd124191023fd373c3f1db753d01d2cfc3bdc`.
+
+**Checks Run:** On Node 22, full ESLint, TypeScript, three focused Node tests,
+`git diff --check`, and the Next.js production build passed. The same Docker
+build passed on the VM and generated all 61 static pages. Local production-mode,
+VM loopback, and public HTTPS smokes returned 200 for home, case-study index,
+all seven details, booking, privacy, terms, Google Workspace, and both new image
+URLs. Served Leila and Marcus image SHA-256 checksums exactly matched the release.
+Desktop and 390×844 browser QA verified the homepage disclosure, fourteen loop
+cards/seven unique stories, both new 4:3 cards, lazy loading, and the wide hero
+crop. Container IDs for every non-website service were unchanged; website logs
+showed a clean Next.js start with no errors.
+
+**Business Value / Plan Fit:** The owner gallery now feels varied and grounded
+in ordinary restaurant work instead of corporate portraiture, while every
+customer-style claim is visibly framed as an illustration. The production
+release is narrow, auditable, and reversible without touching data or service
+contracts.
+
+**Risks / Follow-ups:** The seven stories and metrics remain fictional and must
+stay visibly labeled unless they are replaced with consented, verifiable
+customer evidence. Rollback is website-only: restore source
+`monorepo-9e89508`, retag `rollback-pre-fc5bbc3` as the active image, and recreate
+only `tuvi-website` with `--no-deps`. No migration, database backup/restore,
+API, worker, voice, Caddy, DNS, protected environment, outreach, or provider
+operation was performed.
