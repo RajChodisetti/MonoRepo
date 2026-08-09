@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 export default function LockedBlur({
   locked,
   children,
-  label = "Verify email to unlock",
+  label = "Confirm email to unlock",
   className = "",
 }: {
   locked: boolean;

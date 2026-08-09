@@ -23,11 +23,10 @@ function cleanScore(score: string): string {
 
 function strengthLabel(score: string, scoreColor: string): { text: string; color: string } {
   const n = Number.parseFloat(cleanScore(score));
-  if (!Number.isFinite(n)) return { text: "Strong", color: scoreColor };
-  // Heuristic: scores from API are often out of ~25–40 style buckets.
-  if (n >= 35 || (n <= 25 && n >= 20)) return { text: "Leading", color: scoreColor };
-  if (n >= 15) return { text: "Strong", color: scoreColor };
-  return { text: "Rising", color: scoreColor };
+  if (!Number.isFinite(n)) return { text: "Steady demand", color: scoreColor };
+  if (n >= 35 || (n <= 25 && n >= 20)) return { text: "Winning search", color: scoreColor };
+  if (n >= 15) return { text: "Steady demand", color: scoreColor };
+  return { text: "Building up", color: scoreColor };
 }
 
 export default function LiveCompetitorsCard({
@@ -42,17 +41,17 @@ export default function LiveCompetitorsCard({
   return (
     <div className="rounded-[18px] bg-white px-3.5 pb-4 pt-3.5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
       <p className="text-[15px] font-bold leading-snug tracking-[-0.02em] text-[#111111]">
-        Who&apos;s beating you on Google
+        Local search snapshot
       </p>
       <p className="mt-1 text-[12px] leading-snug" style={{ color: MUTED }}>
-        Nearby restaurants ranking above you right now — scoring review included.
+        How nearby venues show up when diners look for a table tonight.
       </p>
 
-      <LockedBlur locked={locked} label="Verify email — free competitor review" className="mt-3 rounded-xl">
+      <LockedBlur locked={locked} label="Confirm email for the full local map" className="mt-3 rounded-xl">
         <ul className="space-y-3">
           {rows.map((row, index) => {
             const strength = row.highlight
-              ? { text: "You", color: row.scoreColor }
+              ? { text: "Your venue", color: row.scoreColor }
               : strengthLabel(row.score, row.scoreColor);
             return (
               <li key={`${row.rank}-${row.name}`}>
@@ -78,7 +77,7 @@ export default function LiveCompetitorsCard({
                       {row.rating}
                     </p>
                   </div>
-                  <span className="text-[12px] font-semibold" style={{ color: strength.color }}>
+                  <span className="shrink-0 text-[11px] font-semibold" style={{ color: strength.color }}>
                     {strength.text}
                   </span>
                 </div>
@@ -92,13 +91,13 @@ export default function LiveCompetitorsCard({
         <button
           type="button"
           onClick={onUnlock}
-          className="mt-3.5 min-h-11 w-full cursor-pointer rounded-full bg-[#111111] px-4 py-2.5 text-[12.5px] font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          className="mt-3.5 w-full cursor-pointer rounded-full bg-[#111111] px-4 py-2.5 text-[12.5px] font-semibold text-white"
         >
-          Unlock free scoring review
+          Unlock your local search snapshot
         </button>
       ) : (
         <p className="mt-3.5 text-center text-[11.5px] font-medium" style={{ color: MUTED }}>
-          Full competitor scoring unlocked
+          Full local snapshot unlocked
         </p>
       )}
     </div>

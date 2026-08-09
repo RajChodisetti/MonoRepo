@@ -1,12 +1,40 @@
-const GREEN = "#1f9a4a";
-const ORANGE = "#d9772a";
+const TEAL = "#0f7a5a";
+const AMBER = "#c45c1a";
 const MUTED = "#9b9690";
 
 const rows = [
-  { rank: "1st", name: "Competitor 1", rating: "4.8", label: "Leading", scoreColor: GREEN, highlight: false },
-  { rank: "2nd", name: "Competitor 2", rating: "4.0", label: "Leading", scoreColor: GREEN, highlight: false },
-  { rank: "3rd", name: "Competitor 3", rating: "4.6", label: "Strong", scoreColor: GREEN, highlight: false },
-  { rank: "10th", name: "Your restaurant", rating: "4.2", label: "Behind", scoreColor: ORANGE, highlight: true },
+  {
+    rank: "1st",
+    name: "Driftpane Dining",
+    rating: "4.7",
+    label: "Winning search",
+    scoreColor: TEAL,
+    highlight: false,
+  },
+  {
+    rank: "2nd",
+    name: "Marrowbay Table",
+    rating: "4.5",
+    label: "Winning search",
+    scoreColor: TEAL,
+    highlight: false,
+  },
+  {
+    rank: "3rd",
+    name: "Pebblewick Room",
+    rating: "4.4",
+    label: "Steady demand",
+    scoreColor: TEAL,
+    highlight: false,
+  },
+  {
+    rank: "8th",
+    name: "Your venue",
+    rating: "4.1",
+    label: "Gap to close",
+    scoreColor: AMBER,
+    highlight: true,
+  },
 ] as const;
 
 function Star() {
@@ -21,10 +49,10 @@ export default function CompetitorsCard() {
   return (
     <div className="rounded-[18px] bg-white px-3.5 pb-4 pt-3.5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
       <p className="text-[15px] font-bold leading-snug tracking-[-0.02em] text-[#111111]">
-        Who&apos;s beating you on Google
+        Local search snapshot
       </p>
       <p className="mt-1 text-[12px] leading-snug" style={{ color: MUTED }}>
-        Nearby restaurants ranking above you — free AI scoring review.
+        How nearby venues show up when diners look for a table tonight.
       </p>
 
       <ul className="mt-3.5 space-y-3">
@@ -52,7 +80,7 @@ export default function CompetitorsCard() {
                   {row.rating}
                 </p>
               </div>
-              <span className="text-[12px] font-semibold" style={{ color: row.scoreColor }}>
+              <span className="shrink-0 text-[11px] font-semibold" style={{ color: row.scoreColor }}>
                 {row.label}
               </span>
             </div>

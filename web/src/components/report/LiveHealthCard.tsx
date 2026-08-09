@@ -1,54 +1,27 @@
 "use client";
 
+import Image from "next/image";
 import type { HealthMetric } from "@/lib/report";
 import LockedBlur from "@/components/report/LockedBlur";
 
 const MUTED = "#9b9690";
+const FOREST = "#1f4d3a";
 
-function ProgressRing({
-  value,
-  size,
-  strokeWidth,
-  color,
-}: {
-  value: number;
-  size: number;
-  strokeWidth: number;
-  color: string;
-}) {
-  const radius = (size - strokeWidth) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const offset = circumference * (1 - Math.min(Math.max(value, 0), 1));
-
+function MetricBar({ metric }: { metric: HealthMetric }) {
+  const pct = Math.round(Math.min(Math.max(metric.value, 0), 1) * 100);
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90" aria-hidden="true">
-      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#ebe7e2" strokeWidth={strokeWidth} />
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={radius}
-        fill="none"
-        stroke={color}
-        strokeWidth={strokeWidth}
-        strokeLinecap="round"
-        strokeDasharray={circumference}
-        strokeDashoffset={offset}
-      />
-    </svg>
-  );
-}
-
-function MetricRow({ metric }: { metric: HealthMetric }) {
-  return (
-    <li className="flex items-center gap-2.5">
-      <div className="relative flex h-6 w-6 shrink-0 items-center justify-center">
-        <ProgressRing value={metric.value} size={24} strokeWidth={3} color={metric.statusColor} />
-      </div>
-      <div className="min-w-0 flex-1 text-left">
-        <p className="truncate text-[12.5px] font-semibold leading-tight text-[#111111]">{metric.label}</p>
-        <p className="text-[11.5px] font-semibold leading-tight" style={{ color: metric.statusColor }}>
+    <li>
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <span className="truncate text-[12.5px] font-semibold text-[#111111]">{metric.label}</span>
+        <span className="shrink-0 text-[11px] font-semibold" style={{ color: metric.statusColor }}>
           {metric.status}
-        </p>
+        </span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-[#ebe7e2]">
+        <div
+          className="h-full rounded-full transition-[width] duration-500"
+          style={{ width: `${pct}%`, backgroundColor: metric.statusColor }}
+        />
       </div>
     </li>
   );
@@ -58,6 +31,12 @@ function isWebsiteMetric(metric: HealthMetric) {
   const key = (metric.key || "").toLowerCase();
   const label = metric.label.toLowerCase();
   return key === "website" || label.includes("website design") || label.includes("website");
+}
+
+function readinessCopy(score: number, label: string) {
+  if (score >= 75) return { badge: "Strong demand", hint: label };
+  if (score >= 50) return { badge: "Building demand", hint: label };
+  return { badge: "Leaking bookings", hint: label };
 }
 
 export default function LiveHealthCard({
@@ -79,61 +58,83 @@ export default function LiveHealthCard({
   const splitAt = websiteIdx >= 0 ? websiteIdx + 1 : Math.min(3, metrics.length);
   const visibleMetrics = metrics.slice(0, splitAt);
   const gatedMetrics = metrics.slice(splitAt);
+  const readiness = readinessCopy(overallScore, overallLabel);
 
   return (
-    <div className="rounded-[18px] bg-white px-4 pb-4 pt-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-      <div className="flex items-center gap-2.5">
-        <div
-          className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-[#e8f1eb] text-[12px] font-bold uppercase text-primary"
-          aria-hidden="true"
-        >
-          {restaurantName.trim().charAt(0) || "R"}
-        </div>
-        <p className="truncate text-[15px] font-semibold tracking-[-0.02em] text-[#111111]">
-          {restaurantName}
-        </p>
-      </div>
-
-      <div className="relative mx-auto mt-4 flex h-[138px] w-[138px] items-center justify-center">
-        <ProgressRing value={overallScore / 100} size={138} strokeWidth={11} color={overallColor} />
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-[40px] font-bold leading-none tracking-[-0.05em] text-[#111111]">
-            {overallScore}
+    <div className="overflow-hidden rounded-[18px] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+      <div className="relative h-[140px] w-full">
+        <Image
+          src="https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=800&q=80"
+          alt=""
+          fill
+          className="object-cover"
+          sizes="320px"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 px-3.5 pb-3">
+          <div className="min-w-0">
+            <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-white/70">
+              Venue pulse
+            </p>
+            <p className="truncate text-[15px] font-semibold tracking-[-0.02em] text-white">
+              {restaurantName}
+            </p>
+          </div>
+          <span
+            className="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold text-white ring-1 ring-white/30"
+            style={{ backgroundColor: `${overallColor}cc` }}
+          >
+            {readiness.badge}
           </span>
-          <span className="mt-0.5 text-[12px] font-medium" style={{ color: MUTED }}>
-            SEO score
-          </span>
         </div>
       </div>
 
-      <div className="mt-2.5 text-center">
-        <p className="text-[12px] font-medium" style={{ color: MUTED }}>
-          Digital footprint score
-        </p>
-        <p className="mt-0.5 text-[20px] font-bold tracking-[-0.03em]" style={{ color: overallColor }}>
-          {overallLabel}
-        </p>
-      </div>
+      <div className="px-3.5 pb-4 pt-3.5">
+        <div className="grid grid-cols-3 gap-2">
+          <div className="rounded-xl bg-[#f5f3ef] px-2 py-2.5 text-center">
+            <p className="text-[18px] font-bold leading-none tracking-[-0.03em] text-[#111111]">
+              {overallScore}
+            </p>
+            <p className="mt-1 text-[10px] font-medium leading-tight" style={{ color: MUTED }}>
+              Booking readiness
+            </p>
+          </div>
+          <div className="rounded-xl bg-[#f5f3ef] px-2 py-2.5 text-center">
+            <p className="text-[18px] font-bold leading-none tracking-[-0.03em]" style={{ color: FOREST }}>
+              {Math.max(1, Math.round(overallScore / 8))}
+            </p>
+            <p className="mt-1 text-[10px] font-medium leading-tight" style={{ color: MUTED }}>
+              Open gaps
+            </p>
+          </div>
+          <div className="rounded-xl bg-[#f5f3ef] px-2 py-2.5 text-center">
+            <p className="text-[13px] font-bold leading-tight tracking-[-0.02em] text-[#111111]">
+              {readiness.hint}
+            </p>
+            <p className="mt-1 text-[10px] font-medium leading-tight" style={{ color: MUTED }}>
+              Guest path
+            </p>
+          </div>
+        </div>
 
-      <div className="mt-4 border-t border-[#efebe6] pt-4">
-        <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: MUTED }}>
-          Score breakdown
+        <p className="mt-4 text-[11px] font-semibold uppercase tracking-[0.07em]" style={{ color: MUTED }}>
+          What guests hit first
         </p>
-        <ul className="space-y-3">
+        <ul className="mt-2.5 space-y-2.5">
           {visibleMetrics.map((metric) => (
-            <MetricRow key={metric.key || metric.label} metric={metric} />
+            <MetricBar key={metric.key || metric.label} metric={metric} />
           ))}
         </ul>
 
         {gatedMetrics.length > 0 ? (
           <LockedBlur
             locked={locked}
-            label="Verify email to unlock full scoring"
+            label="Confirm email for the full venue pulse"
             className="mt-3 rounded-xl"
           >
-            <ul className="space-y-3 pt-1">
+            <ul className="space-y-2.5 pt-1">
               {gatedMetrics.map((metric) => (
-                <MetricRow key={metric.key || metric.label} metric={metric} />
+                <MetricBar key={metric.key || metric.label} metric={metric} />
               ))}
             </ul>
           </LockedBlur>

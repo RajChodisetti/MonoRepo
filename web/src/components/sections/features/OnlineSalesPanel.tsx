@@ -50,7 +50,7 @@ const MENU: MenuItem[] = [
 
 function CartIcon() {
   return (
-    <svg viewBox="0 0 24 24" className="h-[17px] w-[17px] shrink-0 text-white" aria-hidden="true">
+    <svg viewBox="0 0 24 24" className="h-[17px] w-[17px] shrink-0 text-[#1a1a1a]" aria-hidden="true">
       <path
         fill="currentColor"
         d="M7 18a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm10 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4ZM7.2 6h13.1l-1.2 6.2a2 2 0 0 1-2 1.6H9.1a2 2 0 0 1-2-1.6L5.6 3.5A1.5 1.5 0 0 0 4.1 2H2v1.8h1.7l1.5 7.7a3.8 3.8 0 0 0 3.7 3H17v-1.8H9a2 2 0 0 1-2-1.6L7.2 6Z"
@@ -85,14 +85,14 @@ function CheckIcon() {
 function OdometerDigit({ digit, height = 20 }: { digit: string; height?: number }) {
   if (digit === ",") {
     return (
-      <span className="inline-flex w-[0.32em] items-end justify-center text-white" style={{ height }}>
+      <span className="inline-flex w-[0.32em] items-end justify-center text-[#1a1a1a]" style={{ height }}>
         ,
       </span>
     );
   }
   const value = Number(digit);
   return (
-    <span className="relative inline-block overflow-hidden text-white" style={{ height, width: "0.6em" }}>
+    <span className="relative inline-block overflow-hidden text-[#1a1a1a]" style={{ height, width: "0.6em" }}>
       <span
         className="absolute left-0 top-0 flex w-full flex-col transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
         style={{ transform: `translateY(-${value * height}px)` }}
@@ -110,7 +110,7 @@ function OdometerDigit({ digit, height = 20 }: { digit: string; height?: number 
 function OdometerNumber({ value }: { value: number }) {
   const formatted = Math.round(value).toLocaleString("en-US");
   return (
-    <span className="inline-flex items-center text-[14px] font-semibold tracking-[-0.02em] text-white sm:text-[15px]">
+    <span className="inline-flex items-center text-[14px] font-semibold tracking-[-0.02em] text-[#1a1a1a] sm:text-[15px]">
       {formatted.split("").map((char, index) => (
         <OdometerDigit key={index} digit={char} />
       ))}
@@ -323,15 +323,34 @@ export default function OnlineSalesPanel({ onProgress, onComplete }: OnlineSales
       style={{ backgroundColor: "#f2ecdf" }}
     >
       <div>
-        <p className="text-[14px] font-medium text-[#7a7268] sm:text-[15px]">Boost your orders</p>
+        <p className="text-[14px] font-medium text-[#7a7268] sm:text-[15px]">Commission-free ordering</p>
         <h3 className="mt-3 text-[clamp(1.85rem,3.2vw,2.85rem)] font-bold leading-[1.12] tracking-[-0.04em] text-[#1a1a1a]">
-          <span className="block">Grow sales with ordering</span>
-          <span className="block">that feels just like the</span>
-          <span className="block">big brands</span>
+          <span className="block">Let guests order on</span>
+          <span className="block">your site — and keep</span>
+          <span className="block">every dollar you earn</span>
         </h3>
       </div>
 
       <div className="mx-auto flex w-full max-w-[380px] flex-col gap-3">
+        <div className="flex justify-center">
+          <div className="inline-flex items-center gap-2.5 rounded-full border border-[#1a1a1a]/10 bg-[#fff8ee] px-4 py-2.5 shadow-[0_10px_28px_rgba(26,26,26,0.08)]">
+            <CartIcon />
+            <p className="flex items-center gap-1.5 whitespace-nowrap text-[14px] font-medium text-[#1a1a1a]">
+              <span>You&apos;ll earn</span>
+              <OdometerNumber value={points} />
+              <span>points</span>
+            </p>
+            <span
+              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[12px] font-bold text-[#fff8ee] transition-transform duration-300 ${
+                badgePulse ? "scale-110" : "scale-100"
+              }`}
+              style={{ backgroundColor: "#c45c26" }}
+            >
+              {badge}
+            </span>
+          </div>
+        </div>
+
         <div className="relative h-[196px] overflow-hidden">
           {/* Incoming — enters from top on exit */}
           <div
@@ -354,28 +373,6 @@ export default function OnlineSalesPanel({ onProgress, onComplete }: OnlineSales
             }`}
           >
             <MenuCard key={bottom.id} item={bottom} emphasized={!isExiting} ticked={isTicked} />
-          </div>
-        </div>
-
-        <div className="mt-1 flex justify-center">
-          <div
-            className="inline-flex items-center gap-2.5 rounded-full px-4 py-2.5 shadow-[0_12px_40px_rgba(13,61,40,0.28)]"
-            style={{ backgroundColor: "#174c3a" }}
-          >
-            <CartIcon />
-            <p className="flex items-center gap-1.5 whitespace-nowrap text-[14px] font-medium text-white">
-              <span>You&apos;ll earn</span>
-              <OdometerNumber value={points} />
-              <span>points</span>
-            </p>
-            <span
-              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[12px] font-bold text-white transition-transform duration-300 ${
-                badgePulse ? "scale-110" : "scale-100"
-              }`}
-              style={{ backgroundColor: "#3ecf5a" }}
-            >
-              {badge}
-            </span>
           </div>
         </div>
       </div>

@@ -1,15 +1,18 @@
 const issues = [
   {
-    title: "Not ranking in 3 nearby areas",
-    description: "Missing keywords to rank nearby for terms competitors are winning with.",
+    title: "Thin coverage in 4 local search pockets",
+    description:
+      "Diners typing suburb + cuisine phrases are landing on other menus before yours.",
   },
   {
-    title: "Title missing primary keyword",
-    description: 'Including "Pizza in Springfield" will increase Google rankings.',
+    title: "Menu pages lack clear dish signals",
+    description:
+      "Google and AI answers need sharper dish names, prices, and dietary cues on your site.",
   },
   {
-    title: "2 images missing alt tags",
-    description: "Adding alt tags to all images will boost visibility on Google Maps and Google Images.",
+    title: "Guest proof is hard to find",
+    description:
+      "Recent reviews and photos aren’t surfaced where new guests decide where to book.",
   },
 ] as const;
 
@@ -30,10 +33,10 @@ export default function IssuesCard() {
   return (
     <div className="rounded-[18px] bg-white px-3.5 pb-5 pt-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
       <p className="text-[16px] font-bold leading-snug tracking-[-0.025em] text-[#111111]">
-        Here&apos;s where you can improve
+        Priority fixes for your venue
       </p>
       <p className="mt-1.5 text-[12.5px] leading-snug text-[#8a8580]">
-        You&apos;re losing $450 a month in sales until these are fixed.
+        Roughly 30–40 booked tables a month may be walking to nearby venues first.
       </p>
 
       <ul className="mt-4 space-y-2.5">
@@ -60,20 +63,20 @@ export default function IssuesCard() {
         </ul>
         <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-white/25 via-white/55 to-white/70 px-3">
           <p className="rounded-full bg-white/95 px-3.5 py-1.5 text-center text-[11.5px] font-semibold text-[#111111] shadow-[0_4px_18px_rgba(0,0,0,0.08)]">
-            Verify email to see all suggestions
+            Confirm email for the full Tuvi playbook
           </p>
         </div>
       </div>
 
       <p className="mt-5 text-center text-[13px] font-medium text-[#8a8580]">
-        Improve your score to drive more sales
+        Close the gaps. Own more direct bookings.
       </p>
 
       <button
         type="button"
         className="mt-3 w-full rounded-full bg-[#111111] px-4 py-3.5 text-[14px] font-semibold text-white"
       >
-        Verify email — unlock free AI fixes
+        Unlock your Tuvi action list
       </button>
     </div>
   );
