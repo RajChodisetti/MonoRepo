@@ -43,10 +43,11 @@ export default function LiveIssuesCard({
   return (
     <div className="rounded-[18px] bg-white px-3.5 pb-5 pt-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
       <p className="text-[16px] font-bold leading-snug tracking-[-0.025em] text-[#111111]">
-        Here&apos;s where you can improve
+        Priority fixes for your venue
       </p>
       <p className="mt-1.5 text-[12.5px] leading-snug text-[#8a8580]">
-        You&apos;re losing ${estimatedMonthlyLoss.toLocaleString()} a month in sales until these are fixed.
+        Roughly {estimatedMonthlyLoss > 0 ? `$${estimatedMonthlyLoss.toLocaleString()} /mo` : "booked tables"} may be
+        walking to nearby venues first.
       </p>
 
       <ul className="mt-4 space-y-2.5">
@@ -56,7 +57,7 @@ export default function LiveIssuesCard({
       {rest.length > 0 ? (
         <LockedBlur
           locked={locked}
-          label="Verify email to see all suggestions"
+          label="Confirm email for the full Tuvi playbook"
           className="mt-2.5 rounded-2xl"
         >
           <ul className="space-y-2.5">
@@ -68,15 +69,15 @@ export default function LiveIssuesCard({
       ) : null}
 
       <p className="mt-5 text-center text-[13px] font-medium text-[#8a8580]">
-        Improve your score to drive more sales
+        Close the gaps. Own more direct bookings.
       </p>
 
       <button
         type="button"
         onClick={onFix}
-        className="mt-3 min-h-11 w-full cursor-pointer rounded-full bg-[#111111] px-4 py-3.5 text-[14px] font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        className="mt-3 w-full cursor-pointer rounded-full bg-[#111111] px-4 py-3.5 text-[14px] font-semibold text-white"
       >
-        {locked ? "Verify email — unlock suggested fixes" : "See how Tuvi can help"}
+        {locked ? "Unlock your Tuvi action list" : "Start fixing with Tuvi"}
       </button>
     </div>
   );

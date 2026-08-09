@@ -37,7 +37,7 @@ export function AiPhoneConversationVisual() {
             </svg>
           </span>
           <div>
-            <p className="text-[13px] font-bold text-[#0f271f]">AI Host - Olive & Oak</p>
+            <p className="text-[13px] font-bold text-[#0f271f]">AI Host - Timber Quince</p>
             <p className="text-[11px] text-[#888]">Call with John Smith</p>
           </div>
         </div>

@@ -2781,3 +2781,69 @@ customer evidence. Rollback is website-only: restore source
 only `tuvi-website` with `--no-deps`. No migration, database backup/restore,
 API, worker, voice, Caddy, DNS, protected environment, outreach, or provider
 operation was performed.
+
+## 2026-08-09 — Template-4 Branch Reconciliation and Source Release
+
+**Role:** Coordinating Release, Test, Security, and DevOps Agent
+
+**Delivered:** Reconciled `origin/fix/template-4-build` at `0b5e016` with the
+tested production lineage at `5fa044c`. The merge completed without textual
+conflicts as `4249d56`; its tree exactly matched the independent merge-tree
+preflight. Relative to the production lineage, the merge adds only the 17-file
+standalone `ocr-electrical-poc/`. Verification also found and removed one stale
+local-Compose bind mount for the intentionally retired outbound
+`voice-sales-agent/caller_id.py`; reconciled release commit `9e89508` was
+pushed non-force to `origin/fix/template-4-build`.
+
+The canonical corporate site and active assets were already current in
+production. `web/` is byte-identical to production commit `ee553c4`, including
+`web/public` tree `d51d810546e93e3bf2fba47f201b8a2569e377d5`; the active
+template assets are also identical (`template/public` tree `1d7b9068`). The
+retired `tuvi-website/app` tree stays removed. The electrical OCR/Gemini POC is
+preserved only as repository source and is not referenced by Docker, Compose,
+Make, or the VM topology.
+
+**Production Deployment:** Created and checksum-verified immutable source
+release `/opt/tuvi/releases/monorepo-9e89508` and atomically moved
+`/opt/tuvi/MonoRepo` to it. Runtime directories, `go.mod`, `go.sum`, and
+`docker-compose.vm.yml` were compared against `monorepo-ee553c4` before the
+swap and were identical. Therefore no image rebuild, migration, or container
+recreation was performed; the verified `release-ee553c4` images remain active
+with zero restarts and are the rollback runtime. PostgreSQL remains at schema
+`43`, outreach email remains disabled, and no Tuvi OCR container exists.
+
+**Checks Run:** Go `test`, targeted race tests, vet, and API/worker/migrator
+builds passed. Corporate web, admin web, and all three active restaurant
+templates passed lint, TypeScript, and production builds. The report-preview
+tests, 30 outreach tests, five inbound-only voice tests, OpenAPI validation,
+both Compose configs, POC/Andre compile-only checks, `git diff --check`, and
+secret-pattern scans passed. The first parallel dependency install and first
+race-test attempt hit workstation `ENOSPC`; generated partial directories were
+removed, installs were rerun sequentially, and all affected checks then passed.
+The workstation provides Python 3.14 rather than the repository-aligned 3.12,
+so Python checks used the existing dependency-complete 3.14 outreach venv; no
+Gemini/provider smoke was invoked.
+
+**Production Smokes:** Corporate home, booking, demo, how-it-works, resources,
+case studies, privacy, terms, owner app, and restaurant-services routes; admin
+login; public restaurant API; demo templates 1–3; and voice health all resolved
+to HTTP 200. Served checksums for the Tuvi logo, app-download hero, and resource
+hero exactly matched the promoted release. All Tuvi containers remained
+running with restart count zero. The separately deployed Andre admin, Gradio,
+and voice-agent containers also remained healthy with restart count zero and
+were not changed by this release.
+
+**Business Value / Plan Fit:** The requested feature branch now contains the
+complete tested production lineage without regressing live assets, while the VM
+has an auditable immutable copy of that exact source. The rollout avoided
+unnecessary downtime because the user-visible runtime was already current.
+
+**Risks / Follow-ups:** Do not expose the electrical OCR POC as-is: its Gemini
+call is billable and its upload endpoint lacks the production authentication,
+rate-limit, timeout, and provider-adapter controls. The monorepo Andre source is
+unchanged between the reconciled parents and is outside the Tuvi VM Compose
+stack; it has a tracked absolute `.venv` symlink, no `.dockerignore`, and no
+seeded `data/properties.json`, so it was intentionally not used to replace the
+separate healthy Andre deployment. No outbound call, email, booking, provider
+request, default-branch merge, force-push, schema change, or provider-routing
+change was performed.

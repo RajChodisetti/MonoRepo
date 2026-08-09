@@ -1,12 +1,9 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useId, useRef, useState } from "react";
-import Image from "next/image";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import type { MediaCard, RestaurantDetails } from "@/lib/places";
+import type { RestaurantDetails } from "@/lib/places";
 import type { RestaurantReport } from "@/lib/report";
-import { parsePreviewCoordinates } from "@/lib/report-preview";
 import LiveCompetitorsCard from "@/components/report/LiveCompetitorsCard";
 import LiveHealthCard from "@/components/report/LiveHealthCard";
 import LiveIssuesCard from "@/components/report/LiveIssuesCard";
@@ -20,102 +17,21 @@ type Payload = {
   report: RestaurantReport;
 };
 
-function reportMapSrc(place: RestaurantDetails): string | null {
-  const { latitude, longitude } = place;
-  if (
-    typeof latitude === "number" &&
-    typeof longitude === "number" &&
-    Number.isFinite(latitude) &&
-    Number.isFinite(longitude)
-  ) {
-    const params = new URLSearchParams({
-      q: `${latitude},${longitude}`,
-      ll: `${latitude},${longitude}`,
-      z: "17",
-      hl: "en",
-      output: "embed",
-    });
-    return `https://www.google.com/maps?${params.toString()}`;
-  }
-
-  const query = [place.name, place.address].filter(Boolean).join(", ");
-  if (!query) return null;
-  const params = new URLSearchParams({ q: query, z: "16", hl: "en", output: "embed" });
-  if (place.placeId) params.set("query_place_id", place.placeId);
-  return `https://www.google.com/maps?${params.toString()}`;
-}
-
-function listingPhotoSrc(card?: MediaCard): string | null {
-  if (!card) return null;
-  if (card.photoName) {
-    return `/api/restaurants/photo?name=${encodeURIComponent(card.photoName)}&max=720`;
-  }
-  return card.imageUrl || null;
-}
-
-function ListingPhoto({ card, restaurantName }: { card?: MediaCard; restaurantName: string }) {
-  const src = listingPhotoSrc(card);
-  const sourceLabel = card?.subtitle || (card?.photoName ? "From Google listing" : "");
-  const tile = (
-    <div className="relative h-full min-h-0 overflow-hidden rounded-2xl bg-[#e8e2da]">
-      {src ? (
-        <Image
-          src={src}
-          alt={`${restaurantName} listing photo${card?.label ? ` — ${card.label}` : ""}`}
-          fill
-          sizes="(max-width: 640px) 38vw, 280px"
-          className="object-cover"
-          unoptimized
-          preload
-        />
-      ) : (
-        <div className="flex h-full items-center justify-center px-3 text-center text-[12px] font-medium text-muted">
-          Listing photo unavailable
-        </div>
-      )}
-      {card?.label || sourceLabel ? (
-        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-3 pb-2.5 pt-9 text-white">
-          {card?.label ? <p className="truncate text-[11px] font-semibold">{card.label}</p> : null}
-          {sourceLabel ? <p className="mt-0.5 truncate text-[9px] font-medium text-white/80">{sourceLabel}</p> : null}
-        </div>
-      ) : null}
-    </div>
-  );
-
-  if (card?.href) {
-    return (
-      <a
-        href={card.href}
-        target="_blank"
-        rel="noreferrer"
-        aria-label={`Open ${card.label || restaurantName} photo source`}
-        className="block h-full min-h-0 rounded-2xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-      >
-        {tile}
-      </a>
-    );
-  }
-  return tile;
-}
-
 export default function ReportClient({ placeId }: { placeId: string }) {
   const searchParams = useSearchParams();
   const unlockFromLink = (searchParams.get("unlock") || "").trim();
   const nameFromQuery = (searchParams.get("name") || "").trim();
   const addressFromQuery = (searchParams.get("address") || "").trim();
-  const previewCoordinates = parsePreviewCoordinates(
-    searchParams.get("lat"),
-    searchParams.get("lng"),
-  );
-  const latPreview = previewCoordinates.latitude;
-  const lngPreview = previewCoordinates.longitude;
+  const latFromQuery = Number(searchParams.get("lat") || "");
+  const lngFromQuery = Number(searchParams.get("lng") || "");
+  const latPreview = Number.isFinite(latFromQuery) ? latFromQuery : undefined;
+  const lngPreview = Number.isFinite(lngFromQuery) ? lngFromQuery : undefined;
 
   const [data, setData] = useState<Payload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [phase, setPhase] = useState<"scan" | "ready">("scan");
   const [fetchComplete, setFetchComplete] = useState(false);
   const bootstrappingRef = useRef(true);
-  const activePlaceIdRef = useRef<string | null>(null);
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
   const [unlockToken, setUnlockToken] = useState(unlockFromLink);
@@ -130,33 +46,27 @@ export default function ReportClient({ placeId }: { placeId: string }) {
   const otpId = useId();
 
   useEffect(() => {
-    let cancelled = false;
-    let timedOut = false;
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => {
-      timedOut = true;
-      controller.abort();
-    }, 18_000);
-    if (activePlaceIdRef.current !== placeId) {
-      activePlaceIdRef.current = placeId;
-      bootstrappingRef.current = true;
-    }
+    bootstrappingRef.current = true;
+    setPhase("scan");
+    setFetchComplete(false);
+    setData(null);
+    setError(null);
+  }, [placeId]);
 
+  useEffect(() => {
+    let cancelled = false;
     async function load() {
       const quiet = !bootstrappingRef.current;
       if (!quiet) {
         setPhase("scan");
         setFetchComplete(false);
-        setData(null);
         setError(null);
       }
       try {
         const qs = unlockToken
           ? `?unlock=${encodeURIComponent(unlockToken)}`
           : "";
-        const res = await fetch(`/api/restaurants/${encodeURIComponent(placeId)}${qs}`, {
-          signal: controller.signal,
-        });
+        const res = await fetch(`/api/restaurants/${encodeURIComponent(placeId)}${qs}`);
         const json = await res.json();
         if (!res.ok) throw new Error(json.error || "Failed to load report");
         if (!cancelled) {
@@ -179,35 +89,29 @@ export default function ReportClient({ placeId }: { placeId: string }) {
           bootstrappingRef.current = false;
         }
       } catch (e) {
-        if (cancelled) return;
-        if (timedOut) {
-          setError("The live scan timed out before all signals finished. Please try again.");
-          setPhase("ready");
-          setFetchComplete(true);
-          bootstrappingRef.current = false;
-          return;
-        }
-        if (controller.signal.aborted) return;
         if (!cancelled) {
           setError(e instanceof Error ? e.message : "Failed to load report");
           setPhase("ready");
           bootstrappingRef.current = false;
         }
-      } finally {
-        window.clearTimeout(timeout);
       }
     }
     load();
     return () => {
       cancelled = true;
-      window.clearTimeout(timeout);
-      controller.abort();
     };
   }, [placeId, unlockToken]);
 
   const handleScanReady = useCallback(() => {
     setPhase("ready");
   }, []);
+
+  // Hard escape hatch — only after min scan window + buffer
+  useEffect(() => {
+    if (phase !== "scan") return;
+    const t = window.setTimeout(() => setPhase("ready"), 90_000);
+    return () => window.clearTimeout(t);
+  }, [phase]);
 
   async function requestOtp(event: FormEvent) {
     event.preventDefault();
@@ -328,9 +232,9 @@ export default function ReportClient({ placeId }: { placeId: string }) {
       <div className="mx-auto max-w-3xl px-6 py-24 text-center">
         <p className="font-display text-2xl font-semibold text-ink">Report unavailable</p>
         <p className="mt-2 text-muted">{error || "Restaurant not found."}</p>
-        <Link href="/" className="mt-6 inline-block font-semibold text-primary underline">
+        <a href="/" className="mt-6 inline-block font-semibold text-primary underline">
           Search again
-        </Link>
+        </a>
       </div>
     );
   }
@@ -341,129 +245,71 @@ export default function ReportClient({ placeId }: { placeId: string }) {
     .map((line) => line.trim())
     .filter(Boolean);
   const unlocked = report.fullReportLocked === false || step === "unlocked";
-  const aiAssisted = report.analysisSource === "ai-assisted";
-  const partial = report.analysisStatus === "partial";
-  const analysisLabel = aiAssisted ? "AI-assisted" : "Automated signals";
-  const summaryTitle = aiAssisted ? "AI-assisted summary" : "Signal summary";
-  const mapSrc = reportMapSrc(place);
-  const listingCards = [
-    ...(place.media?.photosAndVideos || []),
-    ...(place.media?.menuAndHighlights || []),
-  ].filter((card) => Boolean(listingPhotoSrc(card)));
-  const heroPhoto = listingCards[0];
-  const generatedSeconds =
-    typeof report.generatedInMs === "number" && report.generatedInMs >= 0
-      ? `${Math.max(0.1, report.generatedInMs / 1000).toFixed(1)}s`
-      : "Ready";
-  const scrollToLead = () => {
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    leadRef.current?.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "center" });
-  };
 
   return (
-    <div className="hero-atmosphere min-h-[70vh] px-4 py-4 sm:px-8 sm:py-8 md:px-10 md:py-12">
+    <div className="hero-atmosphere min-h-[70vh] px-5 py-10 sm:px-8 md:px-10 md:py-14">
       <div className="report-reveal mx-auto w-full max-w-6xl space-y-5 md:space-y-6">
-        {/* Identity, exact map, real listing imagery and scan status stay above fold on mobile. */}
-        <section className="overflow-hidden rounded-[24px] border border-border bg-bg/95 shadow-[0_14px_46px_rgba(15,39,31,0.08)]">
-          <header className="px-5 pb-4 pt-5 sm:px-7 sm:pb-5 sm:pt-6">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-[#e8f1eb] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.09em] text-primary">
-                {analysisLabel}
-              </span>
-              <span
-                className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.09em] ${
-                  partial ? "bg-[#fff2dc] text-[#8a5200]" : "bg-[#e8f6ee] text-[#176b3a]"
-                }`}
-              >
-                {partial ? "Partial snapshot" : "Scan complete"}
-              </span>
-            </div>
-            <h1 className="mt-3 font-display text-[clamp(1.65rem,7vw,2.75rem)] font-semibold leading-[1.05] tracking-[-0.035em] text-ink">
-              {report.restaurantName}
-            </h1>
-            {report.address ? (
-              <p className="mt-1.5 line-clamp-2 text-[13px] leading-snug text-muted sm:text-[15px]">
-                {report.address}
+        {/* 1 — Overview */}
+        <ReportSection eyebrow="AI restaurant report" bodyClassName="px-5 py-6 sm:px-7 sm:py-7">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0 max-w-2xl">
+              <h1 className="font-display text-[clamp(1.75rem,3.8vw,2.75rem)] font-semibold leading-[1.12] tracking-[-0.03em] text-ink">
+                {report.restaurantName}
+              </h1>
+              {report.address ? (
+                <p className="mt-2 text-[14px] leading-relaxed text-muted sm:text-[15px]">{report.address}</p>
+              ) : null}
+              <p className="mt-4 text-[15px] leading-relaxed text-muted sm:text-[16px]">
+                We scored SEO keywords, recent reviews, website design (live screenshot + AI), then deeper
+                order-online, menu, and contact signals after you verify.
               </p>
-            ) : null}
-          </header>
+            </div>
 
-          <div className="px-3 pb-4 sm:px-5 sm:pb-5">
-            <div className="grid h-[178px] grid-cols-[minmax(0,1.2fr)_minmax(96px,0.8fr)] gap-2 sm:h-[250px] sm:gap-3">
-              <div className="relative overflow-hidden rounded-2xl bg-[#e8e4dc]">
-                {mapSrc ? (
-                  <iframe
-                    title={`Map of ${report.restaurantName}`}
-                    src={mapSrc}
-                    className="absolute inset-0 h-full w-full border-0"
-                    loading="eager"
-                    referrerPolicy="no-referrer-when-downgrade"
-                  />
-                ) : (
-                  <div className="flex h-full items-center justify-center px-4 text-center text-[12px] font-medium text-muted">
-                    Map location unavailable
-                  </div>
-                )}
-                <span className="absolute bottom-2 left-2 rounded-full bg-white/95 px-2.5 py-1 text-[10px] font-semibold text-ink shadow-sm">
-                  Google listing
+            <div className="shrink-0 rounded-2xl border border-border bg-[#f7f4ef] px-5 py-4 sm:min-w-[168px]">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-muted">Overall score</p>
+              <p className="mt-1 flex items-baseline gap-2">
+                <span className="font-display text-[2.4rem] font-semibold leading-none tracking-[-0.04em] text-ink">
+                  {report.overallScore}
                 </span>
-              </div>
-              <ListingPhoto card={heroPhoto} restaurantName={report.restaurantName} />
-            </div>
-
-            <div className="mt-3 grid grid-cols-3 divide-x divide-border rounded-2xl border border-border bg-[#f7f4ef] px-2 py-3 text-center">
-              <div className="px-1.5">
-                <p className="font-display text-[1.55rem] font-semibold leading-none text-ink">{report.overallScore}</p>
-                <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.06em] text-muted">Score</p>
-              </div>
-              <div className="px-1.5">
-                <p className="truncate text-[13px] font-bold" style={{ color: report.overallColor }}>
+                <span className="text-[13px] font-semibold" style={{ color: report.overallColor }}>
                   {report.overallLabel}
-                </p>
-                <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.06em] text-muted">Visibility</p>
-              </div>
-              <div className="px-1.5">
-                <p className="text-[13px] font-bold tabular-nums text-ink">{generatedSeconds}</p>
-                <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.06em] text-muted">Scan time</p>
-              </div>
+                </span>
+              </p>
+              <p className="mt-2 text-[12px] text-muted">AI scoring review</p>
             </div>
-
-            {report.analysisNotice ? (
-              <p className="mt-3 text-[12px] leading-relaxed text-muted">{report.analysisNotice}</p>
-            ) : null}
-
-            {(place.website || place.mapsUri) && (
-              <div className="mt-2 flex flex-wrap gap-2 text-[13px]">
-                {place.website ? (
-                  <a
-                    href={place.website}
-                    className="inline-flex min-h-11 items-center rounded-full px-3 font-semibold text-primary underline decoration-primary/35 underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Visit website
-                  </a>
-                ) : null}
-                {place.mapsUri ? (
-                  <a
-                    href={place.mapsUri}
-                    className="inline-flex min-h-11 items-center rounded-full px-3 font-semibold text-primary underline decoration-primary/35 underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Open Google Maps
-                  </a>
-                ) : null}
-              </div>
-            )}
           </div>
-        </section>
+
+          {(place.website || place.mapsUri) && (
+            <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 border-t border-border pt-4 text-[13px]">
+              {place.website ? (
+                <a
+                  href={place.website}
+                  className="font-medium text-primary underline"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Website
+                </a>
+              ) : null}
+              {place.mapsUri ? (
+                <a
+                  href={place.mapsUri}
+                  className="font-medium text-primary underline"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Google Maps
+                </a>
+              ) : null}
+            </div>
+          )}
+        </ReportSection>
 
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(300px,0.95fr)] lg:items-start lg:gap-6">
           {/* Left column — narrative sections */}
           <div className="space-y-5">
             {summaryLines.length > 0 ? (
-              <ReportSection eyebrow="01 · Findings" title={summaryTitle}>
+              <ReportSection eyebrow="01 · Findings" title="AI summary">
                 <div className="space-y-3 text-[15px] leading-relaxed text-ink">
                   {summaryLines.map((line) => (
                     <p key={line}>{line}</p>
@@ -483,7 +329,7 @@ export default function ReportClient({ placeId }: { placeId: string }) {
 
             <ReportSection
               eyebrow="02 · Access"
-              title={unlocked ? "Report unlocked" : "Verify email"}
+              title={unlocked ? "Report unlocked" : "Confirm your email"}
             >
               <div ref={leadRef}>
                 {unlocked ? (
@@ -513,7 +359,7 @@ export default function ReportClient({ placeId }: { placeId: string }) {
                         value={otp}
                         onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
                         placeholder="123456"
-                        className="min-w-0 flex-1 rounded-xl border border-border bg-transparent px-4 py-3 text-[15px] tracking-[0.3em] text-ink outline-none placeholder:text-secondary focus:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
+                        className="min-w-0 flex-1 rounded-xl border border-border bg-transparent px-4 py-3 text-[15px] tracking-[0.3em] text-ink outline-none placeholder:text-secondary focus:border-primary"
                       />
                       <button
                         type="submit"
@@ -552,7 +398,7 @@ export default function ReportClient({ placeId }: { placeId: string }) {
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         placeholder="you@restaurant.com"
-                        className="min-w-0 flex-1 rounded-xl border border-border bg-transparent px-4 py-3 text-[15px] text-ink outline-none placeholder:text-secondary focus:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
+                        className="min-w-0 flex-1 rounded-xl border border-border bg-transparent px-4 py-3 text-[15px] text-ink outline-none placeholder:text-secondary focus:border-primary"
                       />
                       <button
                         type="submit"
@@ -581,18 +427,12 @@ export default function ReportClient({ placeId }: { placeId: string }) {
             </ReportSection>
 
             {report.websiteScreenshot || report.websiteReview ? (
-              <ReportSection
-                eyebrow="03 · Website"
-                title={aiAssisted ? "Screenshot & AI-assisted design review" : "Screenshot & design signals"}
-                bodyClassName="p-0"
-              >
+              <ReportSection eyebrow="03 · Website" title="Screenshot & AI design review" bodyClassName="p-0">
                 <div className="border-b border-border px-5 py-4 sm:px-6">
                   {typeof report.websiteQualityScore === "number" && report.websiteQualityScore > 0 ? (
                     <p className="text-[15px] text-ink">
                       Visual quality <strong>{report.websiteQualityScore}</strong>{" "}
-                      <span className="text-muted">
-                        ({aiAssisted ? "AI-assisted design score" : "automated design estimate"})
-                      </span>
+                      <span className="text-muted">(strict AI design score)</span>
                     </p>
                   ) : (
                     <p className="text-[14px] text-muted">Live homepage capture + design notes.</p>
@@ -600,7 +440,7 @@ export default function ReportClient({ placeId }: { placeId: string }) {
                 </div>
                 <LockedBlur
                   locked={!unlocked}
-                  label="Verify email to unlock the full website review"
+                  label="Confirm email to unlock the full website review"
                   className="min-h-[120px]"
                 >
                   <div className="px-5 py-4 sm:px-6">
@@ -608,7 +448,7 @@ export default function ReportClient({ placeId }: { placeId: string }) {
                       <p className="text-[14px] leading-relaxed text-muted">{report.websiteReview}</p>
                     ) : (
                       <p className="text-[14px] leading-relaxed text-muted">
-                        Detailed design notes unlock after email verification.
+                        Detailed AI design notes unlock after email verification.
                       </p>
                     )}
                   </div>
@@ -642,7 +482,7 @@ export default function ReportClient({ placeId }: { placeId: string }) {
               <LiveCompetitorsCard
                 rows={report.competitors}
                 locked={!unlocked}
-                onUnlock={scrollToLead}
+                onUnlock={() => leadRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })}
               />
             </ReportSection>
 
@@ -651,7 +491,7 @@ export default function ReportClient({ placeId }: { placeId: string }) {
                 issues={report.issues}
                 estimatedMonthlyLoss={report.estimatedMonthlyLoss}
                 locked={!unlocked}
-                onFix={scrollToLead}
+                onFix={() => leadRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })}
               />
             </ReportSection>
           </aside>

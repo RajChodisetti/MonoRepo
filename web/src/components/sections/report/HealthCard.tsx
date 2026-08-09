@@ -1,100 +1,107 @@
 import Image from "next/image";
 
-const ACCENT = "#e86a2d";
-const FAIR = "#e8a33a";
-const MUTED = "#9b9690";
+const FOREST = "#1f4d3a";
+const AMBER = "#c45c1a";
+const MUTED = "#8a8580";
 
-const metrics = [
-  { label: "Search results", status: "Poor", statusColor: ACCENT, value: 0.3 },
-  { label: "Guest experience", status: "Fair", statusColor: FAIR, value: 0.88 },
-  { label: "Local listings", status: "Poor", statusColor: ACCENT, value: 0.2 },
+const channels = [
+  { label: "Your website", value: 28, tone: FOREST },
+  { label: "Google / Maps", value: 41, tone: "#2f6b52" },
+  { label: "Marketplaces", value: 31, tone: AMBER },
 ] as const;
 
-function ProgressRing({
-  value,
-  size,
-  strokeWidth,
-  color,
-}: {
-  value: number;
-  size: number;
-  strokeWidth: number;
-  color: string;
-}) {
-  const radius = (size - strokeWidth) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const offset = circumference * (1 - Math.min(Math.max(value, 0), 1));
-
-  return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90" aria-hidden="true">
-      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#ebe7e2" strokeWidth={strokeWidth} />
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={radius}
-        fill="none"
-        stroke={color}
-        strokeWidth={strokeWidth}
-        strokeLinecap="round"
-        strokeDasharray={circumference}
-        strokeDashoffset={offset}
-      />
-    </svg>
-  );
-}
+const signals = [
+  { label: "Online menu", detail: "Live · 86 dishes", ok: true },
+  { label: "Table requests", detail: "12 this week", ok: true },
+  { label: "Phone line", detail: "4 missed calls", ok: false },
+] as const;
 
 export default function HealthCard() {
   return (
-    <>
-      <div className="flex items-center gap-2.5">
-        <div className="relative h-[30px] w-[30px] overflow-hidden rounded-full">
-          <Image
-            src="https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&w=120&q=80"
-            alt=""
-            fill
-            className="object-cover"
-            sizes="30px"
-          />
+    <div className="overflow-hidden rounded-[18px] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+      <div className="relative h-[152px] w-full sm:h-[160px]">
+        <Image
+          src="https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=800&q=80"
+          alt=""
+          fill
+          className="object-cover"
+          sizes="280px"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/25 to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 px-3.5 pb-3">
+          <div>
+            <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-white/70">
+              Venue pulse
+            </p>
+            <p className="text-[15px] font-semibold tracking-[-0.02em] text-white">Quillnest Kitchen</p>
+          </div>
+          <span className="rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-semibold text-white ring-1 ring-white/25 backdrop-blur-sm">
+            Gildford
+          </span>
         </div>
-        <p className="text-[15px] font-semibold tracking-[-0.02em] text-[#111111]">Your restaurant</p>
       </div>
 
-      <div className="rounded-[18px] bg-white px-3.5 pb-3.5 pt-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-        <div className="relative mx-auto flex h-[138px] w-[138px] items-center justify-center">
-          <ProgressRing value={0.36} size={138} strokeWidth={11} color={ACCENT} />
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className="text-[40px] font-bold leading-none tracking-[-0.05em] text-[#111111]">36</span>
-            <span className="mt-0.5 text-[12px] font-medium" style={{ color: MUTED }}>
-              SEO score
-            </span>
-          </div>
+      <div className="px-3.5 pb-4 pt-3.5">
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { value: "186", label: "Menu views" },
+            { value: "24", label: "Direct orders" },
+            { value: "9", label: "Bookings" },
+          ].map((stat) => (
+            <div key={stat.label} className="rounded-xl bg-[#f5f3ef] px-2 py-2.5 text-center">
+              <p className="text-[18px] font-bold leading-none tracking-[-0.03em] text-[#111111]">
+                {stat.value}
+              </p>
+              <p className="mt-1 text-[10px] font-medium leading-tight" style={{ color: MUTED }}>
+                {stat.label}
+              </p>
+            </div>
+          ))}
         </div>
 
-        <div className="mt-2.5 text-center">
-          <p className="text-[12px] font-medium" style={{ color: MUTED }}>
-            AI scoring review
-          </p>
-          <p className="mt-0.5 text-[20px] font-bold tracking-[-0.03em]" style={{ color: ACCENT }}>
-            Poor
-          </p>
-        </div>
-
-        <ul className="mt-4 space-y-3">
-          {metrics.map((metric) => (
-            <li key={metric.label} className="flex items-center gap-2.5">
-              <div className="relative flex h-6 w-6 shrink-0 items-center justify-center">
-                <ProgressRing value={metric.value} size={24} strokeWidth={3} color={metric.statusColor} />
+        <p className="mt-4 text-[11px] font-semibold uppercase tracking-[0.07em]" style={{ color: MUTED }}>
+          Where guests find you
+        </p>
+        <ul className="mt-2 space-y-2">
+          {channels.map((channel) => (
+            <li key={channel.label}>
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <span className="text-[12px] font-semibold text-[#111111]">{channel.label}</span>
+                <span className="text-[11px] font-semibold" style={{ color: channel.tone }}>
+                  {channel.value}%
+                </span>
               </div>
-              <div className="min-w-0 flex-1 text-left">
-                <p className="truncate text-[12.5px] font-semibold leading-tight text-[#111111]">{metric.label}</p>
-                <p className="text-[11.5px] font-semibold leading-tight" style={{ color: metric.statusColor }}>
-                  {metric.status}
+              <div className="h-1.5 overflow-hidden rounded-full bg-[#ebe7e2]">
+                <div
+                  className="h-full rounded-full"
+                  style={{ width: `${channel.value}%`, backgroundColor: channel.tone }}
+                />
+              </div>
+            </li>
+          ))}
+        </ul>
+
+        <ul className="mt-4 space-y-2 border-t border-[#efebe6] pt-3">
+          {signals.map((signal) => (
+            <li key={signal.label} className="flex items-center gap-2.5">
+              <span
+                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white ${
+                  signal.ok ? "bg-[#1f9a4a]" : "bg-[#e5483b]"
+                }`}
+                aria-hidden
+              >
+                {signal.ok ? "✓" : "!"}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-[12.5px] font-semibold text-[#111111]">{signal.label}</p>
+                <p className="text-[11px]" style={{ color: MUTED }}>
+                  {signal.detail}
                 </p>
               </div>
             </li>
           ))}
         </ul>
       </div>
-    </>
+    </div>
   );
 }

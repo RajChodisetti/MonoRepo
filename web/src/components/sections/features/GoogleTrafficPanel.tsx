@@ -125,11 +125,11 @@ export default function GoogleTrafficPanel({ onProgress, onComplete }: GoogleTra
       style={{ backgroundColor: "#f2ecdf" }}
     >
       <div>
-        <p className="text-[14px] font-medium text-[#7a7268] sm:text-[15px]">Upgrade your SEO</p>
+        <p className="text-[14px] font-medium text-[#7a7268] sm:text-[15px]">Local search that converts</p>
         <h3 className="mt-3 text-[clamp(1.85rem,3.2vw,2.85rem)] font-bold leading-[1.12] tracking-[-0.04em] text-[#1a1a1a]">
-          <span className="block">With Tuvi, your</span>
-          <span className="block">website gets way</span>
-          <span className="block">more Google traffic</span>
+          <span className="block">Show up first when</span>
+          <span className="block">hungry guests search</span>
+          <span className="block">near you</span>
         </h3>
       </div>
 

@@ -52,8 +52,8 @@ export default function ProductMegaMenu() {
   const clearClose = () => {
     if (closeTimer.current) {
       clearTimeout(closeTimer.current);
-      closeTimer.current = null;
     }
+    closeTimer.current = null;
   };
 
   const openMenu = () => {
@@ -97,15 +97,11 @@ export default function ProductMegaMenu() {
               onMouseEnter={openMenu}
               onMouseLeave={scheduleClose}
             >
-              {/* Fixed width box, left-aligned — same size whether left or right */}
               <div
                 className="flex overflow-hidden rounded-2xl border border-black/10 bg-white shadow-[0_24px_80px_rgba(0,0,0,0.14)]"
                 style={{ width: "min(1180px, calc(100vw - 3rem))" }}
               >
-                <div
-                  className="grid flex-1 grid-cols-2 gap-x-16 px-10 py-10"
-                  style={{ minWidth: 0 }}
-                >
+                <div className="grid flex-1 grid-cols-2 gap-x-16 px-10 py-10" style={{ minWidth: 0 }}>
                   <div className="flex flex-col gap-10">
                     {leftCol.map((section) => (
                       <MegaSection key={section.title} section={section} />

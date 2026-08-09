@@ -3,7 +3,7 @@
 import { FormEvent, KeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
-const rotatingLines = ["grow first-party sales.", "grow online discovery."] as const;
+const rotatingLines = ["own more of every order.", "turn searches into booked tables."] as const;
 
 type SearchHit = {
   placeId: string;
@@ -14,14 +14,6 @@ type SearchHit = {
   rating?: number;
   source: "monorepo" | "places";
 };
-
-function StarIcon() {
-  return (
-    <svg viewBox="0 0 16 16" className="h-4 w-4 fill-current" aria-hidden="true">
-      <path d="M8 1.2 9.7 5.8 14.6 6.1 10.8 9.3 12 14.2 8 11.7 4 14.2 5.2 9.3 1.4 6.1 6.3 5.8 8 1.2Z" />
-    </svg>
-  );
-}
 
 function AnimatedPhrase({
   text,
@@ -258,19 +250,13 @@ export default function Hero() {
       />
 
       <div className="relative z-10 mx-auto flex w-full max-w-[1120px] flex-col items-center text-center">
-        <p className="inline-flex flex-wrap items-center justify-center gap-1.5 text-[16px] font-medium text-muted">
-          <span className="text-ink">4.8</span>
-          <span className="inline-flex items-center gap-0.5 text-ink" aria-label="5 stars">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <StarIcon key={i} />
-            ))}
-          </span>
-          <span>across 1,000+ reviews</span>
+        <p className="text-[15px] font-medium tracking-[-0.01em] text-muted md:text-[16px]">
+          Trusted by 200+ restaurants growing direct sales with Tuvi
         </p>
 
         <h1 className="mt-7 w-full font-display text-[clamp(1.55rem,calc(4.8vw+0.65rem),5rem)] font-semibold leading-[1.12] tracking-[-0.04em]">
           <span className="block whitespace-nowrap text-center text-muted">
-            The AI platform restaurants use to
+            The AI stack restaurants use to
           </span>
 
           <span className="relative mx-auto mt-1 grid min-h-[1.25em] w-full place-items-center overflow-hidden text-center text-ink">

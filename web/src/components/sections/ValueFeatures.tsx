@@ -7,10 +7,10 @@ import OnlineSalesPanel from "@/components/sections/features/OnlineSalesPanel";
 import RepeatOrdersPanel from "@/components/sections/features/RepeatOrdersPanel";
 
 const tabs = [
-  { label: "More Google Traffic" },
-  { label: "More Online Sales" },
-  { label: "More Repeat Orders" },
-  { label: "More App Downloads" },
+  { label: "Get found on Google" },
+  { label: "Own every online order" },
+  { label: "Turn guests into regulars" },
+  { label: "Grow your branded app" },
 ] as const;
 
 export default function ValueFeatures() {
