@@ -1,31 +1,224 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useId, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import type { RestaurantDetails } from "@/lib/places";
+import type { MediaCard, RestaurantDetails } from "@/lib/places";
 import type { RestaurantReport } from "@/lib/report";
+import { parsePreviewCoordinates } from "@/lib/report-preview";
+import { normalizeScanPhotos, reportMapEmbedUrl, websiteCaptureEvidence } from "@/lib/report-scan";
 import LiveCompetitorsCard from "@/components/report/LiveCompetitorsCard";
 import LiveHealthCard from "@/components/report/LiveHealthCard";
 import LiveIssuesCard from "@/components/report/LiveIssuesCard";
 import LiveListingMedia from "@/components/report/LiveListingMedia";
 import LockedBlur from "@/components/report/LockedBlur";
 import ReportSection from "@/components/report/ReportSection";
-import ScanExperience from "@/components/report/ScanExperience";
+import ScanExperience, { ReviewScroller } from "@/components/report/ScanExperience";
 
 type Payload = {
   place: RestaurantDetails;
   report: RestaurantReport;
 };
 
+function mediaImageSrc(card: MediaCard): string | null {
+  const direct = card.imageUrl?.trim();
+  if (direct) return direct;
+  const photoName = card.photoName?.trim();
+  return photoName
+    ? `/api/restaurants/photo?name=${encodeURIComponent(photoName)}&max=960`
+    : null;
+}
+
+function ReportOverviewEvidence({ place }: { place: RestaurantDetails }) {
+  const listingPhotos = useMemo(
+    () => normalizeScanPhotos(
+      undefined,
+      place.name,
+      [
+        ...(place.media?.menuAndHighlights || []),
+        ...(place.media?.photosAndVideos || []),
+      ].flatMap((card) => {
+        const src = mediaImageSrc(card);
+        return src ? [{ src, label: card.label }] : [];
+      }),
+    ),
+    [place.media, place.name],
+  );
+  const [readyPhoto, setReadyPhoto] = useState("");
+  const [failedPhotos, setFailedPhotos] = useState<Set<string>>(() => new Set());
+  const mapSrc = reportMapEmbedUrl({
+    restaurantName: place.name,
+    address: place.address,
+    placeId: place.placeId,
+    latitude: place.latitude,
+    longitude: place.longitude,
+  });
+  const hasExactCoordinates =
+    typeof place.latitude === "number" &&
+    typeof place.longitude === "number" &&
+    Number.isFinite(place.latitude) &&
+    Number.isFinite(place.longitude) &&
+    Math.abs(place.latitude) <= 90 &&
+    Math.abs(place.longitude) <= 180;
+
+  useEffect(() => {
+    let cancelled = false;
+    const images = listingPhotos.map((photo) => {
+      const image = new window.Image();
+      image.onload = () => {
+        if (!cancelled) setReadyPhoto((current) => current || photo.src);
+      };
+      image.onerror = () => {
+        if (!cancelled) setFailedPhotos((current) => new Set(current).add(photo.src));
+      };
+      image.src = photo.src;
+      return image;
+    });
+    return () => {
+      cancelled = true;
+      for (const image of images) {
+        image.onload = null;
+        image.onerror = null;
+      }
+    };
+  }, [listingPhotos]);
+
+  const showPhoto = Boolean(readyPhoto && !failedPhotos.has(readyPhoto));
+  if (!mapSrc && !showPhoto) return null;
+
+  return (
+    <div className={`mt-5 grid gap-3 border-t border-border pt-5 ${showPhoto && mapSrc ? "sm:grid-cols-2" : ""}`}>
+      {mapSrc ? (
+        <figure>
+          <div className="relative h-[190px] overflow-hidden rounded-2xl border border-border bg-[#e8e4dc] sm:h-[220px]">
+            <iframe
+              title={hasExactCoordinates ? `Exact map location of ${place.name}` : `Google listing map for ${place.name}`}
+              src={mapSrc}
+              className="absolute inset-0 h-full w-full border-0"
+              loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
+            />
+          </div>
+          <figcaption className="mt-1.5 text-[11px] font-medium text-muted">
+            {hasExactCoordinates ? "Exact Google listing location" : "Google listing map"}
+          </figcaption>
+        </figure>
+      ) : null}
+      {showPhoto ? (
+        <figure>
+          <div className="h-[190px] overflow-hidden rounded-2xl border border-border bg-[#efebe6] sm:h-[220px]">
+            {/* Dynamic Google media cannot use next/image's fixed remote allow-list. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={readyPhoto}
+              alt={`${place.name} listing photo`}
+              className="h-full w-full object-cover"
+              onError={() => {
+                setFailedPhotos((current) => new Set(current).add(readyPhoto));
+                setReadyPhoto("");
+              }}
+            />
+          </div>
+          <figcaption className="mt-1.5 text-[11px] font-medium text-muted">Live listing photo</figcaption>
+        </figure>
+      ) : null}
+    </div>
+  );
+}
+
+function WebsiteReviewCaptures({
+  restaurantName,
+  desktopSrc,
+  mobileSrc,
+}: {
+  restaurantName: string;
+  desktopSrc?: string;
+  mobileSrc?: string;
+}) {
+  const captures = websiteCaptureEvidence(desktopSrc, mobileSrc);
+  const [readySources, setReadySources] = useState<Set<string>>(() => new Set());
+  const [failedSources, setFailedSources] = useState<Set<string>>(() => new Set());
+
+  useEffect(() => {
+    let cancelled = false;
+    const pending = websiteCaptureEvidence(desktopSrc, mobileSrc);
+    const images = pending.map((capture) => {
+      const image = new window.Image();
+      image.onload = () => {
+        if (!cancelled) setReadySources((current) => new Set(current).add(capture.src));
+      };
+      image.onerror = () => {
+        if (!cancelled) setFailedSources((current) => new Set(current).add(capture.src));
+      };
+      image.src = capture.src;
+      return image;
+    });
+    return () => {
+      cancelled = true;
+      for (const image of images) {
+        image.onload = null;
+        image.onerror = null;
+      }
+    };
+  }, [desktopSrc, mobileSrc]);
+
+  const available = captures.filter(
+    (capture) => readySources.has(capture.src) && !failedSources.has(capture.src),
+  );
+  if (available.length === 0) return null;
+
+  return (
+    <div className={`grid items-start gap-4 px-5 pb-5 sm:px-6 ${available.length === 2 ? "sm:grid-cols-[minmax(0,1fr)_12rem]" : ""}`}>
+      {available.map((capture) => (
+        <figure key={capture.kind} className={capture.kind === "mobile" ? "mx-auto w-full max-w-[12rem]" : "min-w-0"}>
+          <div
+            className={
+              capture.kind === "desktop"
+                ? "overflow-hidden rounded-xl border border-border bg-[#efebe6]"
+                : "overflow-hidden rounded-[1.5rem] border-[5px] border-[#1a1a1a] bg-[#1a1a1a]"
+            }
+          >
+            {capture.kind === "desktop" ? (
+              <div className="flex h-6 items-center gap-1.5 border-b border-border bg-white px-2.5" aria-hidden="true">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#ee6a5f]" />
+                <span className="h-1.5 w-1.5 rounded-full bg-[#f3bd4f]" />
+                <span className="h-1.5 w-1.5 rounded-full bg-[#61c454]" />
+              </div>
+            ) : null}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={capture.src}
+              alt={`${restaurantName} ${capture.kind} website capture`}
+              className={
+                capture.kind === "desktop"
+                  ? "block max-h-[460px] w-full object-cover object-top"
+                  : "block aspect-[9/18] w-full object-cover object-top"
+              }
+              onError={() => setFailedSources((current) => new Set(current).add(capture.src))}
+            />
+          </div>
+          <figcaption className="mt-2 text-center text-[12px] font-semibold capitalize text-muted">
+            {capture.kind} view
+          </figcaption>
+        </figure>
+      ))}
+    </div>
+  );
+}
+
 export default function ReportClient({ placeId }: { placeId: string }) {
+  return <ReportClientContent key={placeId} placeId={placeId} />;
+}
+
+function ReportClientContent({ placeId }: { placeId: string }) {
   const searchParams = useSearchParams();
   const unlockFromLink = (searchParams.get("unlock") || "").trim();
   const nameFromQuery = (searchParams.get("name") || "").trim();
   const addressFromQuery = (searchParams.get("address") || "").trim();
-  const latFromQuery = Number(searchParams.get("lat") || "");
-  const lngFromQuery = Number(searchParams.get("lng") || "");
-  const latPreview = Number.isFinite(latFromQuery) ? latFromQuery : undefined;
-  const lngPreview = Number.isFinite(lngFromQuery) ? lngFromQuery : undefined;
+  const { latitude: latPreview, longitude: lngPreview } = parsePreviewCoordinates(
+    searchParams.get("lat"),
+    searchParams.get("lng"),
+  );
 
   const [data, setData] = useState<Payload | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -46,27 +239,18 @@ export default function ReportClient({ placeId }: { placeId: string }) {
   const otpId = useId();
 
   useEffect(() => {
-    bootstrappingRef.current = true;
-    setPhase("scan");
-    setFetchComplete(false);
-    setData(null);
-    setError(null);
-  }, [placeId]);
-
-  useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 18_000);
     async function load() {
       const quiet = !bootstrappingRef.current;
-      if (!quiet) {
-        setPhase("scan");
-        setFetchComplete(false);
-        setError(null);
-      }
       try {
         const qs = unlockToken
           ? `?unlock=${encodeURIComponent(unlockToken)}`
           : "";
-        const res = await fetch(`/api/restaurants/${encodeURIComponent(placeId)}${qs}`);
+        const res = await fetch(`/api/restaurants/${encodeURIComponent(placeId)}${qs}`, {
+          signal: controller.signal,
+        });
         const json = await res.json();
         if (!res.ok) throw new Error(json.error || "Failed to load report");
         if (!cancelled) {
@@ -90,15 +274,25 @@ export default function ReportClient({ placeId }: { placeId: string }) {
         }
       } catch (e) {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : "Failed to load report");
+          const message =
+            e instanceof DOMException && e.name === "AbortError"
+              ? "The live report timed out after 18 seconds. Please try again."
+              : e instanceof Error
+                ? e.message
+                : "Failed to load report";
+          setError(message);
           setPhase("ready");
           bootstrappingRef.current = false;
         }
+      } finally {
+        window.clearTimeout(timeout);
       }
     }
     load();
     return () => {
       cancelled = true;
+      window.clearTimeout(timeout);
+      controller.abort();
     };
   }, [placeId, unlockToken]);
 
@@ -215,12 +409,8 @@ export default function ReportClient({ placeId }: { placeId: string }) {
         photoUrl={heroPhoto}
         photos={scanPhotos}
         reviews={data?.report.recentReviews || []}
-        mobileScreenshot={
-          data?.report.websiteMobileScreenshot ||
-          data?.report.websiteScreenshot ||
-          undefined
-        }
-        websiteUrl={data?.place.website}
+        desktopScreenshot={data?.report.websiteScreenshot || undefined}
+        mobileScreenshot={data?.report.websiteMobileScreenshot || undefined}
         fetchComplete={fetchComplete}
         onReady={handleScanReady}
       />
@@ -232,9 +422,9 @@ export default function ReportClient({ placeId }: { placeId: string }) {
       <div className="mx-auto max-w-3xl px-6 py-24 text-center">
         <p className="font-display text-2xl font-semibold text-ink">Report unavailable</p>
         <p className="mt-2 text-muted">{error || "Restaurant not found."}</p>
-        <a href="/" className="mt-6 inline-block font-semibold text-primary underline">
+        <Link href="/" className="mt-6 inline-block font-semibold text-primary underline">
           Search again
-        </a>
+        </Link>
       </div>
     );
   }
@@ -245,12 +435,20 @@ export default function ReportClient({ placeId }: { placeId: string }) {
     .map((line) => line.trim())
     .filter(Boolean);
   const unlocked = report.fullReportLocked === false || step === "unlocked";
+  const aiAssisted = report.analysisSource === "ai-assisted";
+  const partial = report.analysisStatus === "partial";
+  const competitorRows = report.competitors.filter(
+    (row) => !/^Nearby competitor\s+[A-Z]$/i.test(row.name.trim()),
+  );
 
   return (
     <div className="hero-atmosphere min-h-[70vh] px-5 py-10 sm:px-8 md:px-10 md:py-14">
       <div className="report-reveal mx-auto w-full max-w-6xl space-y-5 md:space-y-6">
         {/* 1 — Overview */}
-        <ReportSection eyebrow="AI restaurant report" bodyClassName="px-5 py-6 sm:px-7 sm:py-7">
+        <ReportSection
+          eyebrow={aiAssisted ? "AI-assisted restaurant report" : "Restaurant digital-footprint report"}
+          bodyClassName="px-5 py-6 sm:px-7 sm:py-7"
+        >
           <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0 max-w-2xl">
               <h1 className="font-display text-[clamp(1.75rem,3.8vw,2.75rem)] font-semibold leading-[1.12] tracking-[-0.03em] text-ink">
@@ -260,22 +458,35 @@ export default function ReportClient({ placeId }: { placeId: string }) {
                 <p className="mt-2 text-[14px] leading-relaxed text-muted sm:text-[15px]">{report.address}</p>
               ) : null}
               <p className="mt-4 text-[15px] leading-relaxed text-muted sm:text-[16px]">
-                We scored SEO keywords, recent reviews, website design (live screenshot + AI), then deeper
-                order-online, menu, and contact signals after you verify.
+                We scored the available SEO, review, website, order-online, menu, contact, and listing
+                evidence with the weights shown in the scorecard.
               </p>
+              {partial ? (
+                <p className="mt-3 rounded-xl border border-[#e8d7b6] bg-[#fff8e9] px-3.5 py-2.5 text-[12px] leading-relaxed text-[#7a5518]">
+                  {report.analysisNotice || "Some live signals were unavailable, so this report is partial."}
+                </p>
+              ) : null}
             </div>
 
             <div className="shrink-0 rounded-2xl border border-border bg-[#f7f4ef] px-5 py-4 sm:min-w-[168px]">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-muted">Overall score</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-muted">
+                {partial ? "Verified points" : "Overall score"}
+              </p>
               <p className="mt-1 flex items-baseline gap-2">
                 <span className="font-display text-[2.4rem] font-semibold leading-none tracking-[-0.04em] text-ink">
-                  {report.overallScore}
+                  {report.overallScore}<span className="ml-1 text-[1rem] text-muted">/100</span>
                 </span>
                 <span className="text-[13px] font-semibold" style={{ color: report.overallColor }}>
                   {report.overallLabel}
                 </span>
               </p>
-              <p className="mt-2 text-[12px] text-muted">AI scoring review</p>
+              <p className="mt-2 text-[12px] text-muted">
+                {partial
+                  ? `${report.metrics.filter((metric) => !metric.status.toLowerCase().includes("assessed")).reduce((total, metric) => total + (metric.max || 0), 0)}/100 fully assessed`
+                  : aiAssisted
+                    ? "AI-assisted weighted review"
+                    : "Automated weighted review"}
+              </p>
             </div>
           </div>
 
@@ -303,13 +514,14 @@ export default function ReportClient({ placeId }: { placeId: string }) {
               ) : null}
             </div>
           )}
+          <ReportOverviewEvidence place={place} />
         </ReportSection>
 
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(300px,0.95fr)] lg:items-start lg:gap-6">
           {/* Left column — narrative sections */}
           <div className="space-y-5">
             {summaryLines.length > 0 ? (
-              <ReportSection eyebrow="01 · Findings" title="AI summary">
+              <ReportSection eyebrow="01 · Findings" title={aiAssisted ? "AI-assisted summary" : "Automated summary"}>
                 <div className="space-y-3 text-[15px] leading-relaxed text-ink">
                   {summaryLines.map((line) => (
                     <p key={line}>{line}</p>
@@ -327,6 +539,15 @@ export default function ReportClient({ placeId }: { placeId: string }) {
               </ReportSection>
             ) : null}
 
+            {report.recentReviews && report.recentReviews.length > 0 ? (
+              <ReportSection
+                eyebrow="Google review evidence"
+                title={`${report.recentReviews.length} available Google reviews`}
+              >
+                <ReviewScroller reviews={report.recentReviews} placeRating={place.rating} />
+              </ReportSection>
+            ) : null}
+
             <ReportSection
               eyebrow="02 · Access"
               title={unlocked ? "Report unlocked" : "Confirm your email"}
@@ -334,8 +555,8 @@ export default function ReportClient({ placeId }: { placeId: string }) {
               <div ref={leadRef}>
                 {unlocked ? (
                   <p className="text-[15px] leading-relaxed text-ink">
-                    You&apos;re on the list — we saved this restaurant as an interested lead. Full competitor
-                    rankings and fix suggestions are open on the right.
+                    You&apos;re on the list — we saved this restaurant as an interested lead. Full scoring
+                    details and fix suggestions are open on the right.
                   </p>
                 ) : step === "otp" ? (
                   <>
@@ -384,7 +605,7 @@ export default function ReportClient({ placeId }: { placeId: string }) {
                 ) : (
                   <>
                     <p className="text-[15px] leading-relaxed text-muted">
-                      Free forever for this restaurant. Unlock full competitor rankings and every fix
+                      Free forever for this restaurant. Unlock the full scoring details and every fix
                       suggestion.
                     </p>
                     <form className="mt-4 flex flex-col gap-2 sm:flex-row" onSubmit={requestOtp}>
@@ -426,16 +647,24 @@ export default function ReportClient({ placeId }: { placeId: string }) {
               </div>
             </ReportSection>
 
-            {report.websiteScreenshot || report.websiteReview ? (
-              <ReportSection eyebrow="03 · Website" title="Screenshot & AI design review" bodyClassName="p-0">
+            {report.websiteScreenshot || report.websiteMobileScreenshot || report.websiteReview ? (
+              <ReportSection
+                eyebrow="03 · Website"
+                title="Website captures & visual review"
+                bodyClassName="p-0"
+              >
                 <div className="border-b border-border px-5 py-4 sm:px-6">
-                  {typeof report.websiteQualityScore === "number" && report.websiteQualityScore > 0 ? (
+                  {report.websiteQualityAssessed && typeof report.websiteQualityScore === "number" ? (
                     <p className="text-[15px] text-ink">
-                      Visual quality <strong>{report.websiteQualityScore}</strong>{" "}
-                      <span className="text-muted">(strict AI design score)</span>
+                      Visual quality <strong>{report.websiteQualityScore}/100</strong>{" "}
+                      <span className="text-muted">(visual-quality score)</span>
                     </p>
                   ) : (
-                    <p className="text-[14px] text-muted">Live homepage capture + design notes.</p>
+                    <p className="text-[14px] text-muted">
+                      {report.websiteScreenshot || report.websiteMobileScreenshot
+                        ? "Captured homepage evidence and design notes."
+                        : "Website review notes; no homepage capture was available."}
+                    </p>
                   )}
                 </div>
                 <LockedBlur
@@ -448,18 +677,15 @@ export default function ReportClient({ placeId }: { placeId: string }) {
                       <p className="text-[14px] leading-relaxed text-muted">{report.websiteReview}</p>
                     ) : (
                       <p className="text-[14px] leading-relaxed text-muted">
-                        Detailed AI design notes unlock after email verification.
+                        Detailed website notes unlock after email verification.
                       </p>
                     )}
                   </div>
-                  {report.websiteScreenshot ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={report.websiteScreenshot}
-                      alt={`${report.restaurantName} website homepage screenshot`}
-                      className="block w-full bg-[#efebe6] object-cover object-top"
-                    />
-                  ) : null}
+                  <WebsiteReviewCaptures
+                    restaurantName={report.restaurantName}
+                    desktopSrc={report.websiteScreenshot}
+                    mobileSrc={report.websiteMobileScreenshot}
+                  />
                 </LockedBlur>
               </ReportSection>
             ) : null}
@@ -474,26 +700,34 @@ export default function ReportClient({ placeId }: { placeId: string }) {
                 overallLabel={report.overallLabel}
                 overallColor={report.overallColor}
                 metrics={report.metrics}
+                partial={partial}
                 locked={!unlocked}
               />
             </ReportSection>
 
-            <ReportSection eyebrow="05 · Market" bodyClassName="bg-[#f4f0ea] p-3 sm:p-3.5">
-              <LiveCompetitorsCard
-                rows={report.competitors}
-                locked={!unlocked}
-                onUnlock={() => leadRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })}
-              />
-            </ReportSection>
+            {competitorRows.length > 0 ? (
+              <ReportSection
+                eyebrow={competitorRows.some((row) => !row.highlight) ? "05 · Market" : "05 · Listing"}
+                bodyClassName="bg-[#f4f0ea] p-3 sm:p-3.5"
+              >
+                <LiveCompetitorsCard
+                  rows={competitorRows}
+                  locked={!unlocked}
+                  onUnlock={() => leadRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })}
+                />
+              </ReportSection>
+            ) : null}
 
-            <ReportSection eyebrow="06 · Fixes" bodyClassName="bg-[#f4f0ea] p-3 sm:p-3.5">
-              <LiveIssuesCard
-                issues={report.issues}
-                estimatedMonthlyLoss={report.estimatedMonthlyLoss}
-                locked={!unlocked}
-                onFix={() => leadRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })}
-              />
-            </ReportSection>
+            {report.issues.length > 0 ? (
+              <ReportSection eyebrow="06 · Fixes" bodyClassName="bg-[#f4f0ea] p-3 sm:p-3.5">
+                <LiveIssuesCard
+                  issues={report.issues}
+                  estimatedMonthlyLoss={report.estimatedMonthlyLoss}
+                  locked={!unlocked}
+                  onFix={() => leadRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })}
+                />
+              </ReportSection>
+            ) : null}
           </aside>
         </div>
 

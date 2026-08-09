@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"image"
+	"image/color"
+	"image/draw"
 	"image/jpeg"
 	_ "image/png"
 	"net"
@@ -36,7 +38,7 @@ var websiteCaptureSlots = make(chan struct{}, maxParallelWebsiteCaptures)
 
 // WebsiteAudit is the visual review of a restaurant website homepage.
 type WebsiteAudit struct {
-	QualityScore     int    // 0–100, intentionally strict (most sites land 20–60)
+	QualityScore     int    // 0–100 when a visual review completed; 0 for unavailable audits
 	Review           string // short spoken/report summary
 	Screenshot       string // data:image/jpeg;base64,... (desktop)
 	MobileScreenshot string // data:image/jpeg;base64,... (phone viewport for scan mockup)
@@ -53,14 +55,6 @@ func isSocialWebsite(website string) bool {
 	host = strings.TrimPrefix(host, "www.")
 	_, ok := socialHosts[host]
 	return ok
-}
-
-func hasHTTPSWebsite(website string) bool {
-	parsed, err := url.Parse(strings.TrimSpace(website))
-	if err != nil {
-		return false
-	}
-	return strings.EqualFold(parsed.Scheme, "https")
 }
 
 // normalizeWebsiteURL upgrades http→https so headless capture matches real mobile browsing.
@@ -97,7 +91,7 @@ func AuditWebsite(ctx context.Context, website string, llm llmlib.Client) Websit
 
 	if isSocialWebsite(website) {
 		return WebsiteAudit{
-			QualityScore: 28,
+			QualityScore: 0,
 			Review:       "This Google listing links to a social profile, not a dedicated restaurant website. Expect weaker branding, menus, and direct ordering.",
 			Source:       "social",
 		}
@@ -115,23 +109,17 @@ func AuditWebsite(ctx context.Context, website string, llm llmlib.Client) Websit
 	mobileJPEG, desktopJPEG, shotErr := captureWebsiteJPEGPair(shotCtx, website)
 	shotCancel()
 
-	jpegBytes := desktopJPEG
-	if len(jpegBytes) == 0 {
-		jpegBytes = mobileJPEG
+	displayJPEG := desktopJPEG
+	if len(displayJPEG) == 0 {
+		displayJPEG = mobileJPEG
 	}
-	if len(jpegBytes) == 0 {
+	if len(displayJPEG) == 0 {
 		return fallbackWebsiteAudit(website, fmt.Sprintf("screenshot failed: %v", shotErr))
 	}
-	dataURL := "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(jpegBytes)
-	mobileDataURL := ""
-	if len(mobileJPEG) > 0 {
-		mobileDataURL = "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(mobileJPEG)
-	} else {
-		mobileDataURL = dataURL
-	}
+	desktopDataURL, mobileDataURL := websiteCaptureDataURLs(mobileJPEG, desktopJPEG)
 
 	attachShots := func(audit WebsiteAudit) WebsiteAudit {
-		audit.Screenshot = dataURL
+		audit.Screenshot = desktopDataURL
 		audit.MobileScreenshot = mobileDataURL
 		return audit
 	}
@@ -143,23 +131,33 @@ func AuditWebsite(ctx context.Context, website string, llm llmlib.Client) Websit
 	visionCtx, visionCancel := context.WithTimeout(auditCtx, websiteVisionBudget)
 	defer visionCancel()
 
-	prompt := `You are auditing a restaurant website homepage screenshot for local SEO and guest conversion.
-Be VERY STRICT. Most restaurant sites should score between 20 and 60 out of 100.
-Scores above 65 are rare. Only an exceptional modern site with clear menu, order path, mobile polish, and strong branding deserves 70+.
-Never give 90+ unless the site looks world-class.
+	visionJPEG := displayJPEG
+	viewDescription := "one available homepage capture"
+	if combined, combineErr := combineWebsiteAuditJPEG(mobileJPEG, desktopJPEG); combineErr == nil && len(combined) > 0 {
+		visionJPEG = combined
+		if len(mobileJPEG) > 0 && len(desktopJPEG) > 0 {
+			viewDescription = "a side-by-side mobile capture (left) and desktop capture (right)"
+		}
+	}
 
-Judge: visual design quality, trust, clarity of cuisine/location, menu visibility, order/reserve CTA, mobile-looking layout, clutter, outdated templates, broken/empty hero, stock-photo feel.
+	prompt := `You are auditing ` + viewDescription + ` of a restaurant website for local SEO and guest conversion.
+Score only what is visible. Do not infer hidden pages, performance, accessibility conformance, or features outside the captures.
+Use this explicit 100-point rubric: responsive mobile/desktop usability 20; cuisine, location, and menu clarity 20; order/reserve CTA clarity 20; trust and contact cues 15; visual hierarchy and brand quality 15; absence of broken, empty, cluttered, or misleading content 10.
+Use the full 0-100 range supported by the evidence: 0-20 unusable/broken, 21-40 major gaps, 41-60 functional but average, 61-80 strong, 81-100 exceptional.
 
 Return ONLY compact JSON (no markdown):
 {"score": <int 0-100>, "summary": "<2 short sentences>", "strengths": ["..."], "weaknesses": ["..."]}`
 
-	raw, err := llm.CompleteVision(visionCtx, prompt, jpegBytes, "image/jpeg")
+	raw, err := llm.CompleteVision(visionCtx, prompt, visionJPEG, "image/jpeg")
 	if err != nil || strings.TrimSpace(raw) == "" {
 		return attachShots(fallbackWebsiteAudit(website, fmt.Sprintf("vision failed: %v", err)))
 	}
 
-	score, summary := parseWebsiteVisionJSON(raw)
-	score = clampStrictWebsiteQuality(score)
+	score, summary, valid := parseWebsiteVisionJSON(raw)
+	if !valid {
+		return attachShots(fallbackWebsiteAudit(website, "vision returned invalid score JSON"))
+	}
+	score = clampWebsiteQuality(score)
 	if summary == "" {
 		summary = "Homepage visual quality is average for a local restaurant site; tighten design, menu access, and booking CTAs."
 	}
@@ -170,35 +168,34 @@ Return ONLY compact JSON (no markdown):
 	})
 }
 
-func fallbackWebsiteAudit(website, reason string) WebsiteAudit {
-	score := 32
-	if hasHTTPSWebsite(website) {
-		score = 38
-	}
+func fallbackWebsiteAudit(_ string, reason string) WebsiteAudit {
 	return WebsiteAudit{
-		QualityScore:  score,
-		Review:        "We could not fully review the live homepage visuals, so this is a conservative estimate. A dedicated site helps, but design, menu clarity, and order CTAs still need a human-quality pass.",
+		// Do not manufacture a visual-quality number when capture or review did
+		// not complete. scoreWebsite separately credits verified site presence.
+		QualityScore:  0,
+		Review:        "We could not fully review the live homepage visuals, so no visual-quality score was assigned. The report credits only the dedicated website signals that were directly observed.",
 		Source:        "fallback",
 		FailureReason: strings.TrimSpace(reason),
 	}
 }
 
-func clampStrictWebsiteQuality(score int) int {
-	score = clamp(score, 0, 100)
-	// Aggressive ceiling: visual quality must stay in the 20–60 band almost always.
-	if score > 60 {
-		score = 48 + (score-60)/4 // 80 → 53, 100 → 58
-	}
-	if score > 60 {
-		score = 60
-	}
-	if score > 0 && score < 20 {
-		score = 20
-	}
-	return score
+func clampWebsiteQuality(score int) int {
+	// The review prompt is already strict. Preserve its evidence instead of
+	// forcing every answer into an artificial 20–60 cluster.
+	return clamp(score, 0, 100)
 }
 
-func parseWebsiteVisionJSON(raw string) (int, string) {
+func websiteCaptureDataURLs(mobileJPEG, desktopJPEG []byte) (desktopDataURL, mobileDataURL string) {
+	if len(desktopJPEG) > 0 {
+		desktopDataURL = "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(desktopJPEG)
+	}
+	if len(mobileJPEG) > 0 {
+		mobileDataURL = "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(mobileJPEG)
+	}
+	return desktopDataURL, mobileDataURL
+}
+
+func parseWebsiteVisionJSON(raw string) (int, string, bool) {
 	raw = strings.TrimSpace(raw)
 	raw = strings.TrimPrefix(raw, "```json")
 	raw = strings.TrimPrefix(raw, "```")
@@ -212,19 +209,55 @@ func parseWebsiteVisionJSON(raw string) (int, string) {
 	}
 
 	var parsed struct {
-		Score      int      `json:"score"`
+		Score      *int     `json:"score"`
 		Summary    string   `json:"summary"`
 		Strengths  []string `json:"strengths"`
 		Weaknesses []string `json:"weaknesses"`
 	}
-	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
-		return 40, strings.TrimSpace(raw)
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil || parsed.Score == nil {
+		return 0, "", false
 	}
 	summary := strings.TrimSpace(parsed.Summary)
 	if summary == "" && len(parsed.Weaknesses) > 0 {
 		summary = strings.Join(parsed.Weaknesses, " ")
 	}
-	return parsed.Score, summary
+	return *parsed.Score, summary, true
+}
+
+// combineWebsiteAuditJPEG gives the vision reviewer both captured viewports in
+// one bounded image because the provider accepts a single image per request.
+func combineWebsiteAuditJPEG(mobileJPEG, desktopJPEG []byte) ([]byte, error) {
+	if len(mobileJPEG) == 0 {
+		return desktopJPEG, nil
+	}
+	if len(desktopJPEG) == 0 {
+		return mobileJPEG, nil
+	}
+	mobile, _, err := image.Decode(bytes.NewReader(mobileJPEG))
+	if err != nil {
+		return nil, fmt.Errorf("decode mobile capture: %w", err)
+	}
+	desktop, _, err := image.Decode(bytes.NewReader(desktopJPEG))
+	if err != nil {
+		return nil, fmt.Errorf("decode desktop capture: %w", err)
+	}
+
+	const gutter = 16
+	mobileBounds := mobile.Bounds()
+	desktopBounds := desktop.Bounds()
+	width := mobileBounds.Dx() + gutter + desktopBounds.Dx()
+	height := max(mobileBounds.Dy(), desktopBounds.Dy())
+	canvas := image.NewRGBA(image.Rect(0, 0, width, height))
+	draw.Draw(canvas, canvas.Bounds(), &image.Uniform{C: color.White}, image.Point{}, draw.Src)
+	draw.Draw(canvas, image.Rect(0, 0, mobileBounds.Dx(), mobileBounds.Dy()), mobile, mobileBounds.Min, draw.Src)
+	desktopX := mobileBounds.Dx() + gutter
+	draw.Draw(canvas, image.Rect(desktopX, 0, desktopX+desktopBounds.Dx(), desktopBounds.Dy()), desktop, desktopBounds.Min, draw.Src)
+
+	var combined bytes.Buffer
+	if err := jpeg.Encode(&combined, canvas, &jpeg.Options{Quality: 82}); err != nil {
+		return nil, fmt.Errorf("encode combined captures: %w", err)
+	}
+	return combined.Bytes(), nil
 }
 
 func captureWebsiteJPEGPair(ctx context.Context, pageURL string) ([]byte, []byte, error) {

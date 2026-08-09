@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { MediaCard, PlaceMedia } from "@/lib/places";
 
 function cardImageSrc(card: MediaCard): string | null {
@@ -11,18 +11,30 @@ function cardImageSrc(card: MediaCard): string | null {
   return null;
 }
 
-function MediaTile({ card }: { card: MediaCard }) {
+function mediaCardKey(card: MediaCard): string {
+  return `${card.kind}|${cardImageSrc(card) || ""}`;
+}
+
+function MediaTile({
+  card,
+  onImageError,
+}: {
+  card: MediaCard;
+  onImageError: (card: MediaCard) => void;
+}) {
   const src = cardImageSrc(card);
+  if (!src) return null;
   const inner = (
     <div className="relative h-[148px] w-[132px] shrink-0 overflow-hidden rounded-xl bg-[#e8e2da] sm:h-[168px] sm:w-[148px]">
-      {src ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={src} alt="" className="h-full w-full object-cover" loading="lazy" />
-      ) : (
-        <div className="flex h-full w-full items-center justify-center bg-[#ddd6cc] text-[13px] font-semibold text-[#6a635c]">
-          {card.label}
-        </div>
-      )}
+      {/* Dynamic Google media cannot use next/image's fixed remote allow-list. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt={card.label || "Restaurant listing media"}
+        className="h-full w-full object-cover"
+        loading="lazy"
+        onError={() => onImageError(card)}
+      />
       <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/35 to-transparent px-2.5 pb-2.5 pt-10">
         {card.kind === "menu" ? (
           <span className="inline-flex items-center gap-1.5 rounded-md bg-[#2b2b2b]/92 px-2 py-1 text-[12px] font-semibold text-white">
@@ -57,10 +69,12 @@ function MediaRow({
   title,
   cards,
   seeMoreHref,
+  onImageError,
 }: {
   title: string;
   cards: MediaCard[];
   seeMoreHref?: string;
+  onImageError: (card: MediaCard) => void;
 }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   if (!cards.length) return null;
@@ -92,7 +106,11 @@ function MediaRow({
         className="flex gap-3 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] snap-x snap-mandatory [&::-webkit-scrollbar]:hidden"
       >
         {cards.map((card, i) => (
-          <MediaTile key={`${card.kind}-${card.label}-${i}`} card={card} />
+          <MediaTile
+            key={`${mediaCardKey(card)}-${i}`}
+            card={card}
+            onImageError={onImageError}
+          />
         ))}
       </div>
       {seeMoreHref ? (
@@ -112,25 +130,79 @@ function MediaRow({
 }
 
 export default function LiveListingMedia({ media }: { media?: PlaceMedia | null }) {
+  const candidateCards = useMemo(
+    () => [
+      ...(media?.menuAndHighlights || []),
+      ...(media?.photosAndVideos || []),
+    ].filter((card) => Boolean(cardImageSrc(card))),
+    [media],
+  );
+  const [readyImages, setReadyImages] = useState<Set<string>>(() => new Set());
+  const [failedImages, setFailedImages] = useState<Set<string>>(() => new Set());
+
+  useEffect(() => {
+    let cancelled = false;
+    const loaders = candidateCards.map((card) => {
+      const key = mediaCardKey(card);
+      const src = cardImageSrc(card);
+      if (!src) return null;
+      const image = new window.Image();
+      image.onload = () => {
+        if (!cancelled) setReadyImages((current) => new Set(current).add(key));
+      };
+      image.onerror = () => {
+        if (!cancelled) setFailedImages((current) => new Set(current).add(key));
+      };
+      image.src = src;
+      return image;
+    });
+    return () => {
+      cancelled = true;
+      for (const image of loaders) {
+        if (!image) continue;
+        image.onload = null;
+        image.onerror = null;
+      }
+    };
+  }, [candidateCards]);
+
   if (!media) return null;
-  const highlights = media.menuAndHighlights || [];
-  const photos = media.photosAndVideos || [];
+  const highlights = (media.menuAndHighlights || []).filter(
+    (card) => readyImages.has(mediaCardKey(card)) && !failedImages.has(mediaCardKey(card)),
+  );
+  const photos = (media.photosAndVideos || []).filter(
+    (card) => readyImages.has(mediaCardKey(card)) && !failedImages.has(mediaCardKey(card)),
+  );
   if (!highlights.length && !photos.length) return null;
+
+  const handleImageError = (card: MediaCard) => {
+    setFailedImages((current) => new Set(current).add(mediaCardKey(card)));
+  };
 
   return (
     <section className="overflow-hidden rounded-[22px] border border-border bg-bg/90 shadow-[0_10px_36px_rgba(15,39,31,0.06)]">
       <header className="border-b border-border px-5 py-4 sm:px-6">
         <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-muted">07 · Listing media</p>
         <h2 className="mt-1.5 font-display text-[1.15rem] font-semibold tracking-[-0.02em] text-ink sm:text-[1.25rem]">
-          Menu, highlights & photos
+          {highlights.length > 0 ? "Menu, highlights & photos" : "Listing photos"}
         </h2>
         <p className="mt-1 text-[13px] text-muted">
-          Scraped from the Google listing{media.mapsUri ? " and nearby profile data" : ""}.
+          Loaded from the live Google listing.
         </p>
       </header>
       <div className="space-y-8 px-5 py-5 sm:px-6 sm:py-6">
-        <MediaRow title="Menu & highlights" cards={highlights} seeMoreHref={media.mapsUri} />
-        <MediaRow title="Photos & videos" cards={photos} seeMoreHref={media.mapsUri} />
+        <MediaRow
+          title="Menu & highlights"
+          cards={highlights}
+          seeMoreHref={media.mapsUri}
+          onImageError={handleImageError}
+        />
+        <MediaRow
+          title={photos.some((card) => card.kind === "video") ? "Photos & videos" : "Photos"}
+          cards={photos}
+          seeMoreHref={media.mapsUri}
+          onImageError={handleImageError}
+        />
       </div>
     </section>
   );

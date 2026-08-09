@@ -86,8 +86,11 @@ func TestGetReportStartsIndependentSourcesConcurrently(t *testing.T) {
 		if result.payload.Report.AnalysisSource != "automated" {
 			t.Fatalf("expected truthful automated source, got %q", result.payload.Report.AnalysisSource)
 		}
-		if result.payload.Report.AnalysisStatus != "complete" {
-			t.Fatalf("expected complete report, got %q", result.payload.Report.AnalysisStatus)
+		if result.payload.Report.AnalysisStatus != "partial" {
+			t.Fatalf("expected partial report for unassessed fixture signals, got %q", result.payload.Report.AnalysisStatus)
+		}
+		if !strings.Contains(result.payload.Report.AISummary, "Only verified evidence earned points") {
+			t.Fatalf("partial summary asserted unsupported gaps: %q", result.payload.Report.AISummary)
 		}
 	case <-time.After(time.Second):
 		t.Fatal("GetReport did not complete after both sources were released")
@@ -135,8 +138,78 @@ func TestGetReportReturnsConservativePartialAtBudget(t *testing.T) {
 	if payload.Report.AnalysisSource != "automated" {
 		t.Fatalf("fallback must not claim AI, got %q", payload.Report.AnalysisSource)
 	}
-	if payload.Report.WebsiteQualityScore == 0 {
-		t.Fatal("expected conservative website fallback score")
+	if payload.Report.WebsiteQualityScore != 0 {
+		t.Fatalf("fallback website quality = %d, want unavailable rather than a fabricated score", payload.Report.WebsiteQualityScore)
+	}
+}
+
+func TestGetReportPropagatesPartiallyAssessedWebsite(t *testing.T) {
+	service := newReportTestService()
+	rating, reviewsCount := 4.4, 180
+	service.fetchPlaceDetails = func(context.Context, string) (*placeSnapshot, error) {
+		return &placeSnapshot{
+			Details: PlaceDetails{
+				PlaceID:          "partial-website",
+				Name:             "Partial Website Bistro",
+				Address:          "Melbourne VIC",
+				Phone:            "+61 3 9000 0000",
+				Website:          "https://partial.example",
+				MapsURI:          "https://maps.google.com/?cid=5",
+				Rating:           &rating,
+				UserRatingCount:  &reviewsCount,
+				BusinessStatus:   "OPERATIONAL",
+				Types:            []string{"restaurant"},
+				EditorialSummary: "Neighbourhood dining in Melbourne.",
+			},
+			Reviews:         []Review{{Rating: 4.5, RelativeTime: "2 weeks ago"}},
+			PhotoCount:      10,
+			HasHours:        true,
+			Delivery:        true,
+			Takeout:         true,
+			Reservable:      true,
+			DeliveryKnown:   true,
+			TakeoutKnown:    true,
+			ReservableKnown: true,
+		}, nil
+	}
+	service.fetchSiteContent = func(context.Context, string) (profiles.SiteContent, bool) {
+		return profiles.SiteContent{
+			Name:    "Partial Website Bistro",
+			Email:   "hello@partial.example",
+			Website: "https://partial.example",
+			Hours:   json.RawMessage(`{"monday":"09:00-21:00"}`),
+			MenuItems: []profiles.SiteMenuItem{
+				{Name: "Pasta"},
+				{Name: "Pizza"},
+				{Name: "Salad"},
+			},
+		}, true
+	}
+	service.auditWebsite = func(context.Context, string, llmlib.Client) WebsiteAudit {
+		return fallbackWebsiteAudit("https://partial.example", "visual provider unavailable")
+	}
+
+	payload, err := service.GetReport(context.Background(), "partial-website")
+	if err != nil {
+		t.Fatalf("GetReport returned error: %v", err)
+	}
+	if payload.Report.OverallLabel != "Partial" || payload.Report.AnalysisStatus != "partial" {
+		t.Fatalf("overall label=%q analysis=%q, want Partial/partial", payload.Report.OverallLabel, payload.Report.AnalysisStatus)
+	}
+	websiteStatus := ""
+	for _, metric := range payload.Report.Metrics {
+		if metric.Key == "website" {
+			websiteStatus = metric.Status
+		}
+	}
+	if websiteStatus != "Partially assessed" {
+		t.Fatalf("website status=%q, want Partially assessed", websiteStatus)
+	}
+	if payload.Report.WebsiteQualityAssessed || payload.Report.WebsiteQualityScore != 0 {
+		t.Fatalf("fallback audit surfaced as observed quality: assessed=%v score=%d", payload.Report.WebsiteQualityAssessed, payload.Report.WebsiteQualityScore)
+	}
+	if !strings.Contains(payload.Report.AISummary, "Only verified evidence earned points") || strings.Contains(payload.Report.AISummary, "Biggest gains") {
+		t.Fatalf("partial summary asserted unsupported gaps: %q", payload.Report.AISummary)
 	}
 }
 

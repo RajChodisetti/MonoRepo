@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import ReportClient from "@/components/report/ReportClient";
 import ScanExperience from "@/components/report/ScanExperience";
+import { parsePreviewCoordinates } from "@/lib/report-preview";
 
 type Props = {
   params: Promise<{ placeId: string }>;
@@ -27,10 +28,7 @@ export default async function ReportPage({ params, searchParams }: Props) {
   const placeId = decodeURIComponent(rawId);
   const name = first(sp.name) || "Restaurant";
   const address = first(sp.address) || undefined;
-  const latRaw = Number(first(sp.lat));
-  const lngRaw = Number(first(sp.lng));
-  const latitude = Number.isFinite(latRaw) ? latRaw : undefined;
-  const longitude = Number.isFinite(lngRaw) ? lngRaw : undefined;
+  const { latitude, longitude } = parsePreviewCoordinates(first(sp.lat), first(sp.lng));
 
   return (
     <Suspense

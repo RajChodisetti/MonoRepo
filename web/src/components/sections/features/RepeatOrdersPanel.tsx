@@ -93,7 +93,10 @@ export default function RepeatOrdersPanel({ onProgress, onComplete }: RepeatOrde
   const [progress, setProgress] = useState(0); // 0 → 1 along full path
   const [cardStep, setCardStep] = useState(0);
   const [cardVisible, setCardVisible] = useState(true);
-  const [tokenPos, setTokenPos] = useState({ x: NODES[0].x, y: NODES[0].y });
+  const [tokenPos, setTokenPos] = useState<{ x: number; y: number }>({
+    x: NODES[0].x,
+    y: NODES[0].y,
+  });
 
   const activeStep = useMemo(() => {
     const idx = Math.round(progress * (BEATS.length - 1));

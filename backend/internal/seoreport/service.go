@@ -301,7 +301,17 @@ func (s *Service) generateReport(ctx context.Context, placeID string) (ReportRes
 	reviews := []Review(nil)
 	photoCount := 0
 	hasHours := false
-	scoreIn := ScoreInput{Enrichment: enrichment}
+	scoreIn := ScoreInput{
+		Enrichment:      enrichment,
+		PlaceKnown:      snap != nil,
+		ReviewsKnown:    snap != nil,
+		PhotoCountKnown: snap != nil,
+		HoursKnown:      snap != nil || enrichment.HasHours,
+		WebsiteKnown:    snap != nil || enrichment.Website != "",
+		MenuKnown:       enrichment.MenuItemCount > 0 || enrichment.MenuImageCount > 0,
+		PhoneKnown:      snap != nil || enrichment.Phone != "",
+		EmailKnown:      enrichment.Email != "",
+	}
 
 	if snap != nil {
 		place = snap.Details
@@ -319,7 +329,6 @@ func (s *Service) generateReport(ctx context.Context, placeID string) (ReportRes
 	} else {
 		return ReportResponse{}, ErrNotFound
 	}
-
 	if enrichment.Phone != "" && place.Phone == "" {
 		place.Phone = enrichment.Phone
 	}
@@ -356,7 +365,10 @@ func (s *Service) generateReport(ctx context.Context, placeID string) (ReportRes
 			audit = fallbackWebsiteAudit(place.Website, "report budget exhausted")
 		}
 		if audit.QualityScore > 0 || audit.Source == "social" || audit.Source == "fallback" || audit.Source == "vision" {
-			scoreIn.WebsiteQualityKnown = true
+			// Only a completed visual review is quality evidence. A fallback score
+			// still populates the report copy, but scoring uses the dedicated-site
+			// baseline rather than treating an unavailable audit as observed quality.
+			scoreIn.WebsiteQualityKnown = audit.Source == "vision"
 			scoreIn.WebsiteQualityScore = audit.QualityScore
 			scoreIn.WebsiteReview = audit.Review
 			scoreIn.WebsiteScreenshot = audit.Screenshot
@@ -368,6 +380,26 @@ func (s *Service) generateReport(ctx context.Context, placeID string) (ReportRes
 	}
 
 	report := BuildReport(scoreIn)
+	partial := detailsErr != nil || reportCtx.Err() != nil
+	if strings.TrimSpace(place.Website) != "" && (audit.Source == "fallback" || audit.Source == "none") {
+		partial = true
+	}
+	if snap == nil && hasContent {
+		partial = true
+	}
+	for _, metric := range report.Metrics {
+		if metric.Status == "Not assessed" || metric.Status == "Partially assessed" {
+			partial = true
+			break
+		}
+	}
+	if partial {
+		report.AnalysisStatus = "partial"
+		report.AnalysisNotice = "Only verified evidence earns points. Unavailable metrics are marked not or partially assessed, contribute no unsupported points, and are not treated as confirmed gaps."
+	} else {
+		report.AnalysisStatus = "complete"
+	}
+
 	summaryResult := SummaryResult{
 		Text:   buildDeterministicSummary(place, report, reviews),
 		Source: "automated",
@@ -394,18 +426,7 @@ func (s *Service) generateReport(ctx context.Context, placeID string) (ReportRes
 	if audit.Source == "vision" || summaryResult.Source == "ai-assisted" {
 		report.AnalysisSource = "ai-assisted"
 	}
-	partial := detailsErr != nil || reportCtx.Err() != nil
-	if strings.TrimSpace(place.Website) != "" && (audit.Source == "fallback" || audit.Source == "none") {
-		partial = true
-	}
-	if s.places != nil && s.places.Enabled() && snap == nil && hasContent {
-		partial = true
-	}
-	if partial {
-		report.AnalysisStatus = "partial"
-		report.AnalysisNotice = "Some live signals did not finish within the scan window, so conservative fallback scoring was used."
-	} else {
-		report.AnalysisStatus = "complete"
+	if report.AnalysisStatus == "complete" {
 		if audit.Source == "vision" {
 			report.AnalysisNotice = "AI-assisted analysis used live listing signals and the captured website homepage."
 		} else if summaryResult.Source == "ai-assisted" {
@@ -481,13 +502,21 @@ func enrichmentFromSiteContent(content profiles.SiteContent, ok bool) Enrichment
 	if !ok {
 		return Enrichment{}
 	}
+	menuImageCount := 0
+	for _, item := range content.MenuItems {
+		images := strings.TrimSpace(string(item.Images))
+		if strings.TrimSpace(item.ImageURL) != "" || (images != "" && images != "[]" && images != "null") {
+			menuImageCount++
+		}
+	}
+	hours := strings.TrimSpace(string(content.Hours))
 	return Enrichment{
 		Email:          strings.TrimSpace(content.Email),
 		Phone:          strings.TrimSpace(content.Phone),
 		Website:        strings.TrimSpace(content.Website),
 		MenuItemCount:  len(content.MenuItems),
-		MenuImageCount: len(content.GalleryImages),
-		HasHours:       len(content.Hours) > 2,
+		MenuImageCount: menuImageCount,
+		HasHours:       hours != "" && hours != "{}" && hours != "[]" && hours != "null",
 	}
 }
 

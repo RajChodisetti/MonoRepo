@@ -518,12 +518,13 @@ export default function VoiceAssistantWidget() {
           type="button"
           onClick={() => (open ? closePanel() : handlePrimaryAction())}
           onMouseDown={() => void preloadWorklet()}
-          className="pointer-events-auto flex cursor-pointer items-center gap-2.5 rounded-full bg-white px-5 py-3.5 text-sm font-semibold text-black shadow-[0_12px_34px_rgba(0,0,0,0.35)] transition-colors hover:bg-white/90"
+          className="pointer-events-auto flex cursor-pointer items-center gap-2.5 rounded-full bg-white px-3.5 py-3.5 text-sm font-semibold text-black shadow-[0_12px_34px_rgba(0,0,0,0.35)] transition-colors hover:bg-white/90 sm:px-5"
           aria-expanded={open}
           aria-haspopup="dialog"
+          aria-label="Talk to Tuvi AI"
         >
           <MicIcon />
-          <span>Talk to Tuvi AI</span>
+          <span className="hidden sm:inline">Talk to Tuvi AI</span>
         </button>
       </div>
     </>

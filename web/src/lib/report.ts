@@ -47,8 +47,10 @@ export type RestaurantReport = {
   websiteScreenshot?: string;
   /** Mobile viewport homepage screenshot for scan phone mockup. */
   websiteMobileScreenshot?: string;
-  /** Strict visual quality 0–100 (typical 20–60). */
+  /** Evidence-based homepage visual quality on the published 0–100 rubric. */
   websiteQualityScore?: number;
+  /** True only when a visual audit completed; a genuine observed score may be 0. */
+  websiteQualityAssessed?: boolean;
   websiteReview?: string;
   /** "ai-assisted" only when the provider actually contributed. */
   analysisSource?: "ai-assisted" | "automated" | string;
@@ -56,11 +58,14 @@ export type RestaurantReport = {
   analysisStatus?: "complete" | "partial" | string;
   analysisNotice?: string;
   generatedInMs?: number;
-  /** Live Google reviews for the scan map UI. */
+  /** Available live Google reviews for the scan and report UI. */
   recentReviews?: RecentReview[];
 };
 
-/** Format metric score for UI. Prefer status-only displays — avoid x/y fractions. */
+/** Format the transparent weighted contribution shown in scorecards. */
 export function formatMetricScore(metric: HealthMetric): string {
-  return metric.status || "";
+  if (typeof metric.max === "number" && metric.max > 0) {
+    return `${metric.score}/${metric.max}`;
+  }
+  return String(metric.score || metric.status || "—");
 }

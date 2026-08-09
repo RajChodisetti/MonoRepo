@@ -20,22 +20,22 @@ import (
 
 // UnlockRequestResult is returned after sending an OTP email.
 type UnlockRequestResult struct {
-	Status      string `json:"status"`
-	Message     string `json:"message"`
-	Email       string `json:"email"`
-	PlaceID     string `json:"placeId"`
-	ExpiresInSec int   `json:"expiresInSec"`
+	Status       string `json:"status"`
+	Message      string `json:"message"`
+	Email        string `json:"email"`
+	PlaceID      string `json:"placeId"`
+	ExpiresInSec int    `json:"expiresInSec"`
 	// DevOTP is only populated when APP_ENV is local/test and email sending is disabled.
 	DevOTP string `json:"devOtp,omitempty"`
 }
 
 // UnlockVerifyResult is returned after successful OTP verification.
 type UnlockVerifyResult struct {
-	Status      string         `json:"status"`
-	UnlockToken string         `json:"unlockToken"`
-	Interested  bool           `json:"interested"`
-	Place       PlaceDetails   `json:"place"`
-	Report      Report         `json:"report"`
+	Status      string       `json:"status"`
+	UnlockToken string       `json:"unlockToken"`
+	Interested  bool         `json:"interested"`
+	Place       PlaceDetails `json:"place"`
+	Report      Report       `json:"report"`
 }
 
 // EmailSender sends unlock verification emails.
@@ -300,12 +300,6 @@ func (s *Service) isLocalEnv() bool {
 func unlockReport(report Report) Report {
 	report.FullReportLocked = false
 	report.UnlockCTA = ""
-	if len(report.Issues) == 0 {
-		report.Issues = append(report.Issues, Issue{
-			Title:       "Keep listing freshness high",
-			Description: "Post weekly photos and reply to new reviews within 24 hours to hold Map Pack rank.",
-		})
-	}
 	return report
 }
 

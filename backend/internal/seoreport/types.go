@@ -107,8 +107,11 @@ type Report struct {
 	// Website visual audit (screenshot + AI design review).
 	WebsiteScreenshot       string `json:"websiteScreenshot,omitempty"`
 	WebsiteMobileScreenshot string `json:"websiteMobileScreenshot,omitempty"`
-	WebsiteQualityScore     int    `json:"websiteQualityScore,omitempty"`
-	WebsiteReview           string `json:"websiteReview,omitempty"`
+	WebsiteQualityScore     int    `json:"websiteQualityScore"`
+	// WebsiteQualityAssessed distinguishes a genuine observed score of zero from
+	// an unavailable visual audit.
+	WebsiteQualityAssessed bool   `json:"websiteQualityAssessed"`
+	WebsiteReview          string `json:"websiteReview,omitempty"`
 	// AnalysisSource is "ai-assisted" only when an LLM actually contributed.
 	// Rule-based fallbacks are reported as "automated" so the public UI does
 	// not imply that AI ran when the provider is disabled or timed out.
@@ -118,7 +121,8 @@ type Report struct {
 	AnalysisStatus string `json:"analysisStatus"`
 	AnalysisNotice string `json:"analysisNotice,omitempty"`
 	GeneratedInMS  int64  `json:"generatedInMs"`
-	// RecentReviews are live Google reviews shown during the scan experience.
+	// RecentReviews retains the public field name for compatibility; values are
+	// the relevance-sorted Google review evidence returned by Place Details.
 	RecentReviews []Review `json:"recentReviews,omitempty"`
 }
 

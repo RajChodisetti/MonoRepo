@@ -44,6 +44,11 @@ func (s LLMSummarizer) Summarize(ctx context.Context, place PlaceDetails, report
 	if s.Client == nil || !s.Client.Enabled() {
 		return fallback.Summarize(ctx, place, report, reviews)
 	}
+	// A metric score of zero can mean unavailable evidence on partial reports.
+	// Do not ask an LLM to reinterpret those zeros as confirmed deficiencies.
+	if report.AnalysisStatus == "partial" || report.OverallLabel == "Not assessed" || report.OverallLabel == "Partial" {
+		return fallback.Summarize(ctx, place, report, reviews)
+	}
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "Restaurant: %s\nAddress: %s\nOverall SEO score: %d/100 (%s)\n", place.Name, place.Address, report.OverallScore, report.OverallLabel)
@@ -51,7 +56,7 @@ func (s LLMSummarizer) Summarize(ctx context.Context, place PlaceDetails, report
 		fmt.Fprintf(&b, "- %s: %d/%d (%s)\n", m.Label, m.Score, m.Max, m.Status)
 	}
 	if len(reviews) > 0 {
-		b.WriteString("Recent review excerpts:\n")
+		b.WriteString("Available Google review excerpts:\n")
 		for i, r := range reviews {
 			if i >= 3 {
 				break
@@ -78,6 +83,21 @@ func (s LLMSummarizer) Summarize(ctx context.Context, place PlaceDetails, report
 }
 
 func buildDeterministicSummary(place PlaceDetails, report Report, reviews []Review) string {
+	if report.AnalysisStatus == "partial" || report.OverallLabel == "Not assessed" || report.OverallLabel == "Partial" {
+		name := strings.TrimSpace(place.Name)
+		if name == "" {
+			name = "This restaurant"
+		}
+		line1 := fmt.Sprintf("%s has %d verified points from the signals available in this scan.", name, report.OverallScore)
+		if report.OverallLabel == "Not assessed" {
+			line1 = fmt.Sprintf("A complete local SEO score could not be calculated for %s from the signals available.", name)
+		}
+		line2 := "Only verified evidence earned points; unavailable signals contributed no unsupported points and were not treated as confirmed gaps."
+		line3 := "Refresh the scan when live listing and website evidence is available for a complete assessment."
+		line4 := "Any recommendations should be based only on evidence shown as assessed in the report."
+		return strings.Join([]string{line1, line2, line3, line4}, "\n")
+	}
+
 	gaps := make([]string, 0, 4)
 	for _, m := range report.Metrics {
 		if m.Value >= 0.75 {
@@ -85,9 +105,9 @@ func buildDeterministicSummary(place PlaceDetails, report Report, reviews []Revi
 		}
 		switch m.Key {
 		case "seo":
-			gaps = append(gaps, "local keywords and cuisine terms in your Google listing and posts")
+			gaps = append(gaps, "category, cuisine, and locality details in the Google listing")
 		case "reviews":
-			gaps = append(gaps, "recent 5-star review volume and reply cadence")
+			gaps = append(gaps, "aggregate rating, review volume, and available dated-review evidence")
 		case "website":
 			gaps = append(gaps, "homepage design, menu clarity, and booking CTAs on your website")
 		case "order_online":
@@ -102,20 +122,24 @@ func buildDeterministicSummary(place PlaceDetails, report Report, reviews []Revi
 				gaps = append(gaps, "a public business email")
 			}
 		case "listing":
-			gaps = append(gaps, "complete hours and fresh listing photos")
+			gaps = append(gaps, "published hours and listing photo coverage")
 		}
 		if len(gaps) >= 3 {
 			break
 		}
 	}
 	if len(gaps) == 0 {
-		gaps = append(gaps, "weekly photo freshness and continued review replies")
+		line1 := fmt.Sprintf("%s scores %d/100 (%s) across the assessed listing, review, website, and conversion signals.", place.Name, report.OverallScore, report.OverallLabel)
+		line2 := "The assessed signals meet the report's strong thresholds; no additional gap is inferred from unavailable evidence."
+		line3 := "Continue monitoring the same measured signals as listing and website details change."
+		line4 := "Confirm your email to unlock the prioritized maintenance plan."
+		return strings.Join([]string{line1, line2, line3, line4}, "\n")
 	}
 
-	line1 := fmt.Sprintf("%s scores %d/100 (%s) on local SEO visibility right now.", place.Name, report.OverallScore, report.OverallLabel)
+	line1 := fmt.Sprintf("%s scores %d/100 (%s) across the assessed listing, review, website, and conversion signals.", place.Name, report.OverallScore, report.OverallLabel)
 	line2 := "Biggest gains come from improving " + joinNatural(gaps) + "."
-	line3 := "Focus on guest-facing listing completeness so Google can trust and rank you in the Map Pack."
-	line4 := "Unlock the full report with a Tuvi membership for a prioritized fix plan."
+	line3 := "Focus on assessed guest-facing details that help people understand the restaurant and take action."
+	line4 := "Confirm your email to unlock the prioritized fix plan."
 
 	if len(reviews) > 0 {
 		avg := 0.0
@@ -128,7 +152,7 @@ func buildDeterministicSummary(place PlaceDetails, report Report, reviews []Revi
 		}
 		if n > 0 {
 			avg /= float64(n)
-			line3 = fmt.Sprintf("Recent guest feedback averages %.1f★ — turn those themes into menu, service, and listing updates.", avg)
+			line3 = fmt.Sprintf("The available Google review evidence averages %.1f★ — use those observed themes in menu, service, and listing updates.", avg)
 		}
 	}
 

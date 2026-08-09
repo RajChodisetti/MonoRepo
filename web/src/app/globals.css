@@ -196,6 +196,26 @@
   }
 }
 
+@keyframes scan-photo-swap {
+  from {
+    opacity: 0;
+    transform: translateY(8px) rotate(-1deg);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) rotate(var(--scan-photo-rotation, 0deg));
+  }
+}
+
+@keyframes scan-review-scroll {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-50%);
+  }
+}
+
 @keyframes scan-pin-bob {
   0%,
   100% {
@@ -268,6 +288,25 @@
   animation: scan-photo-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+.scan-photo-swap {
+  transform: rotate(var(--scan-photo-rotation, 0deg));
+  animation: scan-photo-swap 0.28s ease-out both;
+}
+
+.scan-capture-in {
+  animation: scan-photo-in 0.32s ease-out both;
+}
+
+.scan-review-track {
+  animation: scan-review-scroll var(--scan-review-duration, 24s) linear infinite;
+  will-change: transform;
+}
+
+.scan-review-rail:hover .scan-review-track,
+.scan-review-rail:focus-within .scan-review-track {
+  animation-play-state: paused;
+}
+
 .scan-phone-mockup {
   animation: scan-photo-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
@@ -310,9 +349,24 @@
   .scan-step-active,
   .scan-card-float,
   .scan-photo-float,
+  .scan-photo-swap,
+  .scan-capture-in,
   .scan-phone-mockup,
-  .scan-map-pin {
+  .scan-map-pin,
+  .scan-review-track {
     animation: none;
+  }
+
+  .scan-photo-swap {
+    transform: rotate(var(--scan-photo-rotation, 0deg));
+  }
+
+  .scan-review-copy {
+    display: none;
+  }
+
+  .scan-review-viewport {
+    overflow-y: auto;
   }
 
   .scan-progress-fill {

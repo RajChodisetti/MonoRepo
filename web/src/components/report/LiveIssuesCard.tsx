@@ -46,13 +46,20 @@ export default function LiveIssuesCard({
         Priority fixes for your venue
       </p>
       <p className="mt-1.5 text-[12.5px] leading-snug text-[#8a8580]">
-        Roughly {estimatedMonthlyLoss > 0 ? `$${estimatedMonthlyLoss.toLocaleString()} /mo` : "booked tables"} may be
-        walking to nearby venues first.
+        {estimatedMonthlyLoss > 0
+          ? `Estimated opportunity: $${estimatedMonthlyLoss.toLocaleString()} / month.`
+          : "Revenue impact is unavailable without verified booking and order data."}
       </p>
 
       <ul className="mt-4 space-y-2.5">
         {first ? <IssueRow issue={first} /> : null}
       </ul>
+
+      {!first ? (
+        <p className="mt-4 rounded-2xl bg-[#f3f1ed] px-3 py-3 text-[12px] leading-snug text-[#6f6a65]">
+          No verified priority gaps were identified in the evidence available for this scan.
+        </p>
+      ) : null}
 
       {rest.length > 0 ? (
         <LockedBlur

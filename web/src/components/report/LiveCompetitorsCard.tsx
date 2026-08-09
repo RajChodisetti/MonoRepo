@@ -13,22 +13,6 @@ function Star() {
   );
 }
 
-/** Strip bucket fractions like 23/25 → show clean score label. */
-function cleanScore(score: string): string {
-  const raw = (score || "").trim();
-  const m = raw.match(/^(\d+(?:\.\d+)?)\s*\/\s*\d+(?:\.\d+)?$/);
-  if (m) return m[1];
-  return raw.replace(/\/\d+(?:\.\d+)?$/, "").trim() || raw;
-}
-
-function strengthLabel(score: string, scoreColor: string): { text: string; color: string } {
-  const n = Number.parseFloat(cleanScore(score));
-  if (!Number.isFinite(n)) return { text: "Steady demand", color: scoreColor };
-  if (n >= 35 || (n <= 25 && n >= 20)) return { text: "Winning search", color: scoreColor };
-  if (n >= 15) return { text: "Steady demand", color: scoreColor };
-  return { text: "Building up", color: scoreColor };
-}
-
 export default function LiveCompetitorsCard({
   rows,
   locked = false,
@@ -38,56 +22,63 @@ export default function LiveCompetitorsCard({
   locked?: boolean;
   onUnlock?: () => void;
 }) {
+  if (rows.length === 0) return null;
+  const hasVerifiedComparison = rows.some((row) => !row.highlight);
+  const list = (
+    <ul className="space-y-3">
+      {rows.map((row, index) => (
+        <li key={`${row.rank}-${row.name}`}>
+          {index === rows.length - 1 && rows.length > 1 ? (
+            <div className="mb-2 flex flex-col items-start gap-0.5 pl-[18px]" aria-hidden="true">
+              <span className="h-1 w-1 rounded-full bg-[#cfcac4]" />
+              <span className="h-1 w-1 rounded-full bg-[#cfcac4]" />
+              <span className="h-1 w-1 rounded-full bg-[#cfcac4]" />
+            </div>
+          ) : null}
+          <div className="flex items-center gap-2.5">
+            <span
+              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[11px] font-semibold ${
+                row.highlight ? "bg-[#e8e4df] text-[#5a5550]" : "bg-[#f0eeea] text-[#7a7570]"
+              }`}
+            >
+              {row.rank}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[13px] font-semibold text-[#111111]">{row.name}</p>
+              <p className="mt-0.5 flex items-center gap-1 text-[12px]" style={{ color: MUTED }}>
+                <Star />
+                {row.rating}
+              </p>
+            </div>
+            <span className="shrink-0 text-[11px] font-semibold" style={{ color: row.scoreColor }}>
+              {row.highlight ? "Your venue" : row.score || "Compared venue"}
+            </span>
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+
   return (
     <div className="rounded-[18px] bg-white px-3.5 pb-4 pt-3.5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
       <p className="text-[15px] font-bold leading-snug tracking-[-0.02em] text-[#111111]">
-        Local search snapshot
+        {hasVerifiedComparison ? "Local search comparison" : "Your listing score"}
       </p>
       <p className="mt-1 text-[12px] leading-snug" style={{ color: MUTED }}>
-        How nearby venues show up when diners look for a table tonight.
+        {hasVerifiedComparison
+          ? "Only comparison rows returned by the live report are shown."
+          : "No verified competitor set was returned, so no comparison is inferred."}
       </p>
 
-      <LockedBlur locked={locked} label="Confirm email for the full local map" className="mt-3 rounded-xl">
-        <ul className="space-y-3">
-          {rows.map((row, index) => {
-            const strength = row.highlight
-              ? { text: "Your venue", color: row.scoreColor }
-              : strengthLabel(row.score, row.scoreColor);
-            return (
-              <li key={`${row.rank}-${row.name}`}>
-                {index === rows.length - 1 && rows.length > 1 ? (
-                  <div className="mb-2 flex flex-col items-start gap-0.5 pl-[18px]" aria-hidden="true">
-                    <span className="h-1 w-1 rounded-full bg-[#cfcac4]" />
-                    <span className="h-1 w-1 rounded-full bg-[#cfcac4]" />
-                    <span className="h-1 w-1 rounded-full bg-[#cfcac4]" />
-                  </div>
-                ) : null}
-                <div className="flex items-center gap-2.5">
-                  <span
-                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[11px] font-semibold ${
-                      row.highlight ? "bg-[#e8e4df] text-[#5a5550]" : "bg-[#f0eeea] text-[#7a7570]"
-                    }`}
-                  >
-                    {row.rank}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[13px] font-semibold text-[#111111]">{row.name}</p>
-                    <p className="mt-0.5 flex items-center gap-1 text-[12px]" style={{ color: MUTED }}>
-                      <Star />
-                      {row.rating}
-                    </p>
-                  </div>
-                  <span className="shrink-0 text-[11px] font-semibold" style={{ color: strength.color }}>
-                    {strength.text}
-                  </span>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      </LockedBlur>
+      {hasVerifiedComparison ? (
+        <LockedBlur locked={locked} label="Confirm email for the verified comparison" className="mt-3 rounded-xl">
+          {list}
+        </LockedBlur>
+      ) : (
+        <div className="mt-3">{list}</div>
+      )}
 
-      {locked ? (
+      {locked && hasVerifiedComparison ? (
         <button
           type="button"
           onClick={onUnlock}
@@ -95,11 +86,11 @@ export default function LiveCompetitorsCard({
         >
           Unlock your local search snapshot
         </button>
-      ) : (
+      ) : hasVerifiedComparison ? (
         <p className="mt-3.5 text-center text-[11.5px] font-medium" style={{ color: MUTED }}>
-          Full local snapshot unlocked
+          Verified comparison unlocked
         </p>
-      )}
+      ) : null}
     </div>
   );
 }

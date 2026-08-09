@@ -171,26 +171,26 @@ func (c *PlacesClient) SearchRestaurants(ctx context.Context, query, location st
 
 // placePhoto is a raw Places photo resource used for media URLs.
 type placePhoto struct {
-	Name         string
-	WidthPx      int
-	HeightPx     int
-	Attribution  string
+	Name          string
+	WidthPx       int
+	HeightPx      int
+	Attribution   string
 	GoogleMapsURI string
 }
 
 // placeSnapshot is the internal Places details model used for scoring.
 type placeSnapshot struct {
-	Details          PlaceDetails
-	Reviews          []Review
-	Photos           []placePhoto
-	PhotoCount       int
-	HasHours         bool
-	Delivery         bool
-	Takeout          bool
-	Reservable       bool
-	DeliveryKnown    bool
-	TakeoutKnown     bool
-	ReservableKnown  bool
+	Details         PlaceDetails
+	Reviews         []Review
+	Photos          []placePhoto
+	PhotoCount      int
+	HasHours        bool
+	Delivery        bool
+	Takeout         bool
+	Reservable      bool
+	DeliveryKnown   bool
+	TakeoutKnown    bool
+	ReservableKnown bool
 }
 
 // GetPlaceDetails loads Places details including reviews and order attrs.
@@ -350,7 +350,7 @@ func (c *PlacesClient) FetchPhotoMedia(ctx context.Context, photoName string, ma
 func parsePlacePhotos(photos []any) []placePhoto {
 	out := make([]placePhoto, 0, len(photos))
 	for i, item := range photos {
-		if i >= 12 {
+		if i >= 10 {
 			break
 		}
 		m, ok := item.(map[string]any)
