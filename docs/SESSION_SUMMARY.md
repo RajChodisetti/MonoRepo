@@ -1,7 +1,7 @@
 # Session Summary
 
-Production runtime is `5bfe1dc` at `/opt/tuvi/releases/monorepo-5bfe1dc`; the active tree uses canonical `web/`, has no legacy `tuvi-website/`, and the application database is at migration `000041`.
-The internal monthly consultation calendar shows confirmed calls, persists slot availability with revision checks, and feeds the same PostgreSQL availability/booking path used by the public site and inbound voice agent.
-The latest QA website is live; public callback/outbound endpoints remain HTTP 403. A Pipecat 0.0.108 `ToolsSchema` adapter restored live voice calendar queries while preserving inbound-only behavior.
-Builds, migrations, UI/API/constraint checks, HTTPS and browser smokes, five voice safety tests, and a non-PII production voice availability lookup passed. No real booking, outbound call, email, or SMS was created.
-Migrations `000039`–`000041` are forward-only; retain the validated pre-deploy backup and prefer a forward fix or approved restore over a pre-calendar API rollback once slot overrides are used.
+Production is deployed from commit `ee553c4` at `/opt/tuvi/releases/monorepo-ee553c4`; PostgreSQL is at migration `000043` and the pre-deploy backup is validated.
+The active, extensible plain-text outreach sequence has three approved steps at `0/72/72` hours; 955 eligible inferred-business leads are enrolled, while the email job remains disabled and no real email was sent.
+OCR code and runtime configuration are retired; active release examples and live local/production/QA envs are clean, production/QA env history has been scrubbed, and no OCR container, process, timer, or cron entry remains.
+The API-only reused OpenAI key powers `gpt-4.1-nano`; a complete production AI review with desktop/mobile captures took 10.76 seconds, and two concurrent reviews stayed within 11.9 seconds with truthful partial fallback for a slower site.
+Mobile production QA at 390×844 confirms identity, exact map, Google listing photo, scan status, score, visibility, and timing above the fold; outreach must remain disabled until an operator intentionally enables it.
