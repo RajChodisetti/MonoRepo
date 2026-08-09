@@ -43,8 +43,6 @@ export default function WorkflowTimeline({ steps }: { steps: StoryStep[] }) {
 
   if (!steps.length) return null;
 
-  const step = steps[active];
-
   return (
     <section ref={sectionRef} id="workflow" className="aurora-section min-h-screen">
       <div className="aurora-container grid min-h-screen items-center gap-12 lg:grid-cols-2">

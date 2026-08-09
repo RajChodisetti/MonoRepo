@@ -46,13 +46,8 @@ function MegaSection({
 
 export default function ProductMegaMenu() {
   const [open, setOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
   const menuId = useId();
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   const clearClose = () => {
     if (closeTimer.current) {
@@ -86,7 +81,7 @@ export default function ProductMegaMenu() {
   const midCol = [productMegaSections[2], productMegaSections[3]];
 
   const panel =
-    open && mounted
+    open && typeof document !== "undefined"
       ? createPortal(
           <>
             <div

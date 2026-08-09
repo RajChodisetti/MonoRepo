@@ -10,7 +10,7 @@ export const delivery: ProductPageConfig = {
     heading: "Delivery that still feels like your restaurant.",
     subheading:
       "Get food to guests on time with reliable drivers and clear pricing — while you keep the brand, the guest, and more of the margin.",
-    primaryCta: { label: "Get a free demo", href: "/demo" },
+    primaryCta: { label: "Get a free demo", href: "/book" },
     secondaryCta: { label: "See how it works", href: "/how-it-works" },
     testimonial: {
       imageSrc: "/resources/resource-ordering-hero.png",

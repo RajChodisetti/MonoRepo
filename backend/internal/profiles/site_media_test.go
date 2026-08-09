@@ -1,17 +1,25 @@
 package profiles
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
 
-func TestTemporaryGoogleMediaURL(t *testing.T) {
-	for _, value := range []string{
-		"https://lh3.googleusercontent.com/photo",
-		"https://images.ggpht.com/photo",
-	} {
-		if !isTemporaryGoogleMediaURL(value) {
-			t.Fatalf("isTemporaryGoogleMediaURL(%q) = false", value)
-		}
+func TestSanitizePublicSiteContentRemovesLegacyScrapedImages(t *testing.T) {
+	content := SiteContent{
+		Thumbnail:     "https://legacy.example/thumbnail.jpg",
+		GalleryImages: []GalleryImage{{URL: "https://legacy.example/gallery.jpg"}},
+		MenuItems: []SiteMenuItem{{
+			Name: "Dish", ImageURL: "https://legacy.example/dish.jpg",
+			Images: json.RawMessage(`[{"url":"https://legacy.example/dish-2.jpg"}]`),
+		}},
 	}
-	if isTemporaryGoogleMediaURL("https://cdn.example.test/photo.jpg") {
-		t.Fatal("durable CDN URL classified as temporary Google media")
+
+	sanitized := SanitizePublicSiteContent(content)
+	if sanitized.Thumbnail != "" || len(sanitized.GalleryImages) != 0 {
+		t.Fatalf("sanitized = %#v, want no profile/gallery images", sanitized)
+	}
+	if sanitized.MenuItems[0].ImageURL != "" || len(sanitized.MenuItems[0].Images) != 0 {
+		t.Fatalf("menu item = %#v, want no legacy image fields", sanitized.MenuItems[0])
 	}
 }

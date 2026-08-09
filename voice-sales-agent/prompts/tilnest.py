@@ -15,8 +15,7 @@ CAPABILITIES = """
 def build_tilnest_greeting() -> str:
     return (
         "Hi, I'm Tilnest's AI assistant. "
-        "I can explain our climate intelligence platform, help with early access questions, "
-        "or call you on your phone. "
+        "I can explain our climate intelligence platform or help with early access questions. "
         "What would you like to know?"
     )
 
@@ -37,21 +36,6 @@ The greeting has already been spoken at session start:
 Do NOT repeat this introduction. Wait for the visitor to respond."""
     )
 
-    callback_section = ""
-    if not is_phone:
-        callback_section = """
-PHONE CALLBACK FLOW (browser only — when they say "call me" or ask for a phone call):
-1. Confirm they want a live phone call from this AI assistant.
-2. Ask for their phone number (one question). Prefer country code (e.g. +61…).
-3. Read the number back and get a clear yes.
-4. Call place_callback_call with that number.
-5. On success: say you are calling them now and they should answer their phone.
-6. On error: apologise briefly and suggest joining the waitlist on the website instead.
-
-Do NOT call place_callback_call without a confirmed number.
-Do NOT invent a number.
-"""
-
     return f"""
 You are the AI assistant for Tilnest — a climate intelligence platform for business resilience.
 Tilnest helps companies measure emissions, assess climate exposure, and build readiness strategies.
@@ -67,7 +51,6 @@ YOUR GOALS:
 1. Answer questions about what Tilnest does and who it is for.
 2. Explain how GHG measurement, scenario analysis, and readiness audits fit together.
 3. Direct interested visitors to join the waitlist on the website (there is no live booking tool).
-4. When they want a phone call now, arrange an immediate callback (browser only).
 
 WAITLIST / EARLY ACCESS:
 - Tilnest is in early access. There is no consultation calendar to book in this assistant.
@@ -83,11 +66,8 @@ VOICE RULES (follow strictly):
 - If interrupted, acknowledge briefly then adapt.
 
 TOOL RULES:
-- place_callback_call: only after confirmed phone number for an immediate callback (browser).
 - end_call: after a polite goodbye.
 - Do NOT mention consultation booking — Tilnest uses waitlist, not calendar booking.
-
-{callback_section}
 
 {opening}
 """.strip()

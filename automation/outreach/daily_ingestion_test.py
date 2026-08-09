@@ -17,8 +17,10 @@ class DailyIngestionTest(unittest.TestCase):
     @patch("daily_ingestion.scrape_single_restaurant_places")
     @patch("daily_ingestion.discover_places_for_city")
     @patch("daily_ingestion.KnownLeadsRegistry.load_combined")
+    @patch("daily_ingestion._refuse_when_durable_city_pipeline_is_installed")
     def test_runs_places_then_apollo_contact_enrichment(
         self,
+        refuse_legacy,
         load_known,
         discover,
         scrape,
@@ -86,8 +88,10 @@ class DailyIngestionTest(unittest.TestCase):
         apollo_enrich.assert_called_once()
         self.assertTrue(scrape.called)
         load_known.assert_called_once_with("restaurant", require_database=False)
+        refuse_legacy.assert_called_once_with()
 
-    def test_requires_apollo_key_when_contact_enrichment_is_enabled(self):
+    @patch("daily_ingestion._refuse_when_durable_city_pipeline_is_installed")
+    def test_requires_apollo_key_when_contact_enrichment_is_enabled(self, refuse_legacy):
         cfg = Config()
         cfg.PLACES_API_KEY = "places-key"
         cfg.APOLLO_API_KEY = ""
@@ -101,6 +105,7 @@ class DailyIngestionTest(unittest.TestCase):
                 import_to_db=False,
                 cfg=cfg,
             )
+        refuse_legacy.assert_called_once_with()
 
 
 if __name__ == "__main__":

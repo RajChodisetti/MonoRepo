@@ -1,6 +1,0 @@
-iowe-f76af-abffbc09fd42.json
-*.json
-!app/package.json
-!app/package-lock.json
-!app/tsconfig.json
-!app/.eslintrc.json

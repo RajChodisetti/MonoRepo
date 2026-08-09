@@ -445,24 +445,36 @@ func (service *Service) BuildTrackingURLs(ctx context.Context, campaign Campaign
 	return urls, nil
 }
 
-func (service *Service) BuildAdHocTrackingURLs(ctx context.Context, campaign Campaign, recipientEmail string) (TrackingURLs, error) {
-	return service.BuildTrackingURLs(ctx, campaign, SendContext{
-		RestaurantEmail: strings.TrimSpace(recipientEmail),
-		DemoStatus:      demos.StatusPublished,
-	})
-}
-
-func (service *Service) BuildAdHocPreviewURLs(ctx context.Context, campaign Campaign) (TrackingURLs, error) {
-	demoSite, token, err := service.validPublishedDemoTarget(ctx, campaign)
-	if err != nil {
-		return TrackingURLs{}, err
+// BuildUnsubscribeURL creates the only personalized link used by the plain-text
+// sequence. It deliberately has no demo/click/open token or expiry.
+func (service *Service) BuildUnsubscribeURL(
+	ctx context.Context,
+	campaignID uuid.UUID,
+	restaurantID uuid.UUID,
+	recipientEmail string,
+) (string, error) {
+	recipient := strings.ToLower(strings.TrimSpace(recipientEmail))
+	if campaignID == uuid.Nil || restaurantID == uuid.Nil || recipient == "" {
+		return "", fmt.Errorf("%w: campaign, restaurant, and recipient are required", ErrNotEligible)
 	}
-	demoURL := buildTokenGatedDemoPreviewURL(service.publicWebURL, demoSite.Slug, token, "1")
-	return TrackingURLs{
-		Click:       demoURL,
-		Template1:   demoURL,
-		Unsubscribe: "#unsubscribe-preview",
-	}, nil
+	token, err := newTrackingToken()
+	if err != nil {
+		return "", err
+	}
+	if err := service.repo.CreateTrackingToken(ctx, TrackingToken{
+		Token:          token,
+		CampaignID:     campaignID,
+		RestaurantID:   restaurantID,
+		TokenType:      TokenUnsubscribe,
+		RecipientEmail: recipient,
+	}); err != nil {
+		return "", err
+	}
+	base := service.publicBase
+	if base == "" {
+		base = "http://localhost:8080"
+	}
+	return base + "/t/unsubscribe/" + token, nil
 }
 
 func (service *Service) validPublishedDemoTarget(ctx context.Context, campaign Campaign) (demos.Site, string, error) {

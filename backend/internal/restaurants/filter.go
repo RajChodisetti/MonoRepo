@@ -22,9 +22,6 @@ func MatchesFilter(record Restaurant, filter ListFilter) bool {
 	if filter.ShownInterest != nil && record.ShownInterest != *filter.ShownInterest {
 		return false
 	}
-	if filter.OCRStatus != "" && record.OCRStatus != filter.OCRStatus {
-		return false
-	}
 	return true
 }
 

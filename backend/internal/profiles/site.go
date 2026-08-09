@@ -66,3 +66,16 @@ type SiteRepository interface {
 	GetSiteContentByIndex(ctx context.Context, index int) (SiteContent, error)
 	GetSiteContentByPlaceID(ctx context.Context, placeID string) (SiteContent, error)
 }
+
+// SanitizePublicSiteContent removes every legacy scraped image field. Public
+// handlers attach media separately through the live/no-store or manually
+// approved media service.
+func SanitizePublicSiteContent(content SiteContent) SiteContent {
+	content.Thumbnail = ""
+	content.GalleryImages = []GalleryImage{}
+	for index := range content.MenuItems {
+		content.MenuItems[index].ImageURL = ""
+		content.MenuItems[index].Images = nil
+	}
+	return content
+}

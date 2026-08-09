@@ -6,7 +6,6 @@ COPY template/package*.json ./
 RUN npm ci
 
 COPY template ./
-COPY data ../data
 
 ARG TEMPLATE=2
 ARG NEXT_PUBLIC_API_URL=https://api.tuvisolutions.com
@@ -19,7 +18,9 @@ ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 ENV NEXT_PUBLIC_VOICE_AGENT_URL=${NEXT_PUBLIC_VOICE_AGENT_URL}
 ENV NEXT_PUBLIC_MEDIA_BASE_URL=${NEXT_PUBLIC_MEDIA_BASE_URL}
 
-RUN npm run build
+RUN npm run build \
+    && npm prune --omit=dev \
+    && rm -rf .next/cache
 
 FROM node:22-alpine
 
@@ -35,7 +36,6 @@ COPY --from=builder /src/template/node_modules ./node_modules
 COPY --from=builder /src/template/.next ./.next
 COPY --from=builder /src/template/public ./public
 COPY --from=builder /src/template/next.config.ts ./next.config.ts
-COPY --from=builder /src/data ../data
 
 EXPOSE 3000
 

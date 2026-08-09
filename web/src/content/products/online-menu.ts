@@ -10,7 +10,7 @@ export const onlineMenu: ProductPageConfig = {
     heading: "A menu that turns browsers into buyers.",
     subheading:
       "Tuvi's online menu is shaped for conversion — so more people who land on your site place a commission-free order with you.",
-    primaryCta: { label: "Get a free demo", href: "/demo" },
+    primaryCta: { label: "Get a free demo", href: "/book" },
     secondaryCta: { label: "See how it works", href: "/how-it-works" },
     testimonial: {
       imageSrc: "/resources/resource-inline-dining.png",

@@ -10,7 +10,7 @@ export const aiPhoneOrdering: ProductPageConfig = {
     heading: "Answer every call you are currently missing.",
     subheading:
       "Tuvi picks up, takes the order in a natural conversation, and sends it straight to your kitchen — then keeps the caller in your world.",
-    primaryCta: { label: "Get a free demo", href: "/demo" },
+    primaryCta: { label: "Get a free demo", href: "/book" },
     secondaryCta: { label: "See how it works", href: "/how-it-works" },
     testimonial: {
       imageSrc: "/resources/resource-help-hero.png",

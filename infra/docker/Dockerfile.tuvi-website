@@ -1,8 +1,8 @@
 FROM node:22-alpine AS builder
-WORKDIR /src/tuvi-website/app
-COPY tuvi-website/app/package*.json ./
+WORKDIR /src/web
+COPY web/package*.json ./
 RUN npm ci
-COPY tuvi-website/app ./
+COPY web ./
 
 ARG NEXT_PUBLIC_CONTACT_EMAIL=contact@tuvisolutions.com
 ARG NEXT_PUBLIC_LINKEDIN_URL=https://linkedin.com/company/tuvi-solutions
@@ -15,20 +15,22 @@ ENV NEXT_PUBLIC_LINKEDIN_URL=${NEXT_PUBLIC_LINKEDIN_URL}
 ENV NEXT_PUBLIC_VOICE_AGENT_URL=${NEXT_PUBLIC_VOICE_AGENT_URL}
 ENV NEXT_PUBLIC_CALL_IN_NUMBER=${NEXT_PUBLIC_CALL_IN_NUMBER}
 
-RUN npm run build
+RUN npm run build \
+    && npm prune --omit=dev \
+    && rm -rf .next/cache
 
 FROM node:22-alpine
-WORKDIR /src/tuvi-website/app
+WORKDIR /src/web
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
-COPY --from=builder /src/tuvi-website/app/package*.json ./
-COPY --from=builder /src/tuvi-website/app/node_modules ./node_modules
-COPY --from=builder /src/tuvi-website/app/.next ./.next
-COPY --from=builder /src/tuvi-website/app/public ./public
-COPY --from=builder /src/tuvi-website/app/next.config.ts ./next.config.ts
+COPY --from=builder /src/web/package*.json ./
+COPY --from=builder /src/web/node_modules ./node_modules
+COPY --from=builder /src/web/.next ./.next
+COPY --from=builder /src/web/public ./public
+COPY --from=builder /src/web/next.config.ts ./next.config.ts
 
 EXPOSE 3000
 CMD ["./node_modules/.bin/next", "start", "-p", "3000", "-H", "0.0.0.0"]

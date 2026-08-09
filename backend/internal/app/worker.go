@@ -10,7 +10,6 @@ import (
 
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/campaigns"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/jobs"
-	"github.com/rajchodisetti/restaurant-platform/backend/internal/leadprep"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/outreach"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/config"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/db"
@@ -55,27 +54,12 @@ func NewWorker(ctx context.Context) (*WorkerApp, error) {
 		return nil, err
 	}
 
-	leadPreparationService := leadprep.NewService(dataStore.Pool(), cfg.Demo.TokenTTL, cfg.AppURLs)
-	if err := worker.Register(jobs.LeadPrepareJobType, jobs.LeadPrepareHandler(leadPreparationService, log)); err != nil {
-		return nil, err
-	}
-
 	accessService := restaurants.NewService(dataStore.Restaurants, dataStore.Memberships)
 	campaignService := campaigns.NewService(dataStore.Campaigns, dataStore.Demos, accessService, &jobs.CampaignEnqueuer{Queue: queue}, cfg.AppURLs, cfg.Demo.TokenTTL)
 	emailProvider, err := emailprovider.NewFromConfig(cfg.Email, cfg.ZohoMail)
 	if err != nil {
 		return nil, err
 	}
-	if err := worker.Register(jobs.EmailSendJobType, jobs.EmailSendHandler(jobs.EmailSendDeps{
-		Campaigns:        dataStore.Campaigns,
-		CampaignsService: campaignService,
-		Email:            emailProvider,
-		EmailCfg:         cfg.Email,
-		AppURLs:          cfg.AppURLs,
-	}, log)); err != nil {
-		return nil, err
-	}
-
 	outreachRepo := outreach.NewPostgres(dataStore.Pool())
 	emailHealth, err := emailprovider.NewHealthServiceFromConfig(ctx, cfg.Email, cfg.Outreach, outreachRepo)
 	if err != nil {

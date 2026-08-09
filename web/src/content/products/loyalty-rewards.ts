@@ -10,7 +10,7 @@ export const loyaltyRewards: ProductPageConfig = {
     heading: "Loyalty that turns guests into regulars.",
     subheading:
       "Points, rewards, and VIP perks that live in your app and ordering flow — so guests come back for you, not a marketplace.",
-    primaryCta: { label: "Get a free demo", href: "/demo" },
+    primaryCta: { label: "Get a free demo", href: "/book" },
     secondaryCta: { label: "See how it works", href: "/how-it-works" },
     testimonial: {
       imageSrc: "/resources/resource-support-hero.png",

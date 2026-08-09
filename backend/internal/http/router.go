@@ -137,6 +137,11 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	reservationService := reservations.NewService(dataStore.Reservations)
 	reservationPublicHandler := handlers.NewReservationPublicHandler(reservationService, writeJSON, writeError)
 	companyConsultationHandler := handlers.NewCompanyConsultationHandler(consultationService, writeJSON)
+	companyConsultationAdminHandler := handlers.NewCompanyConsultationAdminHandler(
+		consultationService,
+		writeJSON,
+		writeError,
+	)
 	developerHandler := handlers.NewDeveloperHandler(
 		developer.NewService(dataStore.Pool()),
 		writeJSON,
@@ -207,6 +212,8 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	mux.Handle("GET /healthz", protectDeveloper(http.HandlerFunc(healthz(cfg))))
 	mux.Handle("GET /readyz", protectDeveloper(http.HandlerFunc(readyz(readiness))))
 	mux.Handle("GET /api/v1/admin/me", protectInternalAdmin(http.HandlerFunc(adminHandler.Me)))
+	mux.Handle("GET /api/v1/admin/consultation-calendar/{month}", protectInternalAdmin(http.HandlerFunc(companyConsultationAdminHandler.GetCalendar)))
+	mux.Handle("PUT /api/v1/admin/consultation-calendar/{month}", protectInternalAdmin(http.HandlerFunc(companyConsultationAdminHandler.PutCalendar)))
 	mux.Handle("GET /api/v1/user/me", protectRestaurantUser(http.HandlerFunc(userHandler.Me)))
 
 	mux.Handle("GET /api/v1/restaurants", protectAuthenticated(RequireAnyRole(auth.RoleInternalAdmin, auth.RoleRestaurantOwner)(
@@ -224,15 +231,15 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	mux.Handle("GET /api/v1/restaurants/{id}/profile/review-preview", protectRestaurantAdmin(http.HandlerFunc(leadReviewHandler.GetProfileReviewPreview)))
 	mux.Handle("PATCH /api/v1/restaurants/{id}/profile/review", protectRestaurantAdmin(http.HandlerFunc(leadReviewHandler.ReviewProfile)))
 	mux.Handle("PATCH /api/v1/demo-sites/{id}/status", protectInternalAdmin(http.HandlerFunc(leadReviewHandler.SetDemoStatus)))
-	mux.Handle("POST /api/v1/restaurants/{id}/campaigns", protectRestaurantAdmin(http.HandlerFunc(campaignHandler.Create)))
-	mux.Handle("GET /api/v1/restaurants/{id}/campaigns", protectRestaurantAdmin(http.HandlerFunc(campaignHandler.List)))
-	mux.Handle("GET /api/v1/campaigns/{id}", protectInternalAdmin(http.HandlerFunc(campaignHandler.Get)))
-	mux.Handle("POST /api/v1/campaigns/{id}/approve", protectInternalAdmin(http.HandlerFunc(campaignHandler.Approve)))
-	mux.Handle("POST /api/v1/campaigns/{id}/regenerate", protectInternalAdmin(http.HandlerFunc(campaignHandler.Regenerate)))
-	mux.Handle("POST /api/v1/campaigns/{id}/stop", protectInternalAdmin(http.HandlerFunc(campaignHandler.Stop)))
 	mux.Handle("POST /api/v1/outreach/bulk-send", protectInternalAdmin(http.HandlerFunc(outreachBulkHandler.Trigger)))
 	mux.Handle("PATCH /api/v1/outreach/email-job", protectInternalAdmin(http.HandlerFunc(outreachBulkHandler.SetEmailJob)))
 	mux.Handle("GET /api/v1/outreach/bulk-send/status", protectInternalAdmin(http.HandlerFunc(outreachBulkHandler.Status)))
+	mux.Handle("GET /api/v1/outreach/sequences", protectInternalAdmin(http.HandlerFunc(outreachBulkHandler.ListSequences)))
+	mux.Handle("POST /api/v1/outreach/sequences", protectInternalAdmin(http.HandlerFunc(outreachBulkHandler.CreateSequence)))
+	mux.Handle("PUT /api/v1/outreach/sequences/{id}", protectInternalAdmin(http.HandlerFunc(outreachBulkHandler.UpdateSequence)))
+	mux.Handle("POST /api/v1/outreach/sequences/{id}/approve", protectInternalAdmin(http.HandlerFunc(outreachBulkHandler.ApproveSequence)))
+	mux.Handle("POST /api/v1/outreach/sequences/{id}/preview", protectInternalAdmin(http.HandlerFunc(outreachBulkHandler.PreviewSequence)))
+	mux.Handle("GET /api/v1/outreach/recipients", protectInternalAdmin(http.HandlerFunc(outreachBulkHandler.ListRecipients)))
 	mux.Handle("GET /api/v1/outreach/email-accounts/health", protectInternalAdmin(http.HandlerFunc(emailHealthHandler.Status)))
 	mux.Handle("GET /api/v1/developer/schema", protectInternalAdmin(http.HandlerFunc(developerHandler.Schema)))
 	mux.Handle("POST /api/v1/developer/sql", protectInternalAdmin(http.HandlerFunc(developerHandler.ExecuteSQL)))
@@ -244,6 +251,7 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	mux.Handle("GET /api/v1/restaurants/{id}/images", protectRestaurantAdmin(http.HandlerFunc(restaurantImagesAdminHandler.List)))
 	mux.Handle("GET /api/v1/restaurants/{id}/images/google", protectRestaurantAdmin(http.HandlerFunc(restaurantImagesAdminHandler.ListGoogle)))
 	mux.Handle("POST /api/v1/restaurants/{id}/media", protectRestaurantAdmin(http.HandlerFunc(restaurantImagesAdminHandler.Upload)))
+	mux.Handle("PATCH /api/v1/restaurants/{id}/media/{assetId}/review", protectInternalAdmin(http.HandlerFunc(restaurantImagesAdminHandler.ReviewOwned)))
 	mux.Handle("DELETE /api/v1/restaurants/{id}/media/{assetId}", protectRestaurantAdmin(http.HandlerFunc(restaurantImagesAdminHandler.HideOwned)))
 	mux.Handle("POST /api/v1/restaurants/{id}/media/{assetId}/restore", protectRestaurantAdmin(http.HandlerFunc(restaurantImagesAdminHandler.RestoreOwned)))
 	mux.Handle("DELETE /api/v1/restaurants/{id}/images/{kind}/{imageId}", protectRestaurantAdmin(http.HandlerFunc(restaurantImagesAdminHandler.Hide)))
@@ -252,13 +260,10 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	mux.Handle("GET /api/v1/restaurants/{id}/generated-site", protectRestaurantAdmin(http.HandlerFunc(restaurantSiteAdminHandler.Get)))
 	mux.Handle("GET /api/v1/restaurants/{id}/demo-engagement", protectRestaurantAdmin(http.HandlerFunc(demoEngagementHandler.ListByRestaurant)))
 	mux.Handle("POST /api/v1/restaurants/{id}/demo-engagement/preview", protectRestaurantAdmin(http.HandlerFunc(demoEngagementHandler.StartAdminPreview)))
-	mux.Handle("GET /api/v1/restaurants/{id}/outreach/adhoc-preview", protectRestaurantAdmin(http.HandlerFunc(outreachBulkHandler.PreviewAdHoc)))
-	mux.Handle("POST /api/v1/restaurants/{id}/outreach/adhoc-send", protectRestaurantAdmin(http.HandlerFunc(outreachBulkHandler.SendAdHoc)))
-	mux.Handle("POST /api/v1/outreach/adhoc-send", protectInternalAdmin(http.HandlerFunc(outreachBulkHandler.SendAdHocBatch)))
-
 	mux.HandleFunc("GET /t/click/{token}", trackingHandler.Click)
 	mux.HandleFunc("GET /t/open/{token}", trackingHandler.Open)
-	mux.HandleFunc("GET /t/unsubscribe/{token}", trackingHandler.Unsubscribe)
+	mux.HandleFunc("GET /t/unsubscribe/{token}", trackingHandler.UnsubscribeConfirm)
+	mux.HandleFunc("POST /t/unsubscribe/{token}", trackingHandler.Unsubscribe)
 
 	mux.HandleFunc("GET /api/public/v1/demo/{slug}", demoPublicHandler.Get)
 	mux.HandleFunc("POST /api/public/v1/demo/{slug}/sessions", demoEngagementHandler.Start)

@@ -650,8 +650,8 @@ def scrape_single_restaurant_places(
             "gallery": [],
             "menu_photos": [],
             "google_photo_count": 0,
-            # Photo resource names expire and are fetched again just before
-            # OCR; they must not be cached in durable lead data.
+            # Photo resource names expire and are resolved live by the API;
+            # they must not be cached in durable lead data.
             "google_photos": [],
         },
         "hours": {},

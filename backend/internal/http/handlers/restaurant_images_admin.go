@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"image"
@@ -213,8 +214,8 @@ func (handler *RestaurantImagesAdminHandler) Upload(w http.ResponseWriter, r *ht
 		Orientation:     mediaOrientation(imageConfig.Width, imageConfig.Height),
 		SubjectPosition: "center",
 		PlacementRole:   placementRole,
-		// The background vision worker must confirm this is not a menu
-		// document before it can become public website media.
+		// An internal administrator must approve this asset before it can
+		// become public website media.
 		ApprovalStatus: "draft",
 		RightsStatus:   rightsStatus,
 		MimeType:       mimeType,
@@ -237,6 +238,51 @@ func (handler *RestaurantImagesAdminHandler) Upload(w http.ResponseWriter, r *ht
 		"asset":             created,
 		"original_filename": filepath.Base(header.Filename),
 	})
+}
+
+type reviewOwnedMediaRequest struct {
+	ApprovalStatus string `json:"approval_status"`
+	Note           string `json:"note"`
+}
+
+func (handler *RestaurantImagesAdminHandler) ReviewOwned(w http.ResponseWriter, r *http.Request) {
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		handler.writeError(w, http.StatusUnauthorized, "unauthorized", "Authentication required.")
+		return
+	}
+	if handler.media == nil {
+		handler.writeError(w, http.StatusServiceUnavailable, "media_storage_unavailable", "Restaurant media storage is unavailable.")
+		return
+	}
+	restaurantID, assetID, err := restaurantMediaIDsFromRequest(r)
+	if err != nil {
+		handler.writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+	var request reviewOwnedMediaRequest
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil {
+		handler.writeError(w, http.StatusBadRequest, "invalid_request", "A valid media review decision is required.")
+		return
+	}
+	asset, err := handler.media.ReviewOwnedAsset(
+		r.Context(), restaurantID, assetID, principal.UserID, request.ApprovalStatus, request.Note,
+	)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			handler.writeError(w, http.StatusNotFound, "not_found", "Image was not found.")
+			return
+		}
+		if strings.Contains(err.Error(), "approval status") {
+			handler.writeError(w, http.StatusBadRequest, "invalid_approval_status", "Approval status must be approved or rejected.")
+			return
+		}
+		handler.writeInternalError(w, err)
+		return
+	}
+	handler.writeJSON(w, http.StatusOK, map[string]any{"asset": asset})
 }
 
 func (handler *RestaurantImagesAdminHandler) HideOwned(w http.ResponseWriter, r *http.Request) {

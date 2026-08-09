@@ -44,6 +44,9 @@ type PublicMedia struct {
 	ContainsText       bool          `json:"contains_text,omitempty"`
 	PlacementRole      string        `json:"placement_role,omitempty"`
 	ApprovalStatus     string        `json:"approval_status,omitempty"`
+	ReviewedAt         *time.Time    `json:"reviewed_at,omitempty"`
+	ReviewedBy         *uuid.UUID    `json:"reviewed_by,omitempty"`
+	ReviewNote         string        `json:"review_note,omitempty"`
 	RightsStatus       string        `json:"rights_status,omitempty"`
 	VisionStatus       string        `json:"vision_status,omitempty"`
 	VisionLastError    string        `json:"vision_last_error,omitempty"`
@@ -72,6 +75,9 @@ type Asset struct {
 	ContainsText     bool            `json:"contains_text"`
 	PlacementRole    string          `json:"placement_role"`
 	ApprovalStatus   string          `json:"approval_status"`
+	ReviewedAt       *time.Time      `json:"reviewed_at,omitempty"`
+	ReviewedBy       *uuid.UUID      `json:"reviewed_by,omitempty"`
+	ReviewNote       string          `json:"review_note"`
 	RightsStatus     string          `json:"rights_status"`
 	MimeType         string          `json:"mime_type"`
 	WidthPx          int             `json:"width_px"`
@@ -111,20 +117,12 @@ type CreateAssetInput struct {
 	CreatedBy       uuid.UUID
 }
 
-type ClassificationHint struct {
-	SourceIndex       int
-	SourceFingerprint string
-	MediaType         string
-	Confidence        float64
-	PublicEligible    bool
-}
-
 type Repository interface {
 	ListPublic(ctx context.Context, restaurantID uuid.UUID) ([]Asset, error)
 	ListAdmin(ctx context.Context, restaurantID uuid.UUID) ([]Asset, error)
-	ListClassificationHints(ctx context.Context, restaurantID uuid.UUID) ([]ClassificationHint, error)
 	Create(ctx context.Context, input CreateAssetInput) (Asset, error)
 	SetHidden(ctx context.Context, restaurantID, assetID uuid.UUID, hiddenBy *uuid.UUID) error
+	SetApproval(ctx context.Context, restaurantID, assetID, reviewedBy uuid.UUID, approvalStatus, note string) (Asset, error)
 }
 
 type ObjectStore interface {

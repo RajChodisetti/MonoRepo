@@ -12,13 +12,8 @@ import {
 
 export default function CompanyMegaMenu() {
   const [open, setOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
   const menuId = useId();
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   const clearClose = () => {
     if (closeTimer.current) {
@@ -49,7 +44,7 @@ export default function CompanyMegaMenu() {
   useEffect(() => () => clearClose(), []);
 
   const panel =
-    open && mounted
+    open && typeof document !== "undefined"
       ? createPortal(
           <>
             <div

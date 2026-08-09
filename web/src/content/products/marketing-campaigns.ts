@@ -10,7 +10,7 @@ export const marketingCampaigns: ProductPageConfig = {
     heading: "Campaigns that fill seats and grow orders.",
     subheading:
       "Plan, launch, and measure promotions across every channel without juggling five tools — and keep the guest list yours.",
-    primaryCta: { label: "Get a free demo", href: "/demo" },
+    primaryCta: { label: "Get a free demo", href: "/book" },
     secondaryCta: { label: "See how it works", href: "/how-it-works" },
     testimonial: {
       imageSrc: "/resources/resource-blog-hero.png",

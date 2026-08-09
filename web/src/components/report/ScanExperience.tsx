@@ -2,11 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-const MIN_SCAN_MS = 70_000;
-const STEP_INTERVAL_MS = 11_000;
-const FINISH_HOLD_MS = 1_400;
-const SAFETY_EXIT_MS = 85_000;
-const TARGET_SECONDS = 70;
+const MIN_SCAN_MS = 800;
+const STEP_INTERVAL_MS = 2_200;
+const FINISH_HOLD_MS = 320;
+const TARGET_SECONDS = 15;
 
 export type ScanPhoto = {
   src: string;
@@ -176,6 +175,31 @@ function ReviewCardsOverlay({
   );
 }
 
+function RevealingReviewCards({
+  reviews,
+  placeRating,
+}: {
+  reviews: ScanReview[];
+  placeRating?: number;
+}) {
+  const [visibleCount, setVisibleCount] = useState(1);
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setVisibleCount((count) => Math.min(count + 1, Math.min(4, reviews.length)));
+    }, 1800);
+    return () => window.clearInterval(id);
+  }, [reviews.length]);
+
+  return (
+    <ReviewCardsOverlay
+      reviews={reviews}
+      visibleCount={visibleCount}
+      placeRating={placeRating}
+    />
+  );
+}
+
 function MobilePhoneMockup({
   screenshot,
   hostname,
@@ -326,7 +350,6 @@ export default function ScanExperience({
   restaurantName = "Your restaurant",
   address,
   rating,
-  category = "Restaurant",
   website,
   placeId,
   latitude,
@@ -364,11 +387,13 @@ export default function ScanExperience({
   const [activeIndex, setActiveIndex] = useState(0);
   const [secondsLeft, setSecondsLeft] = useState(TARGET_SECONDS);
   const [finishing, setFinishing] = useState(false);
-  const [visiblePhotoCount, setVisiblePhotoCount] = useState(0);
-  const [visibleReviewCount, setVisibleReviewCount] = useState(0);
-  const startedAtRef = useRef<number>(Date.now());
+  const [visiblePhotoCount, setVisiblePhotoCount] = useState(1);
+  const startedAtRef = useRef<number>(0);
   const onReadyRef = useRef(onReady);
-  onReadyRef.current = onReady;
+
+  useEffect(() => {
+    onReadyRef.current = onReady;
+  }, [onReady]);
 
   const gallery = useMemo(() => {
     const seen = new Set<string>();
@@ -391,36 +416,30 @@ export default function ScanExperience({
     return restaurantName;
   }, [restaurantName, address]);
 
-  // Lock the first good map URL so we never flash a generic fallback / remount the iframe
-  const lockedEmbedRef = useRef<string | null>(null);
-  const embedSrc = useMemo(() => {
-    const next = mapEmbedSrc({ restaurantName, address, placeId, latitude, longitude });
-    if (!next) return lockedEmbedRef.current;
-    const hasExact =
-      typeof latitude === "number" &&
-      typeof longitude === "number" &&
-      Number.isFinite(latitude) &&
-      Number.isFinite(longitude);
-    // Prefer exact coords once; otherwise keep first place_id/name embed stable
-    if (hasExact) {
-      lockedEmbedRef.current = next;
-      return next;
-    }
-    if (!lockedEmbedRef.current) {
-      lockedEmbedRef.current = next;
-    }
-    return lockedEmbedRef.current;
-  }, [restaurantName, address, placeId, latitude, longitude]);
-
   const hasExactPin =
     typeof latitude === "number" &&
     typeof longitude === "number" &&
     Number.isFinite(latitude) &&
     Number.isFinite(longitude);
 
+  const candidateEmbedSrc = useMemo(
+    () => mapEmbedSrc({ restaurantName, address, placeId, latitude, longitude }),
+    [restaurantName, address, placeId, latitude, longitude],
+  );
+  // Keep the first useful map stable, while still promoting exact coordinates once available.
+  const [initialEmbedSrc] = useState(candidateEmbedSrc);
+  const embedSrc =
+    hasExactPin && candidateEmbedSrc
+      ? candidateEmbedSrc
+      : initialEmbedSrc ?? candidateEmbedSrc;
+
   const photoStepIndex = 2; // "Photo quality and quantity"
   const reviewStepIndex = 3; // "Google review sentiment"
   const mobileStepIndex = steps.length - 1;
+  const displayedPhotoCount =
+    activeIndex >= photoStepIndex
+      ? gallery.length
+      : Math.min(visiblePhotoCount, gallery.length);
   const showMobileMockup =
     (Boolean(mobileScreenshot) || Boolean(websiteUrl) || Boolean(website)) &&
     (finishing || activeIndex >= mobileStepIndex);
@@ -451,36 +470,14 @@ export default function ScanExperience({
       setActiveIndex((i) => Math.min(i + 1, steps.length - 1));
       setVisiblePhotoCount((n) => Math.min(n + 1, gallery.length));
     }, STEP_INTERVAL_MS);
-    setVisiblePhotoCount((n) => Math.max(n, 1));
     return () => window.clearInterval(id);
   }, [finishing, steps.length, gallery.length]);
 
-  // Ensure all photos are visible by the time we leave the photo step
-  useEffect(() => {
-    if (activeIndex >= photoStepIndex) {
-      setVisiblePhotoCount(gallery.length);
-    }
-  }, [activeIndex, photoStepIndex, gallery.length]);
-
-  // Reveal review cards only during the review phase (after photos)
-  useEffect(() => {
-    if (!showReviews || reviews.length === 0) {
-      if (!showReviews) setVisibleReviewCount(0);
-      return;
-    }
-    setVisibleReviewCount(1);
-    const id = window.setInterval(() => {
-      setVisibleReviewCount((n) => Math.min(n + 1, Math.min(4, reviews.length)));
-    }, 1800);
-    return () => window.clearInterval(id);
-  }, [showReviews, reviews.length]);
-
-  // Finish only after min 60s AND fetch complete
+  // Hand off as soon as the real response is ready; the short floor prevents a
+  // jarring flash on cached responses without manufacturing a long scan.
   useEffect(() => {
     let cancelled = false;
     let finishTimer: number | undefined;
-    let safetyTimer: number | undefined;
-    let pollTimer: number | undefined;
 
     const tryFinish = () => {
       if (cancelled) return;
@@ -491,27 +488,18 @@ export default function ScanExperience({
       setFinishing(true);
       setActiveIndex(steps.length);
       setVisiblePhotoCount(gallery.length);
-      setVisibleReviewCount(Math.min(4, reviews.length));
 
       finishTimer = window.setTimeout(() => {
         if (!cancelled) onReadyRef.current?.();
       }, FINISH_HOLD_MS);
     };
 
-    pollTimer = window.setInterval(tryFinish, 400);
+    const pollTimer = window.setInterval(tryFinish, 400);
     tryFinish();
-
-    safetyTimer = window.setTimeout(() => {
-      if (!cancelled) {
-        setFinishing(true);
-        onReadyRef.current?.();
-      }
-    }, SAFETY_EXIT_MS);
 
     return () => {
       cancelled = true;
       if (finishTimer) window.clearTimeout(finishTimer);
-      if (safetyTimer) window.clearTimeout(safetyTimer);
       if (pollTimer) window.clearInterval(pollTimer);
     };
   }, [fetchComplete, steps.length, gallery.length, reviews.length]);
@@ -531,9 +519,9 @@ export default function ScanExperience({
   return (
     <div className={`relative min-h-[calc(100dvh-4.5rem)] overflow-hidden bg-[#f3f1ed] ${className}`}>
       <div className="relative grid min-h-[calc(100dvh-4.5rem)] w-full lg:grid-cols-[minmax(260px,320px)_minmax(0,1fr)]">
-        {/* Left — interactive checklist */}
-        <aside className="relative z-20 flex flex-col border-b border-black/5 bg-white/95 px-6 py-7 backdrop-blur-md sm:px-7 lg:border-b-0 lg:border-r lg:py-10">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">AI grader</p>
+        {/* Desktop — expanded checklist. Mobile keeps identity, map, media and progress above fold. */}
+        <aside className="relative z-20 order-2 hidden flex-col border-b border-black/5 bg-white/95 px-6 py-7 backdrop-blur-md sm:px-7 lg:order-1 lg:flex lg:border-b-0 lg:border-r lg:py-10">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">Digital footprint scan</p>
           <h1 className="mt-2 font-display text-[2rem] font-semibold leading-none tracking-[-0.04em] text-ink">
             Scanning…
           </h1>
@@ -593,7 +581,7 @@ export default function ScanExperience({
         </aside>
 
         {/* Right — Google Map stage + floating scraped photos */}
-        <section className="relative min-h-[52vh] overflow-hidden bg-[#e8e4dc] lg:min-h-0">
+        <section className="relative order-1 min-h-[calc(100dvh-4.5rem)] overflow-hidden bg-[#e8e4dc] lg:order-2 lg:min-h-0">
           {embedSrc ? (
             <iframe
               title={`Map of ${restaurantName}`}
@@ -631,16 +619,15 @@ export default function ScanExperience({
 
           {/* Google reviews — only after photos phase */}
           {showReviews ? (
-            <ReviewCardsOverlay
+            <RevealingReviewCards
               reviews={reviews}
-              visibleCount={visibleReviewCount}
               placeRating={rating}
             />
           ) : null}
 
           {/* Scraped photos — hidden once reviews / mobile take over */}
           {showPhotosOverlay
-            ? gallery.slice(0, visiblePhotoCount).map((photo, i) => {
+            ? gallery.slice(0, displayedPhotoCount).map((photo, i) => {
                 const slot = PHOTO_SLOTS[i % PHOTO_SLOTS.length];
                 return (
                   <div
@@ -682,7 +669,7 @@ export default function ScanExperience({
             <div className="scan-beam absolute left-0 right-0 h-[2px] opacity-70" />
           </div>
 
-          <div className="absolute bottom-4 left-4 z-20 rounded-full bg-white/90 px-3 py-1.5 text-[11px] font-medium text-muted shadow-sm">
+          <div className="absolute bottom-4 left-4 z-20 hidden rounded-full bg-white/90 px-3 py-1.5 text-[11px] font-medium text-muted shadow-sm lg:block">
             {showMobileMockup
               ? "Checking mobile experience…"
               : showReviews
@@ -692,6 +679,30 @@ export default function ScanExperience({
                   : hasExactPin
                     ? "Google Maps · pinned to listing"
                     : "Live Google listing scan"}
+          </div>
+
+          <div
+            className="absolute inset-x-4 bottom-24 z-50 rounded-2xl border border-black/5 bg-white/95 p-4 shadow-[0_18px_50px_rgba(15,39,31,0.2)] backdrop-blur lg:hidden"
+            role="status"
+            aria-live="polite"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
+                  Digital footprint scan
+                </p>
+                <p className="mt-1 truncate text-[14px] font-semibold text-ink">
+                  {finishing ? "Building your scorecard" : steps[Math.min(activeIndex, steps.length - 1)]}
+                </p>
+              </div>
+              <span className="shrink-0 text-[12px] font-semibold tabular-nums text-primary">{statusLine}</span>
+            </div>
+            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#ebe6de]">
+              <div
+                className="scan-progress-fill h-full rounded-full transition-[width] duration-500 ease-out"
+                style={{ width: `${Math.max(8, progress * 100)}%` }}
+              />
+            </div>
           </div>
         </section>
       </div>

@@ -26,7 +26,6 @@ func TestCheckEligibilityRequiresApprovedProfile(t *testing.T) {
 func TestCheckEligibilityPassesWhenReady(t *testing.T) {
 	err := campaigns.CheckEligibility(campaigns.EligibilityInput{
 		RestaurantEmail:         "owner@example.com",
-		OCRStatus:               "verified",
 		ReviewStatus:            "approved",
 		ProfileReviewAudited:    true,
 		DemoStatus:              demos.StatusPublished,

@@ -11,7 +11,7 @@ import type {
   RestaurantImages,
   RestaurantOwnedMedia,
 } from "@/lib/types";
-import { EmptyState, ErrorBanner } from "@/components/ui";
+import { EmptyState, ErrorBanner, StatusBadge } from "@/components/ui";
 
 function ImageTile({
   image,
@@ -123,10 +123,12 @@ function OwnedMediaTile({
   onChanged: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [tileError, setTileError] = useState<string | null>(null);
   const hidden = !!image.hidden_at;
 
   async function toggle() {
     setBusy(true);
+    setTileError(null);
     try {
       await adminFetch(
         hidden
@@ -135,6 +137,24 @@ function OwnedMediaTile({
         { method: hidden ? "POST" : "DELETE" },
       );
       onChanged();
+    } catch (reason) {
+      setTileError(reason instanceof Error ? reason.message : "Could not update media");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function review(approvalStatus: "approved" | "rejected") {
+    setBusy(true);
+    setTileError(null);
+    try {
+      await adminFetch(`restaurants/${restaurantId}/media/${image.id}/review`, {
+        method: "PATCH",
+        body: { approval_status: approvalStatus },
+      });
+      onChanged();
+    } catch (reason) {
+      setTileError(reason instanceof Error ? reason.message : "Could not review media");
     } finally {
       setBusy(false);
     }
@@ -146,11 +166,29 @@ function OwnedMediaTile({
       <div className="photo-tile-body">
         <strong>{image.caption || image.media_type}</strong>
         <span style={{ color: "var(--muted)" }}>
-          {image.source_kind} · {image.placement_role || "gallery"} · OCR {image.vision_status || "pending"}
-          {image.approval_status ? ` · ${image.approval_status}` : ""}
+          {image.source_kind} · {image.rights_status || "rights not recorded"} · {image.placement_role || "gallery"}
         </span>
-        {image.vision_last_error ? (
-          <span style={{ color: "var(--danger)", fontSize: "0.78rem" }}>{image.vision_last_error}</span>
+        <StatusBadge status={image.approval_status || "draft"} />
+        {tileError ? <span style={{ color: "var(--bad)", fontSize: "0.78rem" }}>{tileError}</span> : null}
+        {!hidden ? (
+          <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className="btn btn-primary btn-compact"
+              onClick={() => review("approved")}
+              disabled={busy || image.approval_status === "approved"}
+            >
+              Approve for public site
+            </button>
+            <button
+              type="button"
+              className="btn btn-danger btn-compact"
+              onClick={() => review("rejected")}
+              disabled={busy || image.approval_status === "rejected"}
+            >
+              Reject
+            </button>
+          </div>
         ) : null}
         <button
           type="button"
@@ -230,19 +268,27 @@ export function PhotoGallery({ restaurantId }: { restaurantId: string }) {
   if (error) return <ErrorBanner message={error} />;
   if (!images) return <EmptyState message="Loading photos…" />;
 
-  const menu = showHidden ? images.menu_images : images.menu_images.filter((i) => !i.hidden_at);
-  const gallery = showHidden ? images.gallery_images : images.gallery_images.filter((i) => !i.hidden_at);
-  const owned = showHidden ? images.owned_media : images.owned_media.filter((i) => !i.hidden_at);
+  const menuImages = images.menu_images || [];
+  const galleryImages = images.gallery_images || [];
+  const ownedMedia = images.owned_media || [];
+  const menu = showHidden ? menuImages : menuImages.filter((image) => !image.hidden_at);
+  const gallery = showHidden ? galleryImages : galleryImages.filter((image) => !image.hidden_at);
+  const owned = showHidden ? ownedMedia : ownedMedia.filter((image) => !image.hidden_at);
 
   return (
     <div style={{ display: "grid", gap: "1rem" }}>
       <div>
         <h3 style={{ margin: "0 0 0.35rem", fontSize: "0.95rem" }}>Owned or licensed website media</h3>
         <p style={{ color: "var(--muted)", fontSize: "0.82rem", margin: "0 0 0.75rem" }}>
-          Uploaded files remain private until background OCR confirms they are not menu documents. Only approved media appears on personalized sites.
+          Uploaded files remain private until an internal operator checks the image, confirms its
+          rights, and approves it. Only explicitly approved owner-granted or licensed media can
+          appear on personalized sites.
         </p>
         <form onSubmit={uploadOwnedMedia} style={{ display: "grid", gap: "0.65rem", maxWidth: "52rem" }}>
-          <input name="file" type="file" accept="image/jpeg,image/png,image/gif" required />
+          <label className="field-label">
+            Image file
+            <input name="file" type="file" accept="image/jpeg,image/png,image/gif" required />
+          </label>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(11rem, 1fr))", gap: "0.65rem" }}>
             <label>Type
               <select name="media_type" defaultValue="other" required>
@@ -277,7 +323,7 @@ export function PhotoGallery({ restaurantId }: { restaurantId: string }) {
           <input name="alt_text" type="text" maxLength={180} placeholder="Optional accessible description" />
           <ErrorBanner message={uploadError} />
           <button type="submit" className="btn btn-primary" disabled={uploadBusy} style={{ justifySelf: "start" }}>
-            {uploadBusy ? "Uploading…" : "Upload for OCR review"}
+            {uploadBusy ? "Uploading…" : "Upload for manual review"}
           </button>
         </form>
         {owned.length === 0 ? (
@@ -306,7 +352,8 @@ export function PhotoGallery({ restaurantId }: { restaurantId: string }) {
               Google Places photos ({googlePhotos?.photos.length || 0})
             </h3>
             <p style={{ color: "var(--muted)", fontSize: "0.82rem", margin: "0.25rem 0 0" }}>
-              Live server-resolved URLs. They can expire, so this list refreshes when the tab opens.
+              Live attributed reference URLs. They can expire and are not automatically approved
+              for a public site, so this list refreshes when the tab opens.
             </p>
           </div>
           <button
@@ -338,7 +385,7 @@ export function PhotoGallery({ restaurantId }: { restaurantId: string }) {
       </label>
 
       <div>
-        <h3 style={{ margin: "0 0 0.5rem", fontSize: "0.95rem" }}>OCR menu images — admin only ({menu.length})</h3>
+        <h3 style={{ margin: "0 0 0.5rem", fontSize: "0.95rem" }}>Imported menu reference images — admin only ({menu.length})</h3>
         {menu.length === 0 ? (
           <EmptyState message="No menu images." />
         ) : (
@@ -351,7 +398,7 @@ export function PhotoGallery({ restaurantId }: { restaurantId: string }) {
       </div>
 
       <div>
-        <h3 style={{ margin: "0 0 0.5rem", fontSize: "0.95rem" }}>OCR gallery images ({gallery.length})</h3>
+        <h3 style={{ margin: "0 0 0.5rem", fontSize: "0.95rem" }}>Imported gallery reference images ({gallery.length})</h3>
         {gallery.length === 0 ? (
           <EmptyState message="No gallery images." />
         ) : (

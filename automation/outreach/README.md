@@ -14,10 +14,6 @@ Run all commands from **`MonoRepo/automation/outreach/`**.
 | `fetch_restaurant_leads.py` | Legacy/manual Apollo decision-maker fetch |
 | `scrape_restaurant_places.py` | Enrich existing lead files via Google Places API (New) |
 | `scrape_restaurant_data.py` | Scrape restaurants via SerpAPI (legacy) |
-| `scrape_tripadvisor.py` | TripAdvisor scrape (SerpAPI) — menu photos **TripAdvisor-only** |
-| `cron_tripadvisor.sh` | Daily cron wrapper for TripAdvisor + merge |
-| `verify_leads_from_db.py` | Claimed OCR state machine for pending DB leads |
-| `cron_lead_ocr_verify.sh` | Legacy/local OCR wrapper; production uses the Compose `ocr-job` |
 | `city_pipeline.py` | Fetch leads + scrape in one command per city |
 | `fetch_restaurants_no_website.py` | Filter scraped JSON for restaurants without a website |
 | `tuvi_outreach_agent.py` | Legacy/manual draft tooling; production sends use the Go quota workflow |
@@ -58,7 +54,7 @@ Production uses the private `POST /api/v1/scrape-jobs` API and the long-running
 `scrape-worker` Compose service. It persists grid cells, page tokens, Place-ID
 candidates, a combined 500-call window, and a 24-hour `resume_at`; completed
 coverage cycles revisit the city for newly added Place IDs. See
-`docs/runbooks/lead-scrape-ocr-outreach.md` from the repository root.
+`docs/runbooks/lead-scrape-outreach.md` from the repository root.
 
 ## Retired one-shot ingestion
 
@@ -131,109 +127,16 @@ Generated at runtime (gitignored):
 
 Seed data for the backend lives separately at `MonoRepo/data/restaurants_data.json`.
 
-## TripAdvisor menu photos (cron)
+## Outreach enrollment after import
 
-Menu photos used for outreach cards must come from **TripAdvisor only** (not Google / Yelp).
+Every imported restaurant with a non-empty name and valid business email is
+recorded as an `inferred_business` lead with its source evidence and
+idempotently enrolled in the currently approved plain-text outreach sequence.
+This path does not require image analysis, a generated demo, or a reviewed
+profile. Delivery remains disabled until an administrator explicitly enables
+the persisted email job.
 
-Cities match the default Google / Places geo: **Sydney, Melbourne, Perth, Adelaide, Brisbane**.
-
-```bash
-# One city (write data/restaurants_data_<city>_tripadvisor.json)
-python scrape_tripadvisor.py --city Sydney --limit 100
-
-# All default cities
-python scrape_tripadvisor.py --all-cities --limit 100
-
-# Merge TripAdvisor menu_photos into Google scrape files
-# (sets images.menu_photos_source = "tripadvisor")
-python scrape_tripadvisor.py --all-cities --limit 100 --merge
-
-# Long-running process (no crontab)
-python scrape_tripadvisor.py --all-cities --merge --schedule daily
-```
-
-### Crontab
-
-```bash
-chmod +x cron_tripadvisor.sh
-crontab -e
-# Daily 02:15 — edit path to your checkout:
-# 15 2 * * * /ABS/PATH/MonoRepo/automation/outreach/cron_tripadvisor.sh
-```
-
-Logs: `logs/tripadvisor_cron_YYYYMMDD.log`
-
-## Lead OCR verification
-
-After restaurants are imported into PostgreSQL, a scheduled job claims
-`pending` profiles, OCR/classifies trusted images, syncs menu/gallery data, and
-finishes as `verified`, `no_images`, or `failed`. Only `verified` queues the
-idempotent `lead.prepare` job that creates reviewable demo and campaign drafts.
-
-Requires migrations `000016_ocr_status_and_post_ocr` and
-`000022_auto_artifact_profile_provenance`, plus a vision-provider key
-(`HUGGING_FACE_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY`).
-
-The direct commands below are for controlled local/manual operation only:
-
-```bash
-# Manual/local run (from MonoRepo root)
-make verify-leads-ocr
-
-# Or directly
-cd automation/outreach
-LEAD_OCR_VERIFICATION_ENABLED=true python verify_leads_from_db.py --force --dry-run
-LEAD_OCR_VERIFICATION_ENABLED=true python verify_leads_from_db.py --force --limit 5
-```
-
-| Env | Description |
-|-----|-------------|
-| `LEAD_OCR_VERIFICATION_ENABLED` | `true` enables cron + script (default `false`) |
-| `LEAD_OCR_BATCH_SIZE` | Max restaurants per run (default `50`) |
-| `LEAD_OCR_MAX_ATTEMPTS` | Maximum automatic attempts for one unchanged OCR input (default `3`) |
-| `LEAD_OCR_RETRY_AFTER_HOURS` | Cooldown before retrying a failed OCR attempt (default `24`) |
-| `LEAD_OCR_DAILY_REQUEST_LIMIT` | Shared hard ceiling for scraped-photo and durable-media vision requests; capped at `200` per UTC day |
-| `MEDIA_OCR_BATCH_SIZE` | Owner/licensed uploads checked before each lead batch (default `10`, maximum `50`) |
-| `MENU_OCR_ENABLED` | Reuses existing menu OCR pipeline flags |
-
-OCR refreshes current photo resource names from Place Details immediately
-before analysis; expirable resource names and short-lived Photo Media URLs are
-never retained in durable lead data. Only a one-way Place-ID/resource-name
-fingerprint is retained so the public resolver can require an exact match and
-fail closed if Google replaces or reorders the resource. A failed unchanged
-input retries after the configured cooldown until the maximum attempt count.
-After that, inspect the record and explicitly requeue it as described in the
-production runbook.
-
-The same worker also claims `restaurant_media_assets` uploads. Owner/licensed
-files remain `draft` until vision classification completes. Non-menu images are
-approved only when the classification is website-safe, with factual caption/alt
-text, tags, quality/hero score, orientation, subject position, and a template
-placement. A detected `menu_document`, low-confidence result, or text-heavy
-unknown is rejected from public use with an admin-visible reason.
-Both flows share the same durable daily request budget and timeout/429 claim
-release behavior.
-
-When a later import changes the OCR image fingerprint, the profile returns to
-`pending`, stale human approvals are cleared, and the automatic draft may be
-refreshed only after OCR verifies the new inputs.
-
-An unchanged OCR fingerprint does not hide a changed restaurant identity or
-generated profile/menu payload. That source change receives its own durable
-`lead.prepare` key, returns automatic artifacts to draft, and refreshes their
-profile provenance before they can be reviewed again.
-
-Do not install `cron_lead_ocr_verify.sh` in production. Production runs the
-one-shot Compose `ocr-job` under a non-overlapping `flock` schedule so each run
-has the intended image resolver and isolated dependencies. Use the staged OCR
-rollout and exact locked command in
-`docs/runbooks/lead-scrape-ocr-outreach.md`.
-
-Merged menu photos look like:
-
-```json
-"images": {
-  "menu_photos": [{ "url": "...", "source": "tripadvisor" }],
-  "menu_photos_source": "tripadvisor"
-}
-```
+Google listing media stays live and attributed; scraped Google, review, and
+menu images are removed before raw or structured data is persisted. The former
+TripAdvisor menu-photo scraper and cron wrapper are retired. Owner/licensed
+uploads require explicit admin approval before public use.

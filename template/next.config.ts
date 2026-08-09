@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { NextConfig } from "next";
 
 const configuredMediaBase = process.env.NEXT_PUBLIC_MEDIA_BASE_URL?.trim();
@@ -21,6 +22,11 @@ if (configuredMediaBase) {
 }
 
 const nextConfig: NextConfig = {
+  // Restaurant fixtures are intentionally shared from the monorepo-level
+  // `data/` directory. Next 16 Turbopack will not resolve outside its root.
+  turbopack: {
+    root: path.resolve(process.cwd(), ".."),
+  },
   env: {
     TEMPLATE: process.env.TEMPLATE ?? "1",
   },

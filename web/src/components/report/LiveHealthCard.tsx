@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import type { HealthMetric } from "@/lib/report";
 import LockedBlur from "@/components/report/LockedBlur";
 
@@ -84,14 +83,11 @@ export default function LiveHealthCard({
   return (
     <div className="rounded-[18px] bg-white px-4 pb-4 pt-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
       <div className="flex items-center gap-2.5">
-        <div className="relative h-[30px] w-[30px] overflow-hidden rounded-full">
-          <Image
-            src="https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&w=120&q=80"
-            alt=""
-            fill
-            className="object-cover"
-            sizes="30px"
-          />
+        <div
+          className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-[#e8f1eb] text-[12px] font-bold uppercase text-primary"
+          aria-hidden="true"
+        >
+          {restaurantName.trim().charAt(0) || "R"}
         </div>
         <p className="truncate text-[15px] font-semibold tracking-[-0.02em] text-[#111111]">
           {restaurantName}
@@ -112,7 +108,7 @@ export default function LiveHealthCard({
 
       <div className="mt-2.5 text-center">
         <p className="text-[12px] font-medium" style={{ color: MUTED }}>
-          AI scoring review
+          Digital footprint score
         </p>
         <p className="mt-0.5 text-[20px] font-bold tracking-[-0.03em]" style={{ color: overallColor }}>
           {overallLabel}
@@ -132,7 +128,7 @@ export default function LiveHealthCard({
         {gatedMetrics.length > 0 ? (
           <LockedBlur
             locked={locked}
-            label="Verify email to unlock full AI scoring"
+            label="Verify email to unlock full scoring"
             className="mt-3 rounded-xl"
           >
             <ul className="space-y-3 pt-1">

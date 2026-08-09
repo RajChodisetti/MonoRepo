@@ -32,23 +32,14 @@ export type ApiSiteContent = {
   latitude?: number;
   longitude?: number;
   hours?: Record<string, string>;
-  thumbnail?: string;
   menu_items?: {
     name: string;
     category?: string;
     description?: string;
     price?: string;
     price_numeric?: number;
-    image_url?: string;
-    images?: { url?: string; thumbnail?: string; image_type?: string }[];
   }[];
   media?: ApiPublicMedia[];
-  gallery_images?: {
-    url: string;
-    thumbnail_url?: string;
-    image_type?: string;
-    title?: string;
-  }[];
   reviews?: {
     reviewer?: string;
     review?: string;
@@ -86,7 +77,6 @@ export type SignedDemoPayload = {
   restaurant_id: string;
   restaurant_name: string;
   cuisine?: string;
-  hero?: string;
   hours?: Record<string, string>;
   address?: string;
   phone?: string;
@@ -96,7 +86,6 @@ export type SignedDemoPayload = {
       name: string;
       description?: string;
       price?: string;
-      image_url?: string;
     }[];
   }[];
   reservation_cta?: string;
@@ -124,10 +113,6 @@ function primaryCuisine(cuisines?: string[] | null): string {
 
 function normalizeCategory(cat: string): string {
   return cat.replace(/^A LA CARTE\s*-\s*/i, "").replace(/\s+/g, " ").trim();
-}
-
-function pickMenuItemImage(item: NonNullable<ApiSiteContent["menu_items"]>[number]): string | undefined {
-  return item.image_url || item.images?.[0]?.thumbnail || item.images?.[0]?.url || undefined;
 }
 
 function galleryType(imageType?: string): GalleryImage["type"] {
@@ -180,11 +165,7 @@ function selectHeroMedia(data: ApiSiteContent): GalleryImage | undefined {
 
 function heroPoster(data: ApiSiteContent): string {
   const selected = selectHeroMedia(data);
-  if (selected?.url) return selected.url;
-  const amb = (data.gallery_images || []).find((g) => galleryType(g.image_type) === "ambience");
-  if (amb?.url) return amb.url;
-  const food = (data.gallery_images || []).find((g) => galleryType(g.image_type) === "food");
-  return food?.url || data.thumbnail || "";
+  return selected?.url || "";
 }
 
 function getVideoAssets(poster: string): VideoAssets {
@@ -204,7 +185,6 @@ function buildMenuCategories(data: ApiSiteContent): MenuCategory[] {
       name: item.name,
       description: item.description || "",
       price: item.price,
-      image: pickMenuItemImage(item),
       category: cat,
     });
   }
@@ -212,45 +192,19 @@ function buildMenuCategories(data: ApiSiteContent): MenuCategory[] {
 }
 
 function buildGalleryImages(data: ApiSiteContent): GalleryImage[] {
-  const liveOrOwned = (data.media || []).map((item) => publicMediaToGallery(data, item));
-  const seen = new Set(liveOrOwned.map((item) => item.url));
-  const legacy = (data.gallery_images || []).filter((img) => {
-    const imageType = (img.image_type || "").toLowerCase();
-    return imageType !== "menu_document" && imageType !== "menu_list" && imageType !== "menu_ocr" && !seen.has(img.url);
-  }).map((img, i): GalleryImage => {
-    const type = galleryType(img.image_type);
-    return {
-      url: img.url,
-      alt: img.title ? `${data.name} — ${img.title}` : `${data.name} gallery ${i + 1}`,
-      type,
-      sourceKind: "legacy_public_url",
-      mediaType: type === "ambience" ? "interior" : type,
-    };
-  });
-  return [...liveOrOwned, ...legacy].slice(0, 24);
+  return (data.media || [])
+    .map((item) => publicMediaToGallery(data, item))
+    .slice(0, 24);
 }
 
 function buildSignatureDishes(data: ApiSiteContent): MenuItem[] {
-  const matchedMenuItems = (data.menu_items || [])
-    .filter((item) => pickMenuItemImage(item))
-    .slice(0, 6)
-    .map((item) => ({
-      name: item.name,
-      description: item.description || `${item.name} — a guest favorite.`,
-      price: item.price,
-      image: pickMenuItemImage(item),
-      isChefSpecial: true,
-      category: normalizeCategory(item.category || "Menu"),
-    }));
-  const usedURLs = new Set(matchedMenuItems.map((item) => item.image).filter(Boolean));
   const foodMedia = (data.media || [])
     .filter(
       (item) =>
         item.source_kind !== "google_places_live" &&
-        (item.media_type === "food" || item.media_type === "drink") &&
-        !usedURLs.has(item.url),
+        (item.media_type === "food" || item.media_type === "drink"),
     )
-    .slice(0, 6 - matchedMenuItems.length)
+    .slice(0, 6)
     .map((item, index): MenuItem => ({
       name: `From the kitchen${index > 0 ? ` · ${index + 1}` : ""}`,
       description: item.caption || `A glimpse of what is served at ${data.name}.`,
@@ -258,7 +212,7 @@ function buildSignatureDishes(data: ApiSiteContent): MenuItem[] {
       isChefSpecial: true,
       category: item.media_type === "drink" ? "Drinks" : "Kitchen",
     }));
-  return [...matchedMenuItems, ...foodMedia];
+  return foodMedia;
 }
 
 function buildStorySteps(data: ApiSiteContent, images: GalleryImage[], fallbackMedia?: GalleryImage): StoryStep[] {
@@ -402,7 +356,6 @@ function adaptSignedDemoPayload(payload: SignedDemoPayload, fallbackIndex: numbe
       category: section.name || "Menu",
     })),
   );
-  const hero = payload.hero || "";
   return adaptSiteContent({
     index: fallbackIndex,
     restaurant_id: restaurantId,
@@ -411,12 +364,8 @@ function adaptSignedDemoPayload(payload: SignedDemoPayload, fallbackIndex: numbe
     phone: payload.phone,
     address: payload.address,
     hours: payload.hours || {},
-    thumbnail: hero,
     menu_items: menuItems,
     media: payload.media,
-    gallery_images: hero
-      ? [{ url: hero, thumbnail_url: hero, image_type: "food_photo" }]
-      : [],
   });
 }
 
@@ -487,9 +436,8 @@ export async function fetchSiteRestaurantByID(restaurantID: string): Promise<Res
   const base = apiBase();
   if (!base || !/^[0-9a-f-]{36}$/i.test(restaurantID)) return null;
   try {
-    const query = new URLSearchParams({ preview_media: "google_live" });
     const res = await fetch(
-      `${base}/api/public/v1/site/restaurants/by-id/${encodeURIComponent(restaurantID)}?${query.toString()}`,
+      `${base}/api/public/v1/site/restaurants/by-id/${encodeURIComponent(restaurantID)}`,
       { cache: "no-store" },
     );
     if (!res.ok) return null;

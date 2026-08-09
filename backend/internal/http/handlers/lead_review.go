@@ -146,8 +146,6 @@ func (handler *LeadReviewHandler) mapError(w http.ResponseWriter, err error) {
 		handler.writeError(w, http.StatusConflict, "stale_review", "The artifact changed after review; inspect it again before approving or publishing.")
 	case errors.Is(err, leadreview.ErrNotFound):
 		handler.writeError(w, http.StatusNotFound, "not_found", "The requested review target was not found.")
-	case errors.Is(err, leadreview.ErrOCRNotVerified):
-		handler.writeError(w, http.StatusConflict, "ocr_not_verified", "OCR must be verified before approval or publishing.")
 	case errors.Is(err, leadreview.ErrProfileNotApproved):
 		handler.writeError(w, http.StatusConflict, "profile_not_approved", "The restaurant profile must be approved before publishing.")
 	case errors.Is(err, leadreview.ErrDemoExpired):

@@ -1,49 +1,4 @@
-"""
-================================================================================
-  PIPECAT AI — Real-Time Outbound Voice Sales Agent (Twilio Direct Dial)
-  + Call Logging (transcripts & outcomes saved to calls.db)
-  Framework: pipecat-ai
-
-  ARCHITECTURE OVERVIEW:
-  ─────────────────────────────────────────────────────────────────────────────
-
-  dial.py / POST /call
-       │  (compliance pre-checks: E.164, opt-out, calling window)
-       ▼
-  [Twilio REST API]  ──►  Dials the prospect's phone number
-       │
-       ▼  (prospect picks up)
-  [Twilio Media Stream WebSocket]  ──►  Streams μ-law audio to /stream
-       │
-       ▼
-  [TwilioTransport]  ──►  Decodes to PCM AudioRawFrames
-       │
-       ▼
-  [Deepgram STT]  ──►  AudioRawFrame → TranscriptionFrame
-       │
-       ▼
-  [TranscriptLogger(user)]  ──►  logs user speech to DB + records turn timestamp
-       │
-       ▼
-  [OptOutGuardrail]  ──►  detects opt-out phrases → records immediately, schedules end
-       │
-       ▼
-  [ContextCompactor]  ──►  trims LLM context to last N turn pairs (keeps system prompt)
-       │
-       ▼
-  [OpenAI LLM]  ──►  TranscriptionFrame → TextFrame / FunctionCallFrame
-       │
-       ▼
-  [TranscriptLogger(assistant)]  ──►  logs assistant speech + emits turn latency metric
-       │
-       ▼
-  [Cartesia TTS]  ──►  TextFrame → AudioRawFrame (synthesized speech)
-       │
-       ▼
-  [TwilioTransport]  ──►  PCM → μ-law → Twilio WS → prospect's phone
-
-================================================================================
-"""
+"""Inbound-only corporate and restaurant voice assistant runtime."""
 
 import asyncio
 import hmac
@@ -98,6 +53,8 @@ from pipecat.services.deepgram.stt import DeepgramSTTService
 
 # ── LLM ───────────────────────────────────────────────────────────────────────
 from pipecat.services.openai.llm import OpenAILLMService
+from pipecat.adapters.schemas.function_schema import FunctionSchema
+from pipecat.adapters.schemas.tools_schema import ToolsSchema
 from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.aggregators.llm_response_universal import LLMContextAggregatorPair
 
@@ -122,7 +79,6 @@ from logger_db import (
 
 import api_client
 import tuvi_api_client
-from caller_id import resolve_caller_id
 from prompts.restaurant import build_restaurant_greeting, build_restaurant_prompt
 from prompts.tools_restaurant import RESTAURANT_TOOLS, RESTAURANT_BROWSER_TOOLS
 from prompts.corporate import build_corporate_greeting, build_corporate_prompt
@@ -137,6 +93,25 @@ logging.basicConfig(
 logger = logging.getLogger("VoiceSalesAgent")
 
 init_db()
+
+
+def _build_tools_schema(tool_definitions):
+    """Convert the repository's OpenAI-style tool constants for Pipecat 0.0.108."""
+    schemas = []
+    for tool in tool_definitions:
+        if tool.get("type") != "function" or not isinstance(tool.get("function"), dict):
+            raise ValueError("voice tool definition must contain a function schema")
+        function = tool["function"]
+        parameters = function.get("parameters") or {}
+        schemas.append(
+            FunctionSchema(
+                name=function["name"],
+                description=function.get("description", ""),
+                properties=parameters.get("properties") or {},
+                required=parameters.get("required") or [],
+            )
+        )
+    return ToolsSchema(standard_tools=schemas)
 
 
 def _cartesia_pipecat_language() -> Language:
@@ -295,161 +270,6 @@ def _is_calling_allowed() -> tuple[bool, str]:
         return (True, "ok") if 9.0 <= hour < 17.0 else (False, "outside_hours")
     # Monday – Friday
     return (True, "ok") if 9.0 <= hour < 20.0 else (False, "outside_hours")
-
-
-# ==============================================================================
-#  GREETING — pre-cached at startup for instant browser playback
-# ==============================================================================
-GREETING_TEXT = (
-    "Hey, this is Alex from Tuvi Solutions — I'm an AI assistant. "
-    "Super quick one: is now an okay moment?"
-)
-
-# Filled by _prewarm_services() at startup; None = fall back to LLM-generated greeting
-_cached_greeting_audio: bytes | None = None
-
-
-# ==============================================================================
-#  SYSTEM PROMPT — AI disclosure required by ACMA (§15.4 of architecture guide)
-# ==============================================================================
-SYSTEM_PROMPT = f"""
-You are Alex, an AI sales assistant calling on behalf of Tuvi Solutions.
-Tuvi Solutions is a tech agency specialising in Web Design, AI/ML Development, and Custom App Development.
-
-IDENTITY — MANDATORY:
-You must disclose you are an AI at the start of every call and whenever the prospect asks.
-Never claim to be human. If asked "are you a robot?", confirm you are an AI.
-
-YOUR GOAL:
-Qualify the prospect's interest, generate curiosity about Tuvi Solutions, and book a short 10-minute discovery call.
-
-VOICE RULES (follow strictly):
-- Keep every response under 2 sentences. Never monologue.
-- Ask ONE question per turn. Wait for the answer before continuing.
-- Use a warm, natural, conversational tone — like a friendly colleague, not a script-reader.
-- Do not use bullet points, numbered lists, markdown, or long URLs — this is spoken audio.
-- Use natural filler transitions: "So,", "Right,", "Yeah,", "Look,", "Honestly," — sparingly.
-- Use contractions always: "I'm" not "I am", "we've" not "we have", "don't" not "do not".
-- Vary sentence length — mix short punchy sentences with slightly longer ones.
-- If interrupted, acknowledge briefly ("Got it." / "Yep, no worries." / "Sure, sure.") then adapt.
-- Pause naturally before asking a question — end statements before questions with a comma pause signal, e.g. "...so I wanted to ask — are you currently happy with your website?"
-- Never sound like you're reading. Sound like you're thinking as you speak.
-
-CALL FLOW:
-1. Identify yourself as an AI assistant from Tuvi Solutions. State briefly why you are calling.
-2. Ask one relevance question to check if the topic is worth their time.
-3. If relevant — qualify their pain in one or two short questions.
-4. Offer a one-sentence value proposition matched to their situation.
-5. Propose a 10-minute discovery call. Offer 2–3 time slots.
-6. Confirm name, email, and chosen slot. Book via book_appointment tool.
-7. End politely.
-
-OBJECTION HANDLING:
-- "Who is this?" → "I'm Alex, an AI assistant from Tuvi Solutions. [one-sentence reason for call]."
-- "Are you a robot?" → "Yes, I'm an AI. Happy to help or take you off the list — your call."
-- "I'm busy." → "No problem. Want me to send the details by text instead?"
-- "Not interested." → Acknowledge and end the call. Do not push further.
-- "How much?" → "It depends on your scope — I can send a quick summary by text, or we can cover it in 10 minutes."
-- "Remove me." → Use mark_do_not_call tool immediately, then say one polite goodbye line, then use end_call.
-
-HARD-STOP — use mark_do_not_call immediately if the prospect says any of:
-"stop calling", "remove me", "do not call", "this is harassment", or similar opt-out language.
-After mark_do_not_call, say: "Of course, I'll make sure you're not called again. Sorry for the interruption."
-Then use end_call. Do not attempt any more sales conversation after an opt-out.
-
-Start the call with (say it naturally, not robotically):
-"{GREETING_TEXT}"
-
-Wait for their response before continuing. If they say yes, then explain why you're calling in one sentence.
-"""
-
-
-# ==============================================================================
-#  TOOLS  (architecture guide §9.5)
-# ==============================================================================
-TOOLS = [
-    {
-        "type": "function",
-        "function": {
-            "name": "check_calendar_availability",
-            "description": "Check available 10-minute discovery call slots for the next 3 business days.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "preferred_time": {
-                        "type": "string",
-                        "description": "Prospect's preferred time window, e.g. 'tomorrow afternoon'. Optional.",
-                    }
-                },
-                "required": [],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "book_appointment",
-            "description": (
-                "Book a confirmed 10-minute discovery call after the prospect explicitly agrees to a slot. "
-                "Only call this tool after the prospect has said yes to a specific time."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "slot":           {"type": "string", "description": "ISO-8601 datetime, e.g. '2026-06-25T14:00:00'"},
-                    "prospect_name":  {"type": "string"},
-                    "prospect_email": {"type": "string"},
-                },
-                "required": ["slot", "prospect_name"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "mark_do_not_call",
-            "description": (
-                "Record an opt-out / do-not-call request immediately and durably. "
-                "Call this as soon as the prospect says stop calling, remove me, or similar. "
-                "This must be called before end_call when an opt-out is detected."
-            ),
-            "parameters": {"type": "object", "properties": {}, "required": []},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "send_followup_sms",
-            "description": "Send a short follow-up SMS to the prospect (max 160 chars) after they give consent or ask for details.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "message": {
-                        "type": "string",
-                        "description": "The SMS text. Keep it under 160 characters. Plain text only.",
-                    }
-                },
-                "required": ["message"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "transfer_to_human",
-            "description": "Warm-transfer the call to a human team member if the prospect explicitly asks for a person or is clearly a high-value lead.",
-            "parameters": {"type": "object", "properties": {}, "required": []},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "end_call",
-            "description": "End the call gracefully. Only call this after saying a polite goodbye.",
-            "parameters": {"type": "object", "properties": {}, "required": []},
-        },
-    },
-]
 
 
 # ==============================================================================
@@ -658,12 +478,12 @@ async def _require_twilio_signature(request: Request):
 
 
 async def _require_call_api_key(request: Request):
-    """Require X-Call-Api-Key (or Bearer) matching CALL_API_SECRET when configured."""
+    """Protect transcript and administrative voice-control endpoints."""
     secret = (os.environ.get("CALL_API_SECRET") or "").strip()
     if not secret:
         env = os.environ.get("ENVIRONMENT", "development").lower()
         if env == "development":
-            logger.warning("CALL_API_SECRET unset — allowing /call in development")
+            logger.warning("CALL_API_SECRET unset — allowing voice admin access in development")
             return
         raise HTTPException(status_code=503, detail="CALL_API_SECRET is not configured")
 
@@ -692,20 +512,22 @@ def _stream_custom_params(start_payload: dict) -> dict[str, str]:
 
 
 def _normalize_agent_mode(raw: str | None, default: str = "corporate") -> str:
-    mode = (raw or default).strip().lower()
-    if mode in ("corporate", "tuvi"):
+    safe_default = (default or "corporate").strip().lower()
+    if safe_default not in {"corporate", "restaurant"}:
+        safe_default = "corporate"
+
+    mode = (raw or safe_default).strip().lower()
+    if mode in {"corporate", "tuvi"}:
         return "corporate"
     if mode == "restaurant":
         return "restaurant"
-    if mode == "sales":
-        return "sales"
-    return default
+    return safe_default
 
 
 # Populated before FastAPI routes; used by start_outbound_call and stream handlers.
 _active_tasks: dict[str, PipelineTask] = {}
 _call_db_ids: dict[str, int] = {}
-_call_agent_modes: dict[str, str] = {}  # call_sid → corporate | sales | restaurant
+_call_agent_modes: dict[str, str] = {}  # call_sid → corporate | restaurant
 _paused_campaigns: set[str] = set()
 
 
@@ -720,104 +542,32 @@ def start_outbound_call(
     restaurant_name: str | None = None,
     restaurant_phone_display: str | None = None,
 ) -> dict:
-    """
-    Place a Twilio outbound call with Media Stream → /stream.
-    Caller must already have run compliance / E.164 normalisation.
-    """
-    agent_mode = _normalize_agent_mode(agent_mode)
-    public_url = os.environ["PUBLIC_BASE_URL"].rstrip("/")
-    ws_host = public_url.replace("https://", "").replace("http://", "")
-
-    safe_campaign = "".join(c for c in campaign_id if c.isalnum() or c in "-_")[:64] or "default"
-    safe_agent = agent_mode if agent_mode in ("corporate", "sales", "restaurant") else "corporate"
-
-    twilio_client = TwilioClient(
-        os.environ["TWILIO_ACCOUNT_SID"],
-        os.environ["TWILIO_AUTH_TOKEN"],
-    )
-
-    from_e164, verified = (
-        (from_number, caller_verified)
-        if from_number
-        else resolve_caller_id(restaurant_phone_display)
-    )
-
-    restaurant_param = ""
-    if safe_agent == "restaurant" and restaurant_index is not None:
-        restaurant_param = f'\n      <Parameter name="restaurant_index" value="{max(0, int(restaurant_index))}"/>'
-
-    twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Connect>
-    <Stream url="wss://{ws_host}/stream">
-      <Parameter name="campaign_id" value="{safe_campaign}"/>
-      <Parameter name="agent" value="{safe_agent}"/>{restaurant_param}
-    </Stream>
-  </Connect>
-</Response>"""
-
-    call = twilio_client.calls.create(
-        to=to_number,
-        from_=from_e164,
-        twiml=twiml,
-        status_callback=f"{public_url}/twilio/status",
-        status_callback_event=["initiated", "ringing", "answered", "completed"],
-        status_callback_method="POST",
-    )
-
-    call_db_id = start_call(
-        call.sid,
+    """Fail closed: Phase 1 supports inbound voice sessions only."""
+    del (
         to_number,
-        channel="phone",
-        agent_mode=safe_agent,
+        campaign_id,
+        agent_mode,
+        restaurant_index,
+        from_number,
+        caller_verified,
+        restaurant_name,
+        restaurant_phone_display,
     )
-    _call_db_ids[call.sid] = call_db_id
-    _call_agent_modes[call.sid] = safe_agent
-
-    logger.info(
-        f"Outbound call → {to_number}  SID={call.sid}  agent={safe_agent}  "
-        f"from={from_e164} verified={verified}  DB id={call_db_id}"
-    )
-    return {
-        "status": "calling",
-        "to": to_number,
-        "call_sid": call.sid,
-        "log_id": call_db_id,
-        "agent": safe_agent,
-        "from": from_e164,
-        "from_verified": verified,
-        "caller_name": restaurant_name,
-        "caller_display": restaurant_phone_display,
-    }
+    raise RuntimeError("Outbound AI calls are disabled for this release.")
 
 
 # ==============================================================================
 #  STARTUP PRE-WARMING
-#  Eliminates the two biggest sources of connect latency:
-#    1. SileroVADAnalyzer ONNX model load  →  2–4 s on cold start
-#    2. LLM + TTS greeting generation      →  1–3 s per call
+#  Eliminates the SileroVADAnalyzer ONNX model load on the first inbound call.
 # ==============================================================================
 async def _prewarm_services():
-    global _cached_greeting_audio
-
-    # 1. Pre-load Silero ONNX model so first-call instantiation is fast
+    # Pre-load Silero ONNX model so first-call instantiation is fast.
     try:
         _warmup = SileroVADAnalyzer(params=VADParams(stop_secs=0.4))
         del _warmup
         logger.info("[PREWARM] Silero VAD model loaded")
     except Exception as e:
         logger.warning(f"[PREWARM] Silero pre-warm failed: {e}")
-
-    # 2. Pre-generate the sales-agent opening greeting (Twilio / legacy browser demo).
-    try:
-        _cached_greeting_audio = await _fetch_cartesia_tts_bytes(GREETING_TEXT)
-        if _cached_greeting_audio:
-            duration_s = len(_cached_greeting_audio) / 32000
-            logger.info(f"[PREWARM] Greeting cached: {len(_cached_greeting_audio):,} bytes ({duration_s:.1f}s)")
-        else:
-            logger.warning("[PREWARM] Skipping greeting cache — Cartesia TTS unavailable")
-    except Exception as e:
-        logger.warning(f"[PREWARM] Greeting cache failed — browser sessions will use live LLM+TTS: {e}")
 
 
 @asynccontextmanager
@@ -1071,6 +821,12 @@ async def _dispatch_tool(
 ) -> dict:
     logger.info(f"Tool: {function_name}  args={arguments}  browser={is_browser}  restaurant={restaurant_id}")
 
+    if function_name in {"place_callback_call", "place_restaurant_callback", "send_followup_sms"}:
+        return {
+            "status": "disabled",
+            "message": "Outbound calls and messages are disabled for this release.",
+        }
+
     if function_name == "check_table_availability":
         if not restaurant_id:
             return {"status": "error", "message": "Restaurant booking is not configured for this session."}
@@ -1218,142 +974,6 @@ async def _dispatch_tool(
         logger.warning(f"mark_do_not_call tool called for {phone}")
         return {"status": "recorded", "message": "Number added to internal do-not-call list."}
 
-    if function_name == "place_callback_call":
-        if not is_browser:
-            return {
-                "status": "error",
-                "message": "Callback dialing is only available from the browser assistant.",
-            }
-        raw_phone = (arguments.get("phone_number") or "").strip()
-        to_number = normalize_e164(raw_phone)
-        if not to_number:
-            return {
-                "status": "error",
-                "message": "Invalid phone number. Ask for a number with country code, e.g. +61…",
-            }
-        if is_opted_out(to_number):
-            return {
-                "status": "blocked",
-                "reason": "internal_opt_out",
-                "message": "That number is on the do-not-call list.",
-            }
-        skip_compliance = os.environ.get("ENVIRONMENT", "development").lower() == "development"
-        allowed, reason = _is_calling_allowed()
-        if not allowed and not skip_compliance:
-            return {
-                "status": "queued",
-                "reason": reason,
-                "message": (
-                    f"Outside the allowed calling window ({reason}). "
-                    "Offer to book a consultation instead."
-                ),
-            }
-        try:
-            result = start_outbound_call(
-                to_number,
-                campaign_id="website_callback",
-                agent_mode="corporate",
-            )
-            # Link this browser session transcripts to the dialled number
-            update_call_contact(call_db_id, phone=to_number, contact_name=(arguments.get("name") or "").strip())
-            return {
-                "status": result.get("status", "calling"),
-                "call_sid": result.get("call_sid"),
-                "to": to_number,
-                "name": (arguments.get("name") or "").strip() or None,
-            }
-        except Exception as e:
-            logger.error(f"place_callback_call failed: {e}")
-            return {
-                "status": "error",
-                "message": "Could not place the call. Offer a consultation instead.",
-            }
-
-    if function_name == "place_restaurant_callback":
-        if not is_browser:
-            return {
-                "status": "error",
-                "message": "Restaurant callback dialing is only available from the browser assistant.",
-            }
-        raw_phone = (arguments.get("phone_number") or "").strip()
-        to_number = normalize_e164(raw_phone)
-        if not to_number:
-            return {
-                "status": "error",
-                "message": "Invalid phone number. Ask for a number with country code, e.g. +61…",
-            }
-        if is_opted_out(to_number):
-            return {
-                "status": "blocked",
-                "reason": "internal_opt_out",
-                "message": "That number is on the do-not-call list.",
-            }
-        skip_compliance = os.environ.get("ENVIRONMENT", "development").lower() == "development"
-        allowed, reason = _is_calling_allowed()
-        if not allowed and not skip_compliance:
-            return {
-                "status": "queued",
-                "reason": reason,
-                "message": (
-                    f"Outside the allowed calling window ({reason}). "
-                    "Offer to help here in chat instead."
-                ),
-            }
-        idx = restaurant_index if restaurant_index is not None else 0
-        site = await api_client.get_site_restaurant(idx)
-        restaurant_name = str(site.get("name") or "")
-        restaurant_phone_display = str(site.get("phone") or "").strip() or None
-        from_number, from_verified = resolve_caller_id(restaurant_phone_display)
-        try:
-            result = start_outbound_call(
-                to_number,
-                campaign_id="template_callback",
-                agent_mode="restaurant",
-                restaurant_index=idx,
-                from_number=from_number,
-                caller_verified=from_verified,
-                restaurant_name=restaurant_name,
-                restaurant_phone_display=restaurant_phone_display,
-            )
-            update_call_contact(
-                call_db_id,
-                phone=to_number,
-                contact_name=(arguments.get("name") or "").strip(),
-            )
-            return {
-                "status": result.get("status", "calling"),
-                "call_sid": result.get("call_sid"),
-                "to": to_number,
-                "from_verified": result.get("from_verified"),
-                "caller_display": result.get("caller_display"),
-            }
-        except Exception as e:
-            logger.error(f"place_restaurant_callback failed: {e}")
-            return {
-                "status": "error",
-                "message": "Could not place the call right now.",
-            }
-
-    if function_name == "send_followup_sms":
-        if is_browser:
-            return {"status": "unavailable", "message": "SMS is not available in browser sessions."}
-        message = arguments.get("message", "Thank you for your time.")
-        phone = to_number_ref[0]
-        if phone and phone != "unknown":
-            try:
-                tc = TwilioClient(os.environ["TWILIO_ACCOUNT_SID"], os.environ["TWILIO_AUTH_TOKEN"])
-                tc.messages.create(
-                    to=phone,
-                    from_=os.environ["TWILIO_PHONE_NUMBER"],
-                    body=message,
-                )
-                logger.info(f"SMS sent to {phone}")
-                return {"status": "sent"}
-            except Exception as e:
-                logger.error(f"SMS failed: {e}")
-                return {"status": "error", "message": str(e)}
-        return {"status": "error", "message": "Prospect phone number not available."}
-
     if function_name == "transfer_to_human":
         if is_browser:
             outcome_state[0] = "transferred"
@@ -1395,7 +1015,7 @@ async def _dispatch_tool(
 # ==============================================================================
 #  FASTAPI APP
 # ==============================================================================
-app = FastAPI(title="Voice Sales Agent", lifespan=lifespan)
+app = FastAPI(title="Tuvi Inbound Voice Agent", lifespan=lifespan)
 
 _STATIC_DIR = Path(__file__).parent / "static"
 if _STATIC_DIR.is_dir():
@@ -1539,107 +1159,18 @@ async def admin_resume_campaign(campaign_id: str, _: None = Depends(_require_cal
     return {"status": "resumed", "campaign_id": campaign_id}
 
 
-# ── Outbound call trigger ──────────────────────────────────────────────────────
+# ── Disabled outbound call trigger ─────────────────────────────────────────────
 
 @app.post("/call")
-async def initiate_call(
-    request: Request,
-    _: None = Depends(_require_call_api_key),
-):
-    """
-    Trigger an outbound call with compliance pre-checks.
-
-    Body: {"to": "+61412345678", "campaign_id": "camp_01", "agent": "corporate"}
-    Header: X-Call-Api-Key: <CALL_API_SECRET>
-
-    Pre-checks (in order):
-      1. Campaign pause guard
-      2. E.164 normalisation
-      3. Internal opt-out list
-      4. ACMA calling time window
-    """
-    body = await request.json()
-    to_raw = body.get("to", "")
-    campaign_id = body.get("campaign_id", "default")
-    agent_mode = _normalize_agent_mode(body.get("agent"), default="corporate")
-    restaurant_index: int | None = None
-    if body.get("restaurant_index") is not None:
-        try:
-            restaurant_index = max(0, int(body.get("restaurant_index")))
-        except (TypeError, ValueError):
-            return JSONResponse(
-                {"status": "blocked", "reason": "invalid_restaurant_index"},
-                status_code=400,
-            )
-
-    restaurant_name: str | None = None
-    restaurant_phone_display: str | None = None
-    from_number: str | None = None
-    from_verified = False
-    if agent_mode == "restaurant":
-        idx = restaurant_index if restaurant_index is not None else 0
-        site = await api_client.get_site_restaurant(idx)
-        if site.get("status") == "error":
-            return JSONResponse(
-                {
-                    "status": "error",
-                    "message": site.get("message", "Restaurant not found."),
-                },
-                status_code=404,
-            )
-        restaurant_name = str(site.get("name") or "")
-        restaurant_phone_display = str(site.get("phone") or "").strip() or None
-        from_number, from_verified = resolve_caller_id(restaurant_phone_display)
-        restaurant_index = idx
-
-    # 1. Campaign pause guard
-    if campaign_id in _paused_campaigns:
-        return JSONResponse({"status": "blocked", "reason": "campaign_paused"}, status_code=409)
-
-    # 2. E.164 normalisation (defaults to AU region)
-    to_number = normalize_e164(to_raw)
-    if not to_number:
-        return JSONResponse(
-            {"status": "blocked", "reason": "invalid_number", "raw": to_raw},
-            status_code=400,
-        )
-
-    # 3. Internal opt-out check
-    if is_opted_out(to_number):
-        logger.info(f"Blocked (opt-out): {to_number}")
-        return JSONResponse({"status": "blocked", "reason": "internal_opt_out"})
-
-    # 4. ACMA calling time window (bypassed in development via skip_compliance flag)
-    skip_compliance = (
-        body.get("skip_compliance", False)
-        and os.environ.get("ENVIRONMENT", "development").lower() == "development"
+async def initiate_call():
+    """Retain a stable denial response without exposing a dialing path."""
+    return JSONResponse(
+        {
+            "status": "disabled",
+            "message": "Outbound AI calls are disabled for this release.",
+        },
+        status_code=403,
     )
-    allowed, reason = _is_calling_allowed()
-    if not allowed and not skip_compliance:
-        logger.info(f"Blocked (calling window): {reason} for {to_number}")
-        return JSONResponse({
-            "status": "queued",
-            "reason": reason,
-            "message": f"Outside ACMA calling window ({reason}). Schedule for next valid window.",
-        })
-
-    try:
-        return start_outbound_call(
-            to_number,
-            campaign_id=campaign_id,
-            agent_mode=agent_mode,
-            restaurant_index=restaurant_index,
-            from_number=from_number,
-            caller_verified=from_verified,
-            restaurant_name=restaurant_name,
-            restaurant_phone_display=restaurant_phone_display,
-        )
-    except Exception as e:
-        logger.error(f"Outbound call failed: {e}")
-        return JSONResponse(
-            {"status": "error", "message": str(e)},
-            status_code=502,
-        )
 
 
 # ── TwiML webhook (inbound / fallback) ────────────────────────────────────────
@@ -1812,11 +1343,7 @@ async def stream_websocket(websocket: WebSocket):
     stt = DeepgramSTTService(api_key=os.environ["DEEPGRAM_API_KEY"])
 
     restaurant_id: str | None = None
-    if agent_mode == "corporate":
-        phone_tools = CORPORATE_PHONE_TOOLS
-        system_prompt = build_corporate_prompt(channel="phone")
-        greeting_text = build_corporate_greeting()
-    elif agent_mode == "restaurant":
+    if agent_mode == "restaurant":
         try:
             restaurant_index = int(custom_params.get("restaurant_index", "0"))
         except ValueError:
@@ -1829,15 +1356,14 @@ async def stream_websocket(websocket: WebSocket):
         system_prompt = build_restaurant_prompt(site, channel="phone")
         greeting_text = build_restaurant_greeting(site)
     else:
-        phone_tools = TOOLS
-        system_prompt = SYSTEM_PROMPT
-        greeting_text = GREETING_TEXT
+        phone_tools = CORPORATE_PHONE_TOOLS
+        system_prompt = build_corporate_prompt(channel="phone")
+        greeting_text = build_corporate_greeting()
 
     # ── LLM ───────────────────────────────────────────────────────────────────
     llm = OpenAILLMService(
         api_key=os.environ["OPENAI_API_KEY"],
         model=os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
-        tools=phone_tools,
     )
 
     # Mutable closure state
@@ -1863,7 +1389,10 @@ async def stream_websocket(websocket: WebSocket):
     llm.register_function(None, handle_tool_call)
 
     # ── LLM Context ───────────────────────────────────────────────────────────
-    context = LLMContext(messages=[{"role": "system", "content": system_prompt}])
+    context = LLMContext(
+        messages=[{"role": "system", "content": system_prompt}],
+        tools=_build_tools_schema(phone_tools),
+    )
     user_aggregator, assistant_aggregator = LLMContextAggregatorPair(context)
 
     # ── TTS ───────────────────────────────────────────────────────────────────
@@ -2025,7 +1554,7 @@ async def browser_stream(websocket: WebSocket):
 
     query = websocket.scope.get("query_string", b"").decode()
     params = dict(parse_qsl(query))
-    agent_mode = (params.get("agent") or "restaurant").strip().lower()
+    agent_mode = _normalize_agent_mode(params.get("agent"), default="restaurant")
     restaurant_index = 0
 
     if agent_mode == "corporate":
@@ -2108,7 +1637,6 @@ async def browser_stream(websocket: WebSocket):
     llm = OpenAILLMService(
         api_key=os.environ["OPENAI_API_KEY"],
         model=os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
-        tools=agent_tools,
     )
     tts = CartesiaTTSService(
         api_key=os.environ["CARTESIA_API_KEY"],
@@ -2241,7 +1769,10 @@ async def browser_stream(websocket: WebSocket):
     llm.register_function(None, handle_browser_tool)
 
     # ── LLM Context ───────────────────────────────────────────────────────────
-    context = LLMContext(messages=[{"role": "system", "content": system_prompt}])
+    context = LLMContext(
+        messages=[{"role": "system", "content": system_prompt}],
+        tools=_build_tools_schema(agent_tools),
+    )
     user_aggregator, assistant_aggregator = LLMContextAggregatorPair(context)
 
     # ── Processors ────────────────────────────────────────────────────────────
@@ -2466,12 +1997,12 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
     logger.info(
         f"\n{'='*60}\n"
-        f"  Voice Sales Agent\n"
+        f"  Tuvi Inbound Voice Agent\n"
         f"\n"
         f"  NEXT STEPS:\n"
         f"  1. Expose:     ngrok http {port}\n"
         f"  2. Set PUBLIC_BASE_URL in .env to your ngrok URL\n"
-        f"  3. Dial:       python dial.py +61412345678\n"
+        f"  3. Configure:  Twilio inbound voice webhook → POST /twiml\n"
         f"  4. View logs:  GET http://localhost:{port}/calls\n"
         f"  5. Terminal:   python show_calls.py\n"
         f"  6. Readiness:  GET http://localhost:{port}/readyz\n"

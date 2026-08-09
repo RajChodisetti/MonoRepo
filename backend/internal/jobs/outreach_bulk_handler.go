@@ -42,6 +42,14 @@ func OutreachBulkSendHandler(deps OutreachBulkSendDeps, log *slog.Logger) Handle
 		}
 
 		summary, err := deps.Outreach.RunBulkSend(ctx, payload.TriggeredBy, job.ID)
+		if err == nil && summary.StoppedReason == "disabled_by_admin" && summary.NextAvailableAt == nil {
+			if settleErr := deps.Outreach.SettleDisabledBulkJob(ctx, job.ID, job.LockedBy, payload.TriggeredBy, summary); settleErr != nil {
+				return settleErr
+			}
+			// The service already moved the row to queued or completed atomically.
+			// Prevent the generic worker finisher from racing that fenced handoff.
+			return ErrJobDeferred
+		}
 		if err == nil && summary.NextAvailableAt != nil {
 			if deferErr := deps.Outreach.DeferBulkJob(ctx, job.ID, job.LockedBy, payload.TriggeredBy, summary); deferErr != nil {
 				return deferErr

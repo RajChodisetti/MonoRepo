@@ -10,7 +10,7 @@ export const emailTextMarketing: ProductPageConfig = {
     heading: "Email & text that bring guests back.",
     subheading:
       "Send the right message at the right time — specials, loyalty rewards, and win-backs that turn into first-party orders.",
-    primaryCta: { label: "Get a free demo", href: "/demo" },
+    primaryCta: { label: "Get a free demo", href: "/book" },
     secondaryCta: { label: "See how it works", href: "/how-it-works" },
     testimonial: {
       imageSrc: "/resources/resource-email-hero.png",

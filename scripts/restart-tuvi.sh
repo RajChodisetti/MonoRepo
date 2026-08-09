@@ -57,8 +57,8 @@ docker compose -f "$COMPOSE_FILE" up -d postgres --wait
 echo "==> Migrations"
 go run ./backend/cmd/migrate up
 
-if [[ -f tuvi-website/app/.env.local ]] && grep -q '^CONSULTATION_API_URL=http://localhost:8090' tuvi-website/app/.env.local; then
-  sed -i '' 's|^CONSULTATION_API_URL=http://localhost:8090|CONSULTATION_API_URL=http://localhost:8080|' tuvi-website/app/.env.local
+if [[ -f web/.env.local ]] && grep -q '^CONSULTATION_API_URL=http://localhost:8090' web/.env.local; then
+  sed -i '' 's|^CONSULTATION_API_URL=http://localhost:8090|CONSULTATION_API_URL=http://localhost:8080|' web/.env.local
   echo "Updated CONSULTATION_API_URL -> http://localhost:8080"
 fi
 
@@ -79,7 +79,7 @@ echo "==> Starting voice agent :8000"
 docker compose -f "$COMPOSE_FILE" --profile voice up -d --force-recreate voice-sales-agent voice-sales-redis
 
 echo "==> Starting Tuvi website :3001"
-nohup npm --prefix tuvi-website/app run dev >"$RUN_DIR/website.log" 2>&1 &
+nohup npm --prefix web run dev -- -p 3001 >"$RUN_DIR/website.log" 2>&1 &
 echo $! >"$RUN_DIR/website.pid"
 
 echo "==> Waiting for health"

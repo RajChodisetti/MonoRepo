@@ -20,6 +20,12 @@ export type BookingProgress = {
   message: string;
 };
 
+export type BookingDetails = {
+  prospectName: string;
+  prospectEmail: string;
+  prospectPhone: string;
+};
+
 export type ConsultationConfirmation = {
   confirmationCode: string;
   prospectName: string;
@@ -125,6 +131,7 @@ export function useVoiceAgentSession() {
   const [consultation, setConsultation] = useState<ConsultationConfirmation | null>(null);
   const [bookingProgress, setBookingProgress] = useState<BookingProgress | null>(null);
   const [emailPrompt, setEmailPrompt] = useState<string | null>(null);
+  const [bookingDetailsPrompt, setBookingDetailsPrompt] = useState<string | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -209,6 +216,7 @@ export function useVoiceAgentSession() {
     setBookingProgress(null);
     pendingConsultationRef.current = null;
     setEmailPrompt(null);
+    setBookingDetailsPrompt(null);
     sessionActiveRef.current = false;
     readyReceivedRef.current = false;
     setActive(false);
@@ -349,8 +357,18 @@ export function useVoiceAgentSession() {
           );
         }
 
+        if (msg.event === "request_booking_details") {
+          setBookingDetailsPrompt(
+            String(msg.message ?? "Enter your details to confirm the consultation."),
+          );
+        }
+
         if (msg.event === "email_prompt_closed") {
           setEmailPrompt(null);
+        }
+
+        if (msg.event === "booking_details_prompt_closed") {
+          setBookingDetailsPrompt(null);
         }
         return;
       }
@@ -393,6 +411,7 @@ export function useVoiceAgentSession() {
     setStatus("checking");
     pendingConsultationRef.current = null;
     setEmailPrompt(null);
+    setBookingDetailsPrompt(null);
 
     const readiness = await checkVoiceAgentReadiness();
     if (gen !== connectGenRef.current) return;
@@ -502,6 +521,7 @@ export function useVoiceAgentSession() {
     setStatus("idle");
     setConsultation(null);
     setEmailPrompt(null);
+    setBookingDetailsPrompt(null);
   }, [clearBookingProgressTimer]);
 
   const dismissConsultation = useCallback(() => {
@@ -515,6 +535,25 @@ export function useVoiceAgentSession() {
     if (!ws || ws.readyState !== WebSocket.OPEN) return false;
     ws.send(JSON.stringify({ event: "user_email", email: trimmed }));
     setEmailPrompt(null);
+    return true;
+  }, []);
+
+  const submitBookingDetails = useCallback((details: BookingDetails) => {
+    const prospectName = details.prospectName.trim();
+    const prospectEmail = details.prospectEmail.trim();
+    const prospectPhone = details.prospectPhone.trim();
+    if (!prospectName || !prospectEmail || !prospectPhone) return false;
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return false;
+    ws.send(
+      JSON.stringify({
+        event: "user_booking_details",
+        prospect_name: prospectName,
+        prospect_email: prospectEmail,
+        prospect_phone: prospectPhone,
+      }),
+    );
+    setBookingDetailsPrompt(null);
     return true;
   }, []);
 
@@ -533,11 +572,13 @@ export function useVoiceAgentSession() {
     consultation,
     bookingProgress,
     emailPrompt,
+    bookingDetailsPrompt,
     connect,
     disconnect,
     reset,
     dismissConsultation,
     submitEmail,
+    submitBookingDetails,
     prefetchStatus,
     preloadWorklet,
   };

@@ -10,11 +10,12 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/auth"
-	httpapi "github.com/rajchodisetti/restaurant-platform/backend/internal/http"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/campaigns"
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/consultations"
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/demos"
+	httpapi "github.com/rajchodisetti/restaurant-platform/backend/internal/http"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/config"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/logger"
-	"github.com/rajchodisetti/restaurant-platform/backend/internal/demos"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/profiles"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/reservations"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/restaurants"
@@ -42,6 +43,28 @@ func testRouter(t *testing.T, readiness fakeReadiness) http.Handler {
 func testRouterWithUserRepo(t *testing.T, readiness fakeReadiness, users auth.Repository) http.Handler {
 	t.Helper()
 	return testRouterWithStores(t, readiness, users, &restaurants.Mock{}, &restaurants.MembershipMock{}, &demos.Mock{}, &campaigns.Mock{})
+}
+
+func testRouterWithConsultationRepo(
+	t *testing.T,
+	readiness fakeReadiness,
+	consultationsRepo consultations.Repository,
+) http.Handler {
+	t.Helper()
+	cfg := testConfig(t)
+	dataStore := store.NewWithRepositories(
+		nil,
+		nil,
+		&auth.Mock{},
+		&restaurants.Mock{},
+		&restaurants.MembershipMock{},
+		&demos.Mock{},
+		&campaigns.Mock{},
+		&profiles.Mock{},
+		&reservations.Mock{},
+		consultationsRepo,
+	)
+	return httpapi.NewRouter(logger.NewWithWriter(cfg.Logging, io.Discard), readiness, dataStore, cfg)
 }
 
 func testRouterWithStores(

@@ -15,9 +15,9 @@ ENV PIP_RETRIES=15
 
 COPY requirements.txt .
 
-# Cache pip wheels between rebuilds; pre-install heavy numba stack first
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --upgrade pip setuptools wheel && \
+# Pre-install the heavy numba stack first. Keep this compatible with the
+# production VM's legacy Docker builder; a BuildKit cache mount is optional.
+RUN pip install --upgrade pip setuptools wheel && \
     pip install --default-timeout=600 --retries=15 llvmlite numba && \
     pip install --default-timeout=600 --retries=15 -r requirements.txt
 

@@ -15,7 +15,11 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/migrate ./backend
 
 FROM alpine:3.20
 
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache ca-certificates tzdata chromium ttf-freefont \
+    && addgroup -S -g 10001 tuvi \
+    && adduser -S -D -H -u 10001 -G tuvi tuvi \
+    && mkdir -p /tmp/tuvi/.cache \
+    && chown -R 10001:10001 /tmp/tuvi
 
 WORKDIR /app
 COPY --from=builder /out/api /out/worker /out/migrate /app/
@@ -23,7 +27,12 @@ COPY backend/migrations /app/backend/migrations
 
 ENV APP_ENV=production
 ENV HTTP_ADDR=:8080
+ENV HOME=/tmp/tuvi
+ENV TMPDIR=/tmp/tuvi
+ENV XDG_CACHE_HOME=/tmp/tuvi/.cache
 
 EXPOSE 8080
+
+USER 10001:10001
 
 CMD ["/app/api"]

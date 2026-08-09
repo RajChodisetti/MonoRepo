@@ -1,5 +1,5 @@
-// Package leadreview owns the explicit human gates between OCR verification
-// and outreach eligibility. It does not approve campaigns or enqueue email.
+// Package leadreview owns explicit human review of restaurant profiles and
+// demo publication. Outreach sequence eligibility is intentionally separate.
 package leadreview
 
 import (
@@ -31,7 +31,6 @@ var (
 	ErrForbidden          = errors.New("lead review requires an internal administrator")
 	ErrInvalidStatus      = errors.New("invalid review status")
 	ErrNotFound           = errors.New("review target not found")
-	ErrOCRNotVerified     = errors.New("lead OCR is not verified")
 	ErrProfileNotApproved = errors.New("restaurant profile is not approved")
 	ErrDemoExpired        = errors.New("demo link has expired")
 	ErrExpectedUpdatedAt  = errors.New("expected_updated_at is required for a review decision")
@@ -41,7 +40,6 @@ var (
 type ProfileReview struct {
 	RestaurantID uuid.UUID  `json:"restaurant_id"`
 	Status       string     `json:"status"`
-	OCRStatus    string     `json:"ocr_status"`
 	ReviewedAt   *time.Time `json:"reviewed_at,omitempty"`
 	ReviewedBy   *uuid.UUID `json:"reviewed_by,omitempty"`
 	UpdatedAt    time.Time  `json:"updated_at"`
@@ -57,31 +55,17 @@ type DemoReview struct {
 }
 
 type ProfileReviewPreview struct {
-	RestaurantID          uuid.UUID       `json:"restaurant_id"`
-	RestaurantName        string          `json:"restaurant_name"`
-	ContactEmail          string          `json:"contact_email"`
-	OCRStatus             string          `json:"ocr_status"`
-	OCRInputFingerprint   string          `json:"ocr_input_fingerprint"`
-	OCRChecked            bool            `json:"ocr_checked"`
-	OCRStartedAt          *time.Time      `json:"ocr_started_at,omitempty"`
-	OCRCompletedAt        *time.Time      `json:"ocr_completed_at,omitempty"`
-	OCRAttempts           int             `json:"ocr_attempts"`
-	OCRVerificationErrors json.RawMessage `json:"ocr_verification_errors"`
-	OCRImagesDiscovered   int             `json:"ocr_images_discovered"`
-	OCRImagesAnalyzed     int             `json:"ocr_images_analyzed"`
-	OCRImagesSucceeded    int             `json:"ocr_images_succeeded"`
-	OCRImagesFailed       int             `json:"ocr_images_failed"`
-	OCRAllImagesProcessed bool            `json:"ocr_all_images_processed"`
-	OCRProvider           string          `json:"ocr_provider"`
-	OCRModel              string          `json:"ocr_model"`
-	ApolloStatus          string          `json:"apollo_status"`
-	ApolloEmailFound      bool            `json:"apollo_email_found"`
-	ReviewStatus          string          `json:"review_status"`
-	ReviewedAt            *time.Time      `json:"reviewed_at,omitempty"`
-	ReviewedBy            *uuid.UUID      `json:"reviewed_by,omitempty"`
-	RestaurantUpdatedAt   time.Time       `json:"restaurant_updated_at"`
-	ProfileUpdatedAt      time.Time       `json:"profile_updated_at"`
-	Profile               json.RawMessage `json:"profile"`
+	RestaurantID        uuid.UUID       `json:"restaurant_id"`
+	RestaurantName      string          `json:"restaurant_name"`
+	ContactEmail        string          `json:"contact_email"`
+	ApolloStatus        string          `json:"apollo_status"`
+	ApolloEmailFound    bool            `json:"apollo_email_found"`
+	ReviewStatus        string          `json:"review_status"`
+	ReviewedAt          *time.Time      `json:"reviewed_at,omitempty"`
+	ReviewedBy          *uuid.UUID      `json:"reviewed_by,omitempty"`
+	RestaurantUpdatedAt time.Time       `json:"restaurant_updated_at"`
+	ProfileUpdatedAt    time.Time       `json:"profile_updated_at"`
+	Profile             json.RawMessage `json:"profile"`
 }
 
 type Service struct {
@@ -107,38 +91,6 @@ func (service *Service) GetProfileReviewPreview(
 	const query = `
 		SELECT r.name,
 		       r.email,
-		       rp.ocr_status,
-		       rp.ocr_input_fingerprint,
-		       rp.ocr_started_at,
-		       rp.ocr_completed_at,
-		       rp.ocr_attempts,
-		       rp.ocr_verification_errors,
-		       CASE
-		         WHEN jsonb_typeof(rp.raw_public_data #> '{menu_ocr,images_discovered}') = 'number'
-		         THEN (rp.raw_public_data #>> '{menu_ocr,images_discovered}')::int
-		         ELSE 0
-		       END,
-		       CASE
-		         WHEN jsonb_typeof(rp.raw_public_data #> '{menu_ocr,images_analyzed}') = 'number'
-		         THEN (rp.raw_public_data #>> '{menu_ocr,images_analyzed}')::int
-		         ELSE 0
-		       END,
-		       CASE
-		         WHEN jsonb_typeof(rp.raw_public_data #> '{menu_ocr,images_succeeded}') = 'number'
-		         THEN (rp.raw_public_data #>> '{menu_ocr,images_succeeded}')::int
-		         ELSE 0
-		       END,
-		       CASE
-		         WHEN jsonb_typeof(rp.raw_public_data #> '{menu_ocr,images_failed}') = 'number'
-		         THEN (rp.raw_public_data #>> '{menu_ocr,images_failed}')::int
-		         ELSE 0
-		       END,
-		       COALESCE(
-		         (rp.raw_public_data #>> '{menu_ocr,all_images_processed}')::boolean,
-		         false
-		       ),
-		       COALESCE(rp.raw_public_data #>> '{menu_ocr,provider}', ''),
-		       COALESCE(rp.raw_public_data #>> '{menu_ocr,model}', ''),
 		       COALESCE(
 		         NULLIF(rp.raw_public_data #>> '{apollo_enrichment,status}', ''),
 		         CASE WHEN rp.apollo_lead <> '{}'::jsonb THEN 'enriched' ELSE 'not_recorded' END
@@ -183,19 +135,6 @@ func (service *Service) GetProfileReviewPreview(
 	err := service.pool.QueryRow(ctx, query, restaurantID).Scan(
 		&result.RestaurantName,
 		&result.ContactEmail,
-		&result.OCRStatus,
-		&result.OCRInputFingerprint,
-		&result.OCRStartedAt,
-		&result.OCRCompletedAt,
-		&result.OCRAttempts,
-		&result.OCRVerificationErrors,
-		&result.OCRImagesDiscovered,
-		&result.OCRImagesAnalyzed,
-		&result.OCRImagesSucceeded,
-		&result.OCRImagesFailed,
-		&result.OCRAllImagesProcessed,
-		&result.OCRProvider,
-		&result.OCRModel,
 		&result.ApolloStatus,
 		&result.ApolloEmailFound,
 		&result.ReviewStatus,
@@ -212,12 +151,11 @@ func (service *Service) GetProfileReviewPreview(
 		return ProfileReviewPreview{}, fmt.Errorf("load profile review preview: %w", err)
 	}
 	result.Profile = json.RawMessage(profile)
-	result.OCRChecked = result.OCRAttempts > 0
 	return result, nil
 }
 
-// ReviewProfile records a human decision. Approval is only possible after OCR
-// has reached verified; rejected/draft decisions never make a lead sendable.
+// ReviewProfile records a human decision for demo/public content. Outreach
+// eligibility depends on business identity, consent evidence and lifecycle.
 func (service *Service) ReviewProfile(
 	ctx context.Context,
 	principal auth.Principal,
@@ -257,12 +195,11 @@ func (service *Service) ReviewProfile(
 			    reviewed_by = NULL,
 			    updated_at = now()
 			WHERE restaurant_id = $1
-			RETURNING restaurant_id, review_status, ocr_status, reviewed_at, reviewed_by, updated_at`
+			RETURNING restaurant_id, review_status, reviewed_at, reviewed_by, updated_at`
 		var result ProfileReview
 		err = tx.QueryRow(ctx, clearReview, restaurantID).Scan(
 			&result.RestaurantID,
 			&result.Status,
-			&result.OCRStatus,
 			&result.ReviewedAt,
 			&result.ReviewedBy,
 			&result.UpdatedAt,
@@ -302,13 +239,12 @@ func (service *Service) ReviewProfile(
 		return ProfileReview{}, fmt.Errorf("lock restaurant identity for review: %w", err)
 	}
 
-	var ocrStatus string
 	var currentProfileUpdatedAt time.Time
 	err = tx.QueryRow(ctx, `
-		SELECT ocr_status, updated_at
+		SELECT updated_at
 		FROM restaurant_profiles
 		WHERE restaurant_id = $1
-		FOR UPDATE`, restaurantID).Scan(&ocrStatus, &currentProfileUpdatedAt)
+		FOR UPDATE`, restaurantID).Scan(&currentProfileUpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ProfileReview{}, ErrNotFound
 	}
@@ -319,10 +255,6 @@ func (service *Service) ReviewProfile(
 		!currentProfileUpdatedAt.Equal(*expectedProfileUpdatedAt) {
 		return ProfileReview{}, ErrStaleReview
 	}
-	if status == ProfileApproved && ocrStatus != "verified" {
-		return ProfileReview{}, ErrOCRNotVerified
-	}
-
 	const recordReview = `
 		UPDATE restaurant_profiles
 		SET review_status = $2,
@@ -330,12 +262,11 @@ func (service *Service) ReviewProfile(
 		    reviewed_by = $3,
 		    updated_at = now()
 		WHERE restaurant_id = $1 AND updated_at = $4
-		RETURNING restaurant_id, review_status, ocr_status, reviewed_at, reviewed_by, updated_at`
+		RETURNING restaurant_id, review_status, reviewed_at, reviewed_by, updated_at`
 	var result ProfileReview
 	err = tx.QueryRow(ctx, recordReview, restaurantID, status, principal.UserID, *expectedProfileUpdatedAt).Scan(
 		&result.RestaurantID,
 		&result.Status,
-		&result.OCRStatus,
 		&result.ReviewedAt,
 		&result.ReviewedBy,
 		&result.UpdatedAt,
@@ -373,15 +304,14 @@ func invalidateDownstreamApprovals(ctx context.Context, tx pgx.Tx, restaurantID 
 		    approved_at = NULL,
 		    approved_by = NULL,
 		    updated_at = now()
-		WHERE restaurant_id = $1 AND status = 'approved'`, restaurantID); err != nil {
+		WHERE restaurant_id = $1 AND status = 'approved' AND sequence_id IS NULL`, restaurantID); err != nil {
 		return fmt.Errorf("invalidate approved campaigns after profile review: %w", err)
 	}
 	return nil
 }
 
-// SetDemoStatus publishes or unpublishes the existing generated demo. A demo
-// cannot be published until both OCR verification and human profile approval
-// are complete. Campaign approval remains a separate human action.
+// SetDemoStatus publishes or unpublishes an existing generated demo after
+// human profile approval. It does not depend on retired image-analysis state.
 func (service *Service) SetDemoStatus(
 	ctx context.Context,
 	principal auth.Principal,
@@ -478,14 +408,12 @@ func (service *Service) SetDemoStatus(
 		return DemoReview{}, fmt.Errorf("lock restaurant identity for demo publication: %w", err)
 	}
 
-	var reviewStatus, ocrStatus, currentOCRFingerprint string
+	var reviewStatus string
 	var reviewAudited bool
 	var reviewedAt *time.Time
 	var profileUpdatedAt time.Time
 	err = tx.QueryRow(ctx, `
 		SELECT review_status,
-		       ocr_status,
-		       COALESCE(ocr_input_fingerprint, ''),
 		       (reviewed_at IS NOT NULL AND reviewed_by IS NOT NULL),
 		       reviewed_at,
 		       updated_at
@@ -493,8 +421,6 @@ func (service *Service) SetDemoStatus(
 		WHERE restaurant_id = $1
 		FOR UPDATE`, restaurantID).Scan(
 		&reviewStatus,
-		&ocrStatus,
-		&currentOCRFingerprint,
 		&reviewAudited,
 		&reviewedAt,
 		&profileUpdatedAt,
@@ -509,14 +435,12 @@ func (service *Service) SetDemoStatus(
 	var expiresAt *time.Time
 	var currentUpdatedAt time.Time
 	var autoGenerated bool
-	var sourceOCRFingerprint string
 	var sourceProfileFingerprint string
 	var currentProfileFingerprint string
 	err = tx.QueryRow(ctx, `
 		SELECT expires_at,
 		       updated_at,
 		       auto_generated,
-		       source_ocr_fingerprint,
 		       source_profile_fingerprint,
 		       COALESCE(lead_artifact_current_profile_fingerprint($2), '')
 		FROM demo_sites
@@ -525,7 +449,6 @@ func (service *Service) SetDemoStatus(
 		&expiresAt,
 		&currentUpdatedAt,
 		&autoGenerated,
-		&sourceOCRFingerprint,
 		&sourceProfileFingerprint,
 		&currentProfileFingerprint,
 	)
@@ -536,12 +459,7 @@ func (service *Service) SetDemoStatus(
 		return DemoReview{}, fmt.Errorf("lock demo for publication: %w", err)
 	}
 
-	if ocrStatus != "verified" {
-		return DemoReview{}, ErrOCRNotVerified
-	}
-	if autoGenerated && (sourceOCRFingerprint == "" ||
-		sourceOCRFingerprint != currentOCRFingerprint ||
-		sourceProfileFingerprint == "" ||
+	if autoGenerated && (sourceProfileFingerprint == "" ||
 		sourceProfileFingerprint != currentProfileFingerprint) {
 		return DemoReview{}, ErrStaleReview
 	}

@@ -16,8 +16,8 @@ function first(v: string | string[] | undefined): string {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { placeId } = await params;
   return {
-    title: `AI report · ${decodeURIComponent(placeId)} | Tuvi`,
-    description: "Personalized Google visibility report for your restaurant.",
+    title: `Digital footprint · ${decodeURIComponent(placeId)} | Tuvi`,
+    description: "Personalized digital-footprint and Google visibility report for your restaurant.",
   };
 }
 

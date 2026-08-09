@@ -2579,3 +2579,151 @@ PostgreSQL-enforced 200/200 daily request ceiling until the UTC reset, after
 which reviewed public media can be rebuilt through the normal fingerprinted
 path. The production storage provider is still disabled, so owner/licensed
 uploads remain pending bucket/CDN configuration.
+
+## 2026-08-08 — QA Website Promotion, Consultation Calendar, and Voice Scheduling
+
+**Role:** Coordinating Frontend, Backend, Voice, Test, Security, DevOps, and
+Documentation Agent
+
+**Delivered:** Promoted the newest remote QA website lineage into the canonical
+root `web/` app and removed the legacy `tuvi-website/` tree from the active
+release. The production site now includes booking, demo, privacy, terms, and
+Google Workspace routes; old restaurant-service traffic redirects to the new
+root. Public callback routes and the voice `/call` endpoint fail closed with
+HTTP 403, and the public voice UI contains no outbound dialer.
+
+Added a month-adjustable internal consultation calendar. Admins can navigate a
+month, see confirmed calls, toggle individual available times, and save the
+month with optimistic revision checks. PostgreSQL migrations `000039`–`000041`
+add slot overrides, supported-template cleanup, interval validity, confirmed
+call no-overlap enforcement, and month revisions. Public website and inbound
+voice availability/check/book operations share the same PostgreSQL repository,
+with locking and database constraints protecting concurrent bookings.
+
+Production voice testing exposed that Pipecat 0.0.108 ignored tool schemas when
+they were supplied to `OpenAILLMService`. The final fix converts the existing
+tool constants into Pipecat `FunctionSchema`/`ToolsSchema` objects and attaches
+them to each `LLMContext`. Corporate browser voice now performs the live
+calendar lookup before answering availability. Legacy sales mode, callback/SMS
+tools, outbound provider creation, and public dialer artifacts remain removed.
+
+**Production Deployment:** The active VM pointer is
+`/opt/tuvi/releases/monorepo-5bfe1dc`, sourced from commit
+`5bfe1dc7d85e0b7c58c264728e7a9ef396e11019` on
+`agent/prod-qa-calendar-20260808`. The full application rollout used immutable
+release `a09522f`; `5bfe1dc` adds the verified voice adapter. The application
+database reports schema version `41` (`consultation_overlap_and_calendar_revisions`).
+A validated pre-deploy backup remains at
+`/opt/tuvi/backups/postgres-calendar-ed6afa4-20260808.dump` with SHA-256
+`1ee9f539b4a9fdb0d8973b892a07606dbb29cba613a7a3c4437a7688aa5d409a`.
+The complete `a09522f` release and prior deployed `91fc93a` release are retained
+as rollback sources; unused `ed6afa4` and `89dad1f` staging trees and archives
+were removed. The active release contains `web/` and no `tuvi-website/` folder.
+
+**Checks Run:** Go tests passed with 231 tests across 46 packages, plus `go vet`
+and API/worker/migrate builds. Root website, admin, and all three public
+templates passed lint/type checks and production Docker builds/smokes. OpenAPI
+validated with three pre-existing warnings. Disposable PostgreSQL migration and
+calendar save/restore checks passed, including overlap and replay constraints.
+Voice safety tests pass 5/5 inside the final production image. HTTPS smokes
+returned 200 for the site, booking/legal/workspace routes, availability, admin
+login, demo, and voice readiness; legacy services redirect correctly and all
+callback/outbound POSTs return 403. Browser inspection confirmed the new site,
+booking slots, and inbound-only voice UI. The final non-PII synthetic production
+voice smoke confirmed speech recognition, `checking_slots` through `idle`, an
+availability response, no booking event, and no error.
+
+**Business Value / Plan Fit:** Sales traffic now lands on the latest QA website,
+while staff have a database-backed monthly availability control that both the
+website and inbound voice assistant honor. Confirmed calls are visible in the
+same admin calendar and concurrent scheduling fails closed instead of
+double-booking.
+
+**Risks / Follow-ups:** Migrations `000039`–`000041` are forward-only for
+application rollback. Once slot overrides are in use, pre-calendar API images
+must not accept consultation traffic; prefer a forward fix or validated backup
+restore. Production calendar mutation was intentionally not used as a smoke:
+authenticated save/restore was proven against disposable PostgreSQL, while
+production verification remained read-only. No outbound call, real booking,
+email, SMS, customer-data mutation, merge to `main`, or production provider
+routing change was performed.
+
+## 2026-08-08 — Plain-Text Outreach, OCR Retirement, and Fast AI Review
+
+**Role:** Coordinating Backend, Frontend, Data, Security, Test, DevOps, and
+Documentation Agent
+
+**Delivered:** Replaced HTML outreach with a versioned, administrator-editable
+plain-text sequence. The three approved Tuvi Solutions drafts are seeded at
+`0/72/72` hours, address the owner when known and the restaurant otherwise,
+and render exactly the Tuvi website plus a recipient-specific unsubscribe URL.
+The GET unsubscribe route is a non-mutating confirmation page with an explicit
+opt-out button and Tuvi link; POST creates an immutable suppression and stops
+remaining steps. Integer current/next step fields and send timestamps drive
+progress, provider-confirmed sends are the only advancing outcome, and due
+follow-ups globally precede new-lead sends.
+
+Eligibility now uses restaurant name, valid business email, inferred-business
+evidence, `lead`/`emailed` lifecycle, no expressed interest, and no suppression.
+Lost, archived, onboarding, active-client, interested, and missing-contact
+restaurants fail closed. The migration normalized obsolete `demo_ready` rows,
+enrolled 955 eligible restaurants, and left zero ineligible enrollments. The
+admin Outreach page can create, add, remove, reorder, enable, preview, approve,
+and version sequence steps, plus inspect recipient progress and control the
+sender.
+
+OCR workers, TripAdvisor image scraping, OCR scheduling/configuration, and
+Hugging Face credentials were removed. Existing unreviewed scraped image URLs
+no longer cross public API/template boundaries; live attributed Google media
+and manually reviewed licensed media remain supported. Production and QA have
+no OCR container, process, timer, cron entry, active env setting, or historical
+env credential. The existing OpenAI credential was reused without exposing it:
+`/opt/tuvi/env/llm.env` is mode `0600`, mounted only into the API, with
+`gpt-4.1-nano`; shared stack, workers, frontends, and scraper do not receive it.
+
+AI review now has a 15-second overall budget, bounded two-report concurrency,
+singleflight coalescing, low-detail vision, SSRF/DNS-rebinding protection, and
+one sandboxed Chromium process per report that reloads real mobile and desktop
+variants. The API runs as UID/GID `10001:10001` with zero effective
+capabilities; Docker drops all defaults and retains only `SYS_ADMIN` and
+`SYS_CHROOT` in the bounding set for Chromium's setuid sandbox helper. Mobile
+report layout keeps restaurant identity, exact map, live Google photo, analysis
+status, score, visibility, and timing above the fold.
+
+**Production Deployment:** Active release is
+`/opt/tuvi/releases/monorepo-ee553c4`, commit
+`ee553c48b0f6bd76209d8e9c9e957d7da17fb9f2`; PostgreSQL is at version `43`
+(`manual_media_review`). The validated pre-deploy backup is
+`/opt/tuvi/backups/monorepo-pre-ee553c4.dump`, mode `0600`, SHA-256
+`e38d482021ec5885d90129fd38f1a3612ad02f108c8d354eab6586dc41a35145`.
+Previous release `monorepo-5bfe1dc` and explicit pre-release image tags remain
+available. QA code was not promoted, but its API was safely recreated after
+OCR env removal and reports healthy.
+
+**Checks Run:** Go tests and vet passed across `./backend/...`; targeted
+`seoreport`, outreach, jobs, race, and migration tests passed. Admin, corporate
+web, template lint/type/build checks, OpenAPI parsing, both Compose configs,
+Python 3.12's 30-test ingestion suite, `git diff --check`, and secret-pattern
+checks passed. PostgreSQL 16 rehearsed `41→43→41→43` with synthetic eligibility
+and rollback assertions. The exact production images passed non-root Chromium,
+private-destination blocking, 390×844/1280×800 capture, and protected-env
+checks. A complete production AI-assisted review returned both screenshots in
+10.76 seconds; two simultaneous reviews returned in 11.87 and 10.30 seconds,
+with a truthful partial fallback for the slower/WAF-heavy site. Public site,
+AI-review, report, admin login, public API, and demo routes returned 200.
+Browser QA at 390×844 showed identity, map, photo, status, score, visibility,
+and scan timing above the fold with no console errors.
+
+**Business Value / Plan Fit:** Restaurant outreach is concise, auditable,
+extensible, suppressible, and ready for intentional activation without relying
+on OCR readiness. The public digital-footprint review is materially faster and
+more useful on mobile while retaining strict network and browser isolation.
+
+**Risks / Follow-ups:** Outreach remains deliberately disabled. No real lead
+email was sent, no delivery attempt was created during deployment, and the
+operator must intentionally enable the job after reviewing the sequence and
+955-recipient aggregate. Some WAF-heavy sites may return a useful partial report
+without screenshots rather than exceed the 15-second budget. Do not run the old
+API/worker against schema 43; before any sequence progress, rollback requires
+stopping writers and using the new migrator down to 41, while any uncertain or
+real send requires a forward fix.

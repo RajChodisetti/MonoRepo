@@ -151,7 +151,7 @@ export default async function CaseStudyPage({ params }: PageProps) {
               </p>
             </div>
             <Link
-              href="/demo"
+              href="/book"
               className="inline-flex shrink-0 items-center justify-center rounded-full bg-primary px-6 py-3 text-[14px] font-semibold text-bg transition-colors hover:bg-primary-dim"
             >
               Get a free demo

@@ -7,7 +7,6 @@ import { adminFetch } from "@/lib/client-api";
 import { RESTAURANT_STATUSES, formatDate } from "@/lib/constants";
 import type { Restaurant } from "@/lib/types";
 import { EmptyState, ErrorBanner, PageHeader, StatusBadge } from "@/components/ui";
-import { SendPreviewModal } from "@/components/SendPreviewModal";
 
 export default function RestaurantsPage() {
   const router = useRouter();
@@ -16,12 +15,9 @@ export default function RestaurantsPage() {
   const [status, setStatus] = useState("");
   const [isContacted, setIsContacted] = useState("");
   const [shownInterest, setShownInterest] = useState("");
-  const [ocrStatus, setOcrStatus] = useState("");
   const [includeArchived, setIncludeArchived] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [previewOpen, setPreviewOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -33,7 +29,6 @@ export default function RestaurantsPage() {
           status: status || undefined,
           is_contacted: isContacted || undefined,
           shown_interest: shownInterest || undefined,
-          ocr_status: ocrStatus || undefined,
           include_archived: includeArchived ? true : undefined,
         },
       });
@@ -43,7 +38,7 @@ export default function RestaurantsPage() {
     } finally {
       setLoading(false);
     }
-  }, [name, status, isContacted, shownInterest, ocrStatus, includeArchived]);
+  }, [name, status, isContacted, shownInterest, includeArchived]);
 
   useEffect(() => {
     const t = setTimeout(load, 200);
@@ -131,47 +126,10 @@ export default function RestaurantsPage() {
           />
           <span style={{ fontSize: "0.9rem" }}>Include archived</span>
         </label>
-        <label style={{ display: "grid", gap: "0.35rem" }}>
-          <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>OCR</span>
-          <select className="select" value={ocrStatus} onChange={(e) => setOcrStatus(e.target.value)}>
-            <option value="">All</option>
-            <option value="verified">Verified only</option>
-            <option value="pending">Pending</option>
-            <option value="running">Running</option>
-            <option value="failed">Failed</option>
-            <option value="no_images">No images</option>
-          </select>
-        </label>
         <button className="btn btn-secondary" type="button" onClick={load}>
           Refresh
         </button>
       </div>
-
-      {selected.size > 0 ? (
-        <div
-          className="card"
-          style={{
-            marginBottom: "1rem",
-            display: "flex",
-            alignItems: "center",
-            gap: "0.75rem",
-            justifyContent: "space-between",
-            position: "sticky",
-            top: "0.5rem",
-            zIndex: 10,
-          }}
-        >
-          <span>{selected.size} selected</span>
-          <div style={{ display: "flex", gap: "0.5rem" }}>
-            <button className="btn btn-secondary" type="button" onClick={() => setSelected(new Set())}>
-              Clear
-            </button>
-            <button className="btn btn-primary" type="button" onClick={() => setPreviewOpen(true)}>
-              Preview &amp; send {selected.size} selected
-            </button>
-          </div>
-        </div>
-      ) : null}
 
       {loading ? <EmptyState message="Loading restaurants…" /> : null}
       {!loading && items.length === 0 ? (
@@ -183,27 +141,13 @@ export default function RestaurantsPage() {
           <table className="data">
             <thead>
               <tr>
-                <th>
-                  <input
-                    type="checkbox"
-                    checked={items.length > 0 && items.every((r) => selected.has(r.id))}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setSelected(new Set(items.map((r) => r.id)));
-                      } else {
-                        setSelected(new Set());
-                      }
-                    }}
-                    aria-label="Select all"
-                  />
-                </th>
                 <th>Name</th>
                 <th>Email</th>
                 <th>Status</th>
-                <th>OCR</th>
                 <th>Contacted</th>
                 <th>Interest</th>
-                <th>Emailed</th>
+                <th>Sequence sends</th>
+                <th>Last sent</th>
                 <th>Updated</th>
                 <th></th>
               </tr>
@@ -215,34 +159,15 @@ export default function RestaurantsPage() {
                   onClick={() => router.push(`/restaurants/${r.id}`)}
                   style={{ cursor: "pointer" }}
                 >
-                  <td onClick={(e) => e.stopPropagation()}>
-                    <input
-                      type="checkbox"
-                      checked={selected.has(r.id)}
-                      onChange={(e) => {
-                        setSelected((prev) => {
-                          const next = new Set(prev);
-                          if (e.target.checked) next.add(r.id);
-                          else next.delete(r.id);
-                          return next;
-                        });
-                      }}
-                      aria-label={`Select ${r.name}`}
-                    />
-                  </td>
                   <td>{r.name}</td>
                   <td>{r.email || "—"}</td>
                   <td>
                     <StatusBadge status={r.status} />
                   </td>
-                  <td><StatusBadge status={r.ocr_status || "pending"} /></td>
                   <td>{r.is_contacted ? "Yes" : "No"}</td>
                   <td>{r.shown_interest ? "Yes" : "No"}</td>
-                  <td>
-                    {r.email_sent
-                      ? `Yes (${r.email_send_count ?? 1})`
-                      : "No"}
-                  </td>
+                  <td>{r.email_send_count ?? 0}</td>
+                  <td>{formatDate(r.last_email_sent_at)}</td>
                   <td>{formatDate(r.updated_at)}</td>
                   <td onClick={(e) => e.stopPropagation()}>
                     <Link href={`/restaurants/${r.id}`}>Open</Link>
@@ -253,13 +178,6 @@ export default function RestaurantsPage() {
           </table>
         </div>
       ) : null}
-
-      <SendPreviewModal
-        open={previewOpen}
-        restaurantIds={[...selected]}
-        onClose={() => setPreviewOpen(false)}
-        onSent={load}
-      />
     </div>
   );
 }

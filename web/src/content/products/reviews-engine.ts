@@ -10,7 +10,7 @@ export const reviewsEngine: ProductPageConfig = {
     heading: "More Google reviews — without chasing every guest.",
     subheading:
       "Tuvi asks satisfied diners for a review at the right moment, so your Google rating strengthens and new locals keep finding you.",
-    primaryCta: { label: "Get a free demo", href: "/demo" },
+    primaryCta: { label: "Get a free demo", href: "/book" },
     secondaryCta: { label: "See how it works", href: "/how-it-works" },
     testimonial: {
       imageSrc: "/resources/resource-support-hero.png",

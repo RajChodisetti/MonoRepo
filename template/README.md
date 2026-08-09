@@ -44,17 +44,20 @@ Copy from [`template/.env.example`](.env.example). MonoRepo [`.env.example`](../
 
 ## Restaurant switching
 
-Templates use `?id=N` (0-based index into `../data/restaurants_data.json`) or `restaurant_id=<uuid>` for API-backed generated sites:
+Templates are API-only. Use `?id=N` for the public API index,
+`restaurant_id=<uuid>` for an admin preview, or the signed `slug` + `token`
+pair for a published demo. An API miss fails closed and never falls back to a
+bundled scrape fixture.
 
 | URL | Restaurant |
 |-----|------------|
-| `/?id=0` | Bistro Moncur |
-| `/?id=1` | Second restaurant |
+| `/?id=0` | First public API restaurant |
+| `/?restaurant_id=<uuid>` | Admin/API-backed restaurant preview |
 | `/restaurant/0` | Redirects to `/?id=0` |
 
 ## Stack
 
-- Next.js 15 (App Router) + TypeScript
+- Next.js 16 (App Router) + TypeScript
 - Tailwind CSS v4
 - GSAP + ScrollTrigger
 - Lenis smooth scrolling
@@ -68,7 +71,7 @@ template/
     app/                    # Router + layout
     lib/
       templateConfig.ts     # TEMPLATE env reader
-      adapters/             # Shared JSON adapter
+      adapters/             # Public/signed API adapters
     templates/
       cinematic/            # Template 1
       aurora/               # Template 2
@@ -85,14 +88,12 @@ npm run build:aurora       # TEMPLATE=2
 npm run build:elysian      # TEMPLATE=3
 ```
 
-## Legacy static template
-
-```bash
-cd MonoRepo && python3 -m http.server 8080
-# http://localhost:8080/template/legacy/index.html?id=0
-```
-
 ## Data sources
 
-- `../data/restaurants_data.json`
-- `../data/image_classifications.json`
+- Main Go API public restaurant and signed-demo payloads
+- Live attributed Google Places media returned by the API
+- Explicitly approved owner/licensed media returned by the API
+
+The production template image does not contain root scrape or OCR fixture JSON.
+Legacy static files under `template/legacy` are historical reference only and
+must not be deployed as a customer-facing renderer.

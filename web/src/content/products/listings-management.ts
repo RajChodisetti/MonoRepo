@@ -10,7 +10,7 @@ export const listingsManagement: ProductPageConfig = {
     heading: "Accurate listings. Stronger local discovery.",
     subheading:
       "Tuvi keeps your name, hours, and address consistent across the web so hungry locals find the right venue — and land on you.",
-    primaryCta: { label: "Get a free demo", href: "/demo" },
+    primaryCta: { label: "Get a free demo", href: "/book" },
     secondaryCta: { label: "See how it works", href: "/how-it-works" },
     testimonial: {
       imageSrc: "/resources/resource-marketing-hero.png",

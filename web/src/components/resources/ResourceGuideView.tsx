@@ -128,7 +128,7 @@ export default function ResourceGuideView({ guide }: { guide: ResourceGuide }) {
                   </Link>
                 ) : null}
                 <Link
-                  href="/demo"
+                  href="/book"
                   className="inline-flex rounded-full bg-white/10 px-5 py-2.5 text-[14px] font-semibold text-bg ring-1 ring-white/20 hover:bg-white/15"
                 >
                   Get a free demo

@@ -10,7 +10,7 @@ export const onlineOrdering: ProductPageConfig = {
     heading: "Online ordering that grows your business — not a marketplace.",
     subheading:
       "Tuvi turns website and app visitors into commission-free orders. You keep the margin, the data, and the relationship.",
-    primaryCta: { label: "Get a free demo", href: "/demo" },
+    primaryCta: { label: "Get a free demo", href: "/book" },
     secondaryCta: { label: "See how it works", href: "/how-it-works" },
     testimonial: {
       imageSrc: "/resources/resource-ordering-hero.png",

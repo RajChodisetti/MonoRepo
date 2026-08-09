@@ -315,6 +315,10 @@
     animation: none;
   }
 
+  .scan-progress-fill {
+    transition-duration: 0.01ms !important;
+  }
+
   .tuvi-rise,
   .report-reveal,
   .report-phone-stage {

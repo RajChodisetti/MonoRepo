@@ -37,7 +37,7 @@ ensure_template() {
 ensure_website() {
   if lsof -nP -iTCP:3001 -sTCP:LISTEN >/dev/null 2>&1; then return 0; fi
   echo "[watchdog] starting website :3001"
-  nohup npm --prefix "$ROOT/tuvi-website/app" run dev >>"$RUN_DIR/website.log" 2>&1 &
+  nohup npm --prefix "$ROOT/web" run dev -- -p 3001 >>"$RUN_DIR/website.log" 2>&1 &
   echo $! >"$RUN_DIR/website.pid"
 }
 

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"sort"
 	"strings"
 
 	"github.com/google/uuid"
@@ -68,110 +67,23 @@ func (service *Service) PublicForRestaurant(
 	if err != nil || strings.TrimSpace(placeID) == "" {
 		return items
 	}
-	hints, err := service.repository.ListClassificationHints(ctx, restaurantID)
-	if err != nil {
-		service.log.WarnContext(ctx, "media_classification_hints_unavailable", "restaurant_id", restaurantID, "error", err)
-		hints = nil
-	}
-	hintsByFingerprint := make(map[string]ClassificationHint, len(hints))
-	for _, hint := range hints {
-		if hint.SourceFingerprint != "" {
-			hintsByFingerprint[hint.SourceFingerprint] = hint
-		}
-	}
-
-	// Ask for the provider maximum because menu-document classifications are
-	// filtered after resolution and must never leak into website media.
 	resolved, err, _ := service.photoCalls.Do(restaurantID.String(), func() (any, error) {
-		return service.photos.ListPhotoURLs(ctx, placeID, 10)
+		return service.photos.ListPhotoURLs(ctx, placeID, min(10, limit-len(items)))
 	})
 	if err != nil {
-		service.log.WarnContext(ctx, "google_places_demo_media_unavailable", "restaurant_id", restaurantID, "error", err)
+		service.log.WarnContext(ctx, "google_places_public_media_unavailable", "restaurant_id", restaurantID, "error", err)
 		return items
 	}
 	photos, ok := resolved.([]placesprovider.Photo)
 	if !ok {
-		service.log.WarnContext(ctx, "google_places_demo_media_invalid", "restaurant_id", restaurantID)
-		return items
-	}
-	live := make([]PublicMedia, 0, len(photos))
-	for _, photo := range photos {
-		hint, classified := hintsByFingerprint[photo.SourceFingerprint]
-		if !classified {
-			// Public demos fail closed: a freshly resolved Google photo is not
-			// website-safe until its exact resource fingerprint was classified.
-			continue
-		}
-		mediaType := normalizeGoogleMediaType(hint.MediaType)
-		if !hint.PublicEligible || mediaType == "menu_document" {
-			continue
-		}
-		if !IsWebsiteMediaType(mediaType) {
-			mediaType = "other"
-		}
-		live = append(live, PublicMedia{
-			URL:                photo.URL,
-			SourceKind:         SourceGoogleLive,
-			MediaType:          mediaType,
-			AltText:            liveAltText(mediaType),
-			WidthPx:            photo.WidthPx,
-			HeightPx:           photo.HeightPx,
-			PlacementRole:      livePlacement(mediaType),
-			Unoptimized:        true,
-			AuthorAttributions: googleAttributions(photo.AuthorAttributions),
-			GoogleMapsURI:      photo.GoogleMapsURI,
-			FlagContentURI:     photo.FlagContentURI,
-		})
-	}
-	sort.SliceStable(live, func(left, right int) bool {
-		return livePriority(live[left].MediaType) < livePriority(live[right].MediaType)
-	})
-	for _, item := range live {
-		if len(items) >= limit {
-			break
-		}
-		items = append(items, item)
-	}
-	return items
-}
-
-// PreviewForRestaurant is for admin-opened generated-site previews. It keeps
-// reviewed public media first, then falls back to attributed, uncached live
-// Google photos so early sales previews are not visually empty before OCR
-// finishes.
-func (service *Service) PreviewForRestaurant(
-	ctx context.Context,
-	restaurantID uuid.UUID,
-	limit int,
-) []PublicMedia {
-	items := service.PublicForRestaurant(ctx, restaurantID, limit)
-	if len(items) > 0 || service == nil || service.profiles == nil || service.photos == nil {
-		return items
-	}
-	if limit < 1 {
-		limit = 6
-	}
-	placeID, err := service.profiles.GetGooglePlaceID(ctx, restaurantID)
-	if err != nil || strings.TrimSpace(placeID) == "" {
-		return items
-	}
-	resolved, err, _ := service.photoCalls.Do(restaurantID.String(), func() (any, error) {
-		return service.photos.ListPhotoURLs(ctx, placeID, 10)
-	})
-	if err != nil {
-		service.log.WarnContext(ctx, "google_places_preview_media_unavailable", "restaurant_id", restaurantID, "error", err)
-		return items
-	}
-	photos, ok := resolved.([]placesprovider.Photo)
-	if !ok {
-		service.log.WarnContext(ctx, "google_places_preview_media_invalid", "restaurant_id", restaurantID)
+		service.log.WarnContext(ctx, "google_places_public_media_invalid", "restaurant_id", restaurantID)
 		return items
 	}
 	for _, photo := range photos {
 		if len(items) >= limit {
 			break
 		}
-		if photo.WidthPx > 0 && photo.HeightPx > 0 && photo.HeightPx > int(float64(photo.WidthPx)*1.35) {
+		if strings.TrimSpace(photo.URL) == "" {
 			continue
 		}
 		items = append(items, PublicMedia{
@@ -189,6 +101,15 @@ func (service *Service) PreviewForRestaurant(
 		})
 	}
 	return items
+}
+
+// PreviewForRestaurant intentionally shares the public media policy.
+func (service *Service) PreviewForRestaurant(
+	ctx context.Context,
+	restaurantID uuid.UUID,
+	limit int,
+) []PublicMedia {
+	return service.PublicForRestaurant(ctx, restaurantID, limit)
 }
 
 func (service *Service) publicOwnedAssets(
@@ -234,6 +155,11 @@ func (service *Service) publicOwnedAssets(
 			ContainsPeople:  asset.ContainsPeople,
 			ContainsText:    asset.ContainsText,
 			PlacementRole:   asset.PlacementRole,
+			ApprovalStatus:  asset.ApprovalStatus,
+			ReviewedAt:      asset.ReviewedAt,
+			ReviewedBy:      asset.ReviewedBy,
+			ReviewNote:      asset.ReviewNote,
+			RightsStatus:    asset.RightsStatus,
 			Unoptimized:     false,
 		})
 	}
@@ -266,6 +192,9 @@ func (service *Service) ListAdmin(ctx context.Context, restaurantID uuid.UUID) (
 			ContainsText:     asset.ContainsText,
 			PlacementRole:    asset.PlacementRole,
 			ApprovalStatus:   asset.ApprovalStatus,
+			ReviewedAt:       asset.ReviewedAt,
+			ReviewedBy:       asset.ReviewedBy,
+			ReviewNote:       asset.ReviewNote,
 			RightsStatus:     asset.RightsStatus,
 			VisionStatus:     asset.VisionStatus,
 			VisionLastError:  asset.VisionLastError,
@@ -337,6 +266,45 @@ func (service *Service) SetHidden(
 	return service.repository.SetHidden(ctx, restaurantID, assetID, hiddenBy)
 }
 
+func (service *Service) ReviewOwnedAsset(
+	ctx context.Context,
+	restaurantID, assetID, reviewedBy uuid.UUID,
+	approvalStatus, note string,
+) (PublicMedia, error) {
+	approvalStatus = strings.ToLower(strings.TrimSpace(approvalStatus))
+	if approvalStatus != "approved" && approvalStatus != "rejected" {
+		return PublicMedia{}, fmt.Errorf("approval status must be approved or rejected")
+	}
+	asset, err := service.repository.SetApproval(
+		ctx, restaurantID, assetID, reviewedBy, approvalStatus, strings.TrimSpace(note),
+	)
+	if err != nil {
+		return PublicMedia{}, err
+	}
+	url := ""
+	if service.objects != nil {
+		url = service.objects.PublicURL(asset.StorageKey)
+	}
+	assetIDCopy := asset.ID
+	return PublicMedia{
+		ID:             &assetIDCopy,
+		URL:            url,
+		SourceKind:     asset.SourceKind,
+		MediaType:      asset.MediaType,
+		Caption:        asset.Caption,
+		AltText:        asset.AltText,
+		WidthPx:        asset.WidthPx,
+		HeightPx:       asset.HeightPx,
+		PlacementRole:  asset.PlacementRole,
+		ApprovalStatus: asset.ApprovalStatus,
+		ReviewedAt:     asset.ReviewedAt,
+		ReviewedBy:     asset.ReviewedBy,
+		ReviewNote:     asset.ReviewNote,
+		RightsStatus:   asset.RightsStatus,
+		HiddenAt:       asset.HiddenAt,
+	}, nil
+}
+
 func decodeTags(raw json.RawMessage) []string {
 	var tags []string
 	if len(raw) > 0 {
@@ -355,72 +323,4 @@ func googleAttributions(source []placesprovider.Attribution) []Attribution {
 		})
 	}
 	return attributions
-}
-
-func normalizeGoogleMediaType(value string) string {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "food_photo", "food":
-		return "food"
-	case "interior", "ambience":
-		return "interior"
-	case "logo":
-		return "logo"
-	case "menu_document", "menu_list", "menu_ocr":
-		return "menu_document"
-	case "drink", "exterior", "team", "event", "other":
-		return strings.ToLower(strings.TrimSpace(value))
-	default:
-		return "other"
-	}
-}
-
-func livePriority(mediaType string) int {
-	switch mediaType {
-	case "exterior":
-		return 0
-	case "interior":
-		return 1
-	case "food", "drink":
-		return 2
-	case "team", "event":
-		return 3
-	case "logo":
-		return 4
-	default:
-		return 5
-	}
-}
-
-func livePlacement(mediaType string) string {
-	switch mediaType {
-	case "exterior", "interior":
-		return "ambience_gallery"
-	case "food", "drink":
-		return "food_gallery"
-	case "logo":
-		return "logo"
-	default:
-		return "gallery"
-	}
-}
-
-func liveAltText(mediaType string) string {
-	switch mediaType {
-	case "exterior":
-		return "Restaurant exterior"
-	case "interior":
-		return "Restaurant interior and atmosphere"
-	case "food":
-		return "Food served at the restaurant"
-	case "drink":
-		return "Drink served at the restaurant"
-	case "logo":
-		return "Restaurant logo"
-	case "team":
-		return "Restaurant team"
-	case "event":
-		return "Restaurant event"
-	default:
-		return "Restaurant photo"
-	}
 }

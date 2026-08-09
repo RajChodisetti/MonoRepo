@@ -33,3 +33,4 @@ tuvi-website/app/.next/
 tmp/
 .run/
 infra/docker/stack.env
+infra/docker/llm.env

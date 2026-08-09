@@ -87,7 +87,28 @@ func (handler *TrackingHandler) Open(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(trackingPixelGIF)
 }
 
+func (handler *TrackingHandler) UnsubscribeConfirm(w http.ResponseWriter, r *http.Request) {
+	setUnsubscribeSecurityHeaders(w)
+	record, err := handler.repo.GetTrackingToken(r.Context(), r.PathValue("token"))
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			handler.writeError(w, http.StatusNotFound, "not_found", "Unsubscribe link was not found.")
+			return
+		}
+		handler.writeError(w, http.StatusInternalServerError, "internal_error", "An internal error occurred.")
+		return
+	}
+	if record.TokenType != campaigns.TokenUnsubscribe || strings.TrimSpace(record.RecipientEmail) == "" {
+		handler.writeError(w, http.StatusNotFound, "not_found", "Unsubscribe link was not found.")
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Manage email preferences</title><style>body{font-family:system-ui,sans-serif;background:#f7f7f5;color:#171717;margin:0}main{max-width:34rem;margin:10vh auto;padding:2rem;background:white;border:1px solid #ddd;border-radius:1rem}button,a{font:inherit}button{min-height:44px;padding:.7rem 1rem;border:0;border-radius:.6rem;background:#171717;color:white;font-weight:700;cursor:pointer}a{color:#171717}p{line-height:1.55}</style></head><body><main><h1>Stop outreach emails?</h1><p>Confirm below and Tuvi Solutions will stop sending outreach emails to this address.</p><form method="post"><button type="submit">Opt out of emails</button></form><p><a href="https://tuvisolutions.com" rel="noreferrer">Visit Tuvi Solutions</a></p></main></body></html>`))
+}
+
 func (handler *TrackingHandler) Unsubscribe(w http.ResponseWriter, r *http.Request) {
+	setUnsubscribeSecurityHeaders(w)
 	token := r.PathValue("token")
 	record, err := handler.repo.GetTrackingToken(r.Context(), token)
 	if err != nil {
@@ -120,13 +141,19 @@ func (handler *TrackingHandler) Unsubscribe(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	meta, _ := json.Marshal(map[string]any{
-		"token":              token,
-		"recipient_snapshot": record.RecipientSnapshot,
-	})
+	meta, _ := json.Marshal(map[string]any{"recipient_snapshot": record.RecipientSnapshot})
 	_ = handler.repo.InsertEvent(r.Context(), record.CampaignID, record.RestaurantID, campaigns.EventUnsubscribed, meta)
+	_, _ = handler.repo.Stop(r.Context(), record.CampaignID, "recipient unsubscribed")
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte(`<!DOCTYPE html><html><body><h1>Unsubscribed</h1><p>You will no longer receive outreach emails from Tuvi Solutions.</p></body></html>`))
+	_, _ = w.Write([]byte(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Opt-out confirmed</title><style>body{font-family:system-ui,sans-serif;background:#f7f7f5;color:#171717;margin:0}main{max-width:34rem;margin:10vh auto;padding:2rem;background:white;border:1px solid #ddd;border-radius:1rem}a{color:#171717}p{line-height:1.55}</style></head><body><main><h1>You have opted out</h1><p>Tuvi Solutions will no longer send outreach emails to this address.</p><p><a href="https://tuvisolutions.com" rel="noreferrer">Visit Tuvi Solutions</a></p></main></body></html>`))
+}
+
+func setUnsubscribeSecurityHeaders(w http.ResponseWriter) {
+	w.Header().Set("Cache-Control", "no-store, max-age=0")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("X-Frame-Options", "DENY")
 }

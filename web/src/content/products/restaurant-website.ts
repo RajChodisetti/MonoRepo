@@ -10,7 +10,7 @@ export const restaurantWebsite: ProductPageConfig = {
     heading: "A website built to sell food — not just look pretty.",
     subheading:
       "Tuvi builds restaurant sites that win local search, showcase your brand, and turn visits into commission-free online orders.",
-    primaryCta: { label: "Get a free demo", href: "/demo" },
+    primaryCta: { label: "Get a free demo", href: "/book" },
     secondaryCta: { label: "See how it works", href: "/how-it-works" },
     testimonial: {
       imageSrc: "/resources/resource-website-hero.png",

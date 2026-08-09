@@ -236,7 +236,7 @@ export function ScrapedDetailsPanel({
       : 0;
   const pendingPhotosHint =
     googlePhotoCount > 0
-      ? `Google reports ${googlePhotoCount} photo(s), but URLs are not stored in DB yet (Places photo names expire). They are fetched during OCR enrichment — not during Places scrape.`
+      ? `Google reports ${googlePhotoCount} photo(s), but expiring URLs are not stored in the database. Open the Photos tab to resolve the current attributed reference URLs.`
       : undefined;
 
   const gallery = [
@@ -274,9 +274,8 @@ export function ScrapedDetailsPanel({
             alignItems: "center",
             marginBottom: "0.85rem",
           }}
-        >
+          >
           <h2 style={{ margin: 0, fontSize: "1.15rem" }}>Scraped details</h2>
-          <StatusBadge status={preview?.ocr_status || "ocr"} />
           <StatusBadge status={preview?.review_status || "review"} />
           {profile.scrape_status ? (
             <StatusBadge status={String(profile.scrape_status)} />
@@ -349,7 +348,7 @@ export function ScrapedDetailsPanel({
       <ImageGrid
         title="Menu board photos"
         images={uniq(menus)}
-        emptyHint="No menu board images stored yet (OCR / enrichment step)."
+        emptyHint="No menu board reference images are stored."
       />
 
       {(siteContent?.menu_items?.length || 0) > 0 ? (

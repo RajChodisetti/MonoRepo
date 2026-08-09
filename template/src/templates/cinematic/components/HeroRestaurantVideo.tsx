@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { gsap, registerGsap, ScrollTrigger } from "@/lib/gsap";
+import { gsap, registerGsap } from "@/lib/gsap";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 import type { RestaurantContent } from "@/data/types/restaurant";
 import type { GalleryImage } from "@/data/types/gallery";

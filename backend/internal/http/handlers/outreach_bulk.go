@@ -5,6 +5,8 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -112,116 +114,153 @@ func (handler *OutreachBulkHandler) Status(w http.ResponseWriter, r *http.Reques
 	handler.writeJSON(w, http.StatusOK, result)
 }
 
-func (handler *OutreachBulkHandler) PreviewAdHoc(w http.ResponseWriter, r *http.Request) {
+func (handler *OutreachBulkHandler) ListSequences(w http.ResponseWriter, r *http.Request) {
 	principal, ok := auth.PrincipalFromContext(r.Context())
 	if !ok {
 		handler.writeError(w, http.StatusUnauthorized, "unauthorized", "Authentication is required.")
 		return
 	}
-
-	restaurantID, err := restaurantIDFromRequest(r)
+	result, err := handler.service.ListSequences(r.Context(), principal)
 	if err != nil {
-		handler.writeError(w, http.StatusBadRequest, "invalid_request", "Restaurant id must be a valid UUID.")
+		handler.writeSequenceError(w, err)
 		return
 	}
-
-	preview, err := handler.service.PreviewAdHoc(r.Context(), principal, restaurantID)
-	if err != nil {
-		handler.writeAdHocError(w, err)
-		return
-	}
-
-	handler.writeJSON(w, http.StatusOK, preview)
-}
-
-func (handler *OutreachBulkHandler) SendAdHoc(w http.ResponseWriter, r *http.Request) {
-	principal, ok := auth.PrincipalFromContext(r.Context())
-	if !ok {
-		handler.writeError(w, http.StatusUnauthorized, "unauthorized", "Authentication is required.")
-		return
-	}
-
-	restaurantID, err := restaurantIDFromRequest(r)
-	if err != nil {
-		handler.writeError(w, http.StatusBadRequest, "invalid_request", "Restaurant id must be a valid UUID.")
-		return
-	}
-
-	result, err := handler.service.SendAdHoc(r.Context(), principal, restaurantID)
-	if err != nil {
-		handler.writeAdHocError(w, err)
-		return
-	}
-
 	handler.writeJSON(w, http.StatusOK, result)
 }
 
-type sendAdHocBatchRequest struct {
-	RestaurantIDs []string `json:"restaurant_ids"`
-}
-
-func (handler *OutreachBulkHandler) SendAdHocBatch(w http.ResponseWriter, r *http.Request) {
+func (handler *OutreachBulkHandler) CreateSequence(w http.ResponseWriter, r *http.Request) {
 	principal, ok := auth.PrincipalFromContext(r.Context())
 	if !ok {
 		handler.writeError(w, http.StatusUnauthorized, "unauthorized", "Authentication is required.")
 		return
 	}
-
-	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	var request outreach.CreateSequenceInput
+	if err := decodeOutreachJSON(r, &request); err != nil {
+		handler.writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+	result, err := handler.service.CreateSequenceDraft(r.Context(), principal, request)
 	if err != nil {
-		handler.writeError(w, http.StatusBadRequest, "invalid_request", "Could not read request body.")
+		handler.writeSequenceError(w, err)
 		return
 	}
-	var request sendAdHocBatchRequest
-	if err := json.Unmarshal(body, &request); err != nil {
-		handler.writeError(w, http.StatusBadRequest, "invalid_request", "Request body must be valid JSON.")
-		return
-	}
-	if len(request.RestaurantIDs) == 0 {
-		handler.writeError(w, http.StatusBadRequest, "invalid_request", "restaurant_ids must not be empty.")
-		return
-	}
-
-	restaurantIDs := make([]uuid.UUID, 0, len(request.RestaurantIDs))
-	for _, raw := range request.RestaurantIDs {
-		id, err := uuid.Parse(raw)
-		if err != nil {
-			handler.writeError(w, http.StatusBadRequest, "invalid_request", "restaurant_ids must all be valid UUIDs.")
-			return
-		}
-		restaurantIDs = append(restaurantIDs, id)
-	}
-
-	results, err := handler.service.SendAdHocBatch(r.Context(), principal, restaurantIDs)
-	if err != nil {
-		handler.writeAdHocError(w, err)
-		return
-	}
-
-	handler.writeJSON(w, http.StatusOK, map[string]any{"items": results})
+	handler.writeJSON(w, http.StatusCreated, result)
 }
 
-func (handler *OutreachBulkHandler) writeAdHocError(w http.ResponseWriter, err error) {
+func (handler *OutreachBulkHandler) UpdateSequence(w http.ResponseWriter, r *http.Request) {
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		handler.writeError(w, http.StatusUnauthorized, "unauthorized", "Authentication is required.")
+		return
+	}
+	sequenceID, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		handler.writeError(w, http.StatusBadRequest, "invalid_request", "Sequence id must be a valid UUID.")
+		return
+	}
+	var request outreach.UpdateSequenceInput
+	if err := decodeOutreachJSON(r, &request); err != nil {
+		handler.writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+	result, err := handler.service.UpdateSequenceDraft(r.Context(), principal, sequenceID, request)
+	if err != nil {
+		handler.writeSequenceError(w, err)
+		return
+	}
+	handler.writeJSON(w, http.StatusOK, result)
+}
+
+type approveSequenceRequest struct {
+	ExpectedUpdatedAt time.Time `json:"expected_updated_at"`
+}
+
+func (handler *OutreachBulkHandler) ApproveSequence(w http.ResponseWriter, r *http.Request) {
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		handler.writeError(w, http.StatusUnauthorized, "unauthorized", "Authentication is required.")
+		return
+	}
+	sequenceID, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		handler.writeError(w, http.StatusBadRequest, "invalid_request", "Sequence id must be a valid UUID.")
+		return
+	}
+	var request approveSequenceRequest
+	if err := decodeOutreachJSON(r, &request); err != nil {
+		handler.writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+	result, err := handler.service.ApproveSequence(r.Context(), principal, sequenceID, request.ExpectedUpdatedAt)
+	if err != nil {
+		handler.writeSequenceError(w, err)
+		return
+	}
+	handler.writeJSON(w, http.StatusOK, result)
+}
+
+func (handler *OutreachBulkHandler) PreviewSequence(w http.ResponseWriter, r *http.Request) {
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		handler.writeError(w, http.StatusUnauthorized, "unauthorized", "Authentication is required.")
+		return
+	}
+	sequenceID, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		handler.writeError(w, http.StatusBadRequest, "invalid_request", "Sequence id must be a valid UUID.")
+		return
+	}
+	var request outreach.PreviewSequenceInput
+	if err := decodeOutreachJSON(r, &request); err != nil {
+		handler.writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+	result, err := handler.service.PreviewSequence(r.Context(), principal, sequenceID, request)
+	if err != nil {
+		handler.writeSequenceError(w, err)
+		return
+	}
+	handler.writeJSON(w, http.StatusOK, result)
+}
+
+func (handler *OutreachBulkHandler) ListRecipients(w http.ResponseWriter, r *http.Request) {
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		handler.writeError(w, http.StatusUnauthorized, "unauthorized", "Authentication is required.")
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	result, err := handler.service.ListRecipientProgress(r.Context(), principal, limit, offset)
+	if err != nil {
+		handler.writeSequenceError(w, err)
+		return
+	}
+	handler.writeJSON(w, http.StatusOK, result)
+}
+
+func decodeOutreachJSON(r *http.Request, target any) error {
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil {
+		return errors.New("could not read request body")
+	}
+	if len(body) == 0 || json.Unmarshal(body, target) != nil {
+		return errors.New("request body must be valid JSON")
+	}
+	return nil
+}
+
+func (handler *OutreachBulkHandler) writeSequenceError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, restaurants.ErrForbidden):
-		handler.writeError(w, http.StatusForbidden, "forbidden", "You do not have access to this restaurant.")
+		handler.writeError(w, http.StatusForbidden, "forbidden", "Internal administrator access is required.")
 	case errors.Is(err, repository.ErrNotFound):
-		handler.writeError(w, http.StatusNotFound, "not_found", "Restaurant was not found.")
-	case errors.Is(err, outreach.ErrSendingDisabled):
-		handler.writeError(w, http.StatusServiceUnavailable, "email_sending_disabled", "Email sending is disabled.")
-	case errors.Is(err, outreach.ErrNotConfigured):
-		handler.writeError(w, http.StatusServiceUnavailable, "outreach_not_configured", "No email provider is configured.")
-	case errors.Is(err, outreach.ErrNoContactEmail):
-		handler.writeError(w, http.StatusBadRequest, "no_contact_email", "This restaurant has no valid contact email.")
-	case errors.Is(err, outreach.ErrEmailSuppressed):
-		handler.writeError(w, http.StatusBadRequest, "email_suppressed", "This recipient has opted out of outreach email.")
-	case errors.Is(err, outreach.ErrNoCampaignDraft):
-		handler.writeError(w, http.StatusBadRequest, "no_campaign_draft", "No campaign draft exists yet for this restaurant. Create one from the Campaign tab first.")
-	case errors.Is(err, outreach.ErrDemoLinkInvalid):
-		handler.writeError(w, http.StatusBadRequest, "demo_link_invalid", "Publish a current demo site before sending this email.")
-	case errors.Is(err, outreach.ErrDeliverySkipped):
-		handler.writeError(w, http.StatusServiceUnavailable, "adhoc_delivery_skipped", "Email provider skipped or redirected the delivery; the restaurant was not marked contacted.")
+		handler.writeError(w, http.StatusNotFound, "not_found", "Outreach sequence was not found.")
+	case errors.Is(err, outreach.ErrSequenceStale):
+		handler.writeError(w, http.StatusConflict, "stale_sequence", err.Error())
+	case errors.Is(err, outreach.ErrSequenceInvalid):
+		handler.writeError(w, http.StatusBadRequest, "invalid_sequence", err.Error())
 	default:
-		handler.writeError(w, http.StatusInternalServerError, "adhoc_send_failed", err.Error())
+		handler.writeError(w, http.StatusInternalServerError, "sequence_request_failed", err.Error())
 	}
 }

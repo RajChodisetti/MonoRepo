@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 	"time"
 
@@ -15,7 +16,11 @@ import (
 	emailprovider "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/email"
 )
 
-var ErrConflict = errors.New("slot already booked")
+var (
+	ErrConflict                 = errors.New("slot already booked")
+	ErrInvalidCalendar          = errors.New("invalid consultation calendar")
+	ErrCalendarRevisionConflict = errors.New("consultation calendar revision conflict")
+)
 
 type Service struct {
 	cfg     config.ConsultationConfig
@@ -85,6 +90,230 @@ type BookConflict struct {
 	Status       string   `json:"status"`
 	Message      string   `json:"message"`
 	Alternatives []string `json:"alternatives"`
+}
+
+func (s *Service) GetCalendar(ctx context.Context, month string) (CalendarResult, error) {
+	monthStart, err := ParseMonth(month, s.cfg.Timezone)
+	if err != nil {
+		return CalendarResult{}, invalidCalendarError("%v", err)
+	}
+	return s.buildCalendar(ctx, monthStart, time.Now().In(s.cfg.Timezone))
+}
+
+func (s *Service) UpdateCalendar(
+	ctx context.Context,
+	month string,
+	updates []CalendarSlotUpdate,
+	expectedRevision int64,
+	updatedBy uuid.UUID,
+) (CalendarResult, error) {
+	monthStart, err := ParseMonth(month, s.cfg.Timezone)
+	if err != nil {
+		return CalendarResult{}, invalidCalendarError("%v", err)
+	}
+
+	if expectedRevision < 0 {
+		return CalendarResult{}, invalidCalendarError("expected_revision must be zero or greater")
+	}
+
+	now := time.Now().In(s.cfg.Timezone)
+	allCandidates := make(map[int64]time.Time)
+	expectedFuture := make(map[int64]time.Time)
+	for _, slot := range GenerateMonthCandidateSlots(s.slotCfg, monthStart) {
+		allCandidates[slotKey(slot)] = slot
+		if slot.After(now) {
+			expectedFuture[slotKey(slot)] = slot
+		}
+	}
+
+	seen := make(map[int64]struct{}, len(updates))
+	inputs := make([]SlotOverrideInput, 0, len(updates))
+	for _, update := range updates {
+		rawISO := strings.TrimSpace(update.ISO)
+		parsed, err := time.Parse(time.RFC3339, rawISO)
+		if err != nil {
+			return CalendarResult{}, invalidCalendarError("slot %q must be RFC3339", rawISO)
+		}
+		key := slotKey(parsed)
+		expectedSlot, ok := allCandidates[key]
+		if !ok {
+			return CalendarResult{}, invalidCalendarError(
+				"slot %q is not an on-grid candidate in %s",
+				rawISO,
+				monthStart.Format("2006-01"),
+			)
+		}
+		if rawISO != expectedSlot.Format(time.RFC3339) {
+			return CalendarResult{}, invalidCalendarError(
+				"slot %q must use the configured %s timezone offset",
+				rawISO,
+				s.cfg.Timezone.String(),
+			)
+		}
+		if _, duplicate := seen[key]; duplicate {
+			return CalendarResult{}, invalidCalendarError("slot %q is duplicated", rawISO)
+		}
+		seen[key] = struct{}{}
+		// A slot may cross from future to past while an admin has the month
+		// open. It is still validated as a canonical candidate, then ignored.
+		if !expectedSlot.After(now) {
+			continue
+		}
+		inputs = append(inputs, SlotOverrideInput{
+			SlotStart:   expectedSlot,
+			IsAvailable: update.IsAvailable,
+		})
+	}
+
+	for key, expectedSlot := range expectedFuture {
+		if _, ok := seen[key]; !ok {
+			return CalendarResult{}, invalidCalendarError(
+				"slots must contain every future on-grid candidate for %s; missing %q",
+				monthStart.Format("2006-01"),
+				expectedSlot.Format(time.RFC3339),
+			)
+		}
+	}
+
+	monthEnd := monthStart.AddDate(0, 1, 0)
+	if _, err := s.repo.ReplaceMonthSlotOverrides(
+		ctx,
+		monthStart,
+		monthEnd,
+		inputs,
+		expectedRevision,
+		updatedBy,
+	); err != nil {
+		return CalendarResult{}, err
+	}
+	return s.buildCalendar(ctx, monthStart, time.Now().In(s.cfg.Timezone))
+}
+
+func (s *Service) buildCalendar(
+	ctx context.Context,
+	monthStart time.Time,
+	now time.Time,
+) (CalendarResult, error) {
+	monthEnd := monthStart.AddDate(0, 1, 0)
+	var (
+		overrides []SlotOverride
+		booked    []BookedInterval
+		revision  int64
+	)
+	// The revision fence prevents returning an old override snapshot with a new
+	// revision, which could otherwise let a client overwrite a save it never saw.
+	for attempt := 0; attempt < 3; attempt++ {
+		before, err := s.repo.CalendarRevision(ctx, monthStart)
+		if err != nil {
+			return CalendarResult{}, err
+		}
+		overrides, err = s.repo.SlotOverrides(ctx, monthStart, monthEnd)
+		if err != nil {
+			return CalendarResult{}, err
+		}
+		booked, err = s.repo.BookedIntervals(ctx, monthStart, monthEnd)
+		if err != nil {
+			return CalendarResult{}, err
+		}
+		after, err := s.repo.CalendarRevision(ctx, monthStart)
+		if err != nil {
+			return CalendarResult{}, err
+		}
+		if before == after {
+			revision = after
+			break
+		}
+		if attempt == 2 {
+			return CalendarResult{}, ErrCalendarRevisionConflict
+		}
+	}
+
+	overrideBySlot := make(map[int64]bool, len(overrides))
+	for _, override := range overrides {
+		overrideBySlot[slotKey(override.SlotStart)] = override.IsAvailable
+	}
+	type calendarSlotAt struct {
+		start time.Time
+		slot  CalendarSlot
+	}
+	entries := make([]calendarSlotAt, 0)
+	onGrid := make(map[int64]struct{})
+	for _, candidate := range GenerateMonthCandidateSlots(s.slotCfg, monthStart) {
+		key := slotKey(candidate)
+		onGrid[key] = struct{}{}
+		isAvailable := true
+		if override, ok := overrideBySlot[key]; ok {
+			isAvailable = override
+		}
+		candidateEnd := candidate.Add(time.Duration(s.cfg.SlotDurationMinutes) * time.Minute)
+		isBooked := false
+		for _, interval := range booked {
+			if intervalsOverlap(candidate, candidateEnd, interval.SlotStart, interval.SlotEnd) {
+				isBooked = true
+				break
+			}
+		}
+		past := !candidate.After(now)
+		entries = append(entries, calendarSlotAt{
+			start: candidate,
+			slot: CalendarSlot{
+				Date:               candidate.Format("2006-01-02"),
+				Time:               FormatSlotTime(candidate),
+				ISO:                candidate.Format(time.RFC3339),
+				IsAvailable:        isAvailable,
+				Booked:             isBooked,
+				Past:               past,
+				EffectiveAvailable: isAvailable && !isBooked && !past,
+				OnGrid:             true,
+			},
+		})
+	}
+
+	// Historical clients could submit an in-hours time that was not aligned to
+	// the configured grid. Preserve visibility of those confirmed calls.
+	for _, interval := range booked {
+		bookedSlot := interval.SlotStart
+		key := slotKey(bookedSlot)
+		if _, ok := onGrid[key]; ok {
+			continue
+		}
+		local := bookedSlot.In(s.cfg.Timezone)
+		if local.Before(monthStart) || !local.Before(monthEnd) {
+			continue
+		}
+		entries = append(entries, calendarSlotAt{
+			start: local,
+			slot: CalendarSlot{
+				Date:               local.Format("2006-01-02"),
+				Time:               FormatSlotTime(local),
+				ISO:                local.Format(time.RFC3339),
+				IsAvailable:        false,
+				Booked:             true,
+				Past:               !local.After(now),
+				EffectiveAvailable: false,
+				OnGrid:             false,
+			},
+		})
+	}
+
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].start.Before(entries[j].start)
+	})
+	slots := make([]CalendarSlot, 0, len(entries))
+	for _, entry := range entries {
+		slots = append(slots, entry.slot)
+	}
+
+	return CalendarResult{
+		Month:               monthStart.Format("2006-01"),
+		Revision:            revision,
+		BookedCallCount:     len(booked),
+		Timezone:            s.cfg.Timezone.String(),
+		SlotDurationMinutes: s.cfg.SlotDurationMinutes,
+		BusinessHourStart:   fmt.Sprintf("%02d:00", s.cfg.BusinessHourStart),
+		BusinessHourEnd:     fmt.Sprintf("%02d:00", s.cfg.BusinessHourEnd),
+		Slots:               slots,
+	}, nil
 }
 
 func (s *Service) GetAvailability(ctx context.Context, dateStr string, days int) (AvailabilityResult, error) {
@@ -161,35 +390,13 @@ func (s *Service) Book(ctx context.Context, req BookRequest) (BookSuccess, *Book
 		return BookSuccess{}, nil, err
 	}
 
-	free, err := s.isSlotFree(ctx, slotStart)
-	if err != nil {
-		return BookSuccess{}, nil, err
-	}
-	if !free {
-		alts, err := s.nearestAlternatives(ctx, slotStart, 3)
-		if err != nil {
-			return BookSuccess{}, nil, err
-		}
-		return BookSuccess{}, &BookConflict{
-			Status:       "conflict",
-			Message:      "That slot is already booked.",
-			Alternatives: alts,
-		}, nil
-	}
-
 	code, err := GenerateConfirmationCode()
 	if err != nil {
 		return BookSuccess{}, nil, err
 	}
 
 	id := uuid.New()
-	tx, err := s.repo.BeginTx(ctx)
-	if err != nil {
-		return BookSuccess{}, nil, err
-	}
-	defer tx.Rollback(ctx)
-
-	err = s.repo.Insert(ctx, tx, InsertInput{
+	inserted, err := s.repo.InsertIfAvailable(ctx, InsertInput{
 		ID:               id,
 		ConfirmationCode: code,
 		SlotStart:        slotStart,
@@ -202,22 +409,13 @@ func (s *Service) Book(ctx context.Context, req BookRequest) (BookSuccess, *Book
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			alts, altErr := s.nearestAlternatives(ctx, slotStart, 3)
-			if altErr != nil {
-				return BookSuccess{}, nil, altErr
-			}
-			return BookSuccess{}, &BookConflict{
-				Status:       "conflict",
-				Message:      "That slot is already booked.",
-				Alternatives: alts,
-			}, nil
+		if errors.Is(err, ErrConflict) || (errors.As(err, &pgErr) && (pgErr.Code == "23505" || pgErr.Code == "23P01")) {
+			return s.bookingConflict(ctx, slotStart, "That slot is already booked.")
 		}
 		return BookSuccess{}, nil, err
 	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return BookSuccess{}, nil, err
+	if !inserted {
+		return s.bookingConflict(ctx, slotStart, "That slot is not available.")
 	}
 
 	go s.sendBookingEmail(context.Background(), req, code, slotStart, "")
@@ -234,6 +432,22 @@ func (s *Service) Book(ctx context.Context, req BookRequest) (BookSuccess, *Book
 		CalendarLink:     "",
 		Message:          fmt.Sprintf("Your consultation is booked. Confirmation number %s.", code),
 	}, nil, nil
+}
+
+func (s *Service) bookingConflict(
+	ctx context.Context,
+	slotStart time.Time,
+	message string,
+) (BookSuccess, *BookConflict, error) {
+	alternatives, err := s.nearestAlternatives(ctx, slotStart, 3)
+	if err != nil {
+		return BookSuccess{}, nil, err
+	}
+	return BookSuccess{}, &BookConflict{
+		Status:       "conflict",
+		Message:      message,
+		Alternatives: alternatives,
+	}, nil
 }
 
 func (s *Service) resolveStartDate(dateStr string) (time.Time, error) {
@@ -255,7 +469,7 @@ func (s *Service) parseSlot(dateStr, timeStr string) (time.Time, time.Time, erro
 		return time.Time{}, time.Time{}, err
 	}
 	now := time.Now().In(s.cfg.Timezone)
-	if slotStart.Before(now) {
+	if !slotStart.After(now) {
 		return time.Time{}, time.Time{}, fmt.Errorf("cannot book a slot in the past")
 	}
 	if slotStart.Weekday() == time.Saturday || slotStart.Weekday() == time.Sunday {
@@ -264,6 +478,12 @@ func (s *Service) parseSlot(dateStr, timeStr string) (time.Time, time.Time, erro
 	hour := slotStart.Hour()
 	if hour < s.cfg.BusinessHourStart || hour >= s.cfg.BusinessHourEnd {
 		return time.Time{}, time.Time{}, fmt.Errorf("time must be between %02d:00 and %02d:00", s.cfg.BusinessHourStart, s.cfg.BusinessHourEnd)
+	}
+	if !IsCandidateSlot(s.slotCfg, slotStart) {
+		return time.Time{}, time.Time{}, fmt.Errorf(
+			"time must align to a %d-minute consultation slot",
+			s.cfg.SlotDurationMinutes,
+		)
 	}
 	slotEnd := slotStart.Add(time.Duration(s.cfg.SlotDurationMinutes) * time.Minute)
 	return slotStart, slotEnd, nil
@@ -278,14 +498,34 @@ func (s *Service) listFreeSlots(ctx context.Context, startDate time.Time, days i
 	rangeStart := candidates[0]
 	rangeEnd := candidates[len(candidates)-1].Add(time.Duration(s.cfg.SlotDurationMinutes) * time.Minute)
 
-	booked, err := s.repo.BookedSlotStarts(ctx, rangeStart, rangeEnd.Add(24*time.Hour))
+	booked, err := s.repo.BookedIntervals(ctx, rangeStart, rangeEnd)
 	if err != nil {
 		return nil, err
+	}
+	overrides, err := s.repo.SlotOverrides(ctx, rangeStart, rangeEnd)
+	if err != nil {
+		return nil, err
+	}
+	overrideBySlot := make(map[int64]bool, len(overrides))
+	for _, override := range overrides {
+		overrideBySlot[slotKey(override.SlotStart)] = override.IsAvailable
 	}
 
 	var free []time.Time
 	for _, slot := range candidates {
-		if ContainsTime(booked, slot) {
+		key := slotKey(slot)
+		if available, overridden := overrideBySlot[key]; overridden && !available {
+			continue
+		}
+		slotEnd := slot.Add(time.Duration(s.cfg.SlotDurationMinutes) * time.Minute)
+		isBooked := false
+		for _, interval := range booked {
+			if intervalsOverlap(slot, slotEnd, interval.SlotStart, interval.SlotEnd) {
+				isBooked = true
+				break
+			}
+		}
+		if isBooked {
 			continue
 		}
 		free = append(free, slot)
@@ -294,7 +534,15 @@ func (s *Service) listFreeSlots(ctx context.Context, startDate time.Time, days i
 }
 
 func (s *Service) isSlotFree(ctx context.Context, slotStart time.Time) (bool, error) {
-	booked, err := s.repo.IsSlotBooked(ctx, slotStart)
+	enabled, err := s.repo.IsSlotEnabled(ctx, slotStart)
+	if err != nil {
+		return false, err
+	}
+	if !enabled {
+		return false, nil
+	}
+	slotEnd := slotStart.Add(time.Duration(s.cfg.SlotDurationMinutes) * time.Minute)
+	booked, err := s.repo.HasConfirmedOverlap(ctx, slotStart, slotEnd)
 	if err != nil {
 		return false, err
 	}
@@ -334,6 +582,14 @@ func (s *Service) nearestAlternatives(ctx context.Context, around time.Time, lim
 		}
 	}
 	return alts, nil
+}
+
+func invalidCalendarError(format string, args ...any) error {
+	return fmt.Errorf("%w: %s", ErrInvalidCalendar, fmt.Sprintf(format, args...))
+}
+
+func slotKey(slot time.Time) int64 {
+	return slot.UTC().Unix()
 }
 
 func (s *Service) sendBookingEmail(ctx context.Context, req BookRequest, code string, slotStart time.Time, calendarLink string) {

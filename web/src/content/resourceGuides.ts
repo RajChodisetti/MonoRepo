@@ -337,7 +337,7 @@ export const resourceGuides: ResourceGuide[] = [
       "Demo calls map the stack to your locations",
       "Email us with restaurant name + city for fastest help",
     ],
-    relatedHref: "/demo",
+    relatedHref: "/book",
     relatedLabel: "Get a free demo",
     sections: [
       {
@@ -397,7 +397,7 @@ export const resourceGuides: ResourceGuide[] = [
       "Demos are available if you want a live walkthrough",
       "We optimise for operators, not ticket bots",
     ],
-    relatedHref: "/demo",
+    relatedHref: "/book",
     relatedLabel: "Book a free demo",
     sections: [
       {

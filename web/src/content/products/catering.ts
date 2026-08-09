@@ -10,7 +10,7 @@ export const catering: ProductPageConfig = {
     heading: "Catering bookings on your website.",
     subheading:
       "Grow high-value group orders with a simple menu guests can book from in minutes. No marketplace fees. You own the guest.",
-    primaryCta: { label: "Get a free demo", href: "/demo" },
+    primaryCta: { label: "Get a free demo", href: "/book" },
     secondaryCta: { label: "See how it works", href: "/how-it-works" },
     testimonial: {
       imageSrc: "/resources/resource-inline-street.png",

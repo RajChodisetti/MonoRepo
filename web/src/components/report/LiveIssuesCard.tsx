@@ -74,9 +74,9 @@ export default function LiveIssuesCard({
       <button
         type="button"
         onClick={onFix}
-        className="mt-3 w-full cursor-pointer rounded-full bg-[#111111] px-4 py-3.5 text-[14px] font-semibold text-white"
+        className="mt-3 min-h-11 w-full cursor-pointer rounded-full bg-[#111111] px-4 py-3.5 text-[14px] font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
       >
-        {locked ? "Verify email — unlock free AI fixes" : "Fix it now with AI"}
+        {locked ? "Verify email — unlock suggested fixes" : "See how Tuvi can help"}
       </button>
     </div>
   );

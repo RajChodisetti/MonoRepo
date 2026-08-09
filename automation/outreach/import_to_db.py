@@ -9,7 +9,7 @@ Imports all leads/*.json and data/*.json files.
 from __future__ import annotations
 
 import argparse
-import hashlib
+import copy
 import json
 import os
 import sys
@@ -55,51 +55,16 @@ def verify_schema(cur) -> None:
         )
 
 
-def verify_ocr_schema(cur) -> None:
+def verify_outreach_schema(cur) -> None:
     verify_schema(cur)
     cur.execute(
         """
-        SELECT COUNT(*) = 7
-        FROM information_schema.columns
-            WHERE table_schema = 'public'
-              AND table_name = 'restaurant_profiles'
-              AND column_name IN (
-                  'ocr_status',
-                  'ocr_started_at',
-                  'ocr_completed_at',
-                  'ocr_attempts',
-                  'ocr_input_fingerprint',
-                  'ocr_claim_id',
-                  'ocr_claim_fingerprint'
-              )
+        SELECT to_regprocedure('ensure_outreach_sequence_enrollment(uuid)') IS NOT NULL
         """
     )
     if not cur.fetchone()[0]:
         raise SystemExit(
-            "Migration 000016 not applied — ocr_status column missing.\n"
-            "Run: make migrate-up"
-        )
-    cur.execute(
-        """
-        SELECT
-            EXISTS (
-                SELECT 1 FROM information_schema.columns
-                WHERE table_schema = 'public'
-                  AND table_name = 'demo_sites'
-                  AND column_name = 'source_profile_fingerprint'
-            )
-            AND EXISTS (
-                SELECT 1 FROM information_schema.columns
-                WHERE table_schema = 'public'
-                  AND table_name = 'email_campaigns'
-                  AND column_name = 'source_profile_fingerprint'
-            )
-            AND to_regprocedure('lead_artifact_current_profile_fingerprint(uuid)') IS NOT NULL
-        """
-    )
-    if not cur.fetchone()[0]:
-        raise SystemExit(
-            "Migration 000022 not applied — automatic artifact profile provenance is missing.\n"
+            "Outreach sequence schema is not ready.\n"
             "Run: make migrate-up"
         )
 
@@ -118,8 +83,25 @@ def jdump(obj) -> str:
     return json.dumps(obj if obj is not None else None)
 
 
-class StaleOCRClaim(RuntimeError):
-    """The OCR input or worker claim changed before a result was persisted."""
+def without_scraped_media(record: dict) -> dict:
+    """Return the durable public-data payload with third-party media removed.
+
+    Google listing photos are resolved live from the stable Place ID by the Go
+    API so attribution is current. Imported review/menu/gallery URLs must not be
+    retained in PostgreSQL, including inside the raw provider payload.
+    """
+    durable = copy.deepcopy(record)
+    durable["images"] = {}
+    for review in durable.get("reviews") or []:
+        if isinstance(review, dict):
+            review["images"] = []
+    for item in durable.get("menu_items") or []:
+        if not isinstance(item, dict):
+            continue
+        item["image_url"] = ""
+        item["image"] = ""
+        item["images"] = []
+    return durable
 
 
 def lock_restaurant_workflow(cur, restaurant_id: uuid.UUID) -> None:
@@ -130,192 +112,11 @@ def lock_restaurant_workflow(cur, restaurant_id: uuid.UUID) -> None:
     )
 
 
-def first_menu_image_url(images, menu_board_urls: set[str] | None = None) -> str:
-    """Pick first food photo URL — never a menu board image."""
-    menu_board_urls = menu_board_urls or set()
-    if not images:
-        return ""
-    if isinstance(images, list):
-        for img in images:
-            if isinstance(img, dict):
-                url = str(img.get("url") or img.get("thumbnail") or "").strip()
-                img_type = str(img.get("image_type") or img.get("source") or "").lower()
-                if not url or url in menu_board_urls:
-                    continue
-                if img_type in ("menu_document", "menu_ocr", "menu_list"):
-                    continue
-                return url
-            if isinstance(img, str) and img.strip() and img.strip() not in menu_board_urls:
-                return img.strip()
-    return ""
-
-
-def image_record_url(img) -> str:
-    if isinstance(img, str):
-        return img.strip()
-    if isinstance(img, dict):
-        return str(img.get("url") or img.get("thumbnail") or "").strip()
-    return ""
-
-
-def ocr_input_fingerprint(record: dict) -> str:
-    """Hash only stable image inputs that can materially change OCR output."""
-    refs: set[str] = set()
-
-    def add(value: str) -> None:
-        value = str(value or "").strip()
-        if value:
-            refs.add(value)
-
-    images = record.get("images") or {}
-    add(images.get("thumbnail") or "")
-    for collection in ("gallery", "menu_photos"):
-        for image in images.get(collection) or []:
-            add(image_record_url(image))
-            if isinstance(image, dict):
-                add(image.get("source_ref") or "")
-    google_place_id = str(((record.get("google") or {}).get("place_id") or "")).strip()
-    if google_place_id:
-        add(f"google-place:{google_place_id}")
-        add(f"google-photo-count:{images.get('google_photo_count') or 0}")
-    for item in record.get("menu_items") or []:
-        for image in item.get("images") or []:
-            add(image_record_url(image))
-
-    encoded = json.dumps(sorted(refs), separators=(",", ":")).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
-
-
-def sync_classified_images(cur, restaurant_id: uuid.UUID, record: dict) -> tuple[int, int]:
-    """Replace menu_images and gallery_images from OCR-classified scrape JSON."""
-    images = record.get("images") or {}
-    menu_photos = images.get("menu_photos") or []
-    gallery = images.get("gallery") or []
-
-    # Replace only OCR-managed rows and only after a replacement set actually
-    # contains stable URLs. Google Places media URLs are intentionally absent;
-    # an empty transient-only result must never erase durable/manual media.
-    menu_has_persistent_urls = any(image_record_url(img) for img in menu_photos)
-    gallery_has_persistent_urls = any(image_record_url(img) for img in gallery)
-    if menu_has_persistent_urls:
-        cur.execute(
-            "DELETE FROM menu_images WHERE restaurant_id = %s AND source = 'menu_ocr'",
-            (restaurant_id,),
-        )
-    if gallery_has_persistent_urls:
-        cur.execute(
-            "DELETE FROM gallery_images WHERE restaurant_id = %s AND source = 'menu_ocr'",
-            (restaurant_id,),
-        )
-
-    menu_count = 0
-    for i, img in enumerate(menu_photos):
-        url = image_record_url(img)
-        if not url:
-            continue
-        thumb = url
-        image_type = "menu_document"
-        confidence = None
-        title = ""
-        metadata = {}
-        if isinstance(img, dict):
-            thumb = str(img.get("thumbnail") or url).strip()
-            image_type = str(img.get("image_type") or "menu_document").strip()
-            confidence = img.get("confidence")
-            title = str(img.get("title") or "").strip()
-            metadata = {
-                k: v for k, v in img.items()
-                if k not in ("url", "thumbnail", "image_type", "confidence", "title")
-            }
-        cur.execute(
-            """
-            INSERT INTO menu_images (
-                restaurant_id, url, thumbnail_url, image_type, confidence,
-                title, source, sort_order, metadata
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb)
-            ON CONFLICT (restaurant_id, url) DO UPDATE SET
-                thumbnail_url = EXCLUDED.thumbnail_url,
-                image_type = EXCLUDED.image_type,
-                confidence = EXCLUDED.confidence,
-                title = EXCLUDED.title,
-                source = EXCLUDED.source,
-                sort_order = EXCLUDED.sort_order,
-                metadata = EXCLUDED.metadata,
-                updated_at = now()
-            """,
-            (
-                restaurant_id,
-                url,
-                thumb,
-                image_type,
-                confidence,
-                title,
-                "menu_ocr",
-                i,
-                jdump(metadata),
-            ),
-        )
-        menu_count += 1
-
-    gallery_count = 0
-    for i, img in enumerate(gallery):
-        url = image_record_url(img)
-        if not url:
-            continue
-        thumb = url
-        image_type = "other"
-        confidence = None
-        title = ""
-        metadata = {}
-        if isinstance(img, dict):
-            thumb = str(img.get("thumbnail") or url).strip()
-            image_type = str(img.get("image_type") or img.get("title") or "other").strip()
-            if image_type == "":
-                image_type = "other"
-            confidence = img.get("confidence")
-            title = str(img.get("title") or "").strip()
-            metadata = {
-                k: v for k, v in img.items()
-                if k not in ("url", "thumbnail", "image_type", "confidence", "title")
-            }
-        cur.execute(
-            """
-            INSERT INTO gallery_images (
-                restaurant_id, url, thumbnail_url, image_type, confidence,
-                title, source, sort_order, metadata
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb)
-            ON CONFLICT (restaurant_id, url) DO UPDATE SET
-                thumbnail_url = EXCLUDED.thumbnail_url,
-                image_type = EXCLUDED.image_type,
-                confidence = EXCLUDED.confidence,
-                title = EXCLUDED.title,
-                source = EXCLUDED.source,
-                sort_order = EXCLUDED.sort_order,
-                metadata = EXCLUDED.metadata,
-                updated_at = now()
-            """,
-            (
-                restaurant_id,
-                url,
-                thumb,
-                image_type,
-                confidence,
-                title,
-                "menu_ocr",
-                i,
-                jdump(metadata),
-            ),
-        )
-        gallery_count += 1
-
-    return menu_count, gallery_count
-
-
 def _invalidate_review_for_artifact_source_change(
     cur,
     restaurant_id: uuid.UUID,
 ) -> None:
-    """Require fresh gates and preparation after identity/public-payload changes."""
+    """Require a fresh human review after identity/public-payload changes."""
     cur.execute(
         """
         UPDATE restaurant_profiles
@@ -327,7 +128,6 @@ def _invalidate_review_for_artifact_source_change(
         """,
         (restaurant_id,),
     )
-    _enqueue_current_verified_preparation(cur, restaurant_id)
     cur.execute(
         """
         UPDATE demo_sites
@@ -339,16 +139,36 @@ def _invalidate_review_for_artifact_source_change(
         """,
         (restaurant_id,),
     )
+
+
+def record_inferred_business_evidence(
+    cur,
+    restaurant_id: uuid.UUID,
+    source: str,
+) -> None:
+    """Record why an imported public business contact entered outreach.
+
+    Express interest and a prior withdrawal are human decisions and must never
+    be overwritten by a later scrape/import refresh.
+    """
+    normalized_source = source.strip() or "business_contact_import"
     cur.execute(
         """
-        UPDATE email_campaigns
-        SET status = 'draft',
-            approved_at = NULL,
-            approved_by = NULL,
+        UPDATE restaurants
+        SET outreach_consent_basis = 'inferred_business',
+            outreach_consent_source = %s,
+            outreach_consent_recorded_at = COALESCE(outreach_consent_recorded_at, now()),
+            outreach_consent_evidence = jsonb_build_object(
+                'policy', 'inferred_business',
+                'source', %s,
+                'recorded_by', 'outreach_import'
+            ),
             updated_at = now()
-        WHERE restaurant_id = %s AND status = 'approved'
+        WHERE id = %s
+          AND shown_interest = false
+          AND outreach_consent_basis NOT IN ('express_interest', 'withdrawn')
         """,
-        (restaurant_id,),
+        (normalized_source, normalized_source, restaurant_id),
     )
 
 
@@ -407,6 +227,8 @@ def upsert_lead(cur, lead: dict) -> uuid.UUID | None:
             )
             if identity_changed:
                 _invalidate_review_for_artifact_source_change(cur, restaurant_id)
+            record_inferred_business_evidence(cur, restaurant_id, "apollo_business_contact")
+            ensure_outreach_enrollment(cur, restaurant_id)
             return restaurant_id
 
     cur.execute(
@@ -445,16 +267,9 @@ def upsert_lead(cur, lead: dict) -> uuid.UUID | None:
             jdump(lead),
         ),
     )
+    record_inferred_business_evidence(cur, restaurant_id, "apollo_business_contact")
+    ensure_outreach_enrollment(cur, restaurant_id)
     return restaurant_id
-
-
-def _menu_board_urls(record: dict) -> set[str]:
-    urls: set[str] = set()
-    for img in (record.get("images") or {}).get("menu_photos") or []:
-        u = image_record_url(img)
-        if u:
-            urls.add(u)
-    return urls
 
 
 def ensure_menu_id(cur, restaurant_id: uuid.UUID) -> uuid.UUID:
@@ -479,8 +294,7 @@ def sync_menu_items_and_reviews(
     *,
     sync_reviews: bool = True,
 ) -> tuple[int, int]:
-    """Sync menu items, optional reviews, and classified image tables."""
-    board_urls = _menu_board_urls(record)
+    """Sync menu items and optional reviews without persisting scraped media."""
     menu_id = ensure_menu_id(cur, restaurant_id)
 
     cur.execute("DELETE FROM menu_items WHERE menu_id = %s", (menu_id,))
@@ -505,8 +319,8 @@ def sync_menu_items_and_reviews(
                 item.get("price_numeric"),
                 (item.get("price") or "").strip(),
                 category,
-                first_menu_image_url(item.get("images"), board_urls),
-                jdump(item.get("images") or []),
+                "",
+                jdump([]),
                 i,
             ),
         )
@@ -526,441 +340,29 @@ def sync_menu_items_and_reviews(
                     (rev.get("review") or "").strip(),
                     rev.get("stars"),
                     (rev.get("date") or "").strip(),
-                    jdump(rev.get("images") or []),
+                    jdump([]),
                     (rev.get("source") or "").strip(),
                     i,
                 ),
             )
 
-    return sync_classified_images(cur, restaurant_id, record)
+    # Google/third-party images remain live attributed resources. Only media
+    # uploaded or explicitly approved through the admin workflow is durable.
+    return 0, 0
 
 
-def _lock_active_ocr_claim(
-    cur,
-    restaurant_id: uuid.UUID,
-    claim_id: uuid.UUID,
-    claim_fingerprint: str,
-) -> None:
+def ensure_outreach_enrollment(cur, restaurant_id: uuid.UUID) -> None:
+    """Idempotently enroll an eligible inferred-business lead in the active sequence."""
     cur.execute(
-        """
-        SELECT 1
-        FROM restaurant_profiles
-        WHERE restaurant_id = %s
-          AND ocr_status = 'running'
-          AND ocr_claim_id = %s
-          AND ocr_claim_fingerprint = %s
-          AND ocr_input_fingerprint = %s
-        FOR UPDATE
-        """,
-        (restaurant_id, claim_id, claim_fingerprint, claim_fingerprint),
+        "SELECT ensure_outreach_sequence_enrollment(%s)",
+        (restaurant_id,),
     )
-    if cur.fetchone() is None:
-        raise StaleOCRClaim("OCR claim or input fingerprint is no longer current")
-
-
-def apply_verified_record(
-    cur,
-    restaurant_id: uuid.UUID,
-    record: dict,
-    *,
-    claim_id: uuid.UUID,
-    claim_fingerprint: str,
-) -> tuple[int, int]:
-    """
-    Write OCR-verified scrape JSON back to an existing restaurant row.
-    Updates profile images/raw_public_data, menu items, and classified image tables.
-    """
-    lock_restaurant_workflow(cur, restaurant_id)
-    _lock_active_ocr_claim(cur, restaurant_id, claim_id, claim_fingerprint)
-    raw_record = json.dumps(record)
-    cur.execute(
-        """
-        UPDATE restaurant_profiles
-        SET
-            images = %s::jsonb,
-            raw_public_data = %s::jsonb,
-            scrape_errors = %s::jsonb,
-            updated_at = now()
-        WHERE restaurant_id = %s
-        """,
-        (
-            jdump(record.get("images") or {}),
-            raw_record,
-            jdump(record.get("errors") or []),
-            restaurant_id,
-        ),
-    )
-    return sync_menu_items_and_reviews(cur, restaurant_id, record, sync_reviews=False)
-
-
-def mark_ocr_status(
-    cur,
-    restaurant_id: uuid.UUID,
-    status: str,
-    *,
-    claim_id: uuid.UUID,
-    claim_fingerprint: str,
-    errors: list[str] | None = None,
-    summary: dict | None = None,
-) -> None:
-    if status not in ("verified", "no_images", "failed"):
-        raise ValueError(f"Unsupported OCR status: {status}")
-    summary_json = jdump(summary) if summary is not None else None
-    lock_restaurant_workflow(cur, restaurant_id)
-    cur.execute(
-        """
-        UPDATE restaurant_profiles
-        SET
-            ocr_status = %s,
-            ocr_verified = (%s = 'verified'),
-            ocr_verified_at = CASE WHEN %s = 'verified' THEN now() ELSE NULL END,
-            ocr_started_at = CASE
-                WHEN %s = 'running' THEN now()
-                ELSE ocr_started_at
-            END,
-            ocr_completed_at = CASE
-                WHEN %s IN ('verified', 'no_images', 'failed') THEN now()
-                ELSE NULL
-            END,
-            ocr_claim_id = NULL,
-            ocr_claim_fingerprint = NULL,
-            ocr_verification_errors = %s::jsonb,
-            raw_public_data = CASE
-                WHEN %s::jsonb IS NULL THEN raw_public_data
-                ELSE jsonb_set(
-                    COALESCE(raw_public_data, '{}'::jsonb),
-                    '{menu_ocr}',
-                    %s::jsonb,
-                    true
-                )
-            END,
-            updated_at = now()
-        WHERE restaurant_id = %s
-          AND ocr_status = 'running'
-          AND ocr_claim_id = %s
-          AND ocr_claim_fingerprint = %s
-          AND ocr_input_fingerprint = %s
-        """,
-        (
-            status,
-            status,
-            status,
-            status,
-            status,
-            jdump(errors or []),
-            summary_json,
-            summary_json,
-            restaurant_id,
-            claim_id,
-            claim_fingerprint,
-            claim_fingerprint,
-        ),
-    )
-    if cur.rowcount != 1:
-        raise StaleOCRClaim("OCR claim or input fingerprint is no longer current")
-
-
-def mark_ocr_verified(
-    cur,
-    restaurant_id: uuid.UUID,
-    *,
-    claim_id: uuid.UUID,
-    claim_fingerprint: str,
-    note: str = "",
-) -> None:
-    """Compatibility wrapper for older callers."""
-    if note == "no_images":
-        mark_ocr_status(
-            cur,
-            restaurant_id,
-            "no_images",
-            claim_id=claim_id,
-            claim_fingerprint=claim_fingerprint,
-            errors=[note],
-        )
-        return
-    mark_ocr_status(
-        cur,
-        restaurant_id,
-        "verified",
-        claim_id=claim_id,
-        claim_fingerprint=claim_fingerprint,
-        errors=[note] if note else [],
-    )
-
-
-def release_ocr_claim(
-    cur,
-    restaurant_id: uuid.UUID,
-    *,
-    claim_id: uuid.UUID,
-    claim_fingerprint: str,
-    reason: str,
-) -> None:
-    """Return quota/timeout work to pending without consuming an attempt."""
-    lock_restaurant_workflow(cur, restaurant_id)
-    cur.execute(
-        """
-        UPDATE restaurant_profiles
-        SET ocr_status = 'pending',
-            ocr_verified = false,
-            ocr_verified_at = NULL,
-            ocr_started_at = NULL,
-            ocr_completed_at = NULL,
-            ocr_attempts = GREATEST(ocr_attempts - 1, 0),
-            ocr_claim_id = NULL,
-            ocr_claim_fingerprint = NULL,
-            ocr_verification_errors = %s::jsonb,
-            updated_at = now()
-        WHERE restaurant_id = %s
-          AND ocr_status = 'running'
-          AND ocr_claim_id = %s
-          AND ocr_claim_fingerprint = %s
-          AND ocr_input_fingerprint = %s
-        """,
-        (
-            jdump([str(reason or "OCR work deferred")[:500]]),
-            restaurant_id,
-            claim_id,
-            claim_fingerprint,
-            claim_fingerprint,
-        ),
-    )
-    if cur.rowcount != 1:
-        raise StaleOCRClaim("OCR claim or input fingerprint is no longer current")
-
-
-def append_ocr_verification_error(cur, restaurant_id: uuid.UUID, message: str) -> None:
-    cur.execute(
-        """
-        UPDATE restaurant_profiles
-        SET
-            ocr_verification_errors = COALESCE(ocr_verification_errors, '[]'::jsonb) || %s::jsonb,
-            updated_at = now()
-        WHERE restaurant_id = %s
-        """,
-        (jdump([message]), restaurant_id),
-    )
-
-
-def _enqueue_current_verified_preparation(
-    cur,
-    restaurant_id: uuid.UUID,
-    expected_fingerprint: str | None = None,
-) -> bool:
-    cur.execute(
-        """
-        SELECT ocr_input_fingerprint,
-               lead_artifact_current_profile_fingerprint(restaurant_id)
-        FROM restaurant_profiles
-        WHERE restaurant_id = %s
-          AND ocr_status = 'verified'
-          AND (%s IS NULL OR ocr_input_fingerprint = %s)
-        """,
-        (restaurant_id, expected_fingerprint, expected_fingerprint),
-    )
-    row = cur.fetchone()
-    if row is None:
-        return False
-    fingerprint = str(row[0] or "legacy")
-    profile_fingerprint = str(row[1] or "").strip()
-    if not profile_fingerprint:
-        raise RuntimeError("verified lead has no current artifact profile fingerprint")
-    idempotency_key = (
-        f"lead.prepare:{restaurant_id}:{fingerprint}:{profile_fingerprint}"
-    )
-    cur.execute(
-        """
-        INSERT INTO job_runs (
-            job_type, status, payload, idempotency_key, max_attempts
-        ) VALUES (
-            'lead.prepare', 'queued',
-            jsonb_build_object('restaurant_id', %s::text),
-            %s,
-            3
-        )
-        ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL
-        DO UPDATE SET
-            status = 'queued',
-            payload = EXCLUDED.payload,
-            attempts = 0,
-            max_attempts = EXCLUDED.max_attempts,
-            last_error = NULL,
-            available_at = now(),
-            locked_at = NULL,
-            locked_by = NULL,
-            lease_expires_at = NULL,
-            updated_at = now()
-        WHERE job_runs.job_type = 'lead.prepare'
-          AND job_runs.status IN ('completed', 'failed')
-        """,
-        (str(restaurant_id), idempotency_key),
-    )
-    return True
-
-
-def enqueue_post_ocr_preparation(
-    cur,
-    restaurant_id: uuid.UUID,
-    expected_fingerprint: str,
-) -> None:
-    if not _enqueue_current_verified_preparation(
-        cur,
-        restaurant_id,
-        expected_fingerprint,
-    ):
-        raise StaleOCRClaim("verified OCR input changed before draft preparation was queued")
-
-
-def fetch_unverified_leads(
-    cur,
-    limit: int,
-    *,
-    claim: bool = True,
-    max_attempts: int = 3,
-    retry_after_hours: int = 24,
-) -> list[tuple[uuid.UUID, dict, str, uuid.UUID | None, str]]:
-    max_attempts = max(1, int(max_attempts))
-    retry_after_hours = max(1, int(retry_after_hours))
-    if not claim:
-        cur.execute(
-            """
-            SELECT rp.restaurant_id, rp.raw_public_data, r.name,
-                   NULL::uuid, rp.ocr_input_fingerprint
-            FROM restaurant_profiles rp
-            JOIN restaurants r ON r.id = rp.restaurant_id
-            WHERE (
-                rp.ocr_status = 'pending'
-                OR (
-                    rp.ocr_status = 'failed'
-                    AND rp.ocr_attempts < %s
-                    AND rp.ocr_completed_at <= now() - (%s * interval '1 hour')
-                )
-            )
-              AND rp.raw_public_data IS NOT NULL
-              AND rp.raw_public_data <> '{}'::jsonb
-              AND NULLIF(BTRIM(r.email), '') IS NOT NULL
-            ORDER BY
-              CASE
-                WHEN EXISTS (
-                  SELECT 1 FROM demo_sites demo
-                  WHERE demo.restaurant_id = rp.restaurant_id
-                    AND demo.status = 'published'
-                ) THEN 0
-                WHEN EXISTS (
-                  SELECT 1 FROM demo_sites demo
-                  WHERE demo.restaurant_id = rp.restaurant_id
-                ) THEN 1
-                ELSE 2
-              END,
-              rp.created_at ASC
-            LIMIT %s
-            """,
-            (max_attempts, retry_after_hours, limit),
-        )
-        rows_data = cur.fetchall()
-    else:
-        # A repeatedly crashed worker must not reclaim the same unchanged input
-        # forever. Convert an exhausted stale claim into the explicit failed
-        # remediation state before selecting new work.
-        cur.execute(
-            """
-            UPDATE restaurant_profiles
-            SET ocr_status = 'failed',
-                ocr_verified = false,
-                ocr_verified_at = NULL,
-                ocr_completed_at = now(),
-                ocr_claim_id = NULL,
-                ocr_claim_fingerprint = NULL,
-                ocr_verification_errors = COALESCE(ocr_verification_errors, '[]'::jsonb)
-                  || '["stale OCR claim exhausted automatic attempt limit"]'::jsonb,
-                updated_at = now()
-            WHERE ocr_status = 'running'
-              AND ocr_started_at < now() - interval '2 hours'
-              AND ocr_attempts >= %s
-            """,
-            (max_attempts,),
-        )
-        cur.execute(
-            """
-            WITH candidates AS (
-                SELECT rp.restaurant_id, rp.raw_public_data, r.name
-                FROM restaurant_profiles rp
-                JOIN restaurants r ON r.id = rp.restaurant_id
-                WHERE (
-                    rp.ocr_status = 'pending'
-                    OR (
-                        rp.ocr_status = 'running'
-                        AND rp.ocr_started_at < now() - interval '2 hours'
-                        AND rp.ocr_attempts < %s
-                    )
-                    OR (
-                        rp.ocr_status = 'failed'
-                        AND rp.ocr_attempts < %s
-                        AND rp.ocr_completed_at <= now() - (%s * interval '1 hour')
-                    )
-                )
-                  AND rp.raw_public_data IS NOT NULL
-                  AND rp.raw_public_data <> '{}'::jsonb
-                  AND NULLIF(BTRIM(r.email), '') IS NOT NULL
-                ORDER BY
-                  CASE
-                    WHEN EXISTS (
-                      SELECT 1 FROM demo_sites demo
-                      WHERE demo.restaurant_id = rp.restaurant_id
-                        AND demo.status = 'published'
-                    ) THEN 0
-                    WHEN EXISTS (
-                      SELECT 1 FROM demo_sites demo
-                      WHERE demo.restaurant_id = rp.restaurant_id
-                    ) THEN 1
-                    ELSE 2
-                  END,
-                  rp.created_at ASC
-                LIMIT %s
-                FOR UPDATE OF rp SKIP LOCKED
-            )
-            UPDATE restaurant_profiles rp
-            SET
-                ocr_status = 'running',
-                ocr_verified = false,
-                ocr_verified_at = NULL,
-                ocr_started_at = now(),
-                ocr_completed_at = NULL,
-                ocr_attempts = rp.ocr_attempts + 1,
-                ocr_claim_id = gen_random_uuid(),
-                ocr_claim_fingerprint = rp.ocr_input_fingerprint,
-                ocr_verification_errors = '[]'::jsonb,
-                updated_at = now()
-            FROM candidates c
-            WHERE rp.restaurant_id = c.restaurant_id
-            RETURNING rp.restaurant_id, c.raw_public_data, c.name,
-                      rp.ocr_claim_id, rp.ocr_claim_fingerprint
-            """,
-            (max_attempts, max_attempts, retry_after_hours, limit),
-        )
-        rows_data = cur.fetchall()
-
-    rows = []
-    for restaurant_id, raw_public_data, name, claim_id, claim_fingerprint in rows_data:
-        if isinstance(raw_public_data, dict):
-            record = raw_public_data
-        elif isinstance(raw_public_data, str):
-            record = json.loads(raw_public_data)
-        else:
-            record = json.loads(json.dumps(raw_public_data))
-        rows.append((restaurant_id, record, name or "", claim_id, claim_fingerprint or ""))
-    return rows
 
 
 def upsert_restaurant_record(cur, record: dict, source_file: str) -> tuple[uuid.UUID, bool]:
-    """Returns (restaurant_id, skipped_duplicate)."""
+    """Upsert scraped public data and enroll any eligible inferred-business lead."""
     record = sanitize_sensitive_urls(record)
-    try:
-        from menu_image_ocr import _sanitize_menu_item_images
-        _sanitize_menu_item_images(record)
-    except ImportError:
-        pass
+    durable_record = without_scraped_media(record)
 
     google = record.get("google") or {}
     place_id = (google.get("place_id") or "").strip()
@@ -1017,16 +419,10 @@ def upsert_restaurant_record(cur, record: dict, source_file: str) -> tuple[uuid.
     contact = record.get("contact") or {}
     location = record.get("location") or {}
     coords = location.get("coordinates") or {}
-    input_fingerprint = ocr_input_fingerprint(record)
 
-    # Serialize scrape replacement against OCR finalization and remember
-    # whether the human-approved image input is being replaced.
     cur.execute(
         """
-        SELECT ocr_input_fingerprint,
-               ocr_status,
-               raw_public_data,
-               COALESCE(lead_artifact_current_profile_fingerprint(restaurant_id), '')
+        SELECT COALESCE(lead_artifact_current_profile_fingerprint(restaurant_id), '')
         FROM restaurant_profiles
         WHERE restaurant_id = %s
         FOR UPDATE
@@ -1035,33 +431,9 @@ def upsert_restaurant_record(cur, record: dict, source_file: str) -> tuple[uuid.
     )
     existing_profile = cur.fetchone()
     existing_profile_fingerprint = (
-        str(existing_profile[3] or "") if existing_profile is not None else ""
+        str(existing_profile[0] or "") if existing_profile is not None else ""
     )
-    input_changed = (
-        existing_profile is not None
-        and str(existing_profile[0] or "") != input_fingerprint
-    )
-    preserve_verified_ocr = (
-        existing_profile is not None
-        and str(existing_profile[1] or "") == "verified"
-        and not input_changed
-    )
-    if preserve_verified_ocr:
-        existing_raw = existing_profile[2]
-        if isinstance(existing_raw, str):
-            try:
-                existing_raw = json.loads(existing_raw)
-            except json.JSONDecodeError:
-                existing_raw = {}
-        if isinstance(existing_raw, dict):
-            # A new Places/Apollo pass may refresh contact and review fields,
-            # but it must not erase the OCR-derived menu/classification output
-            # while retaining verified eligibility for the same image input.
-            for key in ("images", "menu_items", "menu_ocr"):
-                if key in existing_raw:
-                    record[key] = existing_raw[key]
-
-    raw_record = json.dumps(record)
+    raw_record = json.dumps(durable_record)
 
     cur.execute(
         """
@@ -1069,12 +441,12 @@ def upsert_restaurant_record(cur, record: dict, source_file: str) -> tuple[uuid.
             restaurant_id, opening_hours, phone, website, address, city, state, country,
             latitude, longitude, google_place_id, google_data_id, rating, reviews_count,
             price_level, cuisines, owners, images, apollo_lead, scrape_status, scrape_errors,
-            dietary_options, raw_public_data, ocr_input_fingerprint
+            dietary_options, raw_public_data
         ) VALUES (
             %s, %s::jsonb, %s, %s, %s, %s, %s, %s,
             %s, %s, %s, %s, %s, %s,
             %s, %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb, %s, %s::jsonb,
-            %s::jsonb, %s::jsonb, %s
+            %s::jsonb, %s::jsonb
         )
         ON CONFLICT (restaurant_id) DO UPDATE SET
             opening_hours = EXCLUDED.opening_hours,
@@ -1105,94 +477,6 @@ def upsert_restaurant_record(cur, record: dict, source_file: str) -> tuple[uuid.
             scrape_errors = EXCLUDED.scrape_errors,
             dietary_options = EXCLUDED.dietary_options,
             raw_public_data = EXCLUDED.raw_public_data,
-            ocr_status = CASE
-                WHEN EXCLUDED.ocr_input_fingerprint IS DISTINCT FROM restaurant_profiles.ocr_input_fingerprint
-                    THEN 'pending'
-                WHEN restaurant_profiles.ocr_status = 'running'
-                    AND EXCLUDED.raw_public_data IS DISTINCT FROM restaurant_profiles.raw_public_data
-                    THEN 'pending'
-                ELSE restaurant_profiles.ocr_status
-            END,
-            ocr_verified = CASE
-                WHEN EXCLUDED.ocr_input_fingerprint IS DISTINCT FROM restaurant_profiles.ocr_input_fingerprint
-                    THEN false
-                WHEN restaurant_profiles.ocr_status = 'running'
-                    AND EXCLUDED.raw_public_data IS DISTINCT FROM restaurant_profiles.raw_public_data
-                    THEN false
-                ELSE restaurant_profiles.ocr_verified
-            END,
-            ocr_verified_at = CASE
-                WHEN EXCLUDED.ocr_input_fingerprint IS DISTINCT FROM restaurant_profiles.ocr_input_fingerprint
-                    THEN NULL
-                WHEN restaurant_profiles.ocr_status = 'running'
-                    AND EXCLUDED.raw_public_data IS DISTINCT FROM restaurant_profiles.raw_public_data
-                    THEN NULL
-                ELSE restaurant_profiles.ocr_verified_at
-            END,
-            ocr_started_at = CASE
-                WHEN EXCLUDED.ocr_input_fingerprint IS DISTINCT FROM restaurant_profiles.ocr_input_fingerprint
-                    THEN NULL
-                WHEN restaurant_profiles.ocr_status = 'running'
-                    AND EXCLUDED.raw_public_data IS DISTINCT FROM restaurant_profiles.raw_public_data
-                    THEN NULL
-                ELSE restaurant_profiles.ocr_started_at
-            END,
-            ocr_completed_at = CASE
-                WHEN EXCLUDED.ocr_input_fingerprint IS DISTINCT FROM restaurant_profiles.ocr_input_fingerprint
-                    THEN NULL
-                WHEN restaurant_profiles.ocr_status = 'running'
-                    AND EXCLUDED.raw_public_data IS DISTINCT FROM restaurant_profiles.raw_public_data
-                    THEN NULL
-                ELSE restaurant_profiles.ocr_completed_at
-            END,
-            ocr_attempts = CASE
-                WHEN EXCLUDED.ocr_input_fingerprint IS DISTINCT FROM restaurant_profiles.ocr_input_fingerprint
-                    THEN 0
-                WHEN restaurant_profiles.ocr_status = 'running'
-                    AND EXCLUDED.raw_public_data IS DISTINCT FROM restaurant_profiles.raw_public_data
-                    THEN 0
-                ELSE restaurant_profiles.ocr_attempts
-            END,
-            ocr_verification_errors = CASE
-                WHEN EXCLUDED.ocr_input_fingerprint IS DISTINCT FROM restaurant_profiles.ocr_input_fingerprint
-                    THEN '[]'::jsonb
-                WHEN restaurant_profiles.ocr_status = 'running'
-                    AND EXCLUDED.raw_public_data IS DISTINCT FROM restaurant_profiles.raw_public_data
-                    THEN '[]'::jsonb
-                ELSE restaurant_profiles.ocr_verification_errors
-            END,
-            ocr_claim_id = CASE
-                WHEN EXCLUDED.ocr_input_fingerprint IS DISTINCT FROM restaurant_profiles.ocr_input_fingerprint
-                    THEN NULL
-                WHEN restaurant_profiles.ocr_status = 'running'
-                    AND EXCLUDED.raw_public_data IS DISTINCT FROM restaurant_profiles.raw_public_data
-                    THEN NULL
-                ELSE restaurant_profiles.ocr_claim_id
-            END,
-            ocr_claim_fingerprint = CASE
-                WHEN EXCLUDED.ocr_input_fingerprint IS DISTINCT FROM restaurant_profiles.ocr_input_fingerprint
-                    THEN NULL
-                WHEN restaurant_profiles.ocr_status = 'running'
-                    AND EXCLUDED.raw_public_data IS DISTINCT FROM restaurant_profiles.raw_public_data
-                    THEN NULL
-                ELSE restaurant_profiles.ocr_claim_fingerprint
-            END,
-            review_status = CASE
-                WHEN EXCLUDED.ocr_input_fingerprint IS DISTINCT FROM restaurant_profiles.ocr_input_fingerprint
-                    THEN 'draft'
-                ELSE restaurant_profiles.review_status
-            END,
-            reviewed_at = CASE
-                WHEN EXCLUDED.ocr_input_fingerprint IS DISTINCT FROM restaurant_profiles.ocr_input_fingerprint
-                    THEN NULL
-                ELSE restaurant_profiles.reviewed_at
-            END,
-            reviewed_by = CASE
-                WHEN EXCLUDED.ocr_input_fingerprint IS DISTINCT FROM restaurant_profiles.ocr_input_fingerprint
-                    THEN NULL
-                ELSE restaurant_profiles.reviewed_by
-            END,
-            ocr_input_fingerprint = EXCLUDED.ocr_input_fingerprint,
             updated_at = CASE
                 WHEN EXCLUDED.raw_public_data IS DISTINCT FROM restaurant_profiles.raw_public_data
                     THEN now()
@@ -1207,7 +491,7 @@ def upsert_restaurant_record(cur, record: dict, source_file: str) -> tuple[uuid.
             (location.get("address") or "").strip(),
             (location.get("city") or "").strip(),
             (location.get("state") or "").strip(),
-            (location.get("country") or "").strip(),
+            (location.get("country") or "Australia").strip(),
             coords.get("latitude"),
             coords.get("longitude"),
             place_id or None,
@@ -1217,43 +501,16 @@ def upsert_restaurant_record(cur, record: dict, source_file: str) -> tuple[uuid.
             (record.get("price_level") or "").strip(),
             jdump(record.get("cuisines") or []),
             jdump(record.get("owners") or []),
-            jdump(record.get("images") or {}),
+            jdump({}),
             jdump(record.get("apollo_lead") or {}),
             (record.get("scrape_status") or "unknown").strip(),
             jdump(record.get("errors") or []),
             jdump(record.get("cuisines") or []),
             raw_record,
-            input_fingerprint,
         ),
     )
 
-    if input_changed:
-        cur.execute(
-            """
-            UPDATE demo_sites
-            SET status = 'draft',
-                published_at = NULL,
-                published_by = NULL,
-                updated_at = now()
-            WHERE restaurant_id = %s
-              AND status = 'published'
-            """,
-            (restaurant_id,),
-        )
-        cur.execute(
-            """
-            UPDATE email_campaigns
-            SET status = 'draft',
-                approved_at = NULL,
-                approved_by = NULL,
-                updated_at = now()
-            WHERE restaurant_id = %s
-              AND status = 'approved'
-            """,
-            (restaurant_id,),
-        )
-
-    sync_menu_items_and_reviews(cur, restaurant_id, record, sync_reviews=True)
+    sync_menu_items_and_reviews(cur, restaurant_id, durable_record, sync_reviews=True)
 
     cur.execute(
         "SELECT COALESCE(lead_artifact_current_profile_fingerprint(%s), '')",
@@ -1266,7 +523,11 @@ def upsert_restaurant_record(cur, record: dict, source_file: str) -> tuple[uuid.
     ):
         _invalidate_review_for_artifact_source_change(cur, restaurant_id)
 
+    evidence_source = "google_places_business_contact" if place_id else "scraped_business_contact"
+    record_inferred_business_evidence(cur, restaurant_id, evidence_source)
+    ensure_outreach_enrollment(cur, restaurant_id)
     return restaurant_id, False
+
 
 
 def import_leads(cur) -> int:
@@ -1345,7 +606,7 @@ def run_import(
 
     try:
         with conn.cursor() as cur:
-            verify_ocr_schema(cur)
+            verify_outreach_schema(cur)
             if do_import_leads and not restaurants_only:
                 print("\n[1/2] Importing leads…")
                 import_leads(cur)

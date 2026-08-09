@@ -1,8 +1,8 @@
 # Restaurant Platform
 
-Sales-first restaurant platform for personalized demo websites, tracked outreach,
-reservation requests, inbound AI receptionist prototypes, and lightweight content
-automation.
+Sales-first restaurant platform for personalized demo websites, versioned
+plain-text outreach, reservation requests, inbound AI receptionist prototypes,
+and a public digital-footprint review.
 
 ## Prerequisites
 
@@ -140,6 +140,12 @@ Current migrations:
 - `000021_immutable_outreach_recipient` — immutable recipient attribution on delivery and tracking rows
 - `000022_auto_artifact_profile_provenance` — identity/public-payload provenance for automatic drafts
 - `000023_scrape_coverage_incomplete_state` — visible retry state for provider-capped grid leaves
+- `000024` through `000041` — durable pacing, consultations, media history,
+  engagement, templates, and calendar revisions (see the migration files for
+  exact rollback contracts)
+- `000042_plain_text_outreach_sequences` — approved sequence versions,
+  inferred-business evidence, and integer recipient progress
+- `000043_manual_media_review` — explicit owner/licensed media approval audit
 
 **Rollback notes:**
 
@@ -259,26 +265,24 @@ curl http://localhost:8080/readyz \
 | `POST /api/v1/restaurants/{id}/members` | Bearer + `internal_admin` | Assign owner to restaurant |
 | `POST /api/v1/restaurants/{id}/demo-sites` | Bearer + `internal_admin` | Create a draft demo site (returns one-time token) |
 | `GET /api/v1/restaurants/{id}/profile/review-preview` | Bearer + `internal_admin` | Inspect profile/contact and capture review versions without bearer secrets |
-| `PATCH /api/v1/restaurants/{id}/profile/review` | Bearer + `internal_admin` | Audit profile approval/rejection after verified OCR |
+| `PATCH /api/v1/restaurants/{id}/profile/review` | Bearer + `internal_admin` | Audit profile approval/rejection for demo/public content |
 | `GET /api/v1/demo-sites/{id}/review-preview` | Bearer + `internal_admin` | Inspect exact allowlisted demo payload without exposing its token |
-| `PATCH /api/v1/demo-sites/{id}/status` | Bearer + `internal_admin` | Audit demo publish/unpublish; publishing requires verified OCR + approved profile |
-| `POST /api/v1/restaurants/{id}/campaigns` | Bearer + `internal_admin` | Create a review-only outreach campaign draft |
-| `GET /api/v1/restaurants/{id}/campaigns` | Bearer + `internal_admin` | List a restaurant's campaign drafts and states |
-| `GET /api/v1/campaigns/{id}` | Bearer + `internal_admin` | Inspect exact campaign content, version, and event history |
-| `POST /api/v1/campaigns/{id}/approve` | Bearer + `internal_admin` | Approve the inspected campaign version |
-| `POST /api/v1/campaigns/{id}/regenerate` | Bearer + `internal_admin` | Rotate an expired/stale demo token and rebuild the campaign draft |
-| `POST /api/v1/campaigns/{id}/stop` | Bearer + `internal_admin` | Stop a campaign from further outreach |
+| `PATCH /api/v1/demo-sites/{id}/status` | Bearer + `internal_admin` | Audit demo publish/unpublish after profile approval |
 | `POST /api/v1/scrape-jobs` | Bearer + `internal_admin` | Create/return a durable Places-first city scrape job |
 | `GET /api/v1/scrape-jobs` | Bearer + `internal_admin` | List recent durable city scrape jobs |
 | `GET /api/v1/scrape-jobs/{id}` | Bearer + `internal_admin` | Monitor request window, resume time, grid, and candidate progress |
-| `POST /api/v1/outreach/bulk-send` | Bearer + `internal_admin` | Start one approved outreach workflow (150-item worker slices; 40/account and 24-hour automatic continuation) |
-| `GET /api/v1/outreach/bulk-send/status` | Bearer + `internal_admin` | Pending eligible count + active/last bulk job summary |
+| `PATCH /api/v1/outreach/email-job` | Bearer + `internal_admin` | Explicitly enable/disable the persisted email job |
+| `POST /api/v1/outreach/bulk-send` | Bearer + `internal_admin` | Queue the enabled, quota-managed sequence workflow |
+| `GET /api/v1/outreach/bulk-send/status` | Bearer + `internal_admin` | Follow-up/new counts, pacing, and active/last job status |
+| `GET/POST /api/v1/outreach/sequences...` | Bearer + `internal_admin` | List, draft, edit, preview, and approve sequence versions |
+| `GET /api/v1/outreach/recipients` | Bearer + `internal_admin` | Inspect integer sequence progress and next-due state |
 | `GET /api/public/v1/demo/{slug}?token=...` | Public | Public demo payload only (no internal fields) |
 | `GET /api/public/v1/restaurants/{id}/table-availability` | Public | Return available RFC3339 reservation-request slots |
 | `PUT /api/public/v1/restaurants/{id}/reservations` | Public | Submit an idempotent reservation request in `pending` status |
-| `GET /t/click/{token}` | Public | Record a click and redirect to the reviewed token-gated demo |
-| `GET /t/open/{token}` | Public | Record an approximate email open and return a tracking pixel |
-| `GET /t/unsubscribe/{token}` | Public | Suppress the immutable recipient address associated with the sent email |
+| `GET /t/click/{token}` | Public | Legacy tracked-campaign redirect (not used by plain-text sequences) |
+| `GET /t/open/{token}` | Public | Legacy tracked-campaign pixel (not used by plain-text sequences) |
+| `GET /t/unsubscribe/{token}` | Public | Show scanner-safe opt-out confirmation without changing state |
+| `POST /t/unsubscribe/{token}` | Public | Permanently suppress the immutable recipient address |
 | `GET /healthz` | Bearer + `developer` role | Process is running |
 | `GET /readyz` | Bearer + `developer` role | PostgreSQL is connected and ready |
 
@@ -302,7 +306,10 @@ Query params on `GET /api/v1/restaurants` (no request body):
 | `shown_interest` | `?shown_interest=true` | Filter by interest flag |
 | `include_archived` | `?include_archived=true` | Include archived leads (hidden by default) |
 
-Status values: `lead`, `demo_ready`, `emailed`, `interested`, `client_onboarding`, `active_client`, `lost`, `archived`.
+Status values: `lead`, `emailed`, `interested`, `client_onboarding`,
+`active_client`, `lost`, and `archived`. `demo_ready` remains accepted only as a
+legacy rollback-compatible value; migration `000042` normalizes existing rows to
+`lead`, and sequence eligibility never depends on it.
 
 Seed a full fixture for manual testing:
 
@@ -319,7 +326,7 @@ Default fixture credentials:
 The API starts only after:
 
 1. Database connection succeeds (with retry)
-2. Foundation, users, and lead-workflow migrations through `000023` are verified (`VerifyStartup`)
+2. Every discovered migration through `000043` is verified (`VerifyStartup`)
 
 On startup you should see logs like `database_connected_successfully`.
 
@@ -329,7 +336,12 @@ Local defaults are safe for development. Production and staging require explicit
 `DATABASE_URL`, `REDIS_URL`, and `TOKEN_SECRET` settings. Provider credentials
 are optional while providers are set to `disabled`.
 
-Bulk outreach never creates or approves campaigns. An internal admin must approve each campaign first; the bulk job only sends eligible approved records. `EMAIL_DISABLE_SENDING=true` blocks the trigger and worker, and redirected/dry-run deliveries remain `approved` with a `skipped` event instead of being marked emailed.
+Bulk outreach enrolls eligible inferred-business leads only into the currently
+approved plain-text sequence. Sending is controlled by the persisted email-job
+switch in the admin outreach portal; keep that switch disabled until sequence
+previews and recipient counts are reviewed. Redirected/dry-run deliveries remain
+at the same sequence step and are recorded as skipped instead of being marked
+emailed.
 
 Key environment variables:
 
@@ -348,17 +360,22 @@ See `.env.example` for the full list.
 
 ## Tuvi corporate website
 
-Standalone marketing site (not the restaurant demo template):
+The canonical marketing, SEO-report, legal, consultation-booking, and corporate
+voice site lives in root `web/` (it is not the personalized restaurant demo
+renderer):
 
 ```bash
-cd tuvi-website/app && npm install && npm run dev
+npm --prefix web install
+npm --prefix web run dev -- -p 3001
 ```
 
-Runs at **http://localhost:3001** so it can run alongside the restaurant template on **http://localhost:3000**. See [tuvi-website/README.md](tuvi-website/README.md).
+It runs at **http://localhost:3001** so it can run alongside the restaurant
+template on **http://localhost:3000**. See [web/README.md](web/README.md).
 
-The corporate website's scheduler uses the main API on **http://localhost:8080**
-via `/api/v1/company/consultations/*`; the older `tuvi-website/backend` service is
-legacy reference code.
+The corporate website proxies consultation requests through same-origin
+`/api/consultations/*` handlers to the main API on **http://localhost:8080**.
+PostgreSQL is the booking and availability authority; this flow does not query
+or update Google Calendar.
 
 ## Documentation
 

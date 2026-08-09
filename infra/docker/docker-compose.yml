@@ -50,11 +50,23 @@ services:
       dockerfile: infra/docker/Dockerfile.backend
     container_name: restaurant_platform_api
     command: ["/app/api"]
+    # The API runs as UID 10001 with no effective capabilities. Chromium's
+    # setuid sandbox helper needs only these two capabilities in the bounding
+    # set to create and chroot its isolated browser namespace under Docker's
+    # default seccomp profile.
+    cap_drop:
+      - ALL
+    cap_add:
+      - SYS_ADMIN
+      - SYS_CHROOT
     ports:
       - "8080:8080"
     env_file:
       - stack.env.example
       - path: stack.env
+        required: false
+      - llm.env.example
+      - path: llm.env
         required: false
       - path: ../../backend/.env
         required: false
@@ -116,46 +128,6 @@ services:
       api:
         condition: service_started
     restart: unless-stopped
-
-  ocr-worker:
-    profiles: [stack]
-    build:
-      context: ../..
-      dockerfile: infra/docker/Dockerfile.ocr
-    command: ["python", "verify_leads_from_db.py", "--watch"]
-    env_file:
-      - path: ../../.env
-        required: false
-      - path: ../../automation/outreach/.env
-        required: false
-    environment:
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/restaurant_platform?sslmode=disable
-    depends_on:
-      postgres:
-        condition: service_healthy
-      migrate:
-        condition: service_completed_successfully
-    restart: unless-stopped
-
-  ocr-job:
-    profiles: [jobs]
-    build:
-      context: ../..
-      dockerfile: infra/docker/Dockerfile.ocr
-    command: ["python", "verify_leads_from_db.py"]
-    env_file:
-      - path: ../../.env
-        required: false
-      - path: ../../automation/outreach/.env
-        required: false
-    environment:
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/restaurant_platform?sslmode=disable
-    depends_on:
-      postgres:
-        condition: service_healthy
-      migrate:
-        condition: service_completed_successfully
-    restart: "no"
 
   # Voice sales agent + Redis.
   # Usage from MonoRepo root:

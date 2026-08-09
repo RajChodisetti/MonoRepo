@@ -69,6 +69,11 @@ func (handler *SEOPublicHandler) Report(w http.ResponseWriter, r *http.Request) 
 			handler.writeError(w, http.StatusNotFound, "not_found", "Restaurant was not found.")
 			return
 		}
+		if errors.Is(err, seoreport.ErrReportBusy) {
+			w.Header().Set("Retry-After", "3")
+			handler.writeError(w, http.StatusServiceUnavailable, "report_busy", "The live scan is busy. Please retry shortly.")
+			return
+		}
 		handler.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to build SEO report.")
 		return
 	}
@@ -172,6 +177,9 @@ func (handler *SEOPublicHandler) writeUnlockError(w http.ResponseWriter, err err
 		handler.writeError(w, http.StatusNotFound, "not_found", "Restaurant was not found.")
 	case errors.Is(err, seoreport.ErrEmailSendFailed):
 		handler.writeError(w, http.StatusBadGateway, "email_failed", "Could not send verification email.")
+	case errors.Is(err, seoreport.ErrReportBusy):
+		w.Header().Set("Retry-After", "3")
+		handler.writeError(w, http.StatusServiceUnavailable, "report_busy", "The live scan is busy. Please retry shortly.")
 	default:
 		handler.writeError(w, http.StatusInternalServerError, "internal_error", "Unlock request failed.")
 	}

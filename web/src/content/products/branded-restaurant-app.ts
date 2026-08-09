@@ -10,7 +10,7 @@ export const brandedRestaurantApp: ProductPageConfig = {
     heading: "Your restaurant. Your app. Your customers.",
     subheading:
       "Tuvi gives independent venues a branded mobile app so guests order direct, earn loyalty, and skip the marketplaces.",
-    primaryCta: { label: "Get a free demo", href: "/demo" },
+    primaryCta: { label: "Get a free demo", href: "/book" },
     secondaryCta: { label: "See how it works", href: "/how-it-works" },
     testimonial: {
       imageSrc: "/resources/resource-app-hero.png",

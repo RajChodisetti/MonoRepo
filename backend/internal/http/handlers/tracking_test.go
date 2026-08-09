@@ -1,67 +1,75 @@
-package handlers_test
+package handlers
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/campaigns"
-	"github.com/rajchodisetti/restaurant-platform/backend/internal/http/handlers"
-	"github.com/rajchodisetti/restaurant-platform/backend/internal/restaurants"
 )
 
-func TestTrackingClickRedirects(t *testing.T) {
+func unsubscribeTestHandler(repo *campaigns.Mock) *TrackingHandler {
+	return NewTrackingHandler(repo, nil, func(w http.ResponseWriter, status int, code, message string) {
+		http.Error(w, fmt.Sprintf("%s: %s", code, message), status)
+	})
+}
+
+func unsubscribeTestRepo() (*campaigns.Mock, string, string) {
+	token := "unsubscribe-token"
+	email := "owner@example.com"
 	campaignID := uuid.New()
 	restaurantID := uuid.New()
-	token := "click-token"
-
-	repo := &campaigns.Mock{
+	return &campaigns.Mock{
+		Campaigns: map[uuid.UUID]campaigns.Campaign{
+			campaignID: {ID: campaignID, RestaurantID: restaurantID, Status: campaigns.StatusApproved},
+		},
 		Tokens: map[string]campaigns.TrackingToken{
 			token: {
-				Token:        token,
-				CampaignID:   campaignID,
-				RestaurantID: restaurantID,
-				TokenType:    campaigns.TokenClick,
-				TargetURL:    "http://localhost:3000/demo/test",
+				Token: token, CampaignID: campaignID, RestaurantID: restaurantID,
+				TokenType: campaigns.TokenUnsubscribe, RecipientEmail: email, RecipientSnapshot: true,
 			},
 		},
-	}
+	}, token, email
+}
 
-	restaurantRepo := &restaurants.Mock{Restaurants: map[uuid.UUID]restaurants.Restaurant{
-		restaurantID: {ID: restaurantID, Status: restaurants.StatusEmailed},
-	}}
-	handler := handlers.NewTrackingHandler(repo, restaurantRepo, func(w http.ResponseWriter, status int, code, message string) {
-		http.Error(w, message, status)
-	})
+func TestUnsubscribeGETOnlyShowsConfirmation(t *testing.T) {
+	repo, token, email := unsubscribeTestRepo()
+	handler := unsubscribeTestHandler(repo)
+	request := httptest.NewRequest(http.MethodGet, "/t/unsubscribe/"+token, nil)
+	request.SetPathValue("token", token)
+	recorder := httptest.NewRecorder()
 
-	req := httptest.NewRequest(http.MethodGet, "/t/click/"+token, nil)
-	req.SetPathValue("token", token)
-	rec := httptest.NewRecorder()
+	handler.UnsubscribeConfirm(recorder, request)
 
-	handler.Click(rec, req)
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "Opt out of emails") {
+		t.Fatalf("response = %d %q", recorder.Code, recorder.Body.String())
+	}
+	if suppressed, _ := repo.IsSuppressed(context.Background(), email); suppressed {
+		t.Fatal("GET unsubscribe mutated suppression state")
+	}
+	if got := recorder.Header().Get("Cache-Control"); !strings.Contains(got, "no-store") {
+		t.Fatalf("Cache-Control = %q, want no-store", got)
+	}
+}
 
-	if rec.Code != http.StatusFound {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusFound)
-	}
-	if location := rec.Header().Get("Location"); location != "http://localhost:3000/demo/test" {
-		t.Fatalf("location = %q", location)
-	}
+func TestUnsubscribePOSTSuppressesRecipient(t *testing.T) {
+	repo, token, email := unsubscribeTestRepo()
+	handler := unsubscribeTestHandler(repo)
+	request := httptest.NewRequest(http.MethodPost, "/t/unsubscribe/"+token, nil)
+	request.SetPathValue("token", token)
+	recorder := httptest.NewRecorder()
 
-	events, err := repo.ListEvents(context.Background(), campaignID)
-	if err != nil {
-		t.Fatalf("ListEvents() error = %v", err)
+	handler.Unsubscribe(recorder, request)
+
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "You have opted out") {
+		t.Fatalf("response = %d %q", recorder.Code, recorder.Body.String())
 	}
-	if len(events) != 1 || events[0].EventType != campaigns.EventClicked {
-		t.Fatalf("events = %+v, want one clicked event", events)
-	}
-	restaurant, err := restaurantRepo.GetByID(context.Background(), restaurantID)
-	if err != nil {
-		t.Fatalf("GetByID() error = %v", err)
-	}
-	if !restaurant.ShownInterest || restaurant.Status != restaurants.StatusInterested {
-		t.Fatalf("restaurant = %+v, want shown interest and interested status", restaurant)
+	if suppressed, _ := repo.IsSuppressed(context.Background(), email); !suppressed {
+		t.Fatal("POST unsubscribe did not suppress recipient")
 	}
 }

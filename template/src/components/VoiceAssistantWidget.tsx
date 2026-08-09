@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import type { TemplateId } from "@/lib/templateConfig";
 import { TOUR_VOICE_ASSISTANT } from "@/lib/tourTargets";
 import { useVoiceAgentSession } from "@/hooks/useVoiceAgentSession";
-import RequestCallbackForm from "@/components/RequestCallbackForm";
 import VoiceOrbCanvas, { statusGlow } from "@/components/VoiceOrbCanvas";
 
 const STATUS_LABELS: Record<string, string> = {
@@ -34,25 +33,6 @@ function MicIcon({ className }: { className?: string }) {
     >
       <rect x="9" y="2" width="6" height="11" rx="3" />
       <path d="M5 10a7 7 0 0 0 14 0M12 19v3M9 22h6" />
-    </svg>
-  );
-}
-
-function PhoneIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.81.36 1.6.68 2.34a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.74-1.74a2 2 0 0 1 2.11-.45c.74.32 1.53.55 2.34.68A2 2 0 0 1 22 16.92z" />
     </svg>
   );
 }
@@ -115,9 +95,7 @@ export default function VoiceAssistantWidget({
   restaurantIndex?: number;
 }) {
   const [open, setOpen] = useState(false);
-  const [showCallback, setShowCallback] = useState(false);
   const [restaurantName, setRestaurantName] = useState<string | undefined>();
-  const [restaurantPhone, setRestaurantPhone] = useState<string | undefined>();
   const panelRef = useRef<HTMLDivElement>(null);
   const {
     status,
@@ -170,11 +148,7 @@ export default function VoiceAssistantWidget({
     isElysian ? "bottom-24 right-6 md:bottom-24" : "bottom-20 right-4 md:bottom-6 md:right-6";
 
   useEffect(() => {
-    if (!open) {
-      setShowCallback(false);
-      return;
-    }
-    void prefetchStatus();
+    if (open) void prefetchStatus();
   }, [open, prefetchStatus]);
 
   useEffect(() => {
@@ -188,10 +162,9 @@ export default function VoiceAssistantWidget({
           cache: "no-store",
         });
         if (!res.ok) return;
-        const data = (await res.json()) as { name?: string; phone?: string };
+        const data = (await res.json()) as { name?: string };
         if (cancelled) return;
         if (data.name) setRestaurantName(data.name);
-        if (data.phone) setRestaurantPhone(data.phone);
       } catch {
         // ignore
       }
@@ -205,24 +178,19 @@ export default function VoiceAssistantWidget({
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        if (showCallback) {
-          setShowCallback(false);
-          return;
-        }
         if (active) disconnect();
         setOpen(false);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, active, disconnect, showCallback]);
+  }, [open, active, disconnect]);
 
   const handlePrimaryAction = async () => {
     if (!open) {
       setOpen(true);
       return;
     }
-    if (showCallback) setShowCallback(false);
     if (active) {
       disconnect();
       return;
@@ -236,7 +204,6 @@ export default function VoiceAssistantWidget({
 
   const closePanel = () => {
     if (active) disconnect();
-    setShowCallback(false);
     setOpen(false);
   };
 
@@ -340,7 +307,7 @@ export default function VoiceAssistantWidget({
               </button>
             </div>
 
-            {error && !showCallback && (
+            {error && (
               <div className={`mb-3 rounded-xl px-3 py-2.5 ${errorClass}`} role="alert">
                 <p className="text-[11px] font-bold uppercase tracking-wider text-red-300">
                   Configuration error
@@ -349,87 +316,46 @@ export default function VoiceAssistantWidget({
               </div>
             )}
 
-            {showCallback ? (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <p className="text-sm font-semibold">Call me</p>
-                    <p className={`mt-0.5 text-xs ${dimClass}`}>
-                      AI receptionist{restaurantName ? ` for ${restaurantName}` : ""}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowCallback(false)}
-                    className={`rounded-lg p-1.5 transition hover:bg-white/10 ${dimClass}`}
-                    aria-label="Close callback form"
-                  >
-                    <CloseIcon />
-                  </button>
-                </div>
-                <RequestCallbackForm
-                  compact
-                  isAurora={isAurora || isElysian}
-                  restaurantIndex={restaurantIndex}
-                  restaurantName={restaurantName}
-                  restaurantPhone={restaurantPhone}
-                  onSuccess={() => {
-                    window.setTimeout(() => setShowCallback(false), 1800);
-                  }}
+            <div className="flex flex-col items-center py-1">
+              <VoiceOrbCanvas status={status} size={176} className="mx-auto bg-transparent" />
+
+              <div
+                className="mt-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5"
+                style={{ borderColor: `${glow}40` }}
+              >
+                <span
+                  className={`h-2 w-2 shrink-0 rounded-full ${
+                    status === "thinking" || status === "connecting" ? "animate-pulse" : ""
+                  }`}
+                  style={{ backgroundColor: glow, boxShadow: `0 0 8px ${glow}` }}
                 />
+                <span className={`text-[11px] font-semibold uppercase tracking-[0.14em] ${dimClass}`}>
+                  {STATUS_LABELS[status] ?? status}
+                </span>
               </div>
-            ) : (
-              <div className="flex flex-col items-center py-1">
-                <VoiceOrbCanvas status={status} size={176} className="mx-auto bg-transparent" />
 
-                <div
-                  className="mt-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5"
-                  style={{ borderColor: `${glow}40` }}
+              <div className="mt-4 flex w-full items-center gap-2">
+                <button
+                  type="button"
+                  onMouseDown={() => void preloadWorklet()}
+                  onClick={() => void handlePrimaryAction()}
+                  className={`flex h-12 flex-1 items-center justify-center gap-2 rounded-full px-4 text-sm font-semibold transition ${primaryBtnClass}`}
                 >
-                  <span
-                    className={`h-2 w-2 shrink-0 rounded-full ${
-                      status === "thinking" || status === "connecting" ? "animate-pulse" : ""
-                    }`}
-                    style={{ backgroundColor: glow, boxShadow: `0 0 8px ${glow}` }}
-                  />
-                  <span className={`text-[11px] font-semibold uppercase tracking-[0.14em] ${dimClass}`}>
-                    {STATUS_LABELS[status] ?? status}
-                  </span>
-                </div>
+                  <MicIcon />
+                  {active ? "End" : error ? "Check again" : "Start talking"}
+                </button>
 
-                <div className="mt-4 flex w-full items-center gap-2">
+                {error && !active && (
                   <button
                     type="button"
-                    onClick={() => setShowCallback(true)}
-                    className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full transition ${ghostBtnClass}`}
-                    aria-label="Get a callback"
-                    title="Call me"
+                    onClick={reset}
+                    className={`h-12 shrink-0 rounded-full px-3 text-sm transition ${ghostBtnClass}`}
                   >
-                    <PhoneIcon />
+                    Reset
                   </button>
-
-                  <button
-                    type="button"
-                    onMouseDown={() => void preloadWorklet()}
-                    onClick={() => void handlePrimaryAction()}
-                    className={`flex h-12 flex-1 items-center justify-center gap-2 rounded-full px-4 text-sm font-semibold transition ${primaryBtnClass}`}
-                  >
-                    <MicIcon />
-                    {active ? "End" : error ? "Check again" : "Start talking"}
-                  </button>
-
-                  {error && !active && (
-                    <button
-                      type="button"
-                      onClick={reset}
-                      className={`h-12 shrink-0 rounded-full px-3 text-sm transition ${ghostBtnClass}`}
-                    >
-                      Reset
-                    </button>
-                  )}
-                </div>
+                )}
               </div>
-            )}
+            </div>
           </div>
         )}
 

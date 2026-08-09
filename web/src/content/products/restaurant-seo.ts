@@ -10,7 +10,7 @@ export const restaurantSeo: ProductPageConfig = {
     heading: "Show up when locals are ready to order.",
     subheading:
       "Tuvi keeps your restaurant discoverable on Google so nearby guests land on your site — and order direct, commission-free.",
-    primaryCta: { label: "Get a free demo", href: "/demo" },
+    primaryCta: { label: "Get a free demo", href: "/book" },
     secondaryCta: { label: "See how it works", href: "/how-it-works" },
     testimonial: {
       imageSrc: "/resources/resource-seo-hero.png",

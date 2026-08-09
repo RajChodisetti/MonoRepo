@@ -16,7 +16,7 @@ export default function NavActions({ onNavigate, className = "" }: NavActionsPro
         See how it works
       </Link>
       <Link
-        href="/demo"
+        href="/book"
         onClick={onNavigate}
         className="inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-full bg-primary px-5 py-2.5 text-[14px] font-semibold text-bg transition-colors hover:bg-primary-dim sm:px-6 sm:text-[15px]"
       >

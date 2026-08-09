@@ -68,7 +68,8 @@ function MediaRow({
   function scrollBy(dir: 1 | -1) {
     const el = scrollerRef.current;
     if (!el) return;
-    el.scrollBy({ left: dir * 280, behavior: "smooth" });
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    el.scrollBy({ left: dir * 280, behavior: reducedMotion ? "auto" : "smooth" });
   }
 
   return (
@@ -79,7 +80,7 @@ function MediaRow({
           <button
             type="button"
             onClick={() => scrollBy(1)}
-            className="hidden h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full border border-border bg-bg text-ink shadow-sm hover:bg-[#f7f4ef] sm:inline-flex"
+            className="hidden h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border border-border bg-bg text-ink shadow-sm transition-colors duration-200 hover:bg-[#f7f4ef] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary sm:inline-flex"
             aria-label={`Scroll ${title}`}
           >
             ›
@@ -96,7 +97,12 @@ function MediaRow({
       </div>
       {seeMoreHref ? (
         <div className="mt-3 text-center">
-          <a href={seeMoreHref} target="_blank" rel="noreferrer" className="text-[14px] font-semibold text-primary">
+          <a
+            href={seeMoreHref}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex min-h-11 items-center rounded-full px-3 text-[14px] font-semibold text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          >
             See more
           </a>
         </div>
