@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/chromedp/cdproto/cdp"
+	"github.com/chromedp/cdproto/emulation"
 	"github.com/chromedp/cdproto/fetch"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
@@ -25,12 +26,12 @@ const (
 	websiteAuditBudget         = 13 * time.Second
 	websiteCaptureBudget       = 9 * time.Second
 	websiteVisionBudget        = 3 * time.Second
-	maxParallelWebsiteCaptures = 4
+	maxParallelWebsiteCaptures = 2
 )
 
-// Browser work is the heaviest part of a report. Four slots allow the mobile
-// and desktop views of two reports to run together without unbounded Chromium
-// fan-out under traffic spikes.
+// Browser work is the heaviest part of a report. Each report uses one browser
+// session for both viewports, so two slots match the report-generation limit
+// without starting four Chromium process trees on a two-CPU production host.
 var websiteCaptureSlots = make(chan struct{}, maxParallelWebsiteCaptures)
 
 // WebsiteAudit is the visual review of a restaurant website homepage.
@@ -111,49 +112,20 @@ func AuditWebsite(ctx context.Context, website string, llm llmlib.Client) Websit
 		return fallbackWebsiteAudit(website, fmt.Sprintf("unsafe website destination: %v", validationErr))
 	}
 	shotCtx, shotCancel := context.WithTimeout(auditCtx, websiteCaptureBudget)
-
-	// Mobile-first: iPhone UA often clears CF faster, and the scan phone mockup needs it.
-	type shotResult struct {
-		mobile bool
-		jpeg   []byte
-		err    error
-	}
-	shots := make(chan shotResult, 2)
-	for _, mobile := range []bool{true, false} {
-		mobile := mobile
-		go func() {
-			b, err := captureWebsiteJPEG(shotCtx, website, mobile)
-			shots <- shotResult{mobile: mobile, jpeg: b, err: err}
-		}()
-	}
-
-	var mobileRes, deskRes shotResult
-	for received := 0; received < 2; {
-		select {
-		case result := <-shots:
-			if result.mobile {
-				mobileRes = result
-			} else {
-				deskRes = result
-			}
-			received++
-		case <-shotCtx.Done():
-			received = 2
-		}
-	}
+	mobileJPEG, desktopJPEG, shotErr := captureWebsiteJPEGPair(shotCtx, website)
 	shotCancel()
 
-	jpegBytes := deskRes.jpeg
+	jpegBytes := desktopJPEG
 	if len(jpegBytes) == 0 {
-		jpegBytes = mobileRes.jpeg
+		jpegBytes = mobileJPEG
 	}
 	if len(jpegBytes) == 0 {
-		return fallbackWebsiteAudit(website, fmt.Sprintf("screenshot failed: desk=%v mobile=%v", deskRes.err, mobileRes.err))
+		return fallbackWebsiteAudit(website, fmt.Sprintf("screenshot failed: %v", shotErr))
 	}
 	dataURL := "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(jpegBytes)
 	mobileDataURL := ""
-	if len(mobileRes.jpeg) > 0 {
-		mobileDataURL = "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(mobileRes.jpeg)
+	if len(mobileJPEG) > 0 {
+		mobileDataURL = "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(mobileJPEG)
 	} else {
 		mobileDataURL = dataURL
 	}
@@ -255,19 +227,30 @@ func parseWebsiteVisionJSON(raw string) (int, string) {
 	return parsed.Score, summary
 }
 
-func captureWebsiteJPEG(ctx context.Context, pageURL string, mobile bool) ([]byte, error) {
+func captureWebsiteJPEGPair(ctx context.Context, pageURL string) ([]byte, []byte, error) {
 	select {
 	case websiteCaptureSlots <- struct{}{}:
 		defer func() { <-websiteCaptureSlots }()
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return nil, nil, ctx.Err()
 	}
 
-	png, err := captureWithChromedp(ctx, pageURL, mobile)
+	mobilePNG, desktopPNG, err := capturePairWithChromedp(ctx, pageURL)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return pngToJPEG(png, 82)
+	mobileJPEG, err := pngToJPEG(mobilePNG, 82)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(desktopPNG) == 0 {
+		return mobileJPEG, nil, nil
+	}
+	desktopJPEG, err := pngToJPEG(desktopPNG, 82)
+	if err != nil {
+		return mobileJPEG, nil, nil
+	}
+	return mobileJPEG, desktopJPEG, nil
 }
 
 func isBotBlockPage(title, body string) bool {
@@ -304,25 +287,27 @@ func isTransientChallenge(title, body string) bool {
 		strings.Contains(blob, "this will only take a few seconds")
 }
 
-func captureWithChromedp(ctx context.Context, pageURL string, mobile bool) ([]byte, error) {
+func capturePairWithChromedp(ctx context.Context, pageURL string) ([]byte, []byte, error) {
 	validationCtx, validationCancel := context.WithTimeout(ctx, websiteDNSBudget)
 	_, err := validatePublicWebsiteURL(validationCtx, pageURL, net.DefaultResolver)
 	validationCancel()
 	if err != nil {
-		return nil, fmt.Errorf("website destination blocked: %w", err)
+		return nil, nil, fmt.Errorf("website destination blocked: %w", err)
 	}
 	proxy, err := startSafeBrowserProxy(net.DefaultResolver)
 	if err != nil {
-		return nil, fmt.Errorf("start safe browser proxy: %w", err)
+		return nil, nil, fmt.Errorf("start safe browser proxy: %w", err)
 	}
 	defer proxy.Close()
 
-	width, height := 1280, 800
-	ua := "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-	if mobile {
-		width, height = 390, 844
-		ua = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1"
-	}
+	const (
+		mobileWidth   = 390
+		mobileHeight  = 844
+		desktopWidth  = 1280
+		desktopHeight = 800
+		mobileUA      = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1"
+		desktopUA     = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+	)
 	allocOpts := append(chromedp.DefaultExecAllocatorOptions[:],
 		chromedp.Flag("headless", true),
 		chromedp.Flag("disable-gpu", true),
@@ -337,8 +322,8 @@ func captureWithChromedp(ctx context.Context, pageURL string, mobile bool) ([]by
 		chromedp.Flag("proxy-bypass-list", "<-loopback>"),
 		chromedp.Flag("disable-blink-features", "AutomationControlled"),
 		chromedp.ProxyServer(proxy.URL()),
-		chromedp.UserAgent(ua),
-		chromedp.WindowSize(width, height),
+		chromedp.UserAgent(mobileUA),
+		chromedp.WindowSize(mobileWidth, mobileHeight),
 	)
 	allocCtx, allocCancel := chromedp.NewExecAllocator(ctx, allocOpts...)
 	defer allocCancel()
@@ -347,26 +332,19 @@ func captureWithChromedp(ctx context.Context, pageURL string, mobile bool) ([]by
 	defer browserCancel()
 	installBrowserRequestGuard(browserCtx, browserCancel, net.DefaultResolver)
 
-	var png []byte
+	var mobilePNG, desktopPNG []byte
 	var title, bodyText string
 
-	viewportOpts := []chromedp.EmulateViewportOption{chromedp.EmulateScale(1)}
-	wait := 900 * time.Millisecond
-	if mobile {
-		viewportOpts = []chromedp.EmulateViewportOption{
+	err = chromedp.Run(browserCtx,
+		fetch.Enable(),
+		chromedp.EmulateViewport(mobileWidth, mobileHeight,
 			chromedp.EmulateScale(2),
 			chromedp.EmulateMobile,
 			chromedp.EmulateTouch,
 			chromedp.EmulatePortrait,
-		}
-		wait = 1200 * time.Millisecond
-	}
-
-	err = chromedp.Run(browserCtx,
-		fetch.Enable(),
-		chromedp.EmulateViewport(int64(width), int64(height), viewportOpts...),
+		),
 		chromedp.Navigate(pageURL),
-		chromedp.Sleep(wait),
+		chromedp.Sleep(1200*time.Millisecond),
 		chromedp.ActionFunc(func(ctx context.Context) error {
 			// Wait out Cloudflare / bot interstitial when present.
 			deadline := time.Now().Add(2500 * time.Millisecond)
@@ -396,15 +374,28 @@ func captureWithChromedp(ctx context.Context, pageURL string, mobile bool) ([]by
 			}
 			return nil
 		}),
-		chromedp.CaptureScreenshot(&png),
+		chromedp.CaptureScreenshot(&mobilePNG),
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	if len(png) < 100 {
-		return nil, fmt.Errorf("empty chromedp screenshot")
+	if len(mobilePNG) < 100 {
+		return nil, nil, fmt.Errorf("empty mobile chromedp screenshot")
 	}
-	return png, nil
+
+	// Reuse the already guarded, loaded page for the desktop view. This avoids
+	// a second Chromium process and a second navigation while still letting
+	// responsive CSS and resize handlers render the desktop layout.
+	desktopErr := chromedp.Run(browserCtx,
+		emulation.SetUserAgentOverride(desktopUA),
+		chromedp.EmulateViewport(desktopWidth, desktopHeight, chromedp.EmulateScale(1)),
+		chromedp.Sleep(350*time.Millisecond),
+		chromedp.CaptureScreenshot(&desktopPNG),
+	)
+	if desktopErr != nil || len(desktopPNG) < 100 {
+		return mobilePNG, nil, nil
+	}
+	return mobilePNG, desktopPNG, nil
 }
 
 const (

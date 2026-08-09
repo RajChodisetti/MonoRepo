@@ -19,12 +19,12 @@ func TestBrowserCaptureSmoke(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 	defer cancel()
 
-	jpeg, err := captureWebsiteJPEG(ctx, target, false)
+	mobileJPEG, desktopJPEG, err := captureWebsiteJPEGPair(ctx, target)
 	if err != nil {
-		t.Fatalf("capture website JPEG: %v", err)
+		t.Fatalf("capture website JPEG pair: %v", err)
 	}
-	if len(jpeg) < 100 {
-		t.Fatalf("capture website JPEG returned %d bytes", len(jpeg))
+	if len(mobileJPEG) < 100 || len(desktopJPEG) < 100 {
+		t.Fatalf("capture website JPEG pair returned mobile=%d desktop=%d bytes", len(mobileJPEG), len(desktopJPEG))
 	}
-	t.Logf("captured %d JPEG bytes", len(jpeg))
+	t.Logf("captured mobile=%d desktop=%d JPEG bytes", len(mobileJPEG), len(desktopJPEG))
 }
