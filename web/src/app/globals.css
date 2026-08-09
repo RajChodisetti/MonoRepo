@@ -227,6 +227,12 @@
   will-change: transform;
 }
 
+.owner-stories-marquee-track[data-paused="true"],
+.owner-stories-marquee-viewport:hover .owner-stories-marquee-track,
+.owner-stories-marquee-viewport:focus-within .owner-stories-marquee-track {
+  animation-play-state: paused;
+}
+
 .owner-marquee-track-reverse,
 .tuvi-marquee-track-reverse {
   animation: tuvi-marquee-reverse 50s linear infinite;

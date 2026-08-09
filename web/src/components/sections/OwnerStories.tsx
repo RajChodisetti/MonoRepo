@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useState } from "react";
 import { successStories, type SuccessStory } from "@/components/sections/ownerStories.config";
 
 function StoryCard({ story, isDuplicate = false }: { story: SuccessStory; isDuplicate?: boolean }) {
@@ -34,20 +35,50 @@ function StoryCard({ story, isDuplicate = false }: { story: SuccessStory; isDupl
 }
 
 export default function OwnerStories() {
+  const [isPaused, setIsPaused] = useState(false);
+
   return (
     <section className="overflow-hidden bg-bg py-14 sm:py-20">
       <div className="mx-auto max-w-[1100px] px-4 sm:px-8 md:px-12">
-        <h2 className="font-display text-[clamp(2.15rem,4.2vw,3.35rem)] font-semibold tracking-[-0.03em] text-ink">
-          Restaurant growth stories
-        </h2>
-        <p className="mt-3 max-w-[44ch] text-[15px] leading-relaxed text-muted sm:text-[16px]">
-          Explore fictional, illustrative examples of how independent restaurants can grow direct
-          sales and keep the guest. Results vary by restaurant.
-        </p>
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="font-display text-[clamp(2.15rem,4.2vw,3.35rem)] font-semibold tracking-[-0.03em] text-ink">
+              Restaurant growth stories
+            </h2>
+            <p className="mt-3 max-w-[44ch] text-[15px] leading-relaxed text-muted sm:text-[16px]">
+              Explore fictional, illustrative examples of how independent restaurants can grow
+              direct sales and keep the guest. Results vary by restaurant.
+            </p>
+          </div>
+          <button
+            type="button"
+            aria-controls="owner-stories-track"
+            aria-label={isPaused ? "Resume automatic story scrolling" : "Pause automatic story scrolling"}
+            onClick={() => setIsPaused((paused) => !paused)}
+            className="owner-stories-motion-control inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full border border-ink/15 bg-white px-4 py-2 text-[13px] font-semibold text-ink shadow-sm transition-colors hover:border-ink/30 hover:bg-ink/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 motion-reduce:hidden"
+          >
+            {isPaused ? (
+              <svg aria-hidden="true" viewBox="0 0 16 16" className="h-4 w-4 fill-current">
+                <path d="M4.75 2.65a.85.85 0 0 1 1.3-.72l7.15 5.35a.9.9 0 0 1 0 1.44l-7.15 5.35a.85.85 0 0 1-1.3-.72V2.65Z" />
+              </svg>
+            ) : (
+              <svg aria-hidden="true" viewBox="0 0 16 16" className="h-4 w-4 fill-current">
+                <rect x="3.25" y="2.25" width="3.5" height="11.5" rx="1" />
+                <rect x="9.25" y="2.25" width="3.5" height="11.5" rx="1" />
+              </svg>
+            )}
+            <span>{isPaused ? "Resume" : "Pause"} auto-scroll</span>
+          </button>
+        </div>
       </div>
 
-      <div className="mt-8 overflow-hidden pl-4 motion-reduce:overflow-x-auto motion-reduce:pb-2 sm:mt-10 sm:pl-8 md:pl-12">
-        <div data-owner-marquee-track className="owner-stories-marquee-track flex w-max">
+      <div className="owner-stories-marquee-viewport mt-8 overflow-hidden pl-4 motion-reduce:overflow-x-auto motion-reduce:pb-2 sm:mt-10 sm:pl-8 md:pl-12">
+        <div
+          id="owner-stories-track"
+          data-owner-marquee-track
+          data-paused={isPaused}
+          className="owner-stories-marquee-track flex w-max"
+        >
           {[false, true].map((isDuplicate) => (
             <div
               key={isDuplicate ? "duplicate" : "original"}
