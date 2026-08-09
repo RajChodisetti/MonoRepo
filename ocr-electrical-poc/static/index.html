@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tuvi Electrical OCR POC</title>
+  <style>
+    :root {
+      --bg: #f3f1ed;
+      --ink: #15231c;
+      --muted: #5c6b63;
+      --card: #ffffff;
+      --accent: #174c3a;
+      --line: rgba(21, 35, 28, 0.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: radial-gradient(1200px 600px at 10% -10%, #e4efe8, transparent), var(--bg);
+      color: var(--ink);
+      min-height: 100vh;
+    }
+    main {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 2rem 1.25rem 4rem;
+    }
+    h1 {
+      font-size: clamp(1.6rem, 3vw, 2.2rem);
+      letter-spacing: -0.03em;
+      margin: 0 0 0.35rem;
+    }
+    .sub { color: var(--muted); margin: 0 0 1.5rem; line-height: 1.5; }
+    .drop {
+      border: 2px dashed rgba(23, 76, 58, 0.35);
+      border-radius: 1rem;
+      background: var(--card);
+      padding: 2rem 1.25rem;
+      text-align: center;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .drop.drag { border-color: var(--accent); background: #f4faf6; }
+    .drop input { display: none; }
+    .btn {
+      appearance: none;
+      border: 0;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 600;
+      padding: 0.7rem 1.2rem;
+      border-radius: 999px;
+      cursor: pointer;
+      margin-top: 0.75rem;
+    }
+    .btn:disabled { opacity: 0.55; cursor: wait; }
+    .preview {
+      margin-top: 1.25rem;
+      display: none;
+      gap: 1rem;
+      align-items: start;
+    }
+    .preview.show { display: grid; grid-template-columns: minmax(0, 280px) minmax(0, 1fr); }
+    @media (max-width: 720px) {
+      .preview.show { grid-template-columns: 1fr; }
+    }
+    .preview img {
+      width: 100%;
+      border-radius: 0.85rem;
+      border: 1px solid var(--line);
+      background: #ddd;
+    }
+    .cards { display: grid; gap: 0.75rem; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 0.85rem;
+      padding: 0.9rem 1rem;
+    }
+    .card h3 {
+      margin: 0 0 0.4rem;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+    }
+    .card p, .card li { margin: 0.2rem 0; font-size: 0.95rem; }
+    .badge {
+      display: inline-block;
+      background: #e8f6ee;
+      color: #1f7a45;
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 0.2rem 0.55rem;
+      border-radius: 999px;
+    }
+    pre {
+      margin: 0;
+      background: #101814;
+      color: #d7ebe0;
+      border-radius: 0.85rem;
+      padding: 1rem;
+      overflow: auto;
+      font-size: 0.78rem;
+      max-height: 420px;
+    }
+    .err {
+      margin-top: 1rem;
+      color: #b42318;
+      background: #fdecea;
+      border-radius: 0.75rem;
+      padding: 0.75rem 1rem;
+      display: none;
+    }
+    .err.show { display: block; }
+    .status { color: var(--muted); font-size: 0.85rem; margin-top: 0.75rem; min-height: 1.2em; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Electrical OCR POC</h1>
+    <p class="sub">
+      Upload a meter board / utility photo. Gemini extracts NMI, fuses, brands,
+      and unlabeled objects (e.g. gas pipe) as structured JSON.
+    </p>
+
+    <div class="drop" id="drop">
+      <p>Drop an image here, or</p>
+      <button class="btn" type="button" id="pick">Choose image</button>
+      <input type="file" id="file" accept="image/jpeg,image/png,image/webp,image/gif" />
+      <p class="status" id="status"></p>
+    </div>
+    <div class="err" id="err"></div>
+
+    <div class="preview" id="preview">
+      <div>
+        <img id="thumb" alt="Upload preview" />
+      </div>
+      <div class="cards" id="cards"></div>
+    </div>
+
+    <div style="margin-top:1.5rem">
+      <div class="card">
+        <h3>Raw JSON</h3>
+        <pre id="json">{}</pre>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const drop = document.getElementById("drop");
+    const fileInput = document.getElementById("file");
+    const pick = document.getElementById("pick");
+    const status = document.getElementById("status");
+    const err = document.getElementById("err");
+    const preview = document.getElementById("preview");
+    const thumb = document.getElementById("thumb");
+    const cards = document.getElementById("cards");
+    const jsonEl = document.getElementById("json");
+
+    pick.onclick = () => fileInput.click();
+    fileInput.onchange = () => {
+      if (fileInput.files[0]) analyze(fileInput.files[0]);
+    };
+
+    ["dragenter", "dragover"].forEach((ev) => {
+      drop.addEventListener(ev, (e) => {
+        e.preventDefault();
+        drop.classList.add("drag");
+      });
+    });
+    ["dragleave", "drop"].forEach((ev) => {
+      drop.addEventListener(ev, (e) => {
+        e.preventDefault();
+        drop.classList.remove("drag");
+      });
+    });
+    drop.addEventListener("drop", (e) => {
+      const f = e.dataTransfer.files[0];
+      if (f) analyze(f);
+    });
+
+    function showError(msg) {
+      err.textContent = msg;
+      err.classList.add("show");
+    }
+    function clearError() {
+      err.textContent = "";
+      err.classList.remove("show");
+    }
+
+    function render(data) {
+      preview.classList.add("show");
+      const id = data.identifiers || {};
+      const meter = data.meter || {};
+      const prot = data.protection || {};
+      const fuses = (prot.fuses || [])
+        .map((f) => `${f.count || 1}× ${f.rating_amps != null ? f.rating_amps + "A" : "?"} ${f.label || ""}`.trim())
+        .join("; ") || "—";
+      const comps = (data.components || [])
+        .map((c) => `<li><strong>${c.type}</strong> ${c.label || ""} <span class="badge">${(c.confidence ?? 0).toFixed(2)}</span></li>`)
+        .join("") || "<li>—</li>";
+      const unlabeled = (data.unlabeled_detections || [])
+        .map((u) => `<li><strong>${u.object}</strong> — ${u.evidence || ""} <span class="badge">${(u.confidence ?? 0).toFixed(2)}</span></li>`)
+        .join("") || "<li>None</li>";
+
+      cards.innerHTML = `
+        <div class="card">
+          <h3>Scene</h3>
+          <p><span class="badge">${data.scene_type || "unknown"}</span></p>
+          <p>${data.summary || ""}</p>
+        </div>
+        <div class="card">
+          <h3>Identifiers</h3>
+          <p><strong>NMI:</strong> ${id.nmi || "—"}</p>
+          <p><strong>Other:</strong> ${(id.other_ids || []).join(", ") || "—"}</p>
+        </div>
+        <div class="card">
+          <h3>Meter & protection</h3>
+          <p><strong>Brand:</strong> ${meter.brand || "—"} ${meter.model || ""}</p>
+          <p><strong>Fuses:</strong> ${fuses}</p>
+        </div>
+        <div class="card">
+          <h3>Components</h3>
+          <ul>${comps}</ul>
+        </div>
+        <div class="card">
+          <h3>Handwritten labels</h3>
+          <p>${(data.handwritten_labels || []).join(" · ") || "—"}</p>
+        </div>
+        <div class="card">
+          <h3>Unlabeled detections</h3>
+          <ul>${unlabeled}</ul>
+        </div>
+      `;
+      jsonEl.textContent = JSON.stringify(data, null, 2);
+    }
+
+    async function analyze(file) {
+      clearError();
+      status.textContent = "Analyzing with Gemini…";
+      pick.disabled = true;
+      thumb.src = URL.createObjectURL(file);
+      preview.classList.add("show");
+      cards.innerHTML = `<div class="card"><h3>Status</h3><p>Running vision OCR…</p></div>`;
+
+      const body = new FormData();
+      body.append("file", file);
+      try {
+        const res = await fetch("/analyze", { method: "POST", body });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.detail || res.statusText);
+        }
+        render(data);
+        status.textContent = "Done";
+      } catch (e) {
+        showError(String(e.message || e));
+        status.textContent = "Failed";
+      } finally {
+        pick.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>

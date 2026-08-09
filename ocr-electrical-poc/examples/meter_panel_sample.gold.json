@@ -1,0 +1,42 @@
+{
+  "scene_type": "electrical_meter_board",
+  "summary": "Australian electricity meter board with handwritten NMI, three 80A meter protection fuses, digital meter, and a white comms gateway with antenna.",
+  "identifiers": {
+    "nmi": "431091961",
+    "other_ids": []
+  },
+  "meter": {
+    "brand": "Landis+Gyr",
+    "model": null,
+    "notes": ["Yellow tamper seal on meter"]
+  },
+  "protection": {
+    "fuses": [
+      {
+        "rating_amps": 80,
+        "count": 3,
+        "label": "METER PROTECTION FUSES"
+      }
+    ],
+    "notes": ["Handwritten LOAD and LINE arrows on wiring"]
+  },
+  "components": [
+    { "type": "electricity_meter", "label": "Landis+Gyr digital meter", "confidence": 0.92 },
+    { "type": "fuse_holder", "label": "Triple 80A meter protection fuses", "confidence": 0.95 },
+    { "type": "comms_gateway", "label": "WM-style white gateway", "confidence": 0.8 },
+    { "type": "antenna", "label": "Black antenna on gateway", "confidence": 0.85 },
+    { "type": "seal", "label": "Yellow security seals", "confidence": 0.9 },
+    { "type": "cable", "label": "Bundled black cables", "confidence": 0.88 },
+    { "type": "other", "label": "Siemens equipment (partial)", "confidence": 0.7 }
+  ],
+  "handwritten_labels": [
+    "NMI: 4310 919 61",
+    "METER PROTECTION FUSES",
+    "80A",
+    "LOAD",
+    "LINE"
+  ],
+  "warnings": ["Yellow danger / authorization sticker near NMI"],
+  "unlabeled_detections": [],
+  "raw_ocr_text": "NMI: 4310 919 61 | METER PROTECTION FUSES | 80A | LOAD | LINE | SIEMENS"
+}
