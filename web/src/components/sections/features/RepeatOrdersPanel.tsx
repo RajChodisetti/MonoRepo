@@ -87,8 +87,15 @@ type RepeatOrdersPanelProps = {
   onComplete?: () => void;
 };
 
+type PlaybackPreference = "auto" | "play" | "stop";
+type PlaybackStatus = "idle" | "playing" | "complete";
+
 export default function RepeatOrdersPanel({ onProgress, onComplete }: RepeatOrdersPanelProps) {
   const pathRef = useRef<SVGPathElement>(null);
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState<boolean | null>(null);
+  const [playbackPreference, setPlaybackPreference] = useState<PlaybackPreference>("auto");
+  const [playbackRun, setPlaybackRun] = useState(0);
+  const [playbackStatus, setPlaybackStatus] = useState<PlaybackStatus>("idle");
   const [progress, setProgress] = useState(0); // 0 → 1 along full path
   const [cardStep, setCardStep] = useState(0);
   const [cardVisible, setCardVisible] = useState(true);
@@ -102,6 +109,19 @@ export default function RepeatOrdersPanel({ onProgress, onComplete }: RepeatOrde
     return Math.min(BEATS.length - 1, Math.max(0, idx));
   }, [progress]);
 
+  const shouldAnimate =
+    playbackPreference === "play" ||
+    (playbackPreference === "auto" && prefersReducedMotion === false);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const syncMotionPreference = () => setPrefersReducedMotion(mediaQuery.matches);
+
+    syncMotionPreference();
+    mediaQuery.addEventListener("change", syncMotionPreference);
+    return () => mediaQuery.removeEventListener("change", syncMotionPreference);
+  }, []);
+
   // Keep avatar glued to the SVG path length
   useEffect(() => {
     const path = pathRef.current;
@@ -113,6 +133,20 @@ export default function RepeatOrdersPanel({ onProgress, onComplete }: RepeatOrde
   }, [progress]);
 
   useEffect(() => {
+    if (prefersReducedMotion === null) return;
+
+    if (!shouldAnimate) {
+      const resetTimer = window.setTimeout(() => {
+        setPlaybackStatus("idle");
+        setProgress(0);
+        setCardStep(0);
+        setCardVisible(true);
+        setTokenPos({ x: NODES[0].x, y: NODES[0].y });
+        onProgress?.(0);
+      }, 0);
+      return () => window.clearTimeout(resetTimer);
+    }
+
     let cancelled = false;
     let raf = 0;
     const timers: number[] = [];
@@ -160,6 +194,7 @@ export default function RepeatOrdersPanel({ onProgress, onComplete }: RepeatOrde
     };
 
     const run = async () => {
+      setPlaybackStatus("playing");
       setProgress(0);
       setCardStep(0);
       setCardVisible(true);
@@ -184,26 +219,13 @@ export default function RepeatOrdersPanel({ onProgress, onComplete }: RepeatOrde
 
       if (cancelled) return;
       report(1);
+      setPlaybackStatus("complete");
       await wait(FINISH_HOLD_MS);
       if (cancelled) return;
       onComplete?.();
     };
 
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      timers.push(
-        window.setTimeout(() => {
-          if (cancelled) return;
-          const lastIndex = BEATS.length - 1;
-          setProgress(1);
-          setCardStep(lastIndex);
-          setCardVisible(true);
-          setTokenPos({ x: NODES[lastIndex].x, y: NODES[lastIndex].y });
-          report(1);
-        }, 0),
-      );
-    } else {
-      void run();
-    }
+    void run();
 
     return () => {
       cancelled = true;
@@ -211,7 +233,17 @@ export default function RepeatOrdersPanel({ onProgress, onComplete }: RepeatOrde
       timers.forEach((id) => window.clearTimeout(id));
       onProgress?.(0);
     };
-  }, [onProgress, onComplete]);
+  }, [onProgress, onComplete, playbackRun, prefersReducedMotion, shouldAnimate]);
+
+  const handlePlaybackAction = () => {
+    if (playbackStatus === "playing") {
+      setPlaybackPreference("stop");
+      return;
+    }
+
+    setPlaybackPreference("play");
+    setPlaybackRun((run) => run + 1);
+  };
 
   const beat = BEATS[cardStep] ?? BEATS[0];
 
@@ -233,6 +265,26 @@ export default function RepeatOrdersPanel({ onProgress, onComplete }: RepeatOrde
       </div>
 
       <div className="relative mx-auto w-full max-w-[440px]">
+        <div className="mb-2 flex min-h-9 items-center justify-end">
+          <button
+            type="button"
+            onClick={handlePlaybackAction}
+            aria-label={
+              playbackStatus === "playing"
+                ? "Stop the repeat-order animation"
+                : playbackStatus === "complete"
+                  ? "Replay the repeat-order animation"
+                  : "Play the repeat-order animation"
+            }
+            className="inline-flex min-h-9 items-center rounded-full border border-[#1a1a1a]/15 bg-[#fff8ee]/80 px-3.5 py-1.5 text-[12px] font-semibold text-[#1a1a1a] shadow-sm transition-colors hover:border-[#1a1a1a]/30 hover:bg-[#fff8ee] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c45c26] focus-visible:ring-offset-2 focus-visible:ring-offset-[#ebe4d6]"
+          >
+            {playbackStatus === "playing"
+              ? "Stop"
+              : playbackStatus === "complete"
+                ? "Replay"
+                : "Play journey"}
+          </button>
+        </div>
         <div
           className={`relative z-20 mb-3 transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${
             cardVisible ? "translate-y-0 scale-100 opacity-100" : "translate-y-3 scale-[0.98] opacity-0"

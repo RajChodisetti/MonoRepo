@@ -1,15 +1,23 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  EVIDENCE_DWELL_MS,
+  TARGET_SCAN_SECONDS,
+  isScanCompletionReady,
+  nextEvidenceBatchStart,
+} from "@/lib/scan-timeline";
 
-const MIN_SCAN_MS = 800;
 const STEP_INTERVAL_MS = 2_200;
 const FINISH_HOLD_MS = 320;
-const TARGET_SECONDS = 15;
+const MAX_VISIBLE_EVIDENCE = 4;
 
 export type ScanPhoto = {
   src: string;
   label?: string;
+  sourceLabel?: string;
+  sourceUrl?: string;
+  alt?: string;
 };
 
 export type ScanReview = {
@@ -34,9 +42,11 @@ export type ScanExperienceProps = {
   photos?: ScanPhoto[];
   /** Live Google reviews shown during the review-sentiment step. */
   reviews?: ScanReview[];
+  /** Desktop viewport screenshot of the restaurant website (data URL or http). */
+  desktopScreenshot?: string;
   /** Mobile viewport screenshot of the restaurant website (data URL or http). */
   mobileScreenshot?: string;
-  /** Live restaurant website URL for the phone mockup (never Maps). */
+  /** Live restaurant website URL used only for source labels and unavailable states. */
   websiteUrl?: string;
   fetchComplete?: boolean;
   onReady?: () => void;
@@ -83,199 +93,264 @@ function Stars({ rating = 0 }: { rating?: number }) {
   );
 }
 
-function sentimentMeta(sentiment?: string) {
-  const s = (sentiment || "mixed").toLowerCase();
+function sentimentMeta(sentiment: string) {
+  const s = sentiment.toLowerCase();
   if (s === "positive") return { label: "Positive", className: "bg-[#e8f6ee] text-[#1f7a45]" };
   if (s === "negative") return { label: "Negative", className: "bg-[#fdecea] text-[#b42318]" };
   return { label: "Mixed", className: "bg-[#fff6e5] text-[#a15c00]" };
 }
 
-function ReviewCardsOverlay({
-  reviews,
-  visibleCount,
-  placeRating,
-}: {
-  reviews: ScanReview[];
-  visibleCount: number;
-  placeRating?: number;
-}) {
-  const shown = reviews.slice(0, visibleCount);
-  if (shown.length === 0) return null;
+type ScanEvidence = {
+  id: string;
+  kind: "listing" | "desktop" | "mobile" | "website" | "review";
+  label: string;
+  sourceLabel: string;
+  alt: string;
+  src?: string;
+  sourceUrl?: string;
+  unavailableMessage?: string;
+  review?: ScanReview;
+};
 
-  const pos = reviews.filter((r) => (r.sentiment || "").toLowerCase() === "positive").length;
-  const neg = reviews.filter((r) => (r.sentiment || "").toLowerCase() === "negative").length;
-  const mix = Math.max(0, reviews.length - pos - neg);
-  const overall =
-    pos >= neg && pos >= mix ? "Mostly positive" : neg > pos ? "Needs attention" : "Mixed sentiment";
+type ImageLoadStatus = "loaded" | "failed";
+
+const COLLAGE_SLOTS = [
+  {
+    position: "left-1/2 top-1/2 w-[min(270px,74vw)] -translate-x-1/2 -translate-y-1/2 sm:w-[340px]",
+    rotate: "-1.5deg",
+    zIndex: 50,
+  },
+  {
+    position: "left-0 top-[3%] w-[112px] sm:left-[5%] sm:w-[158px]",
+    rotate: "-6deg",
+    zIndex: 32,
+  },
+  {
+    position: "right-0 top-[8%] w-[108px] sm:right-[5%] sm:w-[154px]",
+    rotate: "6deg",
+    zIndex: 31,
+  },
+  {
+    position: "bottom-[2%] left-[4%] w-[112px] sm:left-[10%] sm:w-[160px]",
+    rotate: "4deg",
+    zIndex: 30,
+  },
+] as const;
+
+function BrowserBar({ viewport }: { viewport: "desktop" | "mobile" | "neutral" }) {
+  return (
+    <div className="flex h-6 items-center gap-1.5 border-b border-black/5 bg-[#f4f1ed] px-2" aria-hidden="true">
+      {viewport === "mobile" ? (
+        <span className="mx-auto h-1.5 w-10 rounded-full bg-ink/20" />
+      ) : viewport === "neutral" ? (
+        <span className="mx-auto h-2.5 w-2/3 rounded-full bg-white" />
+      ) : (
+        <>
+          <span className="h-1.5 w-1.5 rounded-full bg-[#ef7d74]" />
+          <span className="h-1.5 w-1.5 rounded-full bg-[#e9bd63]" />
+          <span className="h-1.5 w-1.5 rounded-full bg-[#73b881]" />
+          <span className="ml-1 h-2.5 flex-1 rounded-full bg-white" />
+        </>
+      )}
+    </div>
+  );
+}
+
+function EvidenceCard({
+  evidence,
+  active,
+  placeRating,
+  imageStatus,
+  onImageLoad,
+  onImageError,
+}: {
+  evidence: ScanEvidence;
+  active: boolean;
+  placeRating?: number;
+  imageStatus?: ImageLoadStatus;
+  onImageLoad: (src: string) => void;
+  onImageError: (src: string) => void;
+}) {
+  const isWebsite =
+    evidence.kind === "desktop" ||
+    evidence.kind === "mobile" ||
+    evidence.kind === "website";
+  const sentiment = evidence.review?.sentiment
+    ? sentimentMeta(evidence.review.sentiment)
+    : null;
+  const sourceUrl = useMemo(() => {
+    const raw = (evidence.sourceUrl || "").trim();
+    if (!raw) return undefined;
+    try {
+      const parsed = new URL(raw.startsWith("//") ? `https:${raw}` : raw);
+      return parsed.protocol === "http:" || parsed.protocol === "https:"
+        ? parsed.toString()
+        : undefined;
+    } catch {
+      return undefined;
+    }
+  }, [evidence.sourceUrl]);
+  const imageFailed = Boolean(evidence.src) && imageStatus === "failed";
+  const imageLoaded = Boolean(evidence.src) && imageStatus === "loaded";
 
   return (
-    <>
-      {/* Sentiment summary chip */}
-      <div className="scan-photo-float pointer-events-none absolute left-1/2 top-[4.75rem] z-40 w-[min(360px,calc(100%-2rem))] -translate-x-1/2 sm:top-[5.25rem]">
-        <div className="flex items-center justify-between gap-3 rounded-2xl border border-black/5 bg-white/95 px-3.5 py-2.5 shadow-[0_14px_40px_rgba(15,39,31,0.16)] backdrop-blur">
-          <div className="min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">Google review sentiment</p>
-            <p className="truncate text-[13px] font-semibold text-ink">{overall}</p>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            {typeof placeRating === "number" ? (
-              <span className="rounded-full bg-[#f4f0ea] px-2 py-1 text-[11px] font-semibold tabular-nums text-ink">
-                {placeRating.toFixed(1)}★
-              </span>
-            ) : null}
-            <span className="rounded-full bg-[#e8f6ee] px-2 py-1 text-[10px] font-semibold text-[#1f7a45]">
-              {pos}↑
-            </span>
-            {neg > 0 ? (
-              <span className="rounded-full bg-[#fdecea] px-2 py-1 text-[10px] font-semibold text-[#b42318]">
-                {neg}↓
-              </span>
-            ) : null}
-          </div>
-        </div>
+    <article
+      className={`overflow-hidden rounded-2xl border-[3px] bg-white shadow-[0_18px_50px_rgba(15,39,31,0.24)] transition-opacity duration-500 motion-reduce:transition-none ${
+        active ? "border-white opacity-100" : "border-white/90 opacity-90"
+      }`}
+      aria-hidden={!active}
+      aria-label={active ? `${evidence.label}. ${evidence.sourceLabel}` : undefined}
+      data-source-url={evidence.sourceUrl || undefined}
+    >
+      <div className="flex items-center justify-between gap-2 bg-white px-2.5 py-1.5">
+        <span className="truncate text-[9px] font-bold uppercase tracking-[0.1em] text-primary">
+          {active ? "Scanning now" : evidence.kind}
+        </span>
+        {evidence.kind === "review" && typeof placeRating === "number" ? (
+          <span className="text-[9px] font-semibold tabular-nums text-ink">{placeRating.toFixed(1)}★ listing</span>
+        ) : null}
       </div>
 
-      {shown.map((review, i) => {
-        const slot = REVIEW_SLOTS[i % REVIEW_SLOTS.length];
-        const meta = sentimentMeta(review.sentiment);
+      {isWebsite ? (
+        <BrowserBar
+          viewport={
+            evidence.kind === "mobile"
+              ? "mobile"
+              : evidence.kind === "desktop"
+                ? "desktop"
+                : "neutral"
+          }
+        />
+      ) : null}
+
+      {evidence.review ? (
+        <div className={`${active ? "min-h-36 p-4" : "min-h-24 p-2.5"} bg-[#fbfaf8]`}>
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className={`${active ? "text-[13px]" : "text-[10px]"} truncate font-semibold text-ink`}>
+                {evidence.review.author || "Recent review"}
+              </p>
+              <div className="mt-1 flex items-center gap-1.5">
+                {typeof evidence.review.rating === "number" ? <Stars rating={evidence.review.rating} /> : null}
+                {evidence.review.relativeTime ? (
+                  <span className="truncate text-[9px] text-muted">{evidence.review.relativeTime}</span>
+                ) : null}
+              </div>
+            </div>
+            {sentiment ? (
+              <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide ${sentiment.className}`}>
+                {sentiment.label}
+              </span>
+            ) : null}
+          </div>
+          <p className={`${active ? "mt-3 line-clamp-4 text-[12px]" : "mt-2 line-clamp-2 text-[9px]"} leading-relaxed text-ink/75`}>
+            {evidence.review.text ? `“${evidence.review.text}”` : "Review text was not provided."}
+          </p>
+        </div>
+      ) : evidence.src && !imageFailed ? (
+        <div className={`${active ? "h-44 sm:h-52" : "h-24 sm:h-28"} relative overflow-hidden bg-[#e9e4dc]`}>
+          {/* Evidence is rendered only from URLs/data received in the report payload. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={evidence.src}
+            alt={active ? evidence.alt : ""}
+            className={`h-full w-full object-top transition-opacity duration-200 motion-reduce:transition-none ${
+              evidence.kind === "mobile" || evidence.kind === "website"
+                ? "object-contain"
+                : "object-cover"
+            } ${imageLoaded ? "opacity-100" : "opacity-0"}`}
+            onLoad={(event) => {
+              if (event.currentTarget.naturalWidth > 0) onImageLoad(evidence.src!);
+              else onImageError(evidence.src!);
+            }}
+            onError={() => onImageError(evidence.src!)}
+          />
+          {!imageLoaded ? (
+            <div className="absolute inset-0 flex items-center justify-center px-3 text-center text-[9px] font-medium text-muted">
+              Loading evidence…
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <div className={`${active ? "h-44 sm:h-52" : "h-24 sm:h-28"} flex items-center justify-center bg-[#eee9e2] px-3 text-center`}>
+          <div>
+            <p className={`${active ? "text-[9px]" : "text-[7px]"} font-bold uppercase tracking-[0.12em] text-muted/70`}>
+              Capture status
+            </p>
+            <p className={`${active ? "mt-2 text-[11px]" : "mt-1 text-[8px]"} font-medium leading-snug text-muted`}>
+              {imageFailed
+                ? `${evidence.label} could not be loaded from its source.`
+                : evidence.unavailableMessage}
+            </p>
+          </div>
+        </div>
+      )}
+
+      <div className={`${active ? "px-3 py-2.5" : "px-2 py-1.5"} flex items-end justify-between gap-2 bg-white`}>
+        <div className="min-w-0">
+          <p className={`${active ? "text-[12px]" : "text-[9px]"} truncate font-semibold text-ink`}>{evidence.label}</p>
+          <p className={`${active ? "mt-0.5 text-[9px]" : "text-[7px]"} truncate font-medium text-muted`}>{evidence.sourceLabel}</p>
+        </div>
+        {active && sourceUrl ? (
+          <a
+            href={sourceUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="pointer-events-auto shrink-0 rounded-full border border-ink/15 px-2 py-1 text-[9px] font-semibold text-primary underline decoration-primary/30 underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          >
+            View source
+          </a>
+        ) : null}
+      </div>
+    </article>
+  );
+}
+
+function EvidenceCollage({
+  evidence,
+  activeIndex,
+  placeRating,
+  imageLoadStates,
+  onImageLoad,
+  onImageError,
+}: {
+  evidence: ScanEvidence[];
+  activeIndex: number;
+  placeRating?: number;
+  imageLoadStates: ReadonlyMap<string, ImageLoadStatus>;
+  onImageLoad: (src: string) => void;
+  onImageError: (src: string) => void;
+}) {
+  const safeIndex = activeIndex >= 0 && activeIndex < evidence.length ? activeIndex : 0;
+  const visible = evidence.slice(safeIndex, safeIndex + MAX_VISIBLE_EVIDENCE);
+  const activeEvidence = visible[0];
+
+  return (
+    <div className="pointer-events-none absolute inset-x-3 bottom-40 top-20 z-30 sm:inset-x-5 sm:bottom-28 sm:top-24 lg:bottom-12">
+      <p className="sr-only" role="status" aria-live="polite">
+        {activeEvidence ? `Reviewing ${activeEvidence.label}` : "Waiting for visual evidence"}
+      </p>
+      {visible.map((item, slotIndex) => {
+        const slot = COLLAGE_SLOTS[slotIndex];
         return (
           <div
-            key={`review-${i}-${review.author || "anon"}`}
-            className="scan-photo-float pointer-events-none absolute z-40 w-[min(220px,42vw)] rounded-2xl border border-white/90 bg-white/95 p-3 shadow-[0_18px_50px_rgba(15,39,31,0.2)] backdrop-blur"
-            style={{
-              top: "top" in slot ? slot.top : undefined,
-              bottom: "bottom" in slot ? slot.bottom : undefined,
-              left: "left" in slot ? slot.left : undefined,
-              right: "right" in slot ? slot.right : undefined,
-              transform: `rotate(${slot.rotate})`,
-              animationDelay: `${0.12 + i * 0.12}s`,
-            }}
+            key={item.id}
+            className={`absolute transition-all duration-500 motion-reduce:transition-none ${slot.position}`}
+            style={{ zIndex: slot.zIndex }}
           >
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="truncate text-[12px] font-semibold text-ink">{review.author || "Google reviewer"}</p>
-                <div className="mt-0.5 flex items-center gap-1.5">
-                  <Stars rating={review.rating} />
-                  {review.relativeTime ? (
-                    <span className="truncate text-[10px] text-muted">{review.relativeTime}</span>
-                  ) : null}
-                </div>
-              </div>
-              <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${meta.className}`}>
-                {meta.label}
-              </span>
+            <div style={{ transform: `rotate(${slot.rotate})` }}>
+              <EvidenceCard
+                evidence={item}
+                active={slotIndex === 0}
+                placeRating={placeRating}
+                imageStatus={item.src ? imageLoadStates.get(item.src) : undefined}
+                onImageLoad={onImageLoad}
+                onImageError={onImageError}
+              />
             </div>
-            {review.text ? (
-              <p className="mt-2 line-clamp-4 text-[11px] leading-snug text-ink/80">&ldquo;{review.text}&rdquo;</p>
-            ) : null}
           </div>
         );
       })}
-    </>
-  );
-}
-
-function RevealingReviewCards({
-  reviews,
-  placeRating,
-}: {
-  reviews: ScanReview[];
-  placeRating?: number;
-}) {
-  const [visibleCount, setVisibleCount] = useState(1);
-
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      setVisibleCount((count) => Math.min(count + 1, Math.min(4, reviews.length)));
-    }, 1800);
-    return () => window.clearInterval(id);
-  }, [reviews.length]);
-
-  return (
-    <ReviewCardsOverlay
-      reviews={reviews}
-      visibleCount={visibleCount}
-      placeRating={placeRating}
-    />
-  );
-}
-
-function MobilePhoneMockup({
-  screenshot,
-  hostname,
-  websiteUrl,
-}: {
-  screenshot?: string;
-  hostname?: string;
-  websiteUrl?: string;
-}) {
-  const host =
-    hostname ||
-    (() => {
-      if (!websiteUrl) return "";
-      try {
-        return new URL(websiteUrl).hostname.replace(/^www\./, "");
-      } catch {
-        return websiteUrl.replace(/^https?:\/\//, "").split("/")[0] || "";
-      }
-    })();
-
-  const httpsSite = (() => {
-    if (!websiteUrl) return "";
-    const raw = websiteUrl.trim();
-    if (!raw) return "";
-    if (raw.startsWith("http://")) return `https://${raw.slice("http://".length)}`;
-    if (!raw.includes("://")) return `https://${raw}`;
-    return raw;
-  })();
-
-  return (
-    <div className="scan-phone-mockup pointer-events-none absolute bottom-6 right-4 z-40 sm:bottom-8 sm:right-8">
-      <div className="relative mx-auto w-[148px] sm:w-[168px]">
-        <div className="relative overflow-hidden rounded-[1.65rem] border-[5px] border-[#1a1a1a] bg-[#1a1a1a] shadow-[0_28px_60px_rgba(15,39,31,0.38)]">
-          <div className="absolute left-1/2 top-2 z-20 h-[14px] w-[52px] -translate-x-1/2 rounded-full bg-black" />
-          <div className="relative aspect-[9/19.5] overflow-hidden rounded-[1.25rem] bg-[#f4f1ed]">
-            <div className="absolute inset-x-0 top-0 z-10 border-b border-black/5 bg-white/95 px-2 pb-1.5 pt-5">
-              <div className="truncate rounded-full bg-[#efebe6] px-2.5 py-1 text-center text-[7px] font-medium text-ink/70">
-                {host || "website"}
-              </div>
-            </div>
-
-            {screenshot ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={screenshot}
-                alt=""
-                className="absolute inset-0 h-full w-full object-cover object-top pt-10"
-              />
-            ) : httpsSite ? (
-              <div className="absolute inset-0 overflow-hidden pt-10">
-                <iframe
-                  title={`Mobile preview of ${host}`}
-                  src={httpsSite}
-                  className="pointer-events-none absolute left-0 top-10 origin-top-left border-0 bg-white"
-                  style={{ width: 390, height: 844, transform: "scale(0.43)" }}
-                  loading="eager"
-                  sandbox="allow-scripts allow-same-origin"
-                />
-              </div>
-            ) : (
-              <div className="absolute inset-0 flex items-center justify-center pt-10 text-[10px] text-muted">
-                Loading site…
-              </div>
-            )}
-
-            <div
-              className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/10 via-transparent to-black/10"
-              aria-hidden="true"
-            />
-          </div>
-          <div className="absolute bottom-1.5 left-1/2 z-20 h-1 w-10 -translate-x-1/2 rounded-full bg-white/35" />
-        </div>
-        <p className="mt-2 max-w-[168px] truncate text-center text-[10px] font-semibold tracking-wide text-ink/80 drop-shadow-sm">
-          {host ? `Mobile · ${host}` : "Mobile experience"}
-        </p>
-      </div>
     </div>
   );
 }
@@ -330,33 +405,19 @@ function mapEmbedSrc(opts: {
   return `https://www.google.com/maps?${params.toString()}`;
 }
 
-const PHOTO_SLOTS = [
-  { top: "12%", left: "8%", rotate: "-8deg", delay: 0 },
-  { top: "18%", right: "10%", rotate: "7deg", delay: 1 },
-  { bottom: "22%", left: "12%", rotate: "5deg", delay: 2 },
-  { bottom: "16%", right: "8%", rotate: "-6deg", delay: 3 },
-  { top: "42%", left: "4%", rotate: "3deg", delay: 4 },
-  { top: "48%", right: "5%", rotate: "-4deg", delay: 5 },
-] as const;
-
-const REVIEW_SLOTS = [
-  { top: "28%", left: "6%", rotate: "-3deg" },
-  { top: "34%", right: "7%", rotate: "4deg" },
-  { bottom: "28%", left: "10%", rotate: "2deg" },
-  { bottom: "24%", right: "12%", rotate: "-5deg" },
-] as const;
-
 export default function ScanExperience({
   restaurantName = "Your restaurant",
   address,
   rating,
   website,
   placeId,
+  mapsUri,
   latitude,
   longitude,
   photoUrl,
   photos = [],
   reviews = [],
+  desktopScreenshot,
   mobileScreenshot,
   websiteUrl,
   fetchComplete = false,
@@ -385,30 +446,235 @@ export default function ScanExperience({
   );
 
   const [activeIndex, setActiveIndex] = useState(0);
-  const [secondsLeft, setSecondsLeft] = useState(TARGET_SECONDS);
+  const [secondsLeft, setSecondsLeft] = useState(TARGET_SCAN_SECONDS);
   const [finishing, setFinishing] = useState(false);
-  const [visiblePhotoCount, setVisiblePhotoCount] = useState(1);
+  const [activeEvidenceIndex, setActiveEvidenceIndex] = useState(0);
+  const [imageLoadStates, setImageLoadStates] = useState<Map<string, ImageLoadStatus>>(
+    () => new Map(),
+  );
   const startedAtRef = useRef<number>(0);
+  const evidenceReadyAtElapsedRef = useRef<number | null>(null);
   const onReadyRef = useRef(onReady);
 
   useEffect(() => {
     onReadyRef.current = onReady;
   }, [onReady]);
 
+  const markEvidenceReady = useCallback(() => {
+    if (evidenceReadyAtElapsedRef.current !== null) return;
+    evidenceReadyAtElapsedRef.current =
+      startedAtRef.current > 0 ? Math.max(0, Date.now() - startedAtRef.current) : 0;
+  }, []);
+
+  const setImageLoadStatus = useCallback(
+    (src: string, status: ImageLoadStatus) => {
+      if (status === "loaded") markEvidenceReady();
+      setImageLoadStates((current) => {
+        if (current.get(src) === status) return current;
+        const next = new Map(current);
+        next.set(src, status);
+        return next;
+      });
+    },
+    [markEvidenceReady],
+  );
+
   const gallery = useMemo(() => {
     const seen = new Set<string>();
     const out: ScanPhoto[] = [];
-    const push = (src?: string, label?: string) => {
-      const s = (src || "").trim();
+    const push = (photo: ScanPhoto) => {
+      const s = (photo.src || "").trim();
       if (!s || seen.has(s)) return;
       seen.add(s);
-      out.push({ src: s, label });
+      out.push({ ...photo, src: s });
     };
-    push(photoUrl, restaurantName);
-    for (const p of photos) push(p.src, p.label);
-    // No stock-photo fallback — wait for real Google listing media
-    return out.slice(0, PHOTO_SLOTS.length);
+    for (const photo of photos) push(photo);
+    if (photoUrl) {
+      push({
+        src: photoUrl,
+        label: `${restaurantName} listing photo`,
+        sourceLabel: "Google listing photo",
+        alt: `${restaurantName} listing photo`,
+      });
+    }
+    // No stock-photo fallback. Keep enough real media for multiple four-second rotations.
+    return out.slice(0, 12);
   }, [photoUrl, photos, restaurantName]);
+
+  const hasReviewEvidence = useMemo(
+    () =>
+      reviews.some(
+        (review) =>
+          Boolean(review.author?.trim()) ||
+          Boolean(review.text?.trim()) ||
+          typeof review.rating === "number",
+      ),
+    [reviews],
+  );
+
+  const evidenceItems = useMemo<ScanEvidence[]>(() => {
+    const host = websiteLabel === "Website / listing signals" ? "Restaurant website" : websiteLabel;
+    const waiting = !fetchComplete;
+    const listingEvidence = gallery.map<ScanEvidence>((photo, index) => ({
+      id: `listing-${index}`,
+      kind: "listing",
+      label: photo.label || `Listing photo ${index + 1}`,
+      sourceLabel: photo.sourceLabel || "Google listing photo",
+      sourceUrl: photo.sourceUrl,
+      alt: photo.alt || `${restaurantName} listing photo ${index + 1}`,
+      src: photo.src,
+    }));
+    const reviewEvidence = reviews
+      .filter(
+        (review) =>
+          Boolean(review.author?.trim()) ||
+          Boolean(review.text?.trim()) ||
+          typeof review.rating === "number",
+      )
+      .slice(0, 4)
+      .map<ScanEvidence>((review, index) => ({
+      id: `review-${index}`,
+      kind: "review",
+      label: review.author ? `Review by ${review.author}` : `Recent review ${index + 1}`,
+      sourceLabel: "Google review evidence",
+      sourceUrl: mapsUri,
+      alt: review.author ? `Google review by ${review.author}` : `Recent Google review ${index + 1}`,
+      review,
+      }));
+
+    const firstListing = listingEvidence.shift() || {
+      id: "listing-unavailable",
+      kind: "listing" as const,
+      label: "Restaurant listing photos",
+      sourceLabel: "Google listing evidence",
+      alt: "Listing photo evidence unavailable",
+      unavailableMessage: waiting
+        ? "Waiting for listing photos…"
+        : "No listing photos were received for this scan.",
+    };
+    const duplicateViewportCapture = Boolean(
+      desktopScreenshot &&
+      mobileScreenshot &&
+      desktopScreenshot === mobileScreenshot,
+    );
+    const websiteEvidence: ScanEvidence[] = duplicateViewportCapture
+      ? [
+          {
+            id: "website-neutral",
+            kind: "website",
+            label: "Website viewport capture",
+            sourceLabel: `Website capture · ${host}`,
+            alt: `${restaurantName} website screenshot; viewport could not be distinguished`,
+            src: desktopScreenshot,
+            sourceUrl: websiteUrl || website,
+          },
+          {
+            id: "website-distinct-unavailable",
+            kind: "website",
+            label: "Distinct second viewport",
+            sourceLabel: "Capture validation",
+            alt: "Distinct desktop and mobile evidence unavailable",
+            unavailableMessage:
+              "Desktop and mobile payloads were identical, so a distinct second viewport is unavailable.",
+          },
+        ]
+      : [
+          {
+            id: "website-desktop",
+            kind: "desktop",
+            label: "Desktop website view",
+            sourceLabel: `Website capture · ${host}`,
+            alt: `${restaurantName} website desktop screenshot`,
+            src: desktopScreenshot,
+            sourceUrl: websiteUrl || website,
+            unavailableMessage: waiting
+              ? "Waiting for the desktop website capture…"
+              : websiteUrl || website
+                ? "A desktop website capture was not available."
+                : "No website was found for a desktop capture.",
+          },
+          {
+            id: "website-mobile",
+            kind: "mobile",
+            label: "Mobile website view",
+            sourceLabel: `Website capture · ${host}`,
+            alt: `${restaurantName} website mobile screenshot`,
+            src: mobileScreenshot,
+            sourceUrl: websiteUrl || website,
+            unavailableMessage: waiting
+              ? "Waiting for the mobile website capture…"
+              : websiteUrl || website
+                ? "A mobile website capture was not available."
+                : "No website was found for a mobile capture.",
+          },
+        ];
+    const firstReview = reviewEvidence.shift() || {
+      id: "review-unavailable",
+      kind: "review" as const,
+      label: "Recent review evidence",
+      sourceLabel: "Google review evidence",
+      alt: "Recent review evidence unavailable",
+      unavailableMessage: waiting
+        ? "Waiting for recent review evidence…"
+        : "No recent review evidence was received for this scan.",
+    };
+
+    // The first rotation always includes listing, desktop, mobile and review evidence.
+    // Additional real evidence replaces cards every four seconds.
+    return [
+      firstListing,
+      ...websiteEvidence,
+      firstReview,
+      ...listingEvidence,
+      ...reviewEvidence,
+    ];
+  }, [
+    desktopScreenshot,
+    fetchComplete,
+    gallery,
+    mapsUri,
+    mobileScreenshot,
+    restaurantName,
+    reviews,
+    website,
+    websiteLabel,
+    websiteUrl,
+  ]);
+
+  const evidenceSignature = useMemo(
+    () =>
+      evidenceItems
+        .map((item) => {
+          const src = item.src || "";
+          return `${item.id}:${src.length}:${src.slice(-32)}:${Boolean(item.review)}`;
+        })
+        .join("|"),
+    [evidenceItems],
+  );
+  const hasLoadedVisualEvidence = evidenceItems.some(
+    (item) => Boolean(item.src) && imageLoadStates.get(item.src!) === "loaded",
+  );
+  const hasReadyEvidence = hasReviewEvidence || hasLoadedVisualEvidence;
+
+  useEffect(() => {
+    if (hasReviewEvidence) markEvidenceReady();
+  }, [hasReviewEvidence, markEvidenceReady]);
+
+  useEffect(() => {
+    const resetId = window.setTimeout(() => setActiveEvidenceIndex(0), 0);
+    if (evidenceItems.length <= MAX_VISIBLE_EVIDENCE || finishing) {
+      return () => window.clearTimeout(resetId);
+    }
+    const id = window.setInterval(() => {
+      setActiveEvidenceIndex((index) =>
+        nextEvidenceBatchStart(index, evidenceItems.length, MAX_VISIBLE_EVIDENCE),
+      );
+    }, EVIDENCE_DWELL_MS);
+    return () => {
+      window.clearTimeout(resetId);
+      window.clearInterval(id);
+    };
+  }, [evidenceItems.length, evidenceSignature, finishing]);
 
   const searchQuery = useMemo(() => {
     const cityish = (address || "").split(",").slice(-2).join(",").trim();
@@ -433,61 +699,50 @@ export default function ScanExperience({
       ? candidateEmbedSrc
       : initialEmbedSrc ?? candidateEmbedSrc;
 
-  const photoStepIndex = 2; // "Photo quality and quantity"
-  const reviewStepIndex = 3; // "Google review sentiment"
-  const mobileStepIndex = steps.length - 1;
-  const displayedPhotoCount =
-    activeIndex >= photoStepIndex
-      ? gallery.length
-      : Math.min(visiblePhotoCount, gallery.length);
-  const showMobileMockup =
-    (Boolean(mobileScreenshot) || Boolean(websiteUrl) || Boolean(website)) &&
-    (finishing || activeIndex >= mobileStepIndex);
-  // Exclusive phases: photos first → then reviews (never mixed on map)
-  const showReviews =
-    reviews.length > 0 &&
-    !showMobileMockup &&
-    !finishing &&
-    activeIndex >= reviewStepIndex &&
-    activeIndex < mobileStepIndex;
-  const showPhotosOverlay =
-    gallery.length > 0 && !showReviews && !showMobileMockup && !finishing;
+  const activeEvidence = evidenceItems[activeEvidenceIndex] ?? evidenceItems[0];
 
   // Countdown
   useEffect(() => {
     startedAtRef.current = Date.now();
     const id = window.setInterval(() => {
       const elapsed = Math.floor((Date.now() - startedAtRef.current) / 1000);
-      setSecondsLeft(Math.max(0, TARGET_SECONDS - elapsed));
+      setSecondsLeft(Math.max(0, TARGET_SCAN_SECONDS - elapsed));
     }, 250);
     return () => window.clearInterval(id);
   }, []);
 
-  // Advance checklist; photos fill during early steps, reviews only after photo step
+  // Advance the review checklist independently of the four-second evidence frames.
   useEffect(() => {
     if (finishing) return;
     const id = window.setInterval(() => {
       setActiveIndex((i) => Math.min(i + 1, steps.length - 1));
-      setVisiblePhotoCount((n) => Math.min(n + 1, gallery.length));
     }, STEP_INTERVAL_MS);
     return () => window.clearInterval(id);
-  }, [finishing, steps.length, gallery.length]);
+  }, [finishing, steps.length]);
 
-  // Hand off as soon as the real response is ready; the short floor prevents a
-  // jarring flash on cached responses without manufacturing a long scan.
+  // Cached responses still receive the full 15-second review. Evidence arriving
+  // late gets one complete four-second frame, bounded by a reasonable 23-second cap.
   useEffect(() => {
     let cancelled = false;
+    let completing = false;
     let finishTimer: number | undefined;
 
     const tryFinish = () => {
-      if (cancelled) return;
+      if (cancelled || completing) return;
       const elapsed = Date.now() - startedAtRef.current;
-      const minMet = elapsed >= MIN_SCAN_MS;
-      if (!fetchComplete || !minMet) return;
+      if (
+        !isScanCompletionReady({
+          elapsedMs: elapsed,
+          fetchComplete,
+          evidenceReadyAtElapsedMs: evidenceReadyAtElapsedRef.current,
+        })
+      ) {
+        return;
+      }
 
+      completing = true;
       setFinishing(true);
       setActiveIndex(steps.length);
-      setVisiblePhotoCount(gallery.length);
 
       finishTimer = window.setTimeout(() => {
         if (!cancelled) onReadyRef.current?.();
@@ -502,18 +757,21 @@ export default function ScanExperience({
       if (finishTimer) window.clearTimeout(finishTimer);
       if (pollTimer) window.clearInterval(pollTimer);
     };
-  }, [fetchComplete, steps.length, gallery.length, reviews.length]);
+  }, [fetchComplete, hasReadyEvidence, steps.length]);
 
   const progress = finishing
     ? 1
-    : Math.min(0.96, ((TARGET_SECONDS - secondsLeft) / TARGET_SECONDS) * 0.96);
+    : Math.min(
+        0.96,
+        ((TARGET_SCAN_SECONDS - secondsLeft) / TARGET_SCAN_SECONDS) * 0.96,
+      );
 
   const statusLine = finishing
     ? "Wrapping up your report…"
     : secondsLeft > 0
       ? `${secondsLeft} seconds remaining`
       : fetchComplete
-        ? "Finalizing scores…"
+        ? "Reviewing final evidence…"
         : "Almost done…";
 
   return (
@@ -617,52 +875,15 @@ export default function ScanExperience({
             </div>
           </div>
 
-          {/* Google reviews — only after photos phase */}
-          {showReviews ? (
-            <RevealingReviewCards
-              reviews={reviews}
-              placeRating={rating}
-            />
-          ) : null}
-
-          {/* Scraped photos — hidden once reviews / mobile take over */}
-          {showPhotosOverlay
-            ? gallery.slice(0, displayedPhotoCount).map((photo, i) => {
-                const slot = PHOTO_SLOTS[i % PHOTO_SLOTS.length];
-                return (
-                  <div
-                    key={`${photo.src}-${i}`}
-                    className="scan-photo-float pointer-events-none absolute z-30 overflow-hidden rounded-2xl border border-white/80 bg-white shadow-[0_18px_50px_rgba(15,39,31,0.22)]"
-                    style={{
-                      top: "top" in slot ? slot.top : undefined,
-                      bottom: "bottom" in slot ? slot.bottom : undefined,
-                      left: "left" in slot ? slot.left : undefined,
-                      right: "right" in slot ? slot.right : undefined,
-                      width: i % 3 === 0 ? "118px" : "102px",
-                      transform: `rotate(${slot.rotate})`,
-                      animationDelay: `${slot.delay * 0.08}s`,
-                    }}
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={photo.src} alt="" className="h-[118px] w-full object-cover" />
-                    {photo.label ? (
-                      <p className="truncate bg-white/95 px-2 py-1 text-[10px] font-semibold text-ink">
-                        {photo.label}
-                      </p>
-                    ) : null}
-                  </div>
-                );
-              })
-            : null}
-
-          {/* Mobile experience — live website screenshot in phone mockup */}
-          {showMobileMockup ? (
-            <MobilePhoneMockup
-              screenshot={mobileScreenshot}
-              hostname={websiteLabel !== "Website / listing signals" ? websiteLabel : undefined}
-              websiteUrl={websiteUrl || website}
-            />
-          ) : null}
+          {/* Real listing, review and website evidence rotates in four-second collage frames. */}
+          <EvidenceCollage
+            evidence={evidenceItems}
+            activeIndex={activeEvidenceIndex}
+            placeRating={rating}
+            imageLoadStates={imageLoadStates}
+            onImageLoad={(src) => setImageLoadStatus(src, "loaded")}
+            onImageError={(src) => setImageLoadStatus(src, "failed")}
+          />
 
           {/* Scan beam across map */}
           <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-full overflow-hidden" aria-hidden="true">
@@ -670,22 +891,16 @@ export default function ScanExperience({
           </div>
 
           <div className="absolute bottom-4 left-4 z-20 hidden rounded-full bg-white/90 px-3 py-1.5 text-[11px] font-medium text-muted shadow-sm lg:block">
-            {showMobileMockup
-              ? "Checking mobile experience…"
-              : showReviews
-                ? "Reading Google review sentiment…"
-                : showPhotosOverlay
-                  ? "Scanning listing photos…"
-                  : hasExactPin
-                    ? "Google Maps · pinned to listing"
-                    : "Live Google listing scan"}
+            {finishing
+              ? "Evidence collected — building report…"
+              : activeEvidence
+                ? `Scanning ${activeEvidence.label.toLowerCase()}…`
+                : hasExactPin
+                  ? "Google Maps · pinned to listing"
+                  : "Live Google listing scan"}
           </div>
 
-          <div
-            className="absolute inset-x-4 bottom-24 z-50 rounded-2xl border border-black/5 bg-white/95 p-4 shadow-[0_18px_50px_rgba(15,39,31,0.2)] backdrop-blur lg:hidden"
-            role="status"
-            aria-live="polite"
-          >
+          <div className="absolute inset-x-4 bottom-24 z-50 rounded-2xl border border-black/5 bg-white/95 p-4 shadow-[0_18px_50px_rgba(15,39,31,0.2)] backdrop-blur lg:hidden">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">

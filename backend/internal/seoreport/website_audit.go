@@ -44,6 +44,31 @@ type WebsiteAudit struct {
 	FailureReason    string // internal observability only; never serialized publicly
 }
 
+type websiteCaptureArtifacts struct {
+	DesktopDataURL string
+	MobileDataURL  string
+	VisionJPEG     []byte
+}
+
+// buildWebsiteCaptureArtifacts preserves viewport provenance. The vision
+// review still prefers the desktop capture and falls back to mobile when the
+// desktop capture is unavailable, but a successful capture is never published
+// under the other viewport's field.
+func buildWebsiteCaptureArtifacts(mobileJPEG, desktopJPEG []byte) websiteCaptureArtifacts {
+	artifacts := websiteCaptureArtifacts{}
+	if len(desktopJPEG) > 0 {
+		artifacts.DesktopDataURL = "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(desktopJPEG)
+		artifacts.VisionJPEG = desktopJPEG
+	}
+	if len(mobileJPEG) > 0 {
+		artifacts.MobileDataURL = "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(mobileJPEG)
+		if len(artifacts.VisionJPEG) == 0 {
+			artifacts.VisionJPEG = mobileJPEG
+		}
+	}
+	return artifacts
+}
+
 func isSocialWebsite(website string) bool {
 	parsed, err := url.Parse(strings.TrimSpace(website))
 	if err != nil || parsed.Host == "" {
@@ -115,24 +140,14 @@ func AuditWebsite(ctx context.Context, website string, llm llmlib.Client) Websit
 	mobileJPEG, desktopJPEG, shotErr := captureWebsiteJPEGPair(shotCtx, website)
 	shotCancel()
 
-	jpegBytes := desktopJPEG
-	if len(jpegBytes) == 0 {
-		jpegBytes = mobileJPEG
-	}
-	if len(jpegBytes) == 0 {
+	captures := buildWebsiteCaptureArtifacts(mobileJPEG, desktopJPEG)
+	if len(captures.VisionJPEG) == 0 {
 		return fallbackWebsiteAudit(website, fmt.Sprintf("screenshot failed: %v", shotErr))
-	}
-	dataURL := "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(jpegBytes)
-	mobileDataURL := ""
-	if len(mobileJPEG) > 0 {
-		mobileDataURL = "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(mobileJPEG)
-	} else {
-		mobileDataURL = dataURL
 	}
 
 	attachShots := func(audit WebsiteAudit) WebsiteAudit {
-		audit.Screenshot = dataURL
-		audit.MobileScreenshot = mobileDataURL
+		audit.Screenshot = captures.DesktopDataURL
+		audit.MobileScreenshot = captures.MobileDataURL
 		return audit
 	}
 
@@ -153,7 +168,7 @@ Judge: visual design quality, trust, clarity of cuisine/location, menu visibilit
 Return ONLY compact JSON (no markdown):
 {"score": <int 0-100>, "summary": "<2 short sentences>", "strengths": ["..."], "weaknesses": ["..."]}`
 
-	raw, err := llm.CompleteVision(visionCtx, prompt, jpegBytes, "image/jpeg")
+	raw, err := llm.CompleteVision(visionCtx, prompt, captures.VisionJPEG, "image/jpeg")
 	if err != nil || strings.TrimSpace(raw) == "" {
 		return attachShots(fallbackWebsiteAudit(website, fmt.Sprintf("vision failed: %v", err)))
 	}

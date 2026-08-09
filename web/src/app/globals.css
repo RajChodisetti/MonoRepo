@@ -223,13 +223,15 @@
 }
 
 .owner-stories-marquee-track {
-  animation: tuvi-marquee 63s linear infinite;
+  animation: tuvi-marquee 54s linear infinite;
   will-change: transform;
 }
 
-.owner-stories-marquee-track[data-paused="true"],
-.owner-stories-marquee-viewport:hover .owner-stories-marquee-track,
-.owner-stories-marquee-viewport:focus-within .owner-stories-marquee-track {
+.owner-stories-marquee-track[data-playing="true"] {
+  animation-play-state: running;
+}
+
+.owner-stories-marquee-track[data-playing="false"] {
   animation-play-state: paused;
 }
 
@@ -310,7 +312,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .owner-stories-marquee-track,
   .owner-marquee-track,
   .tuvi-marquee-track,
   .owner-marquee-track-reverse,

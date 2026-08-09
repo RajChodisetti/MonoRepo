@@ -11,11 +11,13 @@ func buildPlaceMedia(place PlaceDetails, photos []placePhoto) *PlaceMedia {
 
 	photoStart := 0
 	if len(photos) > 0 {
+		photo := photos[0]
 		menuAndHighlights = append(menuAndHighlights, MediaCard{
-			Kind:      "menu",
-			Label:     "Menu",
-			PhotoName: photos[0].Name,
-			Href:      firstNonEmpty(place.Website, mapsURI),
+			Kind:      "photo",
+			Label:     "Listing photo",
+			Subtitle:  strings.TrimSpace(photo.Attribution),
+			PhotoName: photo.Name,
+			Href:      firstNonEmpty(photo.GoogleMapsURI, mapsURI, place.Website),
 		})
 		photoStart = 1
 	} else if mapsURI != "" || place.Website != "" {
@@ -38,8 +40,9 @@ func buildPlaceMedia(place PlaceDetails, photos []placePhoto) *PlaceMedia {
 		menuAndHighlights = append(menuAndHighlights, MediaCard{
 			Kind:      "highlight",
 			Label:     truncateRunes(label, 42),
+			Subtitle:  strings.TrimSpace(photo.Attribution),
 			PhotoName: photo.Name,
-			Href:      firstNonEmpty(photo.GoogleMapsURI, mapsURI),
+			Href:      firstNonEmpty(photo.GoogleMapsURI, mapsURI, place.Website),
 		})
 	}
 
@@ -47,24 +50,26 @@ func buildPlaceMedia(place PlaceDetails, photos []placePhoto) *PlaceMedia {
 		photosAndVideos = append(photosAndVideos, MediaCard{
 			Kind:      "photo",
 			Label:     "All",
+			Subtitle:  strings.TrimSpace(photos[0].Attribution),
 			PhotoName: photos[0].Name,
-			Href:      mapsURI,
+			Href:      firstNonEmpty(photos[0].GoogleMapsURI, mapsURI, place.Website),
 		})
 		if len(photos) > 1 {
 			photosAndVideos = append(photosAndVideos, MediaCard{
 				Kind:      "latest",
 				Label:     "Latest",
-				Subtitle:  "From Google listing",
+				Subtitle:  firstNonEmpty(photos[1].Attribution, "From Google listing"),
 				PhotoName: photos[1].Name,
-				Href:      mapsURI,
+				Href:      firstNonEmpty(photos[1].GoogleMapsURI, mapsURI, place.Website),
 			})
 		}
 		for i := 2; i < len(photos) && len(photosAndVideos) < 8; i++ {
 			photosAndVideos = append(photosAndVideos, MediaCard{
 				Kind:      "photo",
 				Label:     firstNonEmpty(photos[i].Attribution, "Photo"),
+				Subtitle:  strings.TrimSpace(photos[i].Attribution),
 				PhotoName: photos[i].Name,
-				Href:      firstNonEmpty(photos[i].GoogleMapsURI, mapsURI),
+				Href:      firstNonEmpty(photos[i].GoogleMapsURI, mapsURI, place.Website),
 			})
 		}
 	}

@@ -13,7 +13,7 @@ import LiveIssuesCard from "@/components/report/LiveIssuesCard";
 import LiveListingMedia from "@/components/report/LiveListingMedia";
 import LockedBlur from "@/components/report/LockedBlur";
 import ReportSection from "@/components/report/ReportSection";
-import ScanExperience from "@/components/report/ScanExperience";
+import ScanExperience, { type ScanPhoto } from "@/components/report/ScanExperience";
 
 type Payload = {
   place: RestaurantDetails;
@@ -280,16 +280,32 @@ export default function ReportClient({ placeId }: { placeId: string }) {
       ...(data?.place.media?.menuAndHighlights || []),
       ...(data?.place.media?.photosAndVideos || []),
     ];
+    const listingMapsUrl = data?.place.media?.mapsUri || data?.place.mapsUri;
     const scanPhotos = photoCards
-      .map((card) => {
+      .map((card): ScanPhoto | null => {
         const src = card.imageUrl
           ? card.imageUrl
           : card.photoName
             ? `/api/restaurants/photo?name=${encodeURIComponent(card.photoName)}&max=480`
             : "";
-        return src ? { src, label: card.label } : null;
+        if (!src) return null;
+        // Places photo metadata does not prove that an image is a menu. Keep
+        // the scan label factual even when the legacy media bucket says menu.
+        const label = card.photoName && card.kind === "menu" ? "Listing photo" : card.label;
+        const sourceLabel = card.photoName
+          ? [card.subtitle, "Google listing photo"].filter(Boolean).join(" · ")
+          : card.subtitle || "Restaurant listing media";
+        return {
+          src,
+          label,
+          sourceLabel,
+          sourceUrl: card.photoName
+            ? card.href || listingMapsUrl
+            : card.href,
+          alt: `${previewName} listing photo${label ? ` — ${label}` : ""}`,
+        };
       })
-      .filter((p): p is { src: string; label: string } => Boolean(p));
+      .filter((photo): photo is ScanPhoto => photo !== null);
 
     const heroPhoto =
       scanPhotos[0]?.src ||
@@ -311,11 +327,8 @@ export default function ReportClient({ placeId }: { placeId: string }) {
         photoUrl={heroPhoto}
         photos={scanPhotos}
         reviews={data?.report.recentReviews || []}
-        mobileScreenshot={
-          data?.report.websiteMobileScreenshot ||
-          data?.report.websiteScreenshot ||
-          undefined
-        }
+        desktopScreenshot={data?.report.websiteScreenshot || undefined}
+        mobileScreenshot={data?.report.websiteMobileScreenshot || undefined}
         websiteUrl={data?.place.website}
         fetchComplete={fetchComplete}
         onReady={handleScanReady}
