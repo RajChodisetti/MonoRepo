@@ -26,7 +26,7 @@ const MENU: MenuItem[] = [
     id: "garlic",
     name: "Garlic Bread",
     price: "$7.99",
-    imageUrl: "/menu/garlic-bread.jpg",
+    imageUrl: "/menu/garlic-bread-v2.jpg",
   },
   {
     id: "pizza",

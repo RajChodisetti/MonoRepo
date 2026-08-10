@@ -17,7 +17,7 @@ export function MenuItemsStackVisual() {
     {
       name: "Churros",
       price: "$8.99",
-      image: "/menu/garlic-bread.jpg",
+      image: "/menu/churros.jpg",
       bestseller: false,
     },
   ] as const;

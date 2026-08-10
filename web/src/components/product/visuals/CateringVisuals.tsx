@@ -10,7 +10,7 @@ export function CateringMenuStackVisual() {
     {
       name: "50 Breadsticks",
       price: "$45.99",
-      image: "/menu/garlic-bread.jpg",
+      image: "/menu/garlic-bread-v2.jpg",
     },
     {
       name: "Large Greek Salad",

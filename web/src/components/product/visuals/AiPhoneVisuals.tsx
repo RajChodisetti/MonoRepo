@@ -111,7 +111,7 @@ const AI_PHONE_FOOD = [
   "/menu/pepperoni-pizza.jpg",
   "/menu/classic-burger.jpg",
   "/menu/birria-tacos.jpg",
-  "/menu/garlic-bread.jpg",
+  "/menu/garlic-bread-v2.jpg",
 ] as const;
 
 export function AiPhoneFoodTilesVisual() {

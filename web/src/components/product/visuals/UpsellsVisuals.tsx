@@ -40,7 +40,7 @@ export function UpsellFlowVisual() {
       {/* Rejected options */}
       <div className="mt-1 flex w-full justify-between gap-4 px-2">
         {[
-          { name: "Churros", src: "/menu/garlic-bread.jpg" },
+          { name: "Churros", src: "/menu/churros.jpg" },
           { name: "Lemonade", src: "/menu/caesar-salad.jpg" },
         ].map((item) => (
           <div key={item.name} className="relative flex flex-col items-center opacity-70">
@@ -79,7 +79,7 @@ export function UpsellCheckoutVisual() {
       <div className="mt-2 space-y-2.5">
         {[
           { name: "Blue Lemonade", price: "$4.99", src: "/menu/caesar-salad.jpg" },
-          { name: "Cinnamon Churros", price: "$7.99", src: "/menu/garlic-bread.jpg" },
+          { name: "Cinnamon Churros", price: "$7.99", src: "/menu/churros.jpg" },
         ].map((item) => (
           <div
             key={item.name}
