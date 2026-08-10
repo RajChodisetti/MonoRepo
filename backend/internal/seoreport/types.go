@@ -227,12 +227,12 @@ func RedactLockedReport(report Report) Report {
 		return report
 	}
 	report = cloneReportSlices(report)
-	report.Competitors = nil
+	report.Competitors = []CompetitorRow{}
 	// Competitor status, cuisine, sample size, current score/position, leading
 	// conclusion, notice, and rows are all verification-gated. A neutral marker
 	// lets clients render a locked placeholder without receiving those findings.
 	report.CompetitorScan = CompetitorScan{Status: "locked"}
-	report.Issues = nil
+	report.Issues = []Issue{}
 	report.AISummary = ""
 	report.WebsiteReview = ""
 	report.MenuEvidence.MenuURL = ""

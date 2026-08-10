@@ -76,6 +76,11 @@ func TestRedactLockedReportRemovesGatedServerData(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal locked report: %v", err)
 	}
+	for _, emptyCollection := range []string{`"competitors":[]`, `"issues":[]`} {
+		if !strings.Contains(string(encoded), emptyCollection) {
+			t.Fatalf("locked JSON must preserve array contracts for %s: %s", emptyCollection, encoded)
+		}
+	}
 	for _, secret := range []string{
 		"Secret Rival", "private-menu", "instagram.com/secret", "gated summary",
 		"gated website review", "gated metric rationale", "gated evidence", "gated recommendation",

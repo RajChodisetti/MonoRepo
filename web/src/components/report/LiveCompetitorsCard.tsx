@@ -124,12 +124,12 @@ export default function LiveCompetitorsCard({
   locked = false,
   onUnlock,
 }: {
-  rows: CompetitorRow[];
+  rows: CompetitorRow[] | null | undefined;
   scan?: CompetitorScan;
   locked?: boolean;
   onUnlock?: () => void;
 }) {
-  const realRows = scan?.rows || rows;
+  const realRows = scan?.rows ?? rows ?? [];
   const radius = scan?.radiusKm || 10;
   const cuisine = scan?.cuisine?.trim() || "same-cuisine restaurants";
 

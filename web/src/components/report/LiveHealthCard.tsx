@@ -85,15 +85,16 @@ export default function LiveHealthCard({
   overallScore: number;
   overallLabel: string;
   overallColor: string;
-  metrics: HealthMetric[];
+  metrics: HealthMetric[] | null | undefined;
   locked?: boolean;
   onUnlock?: () => void;
   pdfHref?: string;
 }) {
-  const websiteIdx = metrics.findIndex(isWebsiteMetric);
-  const splitAt = websiteIdx >= 0 ? websiteIdx + 1 : Math.min(3, metrics.length);
-  const visibleMetrics = metrics.slice(0, splitAt);
-  const gatedMetrics = metrics.slice(splitAt);
+  const safeMetrics = metrics ?? [];
+  const websiteIdx = safeMetrics.findIndex(isWebsiteMetric);
+  const splitAt = websiteIdx >= 0 ? websiteIdx + 1 : Math.min(3, safeMetrics.length);
+  const visibleMetrics = safeMetrics.slice(0, splitAt);
+  const gatedMetrics = safeMetrics.slice(splitAt);
 
   return (
     <div className="rounded-[18px] bg-white px-4 pb-4 pt-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">

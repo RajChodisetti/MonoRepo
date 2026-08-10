@@ -31,12 +31,13 @@ export default function LiveIssuesCard({
   locked = false,
   onFix,
 }: {
-  issues: ReportIssue[];
+  issues: ReportIssue[] | null | undefined;
   locked?: boolean;
   onFix?: () => void;
 }) {
-  const first = issues[0];
-  const rest = issues.slice(1);
+  const safeIssues = issues ?? [];
+  const first = safeIssues[0];
+  const rest = safeIssues.slice(1);
 
   return (
     <div className="rounded-[18px] bg-white px-3.5 pb-5 pt-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
