@@ -1,7 +1,7 @@
 # Session Summary
 
-Production release `591ffd7` is active at `/opt/tuvi/releases/monorepo-591ffd7`; only the API and corporate website were recreated, with zero restarts and explicit `64c2dc2` rollback images/source preserved.
-Owner stories auto-scroll with Start/Pause controls, and More Repeat Orders now plays the compact horizontal Jules journey with Play/Stop/Replay instead of remaining static.
-The digital-footprint scan presents real listing, review, desktop, and mobile evidence in tilted four-card map collages, replaces batches every four seconds, and measured 15.93 seconds in production.
-Backend evidence now preserves available photo attribution/source links, avoids false menu classification, and keeps desktop/mobile capture provenance independent and fail-closed.
-All backend/web/build/Compose checks and production route/browser smokes passed; no migration, worker, outreach-send, voice, DNS, protected-config, or billing change occurred, and the reviewed build also serves locally on port 3001.
+Production release `cce27cd` is active at `/opt/tuvi/releases/monorepo-cce27cd`; migration 44 is applied and only the API and corporate website were recreated, both with zero restarts.
+The seven generated owner stories auto-scroll, Repeat Orders plays its compact horizontal journey, and the 15-second scan now stages attributed listing/review/desktop/mobile evidence before a stable report handoff.
+The Venue Pulse scores seven weighted criteria, verifies menu and canonical social evidence, compares genuine nearby same-cuisine listings, gates details behind name/email/phone OTP verification, and offers an unlocked two-page PDF.
+Full backend/web/build/OpenAPI/PDF checks and production HTTP/Chrome QA passed, including the locked collection hotfix; no real email, outreach, voice, worker, DNS, environment, or billing action was performed.
+Rollback source/images, a validated pre-migration database backup, and the prior `04bdbc0` release remain available.

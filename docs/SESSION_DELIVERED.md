@@ -2822,3 +2822,76 @@ a new four-card batch opens. Website capture remains fail-closed when a viewport
 cannot be collected. This release does not change database schema, competitor
 scoring, outreach sending, voice behavior, protected configuration, DNS, or
 billing.
+
+## 2026-08-10 — Verified Venue Pulse Review and Owner Gallery
+
+**Role:** Coordinating Product, Frontend, Backend, Security, Accessibility,
+Compliance, QA, and Production Release Agent
+
+**Delivered:** Restored all seven generated restaurant-owner scenes across the
+auto-scrolling owner gallery and case-study routes. Kept the compact horizontal
+Repeat Orders journey with Play/Stop/Replay controls. Reworked the live scan to
+show attributed listing photos, reviews, and independent desktop/mobile website
+captures as paced four-card collages: cards enter 750 ms apart, use a slower
+900 ms transition, remain fully visible for at least three seconds, and the
+review runs for at least 15 seconds. Added a straight 100-point Venue Pulse
+across SEO, reviews, website, ordering, menu, contact, and listing completeness;
+canonical social profiles contribute up to three listing points. Menu and
+social evidence fail closed against generic photos, empty structured data,
+navigation/share links, redirects, and link aggregators. Nearby competitors are
+real eligible same-cuisine listings within 10 km and use a disclosed,
+deterministic Google visibility comparison rather than claiming live search
+rank. Locked responses redact competitor identities, narrative, evidence, and
+recommendations server-side.
+
+Added a modal verification flow requiring name, email, and phone, a throttled
+six-digit OTP email, report-bound HttpOnly unlock state, and storage in
+`seo_interested` without changing the venue's canonical contact data or treating
+verification as marketing consent. Magic-link bearer URLs were removed. The
+unlocked experience exposes every criterion's rationale and recommendation plus
+a colored, bordered, Tuvi-branded two-page PDF. Google review/photo contributor
+and source links are preserved on every visible item; competitor identities are
+kept out of the durable PDF and remain live-only.
+
+**Production Deployment:** User-approved release `cce27cd` is active at
+`/opt/tuvi/releases/monorepo-cce27cd` on branch
+`release/safe-ui-20260809`. Migration 44 (`seo_unlock_contact_security`) is
+applied. Only `tuvi-api-1` and `tuvi-tuvi-website-1` were recreated; every
+non-target container ID remained unchanged. Current images are
+`tuvi-api:release-cce27cd` (`sha256:2234a46b...`) and
+`tuvi-tuvi-website:release-cce27cd` (`sha256:aa236eae...`), both running with
+restart count zero. The prior source `/opt/tuvi/releases/monorepo-04bdbc0` and
+rollback images tagged `rollback-before-cce27cd` remain available. The validated
+pre-migration PostgreSQL backup is
+`/opt/tuvi/backups/monorepo-pre-04bdbc0.dump` (mode 600).
+
+**Checks Run:** All 442 backend tests across 45 packages, focused race tests,
+backend vet, API/migrator builds, corporate-web ESLint and non-incremental
+TypeScript, 14 focused Node tests, the 61-route Next.js production build,
+OpenAPI validation, npm audit, PDF render/text/two-page checks, and
+`git diff --check` passed. All required production routes and seven generated
+image URLs returned 200 with exact asset hashes; locked PDF returned 401 and the
+removed magic-link route returned 404. A real locked Thai Pothong scan returned
+76/100 with `issues: []`, `competitors: []`, and competitor status `locked`.
+Chrome QA observed the full scan-to-report transition with no console errors,
+the locked competitor/fix placeholders, and the required name/email/phone
+unlock dialog. A late production-only crash was traced to legacy `null` locked
+collections; hotfix `cce27cd` restores empty-array JSON contracts and defensively
+normalizes report collections in all scorecard consumers.
+
+**Business Value / Plan Fit:** Prospects now see the actual public evidence Tuvi
+reviewed, receive an auditable weighted score, and can unlock a prioritized
+venue-improvement plan without exposing competitor or recommendation data in
+the locked API. The gallery and Repeat Orders sections now retain the intended
+natural restaurant context and motion.
+
+**Risks / Follow-ups:** Google Places does not expose the Maps interface's Menu
+photo category; only a verified public menu link or substantive Menu structured
+data earns menu points. Competitor output is a bounded nearby visibility sample,
+not live Google rank. The production Thai Pothong run provided only a mobile
+website capture, which is disclosed as a partial snapshot instead of being
+mislabeled as desktop. The Gmail mailer initialized successfully, but no real
+verification email was sent because no controlled recipient was supplied;
+delivery, rate limiting, expiry, and persistence are covered by automated tests.
+No outreach, worker, voice, DNS, environment, model-routing, or billing change
+was made.
