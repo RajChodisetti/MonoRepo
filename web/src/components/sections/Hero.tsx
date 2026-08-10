@@ -264,7 +264,7 @@ export default function Hero() {
   }
 
   return (
-    <section className="hero-atmosphere relative px-6 pb-20 pt-16 md:px-10 md:pb-28 md:pt-24 lg:px-12">
+    <section className="hero-atmosphere relative isolate z-10 px-6 pb-20 pt-16 md:px-10 md:pb-28 md:pt-24 lg:px-12">
       <div
         className="pointer-events-none absolute inset-0 hero-grid opacity-30 [mask-image:radial-gradient(48rem_30rem_at_50%_35%,black,transparent)]"
         aria-hidden="true"

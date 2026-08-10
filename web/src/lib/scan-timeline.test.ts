@@ -42,28 +42,28 @@ test("scan always presents for at least twenty seconds", () => {
   );
 });
 
-test("eight-card batches enter one-by-one and hold the last completed card", () => {
-  assert.equal(EVIDENCE_BATCH_SIZE, 8);
-  assert.equal(EVIDENCE_CARD_STAGGER_MS, 750);
+test("nine-card batches enter one-by-one, a second apart, and hold the last completed card", () => {
+  assert.equal(EVIDENCE_BATCH_SIZE, 9);
+  assert.equal(EVIDENCE_CARD_STAGGER_MS, 1_000);
   assert.equal(EVIDENCE_CARD_ENTRY_MS, 900);
   assert.equal(EVIDENCE_LAST_CARD_HOLD_MS, 3_000);
   assert.deepEqual(
     Array.from({ length: EVIDENCE_BATCH_SIZE }, (_, index) =>
       evidenceCardEntryDelayMs(index),
     ),
-    [0, 750, 1_500, 2_250, 3_000, 3_750, 4_500, 5_250],
+    [0, 1_000, 2_000, 3_000, 4_000, 5_000, 6_000, 7_000, 8_000],
   );
 
   const lastCardFullyVisibleAt =
     evidenceCardEntryDelayMs(EVIDENCE_BATCH_SIZE - 1) + EVIDENCE_CARD_ENTRY_MS;
-  assert.equal(evidenceBatchPresentationMs(EVIDENCE_BATCH_SIZE), 9_150);
+  assert.equal(evidenceBatchPresentationMs(EVIDENCE_BATCH_SIZE), 11_900);
   assert.equal(EVIDENCE_DWELL_MS - lastCardFullyVisibleAt, 3_000);
 });
 
 test("short remainder batches keep the same final-card hold", () => {
   assert.equal(evidenceBatchPresentationMs(0), 0);
   assert.equal(evidenceBatchPresentationMs(1), 3_900);
-  assert.equal(evidenceBatchPresentationMs(2), 4_650);
+  assert.equal(evidenceBatchPresentationMs(2), 4_900);
   assert.equal(evidenceBatchPresentationMs(99), EVIDENCE_DWELL_MS);
   assert.equal(evidenceCardEntryDelayMs(-2), 0);
 });
@@ -127,10 +127,10 @@ test("scan requires fetch, preserves the evidence dwell, and retains its cap", (
   );
 });
 
-test("a listing photo rests three seconds before the card turns", () => {
-  assert.equal(PHOTO_FLIP_HOLD_MS, 3_000);
+test("a listing photo rests two seconds before the card turns", () => {
+  assert.equal(PHOTO_FLIP_HOLD_MS, 2_000);
   assert.equal(PHOTO_FLIP_MS, 900);
-  assert.equal(photoFlipCycleMs(), 3_900);
+  assert.equal(photoFlipCycleMs(), 2_900);
 });
 
 test("the hidden face is always loaded one photo ahead and wraps", () => {
@@ -146,19 +146,16 @@ test("the hidden face is always loaded one photo ahead and wraps", () => {
   assert.equal(nextPhotoFaceIndex(Number.NaN, 5), 1);
 });
 
-test("listing photos spread across five cards before any card repeats", () => {
-  assert.equal(LISTING_CARD_COUNT, 5);
+test("listing photos spread across six cards before any card repeats", () => {
+  assert.equal(LISTING_CARD_COUNT, 6);
   // Fewer photos than cards never invents an empty card.
-  assert.deepEqual(dealPhotosToCards(["a", "b", "c"], 5), [["a"], ["b"], ["c"]]);
+  assert.deepEqual(dealPhotosToCards(["a", "b", "c"], 6), [["a"], ["b"], ["c"]]);
   // Every card gets a first photo before any card gets a second.
-  assert.deepEqual(dealPhotosToCards(["a", "b", "c", "d", "e", "f", "g"], 5), [
-    ["a", "f"],
-    ["b", "g"],
-    ["c"],
-    ["d"],
-    ["e"],
-  ]);
-  assert.deepEqual(dealPhotosToCards([], 5), []);
+  assert.deepEqual(
+    dealPhotosToCards(["a", "b", "c", "d", "e", "f", "g", "h", "i"], 6),
+    [["a", "g"], ["b", "h"], ["c", "i"], ["d"], ["e"], ["f"]],
+  );
+  assert.deepEqual(dealPhotosToCards([], 6), []);
   assert.deepEqual(dealPhotosToCards(["a"], 0), []);
 });
 

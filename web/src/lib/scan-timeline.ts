@@ -1,14 +1,16 @@
 export const MIN_SCAN_MS = 20_000;
 export const MAX_SCAN_MS = 28_000;
 export const TARGET_SCAN_SECONDS = 20;
-export const EVIDENCE_BATCH_SIZE = 8;
+/** 6 listing + 2 website + 1 competitor: every card mounts at once, no rotation. */
+export const EVIDENCE_BATCH_SIZE = 9;
 /** Listing photos spread across this many cards before any card repeats. */
-export const LISTING_CARD_COUNT = 5;
-export const EVIDENCE_CARD_STAGGER_MS = 750;
+export const LISTING_CARD_COUNT = 6;
+/** Gap between each card's entrance so the collage doesn't land all at once. */
+export const EVIDENCE_CARD_STAGGER_MS = 1_000;
 export const EVIDENCE_CARD_ENTRY_MS = 900;
 export const EVIDENCE_LAST_CARD_HOLD_MS = 3_000;
 /** A listing photo rests this long before the card turns to the next one. */
-export const PHOTO_FLIP_HOLD_MS = 3_000;
+export const PHOTO_FLIP_HOLD_MS = 2_000;
 /** The turn itself, kept slow enough to read as a deliberate flip. */
 export const PHOTO_FLIP_MS = 900;
 /** Google Maps returns a relevance-ordered sample; the wall never shows more. */

@@ -178,9 +178,10 @@ function reviewVisitLabel(visitDate?: ScanReview["visitDate"]): string | undefin
 }
 
 /**
- * Eight anchors around the map: one hero in the middle and seven satellites.
- * The bottom-left quadrant stays clear for the review wall, and nothing sits
- * under the search chip along the top centre.
+ * Nine anchors around the map: one hero in the middle and eight satellites —
+ * enough for 6 listing cards + 2 website captures + 1 competitor card to all
+ * be on stage at once, no rotation needed. The top-right corner stays clear
+ * for the review wall, and nothing sits under the top-centre search chip.
  */
 const COLLAGE_SLOTS = [
   {
@@ -191,37 +192,44 @@ const COLLAGE_SLOTS = [
   {
     position: "left-0 top-[2%] w-[100px] sm:left-[3%] sm:w-[146px]",
     rotate: "-6deg",
+    zIndex: 37,
+  },
+  {
+    position: "left-[16%] top-[9%] w-[88px] sm:left-[20%] sm:w-[126px]",
+    rotate: "-3deg",
+    zIndex: 36,
+  },
+  {
+    position: "left-0 top-[27%] w-[94px] sm:left-[1%] sm:w-[134px]",
+    rotate: "3deg",
+    zIndex: 35,
+  },
+  {
+    // Bottom-left, freed up now that the review wall lives top-right.
+    position: "bottom-[26%] left-[3%] w-[90px] sm:left-[6%] sm:w-[128px]",
+    rotate: "5deg",
     zIndex: 34,
   },
   {
-    position: "right-0 top-[6%] w-[98px] sm:right-[3%] sm:w-[142px]",
-    rotate: "6deg",
+    position: "bottom-[6%] left-[20%] w-[92px] sm:left-[24%] sm:w-[130px]",
+    rotate: "-2deg",
     zIndex: 33,
   },
   {
-    position: "left-0 top-[26%] w-[94px] sm:left-[1%] sm:w-[134px]",
-    rotate: "3deg",
+    position: "bottom-[4%] right-[3%] w-[96px] sm:right-[7%] sm:w-[138px]",
+    rotate: "4deg",
     zIndex: 32,
   },
   {
-    position: "right-0 top-[30%] w-[94px] sm:right-[1%] sm:w-[134px]",
-    rotate: "-4deg",
+    // Right edge, low enough to clear the top-right review wall.
+    position: "right-[6%] top-[38%] w-[86px] sm:right-[10%] sm:w-[120px]",
+    rotate: "5deg",
     zIndex: 31,
   },
   {
-    position: "bottom-[4%] right-[2%] w-[100px] sm:right-[6%] sm:w-[146px]",
-    rotate: "4deg",
+    position: "right-[22%] top-[60%] w-[90px] sm:right-[26%] sm:w-[126px]",
+    rotate: "-4deg",
     zIndex: 30,
-  },
-  {
-    position: "left-[14%] top-[12%] w-[88px] sm:left-[19%] sm:w-[124px]",
-    rotate: "-3deg",
-    zIndex: 29,
-  },
-  {
-    position: "right-[14%] bottom-[22%] w-[88px] sm:right-[19%] sm:w-[124px]",
-    rotate: "5deg",
-    zIndex: 28,
   },
 ] as const;
 
@@ -604,11 +612,14 @@ function ReviewWall({
   const sourceUri = safeHttpUrl(review.googleMapsUri) || safeHttpUrl(mapsUri);
   const visitLabel = reviewVisitLabel(review.visitDate);
 
-  // Sits clear above the mobile progress card, which overlays this corner until
-  // lg and paints above it. The capped height keeps it on short viewports.
+  // Anchored top-right, below the centred search chip at every breakpoint —
+  // on a narrow phone the chip spans nearly the full width, so "top right"
+  // means stacked underneath it rather than beside it, and that same offset
+  // still reads as a clean corner box once the canvas is wide enough for the
+  // chip to leave room beside it. A capped height keeps it off short screens.
   return (
     <section
-      className="pointer-events-auto absolute bottom-[15rem] left-3 z-40 max-h-[44vh] w-[min(430px,calc(100%-1.5rem))] overflow-hidden rounded-[22px] border border-black/5 bg-white/95 p-3 shadow-[0_18px_50px_rgba(15,39,31,0.2)] backdrop-blur sm:bottom-[13rem] sm:rounded-[24px] sm:p-3.5 lg:bottom-20 lg:left-4 lg:max-h-none lg:w-[460px] lg:p-4"
+      className="pointer-events-auto absolute right-3 top-24 z-40 max-h-[46vh] w-[min(300px,calc(100%-1.5rem))] overflow-hidden rounded-[22px] border border-black/5 bg-white/95 p-3 shadow-[0_18px_50px_rgba(15,39,31,0.2)] backdrop-blur sm:right-4 sm:top-28 sm:w-[340px] sm:rounded-[24px] sm:p-3.5 lg:right-6 lg:w-[380px] lg:p-4"
       aria-label="Recent Google reviews"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
@@ -917,40 +928,39 @@ export default function ScanExperience({
 
   // Cards must never appear before their pixels exist. Every candidate source is
   // decoded off-stage first, so the collage only ever shows real, loaded media.
+  //
+  // Deliberately no per-run cancellation here. A URL's decode outcome is a
+  // permanent fact, not something that goes stale when this effect re-runs for
+  // an unrelated prop change — and `requestedSrcRef` already stops it firing
+  // twice for the same source. An earlier version tied a `cancelled` flag to
+  // each run's cleanup, which discarded every in-flight result the instant the
+  // effect re-ran (guaranteed at least once under Strict Mode in development,
+  // and again in production if the caller ever passes a new `photos` array
+  // identity before the first pass finishes) — so no photo ever reached
+  // "loaded" and the collage stayed empty for its entire scan.
   useEffect(() => {
     const candidates = [
       ...gallery.map((photo) => photo.src),
       desktopScreenshot,
       mobileScreenshot,
     ].filter((src): src is string => Boolean(src));
-    const pending = candidates.filter((src) => !requestedSrcRef.current.has(src));
-    if (pending.length === 0) return;
+    const pending = Array.from(new Set(candidates)).filter(
+      (src) => !requestedSrcRef.current.has(src),
+    );
 
-    let cancelled = false;
-    const loaders: HTMLImageElement[] = [];
     for (const src of pending) {
       requestedSrcRef.current.add(src);
+      // No referrerPolicy override here: listing photos and website captures
+      // used the browser default before this preload existed, and Google's
+      // photo CDN can reject a stripped referrer. "no-referrer" is reserved
+      // for reviewer/contributor avatars, which are rendered directly and
+      // never routed through this preload.
       const loader = new window.Image();
       loader.decoding = "async";
-      loader.referrerPolicy = "no-referrer";
-      loader.onload = () => {
-        if (cancelled) return;
-        setImageLoadStatus(src, loader.naturalWidth > 0 ? "loaded" : "failed");
-      };
-      loader.onerror = () => {
-        if (!cancelled) setImageLoadStatus(src, "failed");
-      };
+      loader.onload = () => setImageLoadStatus(src, loader.naturalWidth > 0 ? "loaded" : "failed");
+      loader.onerror = () => setImageLoadStatus(src, "failed");
       loader.src = src;
-      loaders.push(loader);
     }
-
-    return () => {
-      cancelled = true;
-      for (const loader of loaders) {
-        loader.onload = null;
-        loader.onerror = null;
-      }
-    };
   }, [gallery, desktopScreenshot, mobileScreenshot, setImageLoadStatus]);
 
   const isDecoded = useCallback(
@@ -1333,7 +1343,7 @@ export default function ScanExperience({
             onImageError={(src) => setImageLoadStatus(src, "failed")}
           />
 
-          {/* Recent Google reviews hold the bottom-left corner of the stage. */}
+          {/* Recent Google reviews hold the top-right corner of the stage. */}
           <ReviewWall reviews={reviewWallItems} placeRating={rating} mapsUri={mapsUri} />
 
           {/* Scan beam across map */}
