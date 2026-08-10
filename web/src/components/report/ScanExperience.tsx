@@ -604,9 +604,11 @@ function ReviewWall({
   const sourceUri = safeHttpUrl(review.googleMapsUri) || safeHttpUrl(mapsUri);
   const visitLabel = reviewVisitLabel(review.visitDate);
 
+  // Sits clear above the mobile progress card, which overlays this corner until
+  // lg and paints above it. The capped height keeps it on short viewports.
   return (
     <section
-      className="pointer-events-auto absolute bottom-28 left-3 z-40 w-[min(430px,calc(100%-1.5rem))] overflow-hidden rounded-[22px] border border-black/5 bg-white/95 p-3.5 shadow-[0_18px_50px_rgba(15,39,31,0.2)] backdrop-blur sm:rounded-[24px] lg:bottom-16 lg:left-4 lg:w-[460px] lg:p-4"
+      className="pointer-events-auto absolute bottom-[15rem] left-3 z-40 max-h-[44vh] w-[min(430px,calc(100%-1.5rem))] overflow-hidden rounded-[22px] border border-black/5 bg-white/95 p-3 shadow-[0_18px_50px_rgba(15,39,31,0.2)] backdrop-blur sm:bottom-[13rem] sm:rounded-[24px] sm:p-3.5 lg:bottom-20 lg:left-4 lg:max-h-none lg:w-[460px] lg:p-4"
       aria-label="Recent Google reviews"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
@@ -631,7 +633,7 @@ function ReviewWall({
 
       <article
         key={`review-${index}`}
-        className="scan-review-slide mt-3 min-h-[124px] rounded-[18px] bg-[#dce6dd] px-4 py-3.5"
+        className="scan-review-slide mt-2.5 min-h-[100px] rounded-[18px] bg-[#dce6dd] px-3.5 py-3 sm:mt-3 sm:min-h-[124px] sm:px-4 sm:py-3.5"
       >
         <div className="flex items-start justify-between gap-2">
           <div className="flex min-w-0 items-start gap-2">
@@ -679,7 +681,7 @@ function ReviewWall({
             </span>
           ) : null}
         </div>
-        <p className="mt-2.5 line-clamp-4 text-[12px] font-medium leading-snug text-ink/80">
+        <p className="mt-2.5 line-clamp-3 text-[12px] font-medium leading-snug text-ink/80 sm:line-clamp-4">
           {review.text ? `“${review.text}”` : "This reviewer left a rating without written feedback."}
         </p>
       </article>
