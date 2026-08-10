@@ -224,6 +224,32 @@ func TestGetReportCoalescesConcurrentSamePlaceGeneration(t *testing.T) {
 	}
 }
 
+func TestGetReportDoesNotCachePlacesContentAfterGeneration(t *testing.T) {
+	service := newReportTestService()
+	service.reportSlots = make(chan struct{}, 1)
+	var placeCalls atomic.Int32
+	service.fetchPlaceDetails = func(context.Context, string) (*placeSnapshot, error) {
+		placeCalls.Add(1)
+		return &placeSnapshot{Details: PlaceDetails{
+			PlaceID: "fresh-place",
+			Name:    "Fresh Cafe",
+			Source:  "places",
+		}}, nil
+	}
+	service.fetchSiteContent = func(context.Context, string) (profiles.SiteContent, bool) {
+		return profiles.SiteContent{}, false
+	}
+
+	for i := 0; i < 2; i++ {
+		if _, err := service.GetReport(context.Background(), "fresh-place"); err != nil {
+			t.Fatalf("GetReport call %d: %v", i+1, err)
+		}
+	}
+	if placeCalls.Load() != 2 {
+		t.Fatalf("Places detail calls=%d, want one fresh call per completed report request", placeCalls.Load())
+	}
+}
+
 func TestGetReportCapacityExhaustionFailsBeforeProviderCalls(t *testing.T) {
 	service := newReportTestService()
 	service.reportSlots = make(chan struct{}, 1)

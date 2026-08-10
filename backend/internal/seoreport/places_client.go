@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"strings"
@@ -52,6 +53,29 @@ var detailFieldMask = strings.Join([]string{
 	"takeout",
 	"reservable",
 }, ",")
+
+var nearbyCompetitorFieldMask = strings.Join([]string{
+	"places.id",
+	"places.displayName",
+	"places.formattedAddress",
+	"places.nationalPhoneNumber",
+	"places.internationalPhoneNumber",
+	"places.websiteUri",
+	"places.googleMapsUri",
+	"places.location",
+	"places.rating",
+	"places.userRatingCount",
+	"places.types",
+	"places.primaryType",
+	"places.businessStatus",
+	"places.photos",
+	"places.regularOpeningHours",
+	"places.delivery",
+	"places.takeout",
+	"places.reservable",
+}, ",")
+
+const competitorRadiusMeters = 10_000.0
 
 // PlacesClient talks to Google Places API (New).
 type PlacesClient struct {
@@ -171,26 +195,129 @@ func (c *PlacesClient) SearchRestaurants(ctx context.Context, query, location st
 
 // placePhoto is a raw Places photo resource used for media URLs.
 type placePhoto struct {
-	Name         string
-	WidthPx      int
-	HeightPx     int
-	Attribution  string
+	Name          string
+	WidthPx       int
+	HeightPx      int
+	Attribution   string
 	GoogleMapsURI string
 }
 
 // placeSnapshot is the internal Places details model used for scoring.
 type placeSnapshot struct {
-	Details          PlaceDetails
-	Reviews          []Review
-	Photos           []placePhoto
-	PhotoCount       int
-	HasHours         bool
-	Delivery         bool
-	Takeout          bool
-	Reservable       bool
-	DeliveryKnown    bool
-	TakeoutKnown     bool
-	ReservableKnown  bool
+	Details         PlaceDetails
+	Reviews         []Review
+	Photos          []placePhoto
+	PhotoCount      int
+	HasHours        bool
+	Delivery        bool
+	Takeout         bool
+	Reservable      bool
+	DeliveryKnown   bool
+	TakeoutKnown    bool
+	ReservableKnown bool
+	DistanceKM      float64
+}
+
+// SearchNearbyCuisine finds same-cuisine restaurants in the official 10 km
+// Places Nearby Search boundary. POPULARITY is only a discovery preference;
+// callers calculate and label their own deterministic visibility score.
+func (c *PlacesClient) SearchNearbyCuisine(
+	ctx context.Context,
+	current PlaceDetails,
+	radiusMeters float64,
+	limit int,
+) ([]placeSnapshot, string, error) {
+	if !c.Enabled() || current.Latitude == nil || current.Longitude == nil {
+		return nil, "", nil
+	}
+	if radiusMeters <= 0 || radiusMeters > competitorRadiusMeters {
+		radiusMeters = competitorRadiusMeters
+	}
+	if limit < 1 {
+		limit = 12
+	}
+	if limit > 20 {
+		limit = 20
+	}
+
+	cuisineType := competitorCuisineType(current)
+	body := map[string]any{
+		"includedTypes":  []string{cuisineType},
+		"maxResultCount": limit,
+		"rankPreference": "POPULARITY",
+		"languageCode":   "en",
+		"regionCode":     c.regionCode,
+		"locationRestriction": map[string]any{
+			"circle": map[string]any{
+				"center": map[string]float64{
+					"latitude":  *current.Latitude,
+					"longitude": *current.Longitude,
+				},
+				"radius": radiusMeters,
+			},
+		},
+	}
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return nil, cuisineType, fmt.Errorf("marshal nearby competitor body: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/places:searchNearby", bytes.NewReader(payload))
+	if err != nil {
+		return nil, cuisineType, fmt.Errorf("create nearby competitor request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Goog-Api-Key", c.apiKey)
+	req.Header.Set("X-Goog-FieldMask", nearbyCompetitorFieldMask)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, cuisineType, fmt.Errorf("places searchNearby: %w", err)
+	}
+	defer resp.Body.Close()
+
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, cuisineType, fmt.Errorf("places searchNearby failed (%d): %s", resp.StatusCode, truncate(string(raw), 200))
+	}
+	var parsed struct {
+		Places []map[string]any `json:"places"`
+	}
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return nil, cuisineType, fmt.Errorf("decode places searchNearby: %w", err)
+	}
+
+	currentID := sanitizePlaceID(current.PlaceID)
+	out := make([]placeSnapshot, 0, len(parsed.Places))
+	for _, rawPlace := range parsed.Places {
+		// Missing display names are not useful comparison evidence. In
+		// particular, do not turn them into the generic details fallback name.
+		if strings.TrimSpace(localizedText(rawPlace["displayName"])) == "" {
+			continue
+		}
+		candidate := parsePlaceSnapshot(rawPlace, "")
+		candidateID := sanitizePlaceID(candidate.Details.PlaceID)
+		if candidateID == "" || candidateID == currentID || isClosedBusiness(candidate.Details.BusinessStatus) {
+			continue
+		}
+		if cuisineType != "restaurant" && !placeHasType(candidate.Details, cuisineType) {
+			continue
+		}
+		if candidate.Details.Latitude == nil || candidate.Details.Longitude == nil {
+			continue
+		}
+		candidate.DistanceKM = haversineKM(
+			*current.Latitude,
+			*current.Longitude,
+			*candidate.Details.Latitude,
+			*candidate.Details.Longitude,
+		)
+		if candidate.DistanceKM*1000 > radiusMeters+1 {
+			continue
+		}
+		out = append(out, candidate)
+	}
+	return out, cuisineType, nil
 }
 
 // GetPlaceDetails loads Places details including reviews and order attrs.
@@ -230,9 +357,15 @@ func (c *PlacesClient) GetPlaceDetails(ctx context.Context, placeID string) (*pl
 		return nil, fmt.Errorf("decode places details: %w", err)
 	}
 
-	snap := &placeSnapshot{
+	snapValue := parsePlaceSnapshot(place, id)
+	snap := &snapValue
+	return snap, nil
+}
+
+func parsePlaceSnapshot(place map[string]any, fallbackID string) placeSnapshot {
+	snap := placeSnapshot{
 		Details: PlaceDetails{
-			PlaceID:          firstNonEmpty(asString(place["id"]), id),
+			PlaceID:          firstNonEmpty(asString(place["id"]), fallbackID),
 			Name:             firstNonEmpty(localizedText(place["displayName"]), "Restaurant"),
 			Address:          asString(place["formattedAddress"]),
 			Phone:            firstNonEmpty(asString(place["nationalPhoneNumber"]), asString(place["internationalPhoneNumber"])),
@@ -241,6 +374,7 @@ func (c *PlacesClient) GetPlaceDetails(ctx context.Context, placeID string) (*pl
 			PriceLevel:       asString(place["priceLevel"]),
 			BusinessStatus:   asString(place["businessStatus"]),
 			Types:            asStringSlice(place["types"]),
+			PrimaryType:      asString(place["primaryType"]),
 			EditorialSummary: localizedText(place["editorialSummary"]),
 			Source:           "places",
 		},
@@ -303,7 +437,51 @@ func (c *PlacesClient) GetPlaceDetails(ctx context.Context, placeID string) (*pl
 		}
 	}
 
-	return snap, nil
+	return snap
+}
+
+func competitorCuisineType(place PlaceDetails) string {
+	for _, candidate := range append([]string{place.PrimaryType}, place.Types...) {
+		candidate = strings.ToLower(strings.TrimSpace(candidate))
+		if candidate != "restaurant" && strings.HasSuffix(candidate, "_restaurant") {
+			return candidate
+		}
+	}
+	return "restaurant"
+}
+
+func placeHasType(place PlaceDetails, wanted string) bool {
+	wanted = strings.ToLower(strings.TrimSpace(wanted))
+	if wanted == "" {
+		return false
+	}
+	if strings.EqualFold(place.PrimaryType, wanted) {
+		return true
+	}
+	for _, candidate := range place.Types {
+		if strings.EqualFold(strings.TrimSpace(candidate), wanted) {
+			return true
+		}
+	}
+	return false
+}
+
+func isClosedBusiness(status string) bool {
+	status = strings.ToUpper(strings.TrimSpace(status))
+	return status == "CLOSED_PERMANENTLY" || status == "CLOSED_TEMPORARILY"
+}
+
+func haversineKM(lat1, lng1, lat2, lng2 float64) float64 {
+	const earthRadiusKM = 6371.0088
+	toRadians := func(value float64) float64 { return value * math.Pi / 180 }
+	lat1Rad := toRadians(lat1)
+	lat2Rad := toRadians(lat2)
+	deltaLat := toRadians(lat2 - lat1)
+	deltaLng := toRadians(lng2 - lng1)
+	a := math.Sin(deltaLat/2)*math.Sin(deltaLat/2) +
+		math.Cos(lat1Rad)*math.Cos(lat2Rad)*math.Sin(deltaLng/2)*math.Sin(deltaLng/2)
+	a = math.Max(0, math.Min(1, a))
+	return earthRadiusKM * 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
 }
 
 // FetchPhotoMedia streams a Places photo binary (keeps the API key server-side).

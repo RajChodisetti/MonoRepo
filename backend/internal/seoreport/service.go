@@ -5,7 +5,6 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/config"
@@ -16,7 +15,6 @@ import (
 )
 
 const (
-	reportCacheTTL         = 12 * time.Minute
 	reportGenerationBudget = 15 * time.Second
 	reportSummaryBudget    = 2200 * time.Millisecond
 	maxConcurrentReports   = 2
@@ -26,8 +24,7 @@ var (
 	// ErrNotFound indicates the restaurant could not be resolved.
 	ErrNotFound = errors.New("seo report restaurant not found")
 	// ErrReportBusy fails fast before any provider work when public generation
-	// capacity is exhausted. Callers can retry after an in-flight report lands
-	// in the cache.
+	// capacity is exhausted. Callers can retry after an in-flight report finishes.
 	ErrReportBusy = errors.New("seo report generation is at capacity")
 )
 
@@ -48,23 +45,16 @@ type Service struct {
 	publicBaseURL string
 	publicWebURL  string
 
-	mu    sync.Mutex
-	cache map[string]cachedReport
-
 	reportCalls singleflight.Group
 	reportSlots chan struct{}
 
 	// Private hooks keep orchestration testable without provider calls. Production
 	// constructors always wire the concrete Places, profile, and website clients.
-	fetchPlaceDetails func(context.Context, string) (*placeSnapshot, error)
-	fetchSiteContent  func(context.Context, string) (profiles.SiteContent, bool)
-	auditWebsite      func(context.Context, string, llmlib.Client) WebsiteAudit
-	reportBudget      time.Duration
-}
-
-type cachedReport struct {
-	expires time.Time
-	payload ReportResponse
+	fetchPlaceDetails      func(context.Context, string) (*placeSnapshot, error)
+	fetchSiteContent       func(context.Context, string) (profiles.SiteContent, bool)
+	fetchNearbyCompetitors func(context.Context, PlaceDetails, float64, int) ([]placeSnapshot, string, error)
+	auditWebsite           func(context.Context, string, llmlib.Client) WebsiteAudit
+	reportBudget           time.Duration
 }
 
 // NewService constructs the SEO report service.
@@ -87,12 +77,12 @@ func NewService(
 		summarizer:   summarizer,
 		llm:          llmClient,
 		log:          log,
-		cache:        make(map[string]cachedReport),
 		reportBudget: reportGenerationBudget,
 		reportSlots:  sharedReportGenerationSlots,
 	}
 	service.fetchPlaceDetails = service.places.GetPlaceDetails
 	service.fetchSiteContent = service.loadSiteContent
+	service.fetchNearbyCompetitors = service.places.SearchNearbyCuisine
 	service.auditWebsite = AuditWebsite
 	return service
 }
@@ -159,23 +149,18 @@ func (s *Service) SearchRestaurants(ctx context.Context, query, location string,
 	return resp, nil
 }
 
-// GetReport builds (or returns cached) SEO report for a place ID.
+// GetReport builds a fresh SEO report for a place ID. Concurrent callers for
+// the same place share one in-flight generation, but completed Places content
+// is not retained or reused.
 func (s *Service) GetReport(ctx context.Context, placeID string) (ReportResponse, error) {
 	placeID = sanitizePlaceID(placeID)
 	if placeID == "" {
 		return ReportResponse{}, ErrNotFound
 	}
 
-	if cached, ok := s.getCached(placeID); ok {
-		return cached, nil
-	}
-
 	// DoChan lets each HTTP caller stop waiting independently while the shared,
-	// 15-second-bounded generation finishes for remaining callers and cache.
+	// 15-second-bounded generation finishes for remaining concurrent callers.
 	result := s.reportCalls.DoChan(placeID, func() (any, error) {
-		if cached, ok := s.getCached(placeID); ok {
-			return cached, nil
-		}
 		return s.generateReport(context.WithoutCancel(ctx), placeID)
 	})
 	select {
@@ -194,9 +179,6 @@ func (s *Service) GetReport(ctx context.Context, placeID string) (ReportResponse
 }
 
 func (s *Service) generateReport(ctx context.Context, placeID string) (ReportResponse, error) {
-	if cached, ok := s.getCached(placeID); ok {
-		return cached, nil
-	}
 	reportSlots := s.reportSlots
 	if reportSlots == nil {
 		reportSlots = sharedReportGenerationSlots
@@ -344,7 +326,34 @@ func (s *Service) generateReport(ctx context.Context, placeID string) (ReportRes
 	// current public-use contract and must never cross this boundary.
 	place.Media = buildPlaceMedia(place, photos)
 
-	audit := WebsiteAudit{Source: "none"}
+	type competitorResult struct {
+		candidates  []placeSnapshot
+		cuisineType string
+		err         error
+	}
+	var competitorCh chan competitorResult
+	fetchNearbyCompetitors := s.fetchNearbyCompetitors
+	if fetchNearbyCompetitors == nil && s.places != nil {
+		fetchNearbyCompetitors = s.places.SearchNearbyCuisine
+	}
+	if snap != nil && place.Latitude != nil && place.Longitude != nil && fetchNearbyCompetitors != nil {
+		competitorCh = make(chan competitorResult, 1)
+		go func() {
+			candidates, cuisineType, err := fetchNearbyCompetitors(
+				reportCtx,
+				place,
+				competitorRadiusMeters,
+				12,
+			)
+			competitorCh <- competitorResult{candidates: candidates, cuisineType: cuisineType, err: err}
+		}()
+	}
+
+	audit := WebsiteAudit{
+		Source:         "none",
+		MenuEvidence:   noWebsiteMenuEvidence(),
+		SocialPresence: noWebsiteSocialPresence(),
+	}
 	if strings.TrimSpace(place.Website) != "" {
 		auditWebsite := s.auditWebsite
 		if auditWebsite == nil {
@@ -364,6 +373,47 @@ func (s *Service) generateReport(ctx context.Context, placeID string) (ReportRes
 		}
 		if audit.Source == "fallback" {
 			s.log.WarnContext(ctx, "seo_website_audit_fallback", "website", place.Website, "source", audit.Source, "reason", audit.FailureReason)
+		}
+	}
+	scoreIn.MenuEvidence = audit.MenuEvidence
+	scoreIn.SocialPresence = audit.SocialPresence
+	competitorFailed := false
+	if competitorCh == nil {
+		scoreIn.CompetitorScan = CompetitorScan{
+			Status:       "unavailable",
+			RadiusKM:     competitorRadiusMeters / 1000,
+			Cuisine:      strings.ReplaceAll(competitorCuisineType(place), "_", " "),
+			ScoreKind:    "google_visibility",
+			CurrentScore: ternaryVisibilityScore(snap),
+			Notice:       "Nearby comparison requires live Places coordinates and a specific restaurant listing.",
+		}
+	} else {
+		select {
+		case result := <-competitorCh:
+			if result.err != nil {
+				competitorFailed = true
+				s.log.WarnContext(ctx, "seo_competitor_scan_failed", "error", result.err, "place_id", placeID)
+				scoreIn.CompetitorScan = CompetitorScan{
+					Status:       "partial",
+					RadiusKM:     competitorRadiusMeters / 1000,
+					Cuisine:      strings.ReplaceAll(result.cuisineType, "_", " "),
+					ScoreKind:    "google_visibility",
+					CurrentScore: googleVisibilityScore(*snap),
+					Notice:       "Nearby same-cuisine listings did not finish, so no competitor claim is shown.",
+				}
+			} else {
+				scoreIn.CompetitorScan = buildCompetitorScan(*snap, result.candidates, result.cuisineType)
+			}
+		case <-reportCtx.Done():
+			competitorFailed = true
+			scoreIn.CompetitorScan = CompetitorScan{
+				Status:       "partial",
+				RadiusKM:     competitorRadiusMeters / 1000,
+				Cuisine:      strings.ReplaceAll(competitorCuisineType(place), "_", " "),
+				ScoreKind:    "google_visibility",
+				CurrentScore: googleVisibilityScore(*snap),
+				Notice:       "Nearby same-cuisine listings exceeded the report time budget, so no competitor claim is shown.",
+			}
 		}
 	}
 
@@ -394,7 +444,7 @@ func (s *Service) generateReport(ctx context.Context, placeID string) (ReportRes
 	if audit.Source == "vision" || summaryResult.Source == "ai-assisted" {
 		report.AnalysisSource = "ai-assisted"
 	}
-	partial := detailsErr != nil || reportCtx.Err() != nil
+	partial := detailsErr != nil || reportCtx.Err() != nil || competitorFailed
 	if strings.TrimSpace(place.Website) != "" && (audit.Source == "fallback" || audit.Source == "none") {
 		partial = true
 	}
@@ -417,7 +467,6 @@ func (s *Service) generateReport(ctx context.Context, placeID string) (ReportRes
 	report.GeneratedInMS = time.Since(startedAt).Milliseconds()
 
 	payload := ReportResponse{Place: place, Report: report}
-	s.putCached(placeID, payload)
 	return payload, nil
 }
 
@@ -540,32 +589,4 @@ func filterEmpty(values []string) []string {
 		}
 	}
 	return out
-}
-
-func (s *Service) getCached(placeID string) (ReportResponse, bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	entry, ok := s.cache[placeID]
-	if !ok || time.Now().After(entry.expires) {
-		if ok {
-			delete(s.cache, placeID)
-		}
-		return ReportResponse{}, false
-	}
-	return entry.payload, true
-}
-
-func (s *Service) putCached(placeID string, payload ReportResponse) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	// Simple bound to avoid unbounded growth.
-	if len(s.cache) > 512 {
-		now := time.Now()
-		for k, v := range s.cache {
-			if now.After(v.expires) {
-				delete(s.cache, k)
-			}
-		}
-	}
-	s.cache[placeID] = cachedReport{expires: time.Now().Add(reportCacheTTL), payload: payload}
 }

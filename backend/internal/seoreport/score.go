@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"net/url"
+	"sort"
 	"strings"
 )
 
@@ -24,44 +25,34 @@ var genericTypes = map[string]struct{}{
 	"meal_delivery":     {},
 }
 
-var socialHosts = map[string]struct{}{
-	"facebook.com": {},
-	"fb.com":       {},
-	"instagram.com": {},
-	"twitter.com":  {},
-	"x.com":        {},
-	"tiktok.com":   {},
-	"linkedin.com": {},
-	"linktr.ee":    {},
-}
-
 var orderOnlineHints = []string{
 	"/order", "order-online", "online-order", "ubereats", "doordash",
 	"menulog", "deliveroo", "grubhub", "skipthedishes", "toasttab", "square.site",
 }
 
-var menuKeywords = []string{"menu", "dish", "dishes", "food", "meal", "cuisine", "specials"}
-
 // ScoreInput aggregates Places + enrichment signals for scoring.
 type ScoreInput struct {
-	Place      PlaceDetails
-	Reviews    []Review
-	PhotoCount int
-	HasHours   bool
-	Delivery   bool
-	Takeout    bool
-	Reservable bool
-	DeliveryKnown  bool
-	TakeoutKnown   bool
+	Place           PlaceDetails
+	Reviews         []Review
+	PhotoCount      int
+	HasHours        bool
+	Delivery        bool
+	Takeout         bool
+	Reservable      bool
+	DeliveryKnown   bool
+	TakeoutKnown    bool
 	ReservableKnown bool
-	Enrichment Enrichment
+	Enrichment      Enrichment
 	// Website visual audit (from screenshot + AI). When QualityKnown is false,
 	// scoreWebsite uses a conservative presence fallback (never full 20).
-	WebsiteQualityKnown bool
-	WebsiteQualityScore int // 0–100
-	WebsiteReview       string
-	WebsiteScreenshot   string
+	WebsiteQualityKnown     bool
+	WebsiteQualityScore     int // 0–100
+	WebsiteReview           string
+	WebsiteScreenshot       string
 	WebsiteMobileScreenshot string
+	MenuEvidence            MenuEvidence
+	SocialPresence          SocialPresence
+	CompetitorScan          CompetitorScan
 }
 
 // BuildReport computes the 100-point SEO report.
@@ -76,28 +67,63 @@ func BuildReport(in ScoreInput) Report {
 	if in.Enrichment.Website != "" && place.Website == "" {
 		place.Website = in.Enrichment.Website
 	}
+	in.Place = place
 	hasHours := in.HasHours || in.Enrichment.HasHours
+
+	menuEvidence := normalizeMenuEvidence(in.MenuEvidence, place.Website)
+	socialPresence := scoreSocialPresence(in.SocialPresence)
+	in.MenuEvidence = menuEvidence
+	in.SocialPresence = socialPresence
 
 	seo := scoreSEO(place)
 	reviews := scoreReviews(place, in.Reviews)
 	website := scoreWebsite(place.Website, in.WebsiteQualityKnown, in.WebsiteQualityScore)
 	order := scoreOrderOnline(place.Website, in)
-	menu := scoreMenu(in)
+	menu := scoreMenu(menuEvidence)
 	contact := scoreContact(place.Phone, place.Email)
-	listing := scoreListing(place, hasHours, in.PhotoCount)
+	listing := scoreListing(place, hasHours, in.PhotoCount, socialPresence)
+	competitorScan := in.CompetitorScan
+	if strings.TrimSpace(competitorScan.ScoreKind) == "" {
+		competitorScan = CompetitorScan{
+			Status:    "unavailable",
+			RadiusKM:  competitorRadiusMeters / 1000,
+			ScoreKind: "google_visibility",
+			Notice:    "Nearby same-cuisine visibility data was unavailable for this report.",
+		}
+	}
 
 	metrics := []Metric{
-		metricOf("seo", "SEO keywords", seo, 20),
-		metricOf("reviews", "Recent reviews", reviews, 25),
-		metricOf("website", "Website design", website, 20),
-		metricOf("order_online", "Order online", order, 5),
-		metricOf("menu", "Menu data", menu, 10),
-		metricOf("contact", "Phone & email", contact, 10),
-		metricOf("listing", "Listing completeness", listing, 10),
+		metricOf("seo", "SEO keywords", seo, 20,
+			"Cuisine, locality, and descriptive listing signals determine how clearly Google can understand the venue.",
+			seoEvidence(place),
+			"Use the primary cuisine and suburb naturally in the business description, website title, and local posts."),
+		metricOf("reviews", "Recent reviews", reviews, 25,
+			fmt.Sprintf("The listing has %d reviews and a %s rating; recent review quality and freshness are also weighted.", intValue(place.UserRatingCount), ratingLabel(place.Rating)),
+			reviewEvidence(place, in.Reviews),
+			"Ask recent guests for specific, honest feedback and reply consistently to new reviews."),
+		metricOf("website", "Website design", website, 20,
+			websiteRationale(place.Website, in.WebsiteQualityKnown, in.WebsiteQualityScore),
+			websiteEvidence(place.Website, in.WebsiteScreenshot, in.WebsiteMobileScreenshot),
+			"Keep the homepage fast, mobile-readable, and explicit about cuisine, menu, ordering, and reservations."),
+		metricOf("order_online", "Order online", order, 5,
+			"Delivery, takeout, reservations, and a clear direct-order path are scored from known listing and website signals.",
+			orderEvidence(in),
+			"Add a prominent direct order or reservation link and keep Google service attributes accurate."),
+		metricOf("menu", "Menu data", menu, 10,
+			menuEvidence.Rationale,
+			menuMetricEvidence(menuEvidence),
+			"Publish a crawlable menu page and add Restaurant/Menu structured data to the official website."),
+		metricOf("contact", "Phone & email", contact, 10,
+			"Guests need both a public phone number and a discoverable business email.",
+			contactEvidence(place.Phone, place.Email),
+			"List a monitored business phone and email consistently on Google and the official website."),
+		metricOf("listing", "Listing completeness", listing, 10,
+			"Address, hours, operating status, cuisine category, photos, and verified social profiles make up this bucket.",
+			listingEvidence(place, hasHours, in.PhotoCount, socialPresence),
+			"Complete every Google listing field and link maintained social profiles from the official website."),
 	}
 
 	rawTotal := seo + reviews + website + order + menu + contact + listing
-	// Raw bucket sum is intentionally generous; compress so typical reports land ~20–60.
 	overall := strictOverallScore(rawTotal)
 	label, color := labelForScore(overall)
 
@@ -105,17 +131,20 @@ func BuildReport(in ScoreInput) Report {
 	loss := int(math.Round(float64(100-overall)*12)) + ternaryInt(place.Website == "", 180, 0)
 
 	return Report{
-		RestaurantName:       place.Name,
-		Address:              place.Address,
-		OverallScore:         overall,
-		OverallLabel:         label,
-		OverallColor:         color,
-		Metrics:              metrics,
-		Competitors:          buildCompetitors(place, reviews),
-		Issues:               issues,
-		EstimatedMonthlyLoss: loss,
-		FullReportLocked:     true,
-		UnlockCTA:            "Unlock the full SEO report by verifying your email.",
+		RestaurantName:          place.Name,
+		Address:                 place.Address,
+		OverallScore:            overall,
+		OverallLabel:            label,
+		OverallColor:            color,
+		Metrics:                 metrics,
+		Competitors:             competitorScan.Rows,
+		CompetitorScan:          competitorScan,
+		MenuEvidence:            menuEvidence,
+		SocialPresence:          socialPresence,
+		Issues:                  issues,
+		EstimatedMonthlyLoss:    loss,
+		FullReportLocked:        true,
+		UnlockCTA:               "Unlock the full SEO report by verifying your email.",
 		WebsiteScreenshot:       in.WebsiteScreenshot,
 		WebsiteMobileScreenshot: in.WebsiteMobileScreenshot,
 		WebsiteQualityScore:     in.WebsiteQualityScore,
@@ -178,19 +207,18 @@ func reviewSentiment(r Review) string {
 
 func scoreSEO(place PlaceDetails) int {
 	points := 0
-	cuisines := cuisineLabels(place.Types)
+	cuisines := cuisineLabels(append([]string{place.PrimaryType}, place.Types...))
 	blob := strings.ToLower(strings.Join([]string{
 		place.Name,
 		place.Address,
 		place.EditorialSummary,
-		strings.Join(place.Types, " "),
 	}, " "))
 
 	if place.EditorialSummary != "" {
-		points += 3
+		points += 4
 	}
 	if len(cuisines) > 0 {
-		points += 2
+		points += 6
 		hits := 0
 		for _, cuisine := range cuisines {
 			if strings.Contains(blob, strings.ToLower(cuisine)) {
@@ -198,15 +226,12 @@ func scoreSEO(place PlaceDetails) int {
 			}
 		}
 		if hits > 0 {
-			points += 2
-		}
-		if hits >= 2 {
-			points += 1
+			points += 4
 		}
 	}
 	// Locality signal: address suburb/city tokens appear with restaurant name context.
 	if hasLocalityKeyword(place.Name, place.Address) {
-		points += 2
+		points += 6
 	}
 	return clamp(points, 0, 20)
 }
@@ -222,8 +247,8 @@ func scoreReviews(place PlaceDetails, reviews []Review) int {
 	}
 
 	// Stricter volume curve — 200 reviews no longer maxes the bucket.
-	volume := math.Min(1, float64(count)/400.0) * 8 // max 8
-	stars := (rating / 5.0) * 6                     // max 6
+	volume := math.Min(1, float64(count)/500.0) * 10 // max 10
+	stars := (rating / 5.0) * 10                     // max 10
 
 	recent := 0.0
 	if len(reviews) > 0 {
@@ -236,7 +261,7 @@ func scoreReviews(place PlaceDetails, reviews []Review) int {
 			}
 		}
 		avg := sum / float64(len(reviews))
-		recent = (avg / 5.0) * 3 // max 3
+		recent = (avg / 5.0) * 4 // max 4
 		// Recency bonus from relative time strings.
 		fresh := 0
 		for _, r := range reviews {
@@ -266,18 +291,14 @@ func scoreWebsite(website string, qualityKnown bool, qualityScore int) int {
 	if err != nil || parsed.Host == "" {
 		return 3
 	}
-	host := strings.ToLower(parsed.Hostname())
-	host = strings.TrimPrefix(host, "www.")
-	if _, social := socialHosts[host]; social {
+	if isSocialWebsite(website) {
 		// Social links are not a real restaurant website experience.
 		return 4
 	}
 
 	if qualityKnown {
-		// qualityScore is 0–100 (strict; typically 20–60) → 0–20 metric points.
-		points := int(math.Round(float64(qualityScore) / 100.0 * 16.0))
-		// Hard cap: visual review almost never fills the website bucket.
-		return clamp(points, 1, 11)
+		points := int(math.Round(float64(qualityScore) / 100.0 * 20.0))
+		return clamp(points, 1, 20)
 	}
 
 	// Conservative fallback when screenshot/AI is unavailable — HTTPS dedicated site ≠ 20 pts.
@@ -308,40 +329,17 @@ func scoreOrderOnline(website string, in ScoreInput) int {
 	return clamp(points, 0, 5)
 }
 
-func scoreMenu(in ScoreInput) int {
+func scoreMenu(evidence MenuEvidence) int {
 	points := 0
-	if in.Enrichment.MenuItemCount > 0 {
-		points += 6
-		if in.Enrichment.MenuItemCount >= 8 {
-			points += 2
-		}
+	if evidence.Status != "present" {
+		return 0
 	}
-	if in.Enrichment.MenuImageCount > 0 {
+	points += 6
+	if evidence.HasWebsiteLink {
 		points += 2
 	}
-	if points >= 10 {
-		return 10
-	}
-	// Weak Places proxies when inventory menu is missing.
-	if in.PhotoCount >= 8 {
+	if evidence.HasStructuredData {
 		points += 2
-	} else if in.PhotoCount >= 3 {
-		points += 1
-	}
-	menuMentions := 0
-	for _, rev := range in.Reviews {
-		lower := strings.ToLower(rev.Text)
-		for _, kw := range menuKeywords {
-			if strings.Contains(lower, kw) {
-				menuMentions++
-				break
-			}
-		}
-	}
-	if menuMentions >= 2 {
-		points += 2
-	} else if menuMentions == 1 {
-		points += 1
 	}
 	return clamp(points, 0, 10)
 }
@@ -349,18 +347,18 @@ func scoreMenu(in ScoreInput) int {
 func scoreContact(phone, email string) int {
 	points := 0
 	if strings.TrimSpace(phone) != "" {
-		points += 3
+		points += 5
 	}
 	if strings.TrimSpace(email) != "" {
-		points += 3
+		points += 5
 	}
 	return clamp(points, 0, 10)
 }
 
-func scoreListing(place PlaceDetails, hasHours bool, photoCount int) int {
+func scoreListing(place PlaceDetails, hasHours bool, photoCount int, social SocialPresence) int {
 	points := 0
 	if place.MapsURI != "" || place.Address != "" {
-		points += 2
+		points++
 	}
 	if hasHours {
 		points += 2
@@ -374,6 +372,10 @@ func scoreListing(place PlaceDetails, hasHours bool, photoCount int) int {
 	} else if photoCount > 0 {
 		points += 1
 	}
+	if strings.TrimSpace(place.PrimaryType) != "" || len(cuisineLabels(place.Types)) > 0 {
+		points++
+	}
+	points += clamp(social.Score, 0, 3)
 	return clamp(points, 0, 10)
 }
 
@@ -406,6 +408,13 @@ func buildIssues(place PlaceDetails, in ScoreInput, seo, reviews, website, order
 			Description: "Publish a public contact email so guests and partners can reach you without marketplace fees.",
 		})
 	}
+	if in.SocialPresence.Status != "present" {
+		description := "Link maintained restaurant social profiles from the official website so guests can verify activity and updates."
+		if in.SocialPresence.Status == "unknown" {
+			description = "The website scan could not verify social links. Add clear profile links on the official homepage."
+		}
+		issues = append(issues, Issue{Title: "Social presence is incomplete", Description: description})
+	}
 	count := 0
 	if place.UserRatingCount != nil {
 		count = *place.UserRatingCount
@@ -425,7 +434,7 @@ func buildIssues(place PlaceDetails, in ScoreInput, seo, reviews, website, order
 	if menu < 5 {
 		issues = append(issues, Issue{
 			Title:       "Menu data underrepresented",
-			Description: "Structured menu items and photos help guests decide faster and improve local SEO relevance.",
+			Description: "Publish a crawlable website menu and Menu structured data; generic Google listing photos do not prove menu presence.",
 		})
 	}
 	if seo < 12 {
@@ -446,48 +455,219 @@ func buildIssues(place PlaceDetails, in ScoreInput, seo, reviews, website, order
 	return issues
 }
 
-func buildCompetitors(place PlaceDetails, reviewPoints int) []CompetitorRow {
-	rating := "—"
-	if place.Rating != nil {
-		rating = fmt.Sprintf("%.1f", *place.Rating)
+func buildCompetitorScan(target placeSnapshot, candidates []placeSnapshot, cuisineType string) CompetitorScan {
+	cuisineType = strings.ToLower(strings.TrimSpace(cuisineType))
+	if cuisineType == "" {
+		cuisineType = competitorCuisineType(target.Details)
 	}
-	rank := "10th"
-	if reviewPoints >= 20 {
-		rank = "4th"
-	} else if reviewPoints >= 14 {
-		rank = "7th"
+	scan := CompetitorScan{
+		RadiusKM:     competitorRadiusMeters / 1000,
+		Cuisine:      strings.TrimSpace(strings.ReplaceAll(cuisineType, "_", " ")),
+		ScoreKind:    "google_visibility",
+		CurrentScore: googleVisibilityScore(target),
 	}
-	return []CompetitorRow{
-		{Rank: "1st", Name: "Nearby competitor A", Rating: "4.8", Score: "23/25", ScoreColor: colorGood, Highlight: false},
-		{Rank: "2nd", Name: "Nearby competitor B", Rating: "4.6", Score: "21/25", ScoreColor: colorGood, Highlight: false},
-		{Rank: "3rd", Name: "Nearby competitor C", Rating: "4.5", Score: "20/25", ScoreColor: colorGood, Highlight: false},
-		{Rank: rank, Name: place.Name, Rating: rating, Score: fmt.Sprintf("%d/25", reviewPoints), ScoreColor: colorOrange, Highlight: true},
+	type scoredCandidate struct {
+		snapshot placeSnapshot
+		score    int
 	}
+	stronger := make([]scoredCandidate, 0, len(candidates))
+	seen := make(map[string]struct{}, len(candidates))
+	currentID := sanitizePlaceID(target.Details.PlaceID)
+	for _, candidate := range candidates {
+		candidateID := sanitizePlaceID(candidate.Details.PlaceID)
+		if candidateID == "" || candidateID == currentID || isClosedBusiness(candidate.Details.BusinessStatus) {
+			continue
+		}
+		if _, exists := seen[candidateID]; exists {
+			continue
+		}
+		seen[candidateID] = struct{}{}
+		if cuisineType != "restaurant" && !placeHasType(candidate.Details, cuisineType) {
+			continue
+		}
+		if strings.TrimSpace(candidate.Details.Name) == "" {
+			continue
+		}
+		if target.Details.Latitude != nil && target.Details.Longitude != nil {
+			if candidate.Details.Latitude == nil || candidate.Details.Longitude == nil {
+				continue
+			}
+			candidate.DistanceKM = haversineKM(
+				*target.Details.Latitude,
+				*target.Details.Longitude,
+				*candidate.Details.Latitude,
+				*candidate.Details.Longitude,
+			)
+		}
+		if candidate.DistanceKM > competitorRadiusMeters/1000+0.001 {
+			continue
+		}
+		scan.SampleSize++
+		score := googleVisibilityScore(candidate)
+		if score > scan.CurrentScore {
+			stronger = append(stronger, scoredCandidate{snapshot: candidate, score: score})
+		}
+	}
+
+	if scan.SampleSize == 0 {
+		scan.Status = "no_data"
+		scan.Notice = "No eligible same-cuisine Google Places listings were returned inside 10 km."
+		return scan
+	}
+
+	sort.SliceStable(stronger, func(i, j int) bool {
+		if stronger[i].score != stronger[j].score {
+			return stronger[i].score > stronger[j].score
+		}
+		leftRating := floatValue(stronger[i].snapshot.Details.Rating)
+		rightRating := floatValue(stronger[j].snapshot.Details.Rating)
+		if leftRating != rightRating {
+			return leftRating > rightRating
+		}
+		leftCount := intValue(stronger[i].snapshot.Details.UserRatingCount)
+		rightCount := intValue(stronger[j].snapshot.Details.UserRatingCount)
+		if leftCount != rightCount {
+			return leftCount > rightCount
+		}
+		if stronger[i].snapshot.DistanceKM != stronger[j].snapshot.DistanceKM {
+			return stronger[i].snapshot.DistanceKM < stronger[j].snapshot.DistanceKM
+		}
+		return stronger[i].snapshot.Details.Name < stronger[j].snapshot.Details.Name
+	})
+	for index, candidate := range stronger {
+		details := candidate.snapshot.Details
+		scan.Rows = append(scan.Rows, CompetitorRow{
+			Rank:            ordinalPosition(index + 1),
+			PlaceID:         details.PlaceID,
+			Name:            details.Name,
+			Rating:          ratingLabel(details.Rating),
+			UserRatingCount: intValue(details.UserRatingCount),
+			Score:           fmt.Sprintf("%d/100", candidate.score),
+			VisibilityScore: candidate.score,
+			ScoreMax:        100,
+			DistanceKM:      math.Round(candidate.snapshot.DistanceKM*10) / 10,
+			Reasons:         visibilityReasons(target, candidate.snapshot),
+			ScoreColor:      colorGood,
+		})
+	}
+	scan.Status = "complete"
+	scan.CurrentPosition = len(scan.Rows) + 1
+	scan.CurrentRestaurantLeading = len(scan.Rows) == 0
+	if scan.CurrentRestaurantLeading {
+		scan.Notice = "No sampled same-cuisine restaurant had a higher deterministic Google visibility score."
+	} else {
+		scan.Notice = "Only sampled restaurants with a stronger deterministic Google visibility score are shown; this is not a live Google Search rank."
+	}
+	return scan
 }
 
-func metricOf(key, label string, score, max int) Metric {
+func googleVisibilityScore(snapshot placeSnapshot) int {
+	rating := floatValue(snapshot.Details.Rating)
+	count := intValue(snapshot.Details.UserRatingCount)
+	points := int(math.Round(math.Max(0, math.Min(5, rating)) / 5 * 25))
+	points += int(math.Round(math.Min(1, float64(maxInt(count, 0))/500.0) * 25))
+	if strings.TrimSpace(snapshot.Details.Website) != "" {
+		points += 10
+	}
+	if strings.TrimSpace(snapshot.Details.Phone) != "" {
+		points += 10
+	}
+	if snapshot.HasHours {
+		points += 10
+	}
+	switch {
+	case snapshot.PhotoCount >= 8:
+		points += 10
+	case snapshot.PhotoCount >= 3:
+		points += 7
+	case snapshot.PhotoCount > 0:
+		points += 4
+	}
+	if (snapshot.DeliveryKnown && snapshot.Delivery) ||
+		(snapshot.TakeoutKnown && snapshot.Takeout) ||
+		(snapshot.ReservableKnown && snapshot.Reservable) {
+		points += 5
+	}
+	if strings.EqualFold(strings.TrimSpace(snapshot.Details.BusinessStatus), "OPERATIONAL") {
+		points += 5
+	}
+	return clamp(points, 0, 100)
+}
+
+func ternaryVisibilityScore(snapshot *placeSnapshot) int {
+	if snapshot == nil {
+		return 0
+	}
+	return googleVisibilityScore(*snapshot)
+}
+
+func visibilityReasons(target, candidate placeSnapshot) []string {
+	reasons := make([]string, 0, 4)
+	if floatValue(candidate.Details.Rating) > floatValue(target.Details.Rating)+0.049 {
+		reasons = append(reasons, "Higher Google rating")
+	}
+	if intValue(candidate.Details.UserRatingCount) > intValue(target.Details.UserRatingCount) {
+		reasons = append(reasons, "More Google reviews")
+	}
+	if target.Details.Website == "" && candidate.Details.Website != "" {
+		reasons = append(reasons, "Website linked")
+	}
+	if !target.HasHours && candidate.HasHours {
+		reasons = append(reasons, "Hours complete")
+	}
+	if candidate.PhotoCount > target.PhotoCount {
+		reasons = append(reasons, "More listing photos")
+	}
+	if len(reasons) == 0 {
+		reasons = append(reasons, "Stronger combined listing completeness")
+	}
+	if len(reasons) > 3 {
+		reasons = reasons[:3]
+	}
+	return reasons
+}
+
+func ordinalPosition(position int) string {
+	if position%100 >= 11 && position%100 <= 13 {
+		return fmt.Sprintf("%dth", position)
+	}
+	suffix := "th"
+	switch position % 10 {
+	case 1:
+		suffix = "st"
+	case 2:
+		suffix = "nd"
+	case 3:
+		suffix = "rd"
+	}
+	return fmt.Sprintf("%d%s", position, suffix)
+}
+
+func metricOf(key, label string, score, max int, rationale string, evidence []string, recommendation string) Metric {
 	ratio := 0.0
 	if max > 0 {
 		ratio = float64(score) / float64(max)
 	}
 	status, color := metricStatus(ratio)
 	return Metric{
-		Key:         key,
-		Label:       label,
-		Score:       score,
-		Max:         max,
-		Status:      status,
-		StatusColor: color,
-		Value:       ratio,
+		Key:            key,
+		Label:          label,
+		Score:          score,
+		Max:            max,
+		Status:         status,
+		StatusColor:    color,
+		Value:          ratio,
+		Rationale:      strings.TrimSpace(rationale),
+		Evidence:       evidence,
+		Recommendation: strings.TrimSpace(recommendation),
 	}
 }
 
 func labelForScore(score int) (string, string) {
-	// Calibrated for the strict 20–60 overall band.
-	if score >= 52 {
+	if score >= 70 {
 		return "Good", colorGood
 	}
-	if score >= 34 {
+	if score >= 45 {
 		return "Fair", colorFair
 	}
 	return "Poor", colorPoor
@@ -503,27 +683,212 @@ func metricStatus(ratio float64) (string, string) {
 	return "Poor", colorPoor
 }
 
-// strictOverallScore compresses the raw 0–100 bucket total so most restaurants
-// land between ~20 and ~60. Scores near 75+ should be rare.
+// strictOverallScore now preserves the explicit 100-point weighting contract.
+// The historical second compression made the declared metric maxima impossible.
 func strictOverallScore(raw int) int {
-	raw = clamp(raw, 0, 100)
-	// Power curve pulls inflated mid/high totals down hard.
-	scaled := 10 + int(math.Round(math.Pow(float64(raw)/100.0, 1.45)*48))
-	if scaled < 12 {
-		scaled = 12
+	return clamp(raw, 0, 100)
+}
+
+func normalizeMenuEvidence(evidence MenuEvidence, website string) MenuEvidence {
+	switch evidence.Status {
+	case "present", "not_found", "unknown":
+		if strings.TrimSpace(evidence.Rationale) == "" {
+			evidence.Rationale = placesMenuEvidenceLimitation
+		}
+		return evidence
 	}
-	if scaled > 58 {
-		scaled = 58 + (scaled-58)/3
+	if strings.TrimSpace(website) == "" {
+		return noWebsiteMenuEvidence()
 	}
-	if scaled > 62 {
-		scaled = 62
+	return unknownWebsiteMenuEvidence("The official website was listed but menu evidence was not inspected.")
+}
+
+func scoreSocialPresence(presence SocialPresence) SocialPresence {
+	presence.Max = 3
+	if presence.Status != "present" || len(presence.Profiles) == 0 {
+		presence.Score = 0
+		if presence.Status == "" {
+			presence.Status = "unknown"
+		}
+		return presence
 	}
-	return scaled
+	platforms := make(map[string]struct{}, len(presence.Profiles))
+	for _, profile := range presence.Profiles {
+		platform := strings.ToLower(strings.TrimSpace(profile.Platform))
+		if platform != "" {
+			platforms[platform] = struct{}{}
+		}
+	}
+	if len(platforms) >= 2 {
+		presence.Score = 3
+	} else {
+		presence.Score = 2
+	}
+	return presence
+}
+
+func seoEvidence(place PlaceDetails) []string {
+	evidence := []string{
+		fmt.Sprintf("Primary category: %s", firstNonEmpty(place.PrimaryType, "not supplied")),
+		fmt.Sprintf("Cuisine categories found: %d", len(cuisineLabels(append([]string{place.PrimaryType}, place.Types...)))),
+	}
+	if strings.TrimSpace(place.EditorialSummary) != "" {
+		evidence = append(evidence, "Google editorial summary available")
+	} else {
+		evidence = append(evidence, "No Google editorial summary")
+	}
+	if strings.TrimSpace(place.Address) != "" {
+		evidence = append(evidence, "Locality/address available")
+	}
+	return evidence
+}
+
+func reviewEvidence(place PlaceDetails, reviews []Review) []string {
+	evidence := []string{
+		fmt.Sprintf("Rating: %s", ratingLabel(place.Rating)),
+		fmt.Sprintf("Review count: %d", intValue(place.UserRatingCount)),
+		fmt.Sprintf("Recent review sample: %d", len(reviews)),
+	}
+	fresh := 0
+	for _, review := range reviews {
+		when := strings.ToLower(review.RelativeTime)
+		if strings.Contains(when, "hour") || strings.Contains(when, "day") || strings.Contains(when, "week") {
+			fresh++
+		}
+	}
+	evidence = append(evidence, fmt.Sprintf("Fresh reviews in sample: %d", fresh))
+	return evidence
+}
+
+func websiteRationale(website string, qualityKnown bool, qualityScore int) string {
+	if strings.TrimSpace(website) == "" {
+		return "No official website was listed."
+	}
+	if isSocialWebsite(website) {
+		return "The listing points to a social profile rather than a dedicated restaurant website."
+	}
+	if qualityKnown {
+		return fmt.Sprintf("The captured homepage received a %d/100 visual and usability assessment.", clamp(qualityScore, 0, 100))
+	}
+	return "A dedicated website is listed, but a complete visual assessment was unavailable."
+}
+
+func websiteEvidence(website, desktopScreenshot, mobileScreenshot string) []string {
+	evidence := []string{fmt.Sprintf("Official website: %s", presenceLabel(website != ""))}
+	evidence = append(evidence,
+		fmt.Sprintf("Desktop capture: %s", presenceLabel(desktopScreenshot != "")),
+		fmt.Sprintf("Mobile capture: %s", presenceLabel(mobileScreenshot != "")),
+	)
+	return evidence
+}
+
+func orderEvidence(in ScoreInput) []string {
+	return []string{
+		fmt.Sprintf("Delivery: %s", knownBoolLabel(in.DeliveryKnown, in.Delivery)),
+		fmt.Sprintf("Takeout: %s", knownBoolLabel(in.TakeoutKnown, in.Takeout)),
+		fmt.Sprintf("Reservations: %s", knownBoolLabel(in.ReservableKnown, in.Reservable)),
+		fmt.Sprintf("Direct-order URL hint: %s", presenceLabel(hasOrderOnlineHint(in.Place.Website))),
+	}
+}
+
+func menuMetricEvidence(evidence MenuEvidence) []string {
+	return []string{
+		fmt.Sprintf("Website menu link: %s", presenceLabel(evidence.HasWebsiteLink)),
+		fmt.Sprintf("Menu structured data: %s", presenceLabel(evidence.HasStructuredData)),
+		"Google Places generic photos are excluded from menu scoring",
+	}
+}
+
+func contactEvidence(phone, email string) []string {
+	return []string{
+		fmt.Sprintf("Public phone: %s", presenceLabel(strings.TrimSpace(phone) != "")),
+		fmt.Sprintf("Business email: %s", presenceLabel(strings.TrimSpace(email) != "")),
+	}
+}
+
+func listingEvidence(place PlaceDetails, hasHours bool, photoCount int, social SocialPresence) []string {
+	return []string{
+		fmt.Sprintf("Address/Maps link: %s", presenceLabel(place.Address != "" || place.MapsURI != "")),
+		fmt.Sprintf("Opening hours: %s", presenceLabel(hasHours)),
+		fmt.Sprintf("Business status: %s", firstNonEmpty(place.BusinessStatus, "unknown")),
+		fmt.Sprintf("Listing photos: %d", photoCount),
+		fmt.Sprintf("Cuisine category: %s", firstNonEmpty(place.PrimaryType, "not supplied")),
+		fmt.Sprintf("Verified social platforms: %d", distinctSocialPlatforms(social.Profiles)),
+	}
+}
+
+func distinctSocialPlatforms(profiles []SocialProfile) int {
+	platforms := make(map[string]struct{}, len(profiles))
+	for _, profile := range profiles {
+		if platform := strings.ToLower(strings.TrimSpace(profile.Platform)); platform != "" {
+			platforms[platform] = struct{}{}
+		}
+	}
+	return len(platforms)
+}
+
+func hasOrderOnlineHint(website string) bool {
+	lower := strings.ToLower(website)
+	for _, hint := range orderOnlineHints {
+		if strings.Contains(lower, strings.ToLower(hint)) {
+			return true
+		}
+	}
+	return false
+}
+
+func presenceLabel(present bool) string {
+	if present {
+		return "present"
+	}
+	return "not found"
+}
+
+func knownBoolLabel(known, value bool) string {
+	if !known {
+		return "unknown"
+	}
+	if value {
+		return "available"
+	}
+	return "not available"
+}
+
+func ratingLabel(rating *float64) string {
+	if rating == nil {
+		return "—"
+	}
+	return fmt.Sprintf("%.1f", *rating)
+}
+
+func intValue(value *int) int {
+	if value == nil {
+		return 0
+	}
+	return *value
+}
+
+func floatValue(value *float64) float64 {
+	if value == nil {
+		return 0
+	}
+	return *value
+}
+
+func maxInt(left, right int) int {
+	if left > right {
+		return left
+	}
+	return right
 }
 
 func cuisineLabels(types []string) []string {
 	out := make([]string, 0, len(types))
 	for _, t := range types {
+		t = strings.TrimSpace(t)
+		if t == "" {
+			continue
+		}
 		lower := strings.ToLower(t)
 		if _, skip := genericTypes[lower]; skip {
 			continue

@@ -61,3 +61,9 @@ func TestBuildWebsiteCaptureArtifactsHandlesNoCaptures(t *testing.T) {
 		t.Fatalf("empty captures produced artifacts: %#v", artifacts)
 	}
 }
+
+func TestWebsiteQualityMaximumRemainsReachable(t *testing.T) {
+	if got := clampStrictWebsiteQuality(100); got != 100 {
+		t.Fatalf("quality clamp=%d, want reachable maximum 100", got)
+	}
+}
