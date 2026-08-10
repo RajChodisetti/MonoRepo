@@ -2901,3 +2901,68 @@ verification email was sent because no controlled recipient was supplied;
 delivery, rate limiting, expiry, and persistence are covered by automated tests.
 No outreach, worker, voice, DNS, environment, model-routing, or billing change
 was made.
+
+## 2026-08-10 — Real-Evidence Scan Cards and Review Wall
+
+**Role:** Frontend implementation and production release for the corporate
+website scan experience.
+
+**Delivery:** The scan stage no longer manufactures placeholder cards. Every
+listing photo and website capture is decoded off-stage through a preload pass,
+and a card enters the collage only once its pixels exist, so the
+"Waiting for listing photos…", "Waiting for the desktop website capture…",
+"Waiting for recent review evidence…" and "Capture status" states are gone from
+the rotation rather than being shown as empty frames.
+
+Listing photos now collapse into a single card that rests three seconds and
+then turns to the next photo over a 900 ms flip. The card keeps two faces and
+refreshes the face that just turned away only after the rotation lands, so a
+flip never flashes the upcoming photo early, and an `n / total` counter shows
+how much listing media the scan found.
+
+Recent Google reviews moved out of the collage into a dedicated rounded review
+wall anchored bottom-left, built from the same tile language the marketing
+pages use for reviews. It holds each review for the same three-second beat,
+pauses on hover and focus, shows progress dots, and carries up to
+`REVIEW_WALL_LIMIT` (10) reviews. The fourth collage slot moved from
+bottom-left to bottom-right to give the wall that corner.
+
+Desktop and mobile website captures render in browser-chrome and phone-shell
+frames instead of empty capture-status cards, and appear only once decoded.
+
+**Production Deployment:** User-approved website-only release `9383f83` on
+branch `release/safe-ui-20260809`, extracted to
+`/opt/tuvi/releases/monorepo-9383f83` and serving from image
+`tuvi-tuvi-website:release-9383f83`
+(`sha256:cd7af3d860c35ca850ef5178e629c970d178f044c69f3fd2103b56fd406f5fba`).
+Only `tuvi-tuvi-website-1` was recreated (`7583303c1f2b` -> `5a64860b8bd9`);
+a container-ID diff confirmed every other container, including `tuvi-api-1`,
+the QA website, workers and voice, was untouched. Restart count is zero. No
+migration, env, image or provider change accompanied this release. Rollback
+image `tuvi-tuvi-website:rollback-before-9383f83` and the prior sources
+`/opt/tuvi/releases/monorepo-eb8947c` and `monorepo-cce27cd` remain available.
+
+**Checks Run:** Corporate-web ESLint (clean), non-incremental TypeScript
+(clean), 19 Node tests including nine scan-timeline cases covering the new
+`photoFlipCycleMs`, `nextPhotoFaceIndex` and `nextReviewIndex` helpers, the
+61-route Next.js production build, and `git diff --check`. Post-deploy, public
+`/`, `/pricing`, `/book`, `/how-it-works`, `/product/seo`, `/resources` and a
+live `/report/<placeId>` all returned 200 over HTTPS; the shipped CSS chunk
+contains `scan-photo-flip-stage` and the report JS chunk contains the review
+wall, while the retired placeholder strings no longer appear.
+
+**Business Value / Plan Fit:** Prospects watching their scan now see only real
+Google evidence — actual listing photos turning at a readable pace, actual
+recent reviews in the product's own review styling, and actual desktop and
+mobile captures of their site — instead of empty frames that made the scan look
+like it had found nothing.
+
+**Risks / Follow-ups:** The change was verified by lint, types, tests, build and
+post-deploy HTTP and asset checks, but the animation itself was not rendered in
+a browser before release because the local backend was not started; visual
+confirmation of the flip cadence and wall placement is still outstanding. Google
+Maps supplies a relevance-ordered sample of at most five reviews, so the wall's
+ten-review capacity will normally show five until a richer review source exists.
+When a venue returns no photos, no captures and no reviews, the stage
+deliberately shows only the map, search chip and progress. No backend, schema,
+env, outreach, voice, DNS or billing change was made.
