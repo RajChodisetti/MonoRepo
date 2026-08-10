@@ -7,6 +7,7 @@ import (
 	"html"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,24 +19,29 @@ import (
 	llmlib "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/llm"
 )
 
+// A process has one SEO report service in production. Keeping the unlock-only
+// secret alongside that service avoids broadening the report orchestration
+// struct with credential material that no other report path should access.
+var serviceOTPSecrets sync.Map // map[*Service]string
+
 // UnlockRequestResult is returned after sending an OTP email.
 type UnlockRequestResult struct {
-	Status      string `json:"status"`
-	Message     string `json:"message"`
-	Email       string `json:"email"`
-	PlaceID     string `json:"placeId"`
-	ExpiresInSec int   `json:"expiresInSec"`
+	Status       string `json:"status"`
+	Message      string `json:"message"`
+	Email        string `json:"email"`
+	PlaceID      string `json:"placeId"`
+	ExpiresInSec int    `json:"expiresInSec"`
 	// DevOTP is only populated when APP_ENV is local/test and email sending is disabled.
 	DevOTP string `json:"devOtp,omitempty"`
 }
 
 // UnlockVerifyResult is returned after successful OTP verification.
 type UnlockVerifyResult struct {
-	Status      string         `json:"status"`
-	UnlockToken string         `json:"unlockToken"`
-	Interested  bool           `json:"interested"`
-	Place       PlaceDetails   `json:"place"`
-	Report      Report         `json:"report"`
+	Status      string       `json:"status"`
+	UnlockToken string       `json:"unlockToken"`
+	Interested  bool         `json:"interested"`
+	Place       PlaceDetails `json:"place"`
+	Report      Report       `json:"report"`
 }
 
 // EmailSender sends unlock verification emails.
@@ -53,6 +59,7 @@ func NewServiceFull(
 	leadUpserter LeadUpserter,
 	mailer EmailSender,
 	llmClient llmlib.Client,
+	tokenSecret string,
 	log *slog.Logger,
 ) *Service {
 	svc := NewService(placesCfg, profilesRepo, llmClient, log)
@@ -68,21 +75,37 @@ func NewServiceFull(
 	svc.interested = interestedRepo
 	svc.leads = leadUpserter
 	svc.mailer = mailer
+	serviceOTPSecrets.Store(svc, strings.TrimSpace(tokenSecret))
 	return svc
 }
 
-// RequestUnlockEmail stores an OTP and emails it (HTTPS Resend) with a View full report link.
-func (s *Service) RequestUnlockEmail(ctx context.Context, emailRaw, placeID string) (UnlockRequestResult, error) {
-	if s.interested == nil {
-		return UnlockRequestResult{}, fmt.Errorf("interested repository unavailable")
+// RequestUnlockEmail stores a bounded OTP and emails it with a View full report link.
+func (s *Service) RequestUnlockEmail(
+	ctx context.Context,
+	nameRaw, emailRaw, phoneRaw, placeID string,
+) (UnlockRequestResult, error) {
+	contactName, err := normalizeContactName(nameRaw)
+	if err != nil {
+		return UnlockRequestResult{}, err
 	}
 	email, err := normalizeEmail(emailRaw)
+	if err != nil {
+		return UnlockRequestResult{}, err
+	}
+	contactPhone, err := normalizeContactPhone(phoneRaw)
 	if err != nil {
 		return UnlockRequestResult{}, err
 	}
 	placeID = sanitizePlaceID(placeID)
 	if placeID == "" {
 		return UnlockRequestResult{}, ErrNotFound
+	}
+	if s.interested == nil {
+		return UnlockRequestResult{}, fmt.Errorf("interested repository unavailable")
+	}
+	otpSecret, err := s.unlockOTPSecret()
+	if err != nil {
+		return UnlockRequestResult{}, err
 	}
 
 	reportPayload, err := s.GetReport(ctx, placeID)
@@ -99,13 +122,19 @@ func (s *Service) RequestUnlockEmail(ctx context.Context, emailRaw, placeID stri
 		return UnlockRequestResult{}, fmt.Errorf("generate unlock token: %w", err)
 	}
 	expires := time.Now().UTC().Add(otpTTL)
+	otpHash, err := hashOTP(otpSecret, email, placeID, otp)
+	if err != nil {
+		return UnlockRequestResult{}, fmt.Errorf("hash otp: %w", err)
+	}
 
 	_, err = s.interested.UpsertPending(
 		ctx,
 		email,
 		placeID,
 		reportPayload.Place.Name,
-		hashOTP(otp),
+		contactName,
+		contactPhone,
+		otpHash,
 		token,
 		expires,
 	)
@@ -165,19 +194,24 @@ func (s *Service) RequestUnlockEmail(ctx context.Context, emailRaw, placeID stri
 	return result, nil
 }
 
-// VerifyUnlockOTP validates the OTP, marks interested, upserts lead, returns unlocked report.
+// VerifyUnlockOTP validates the OTP, records the verified lead without inferring
+// marketing interest, and returns the unlocked report.
 func (s *Service) VerifyUnlockOTP(ctx context.Context, emailRaw, placeID, otp string) (UnlockVerifyResult, error) {
-	if s.interested == nil {
-		return UnlockVerifyResult{}, fmt.Errorf("interested repository unavailable")
-	}
 	email, err := normalizeEmail(emailRaw)
 	if err != nil {
 		return UnlockVerifyResult{}, err
 	}
 	placeID = sanitizePlaceID(placeID)
 	otp = strings.TrimSpace(otp)
-	if placeID == "" || len(otp) < 4 {
+	if placeID == "" || !isSixDigitOTP(otp) {
 		return UnlockVerifyResult{}, ErrInvalidOTP
+	}
+	if s.interested == nil {
+		return UnlockVerifyResult{}, fmt.Errorf("interested repository unavailable")
+	}
+	otpSecret, err := s.unlockOTPSecret()
+	if err != nil {
+		return UnlockVerifyResult{}, err
 	}
 
 	rec, err := s.interested.GetByEmailPlace(ctx, email, placeID)
@@ -187,10 +221,13 @@ func (s *Service) VerifyUnlockOTP(ctx context.Context, emailRaw, placeID, otp st
 		}
 		return UnlockVerifyResult{}, err
 	}
-	if rec.OTPHash == "" || rec.OTPExpiresAt == nil || time.Now().UTC().After(rec.OTPExpiresAt.UTC()) {
+	if rec.OTPHash == "" || rec.OTPExpiresAt == nil || rec.OTPAttempts >= maxOTPAttempts || time.Now().UTC().After(rec.OTPExpiresAt.UTC()) {
 		return UnlockVerifyResult{}, ErrInvalidOTP
 	}
-	if hashOTP(otp) != rec.OTPHash {
+	if !otpHashMatches(otpSecret, email, placeID, otp, rec.OTPHash) {
+		if _, recordErr := s.interested.RecordFailedOTP(ctx, rec.ID); recordErr != nil && !errors.Is(recordErr, ErrInvalidOTP) {
+			s.log.WarnContext(ctx, "seo_unlock_failed_attempt_record_failed", "error", recordErr, "place_id", placeID)
+		}
 		return UnlockVerifyResult{}, ErrInvalidOTP
 	}
 
@@ -205,7 +242,7 @@ func (s *Service) VerifyUnlockOTP(ctx context.Context, emailRaw, placeID, otp st
 		return UnlockVerifyResult{}, fmt.Errorf("scrape lead failed: %w", err)
 	}
 
-	rec, err = s.interested.MarkVerified(ctx, rec.ID, leadID)
+	rec, err = s.interested.MarkVerified(ctx, rec.ID, leadID, time.Now().UTC().Add(unlockTTL))
 	if err != nil {
 		return UnlockVerifyResult{}, err
 	}
@@ -214,13 +251,15 @@ func (s *Service) VerifyUnlockOTP(ctx context.Context, emailRaw, placeID, otp st
 	return UnlockVerifyResult{
 		Status:      "ok",
 		UnlockToken: rec.UnlockToken,
-		Interested:  true,
+		Interested:  rec.Interested,
 		Place:       reportPayload.Place,
 		Report:      reportPayload.Report,
 	}, nil
 }
 
-// ConfirmUnlockClick marks interested=true for the unlock token (email CTA).
+// ConfirmUnlockClick treats possession of the emailed, unexpired token as email
+// verification. It intentionally does not create a lead or mark marketing
+// interest; only an explicit OTP submission can create/update the lead record.
 func (s *Service) ConfirmUnlockClick(ctx context.Context, token string) (InterestedRecord, PlaceDetails, error) {
 	if s.interested == nil {
 		return InterestedRecord{}, PlaceDetails{}, fmt.Errorf("interested repository unavailable")
@@ -236,25 +275,17 @@ func (s *Service) ConfirmUnlockClick(ctx context.Context, token string) (Interes
 		}
 		return InterestedRecord{}, PlaceDetails{}, err
 	}
+	if rec.UnlockExpiresAt.IsZero() || time.Now().UTC().After(rec.UnlockExpiresAt.UTC()) {
+		return InterestedRecord{}, PlaceDetails{}, ErrInvalidUnlock
+	}
 
 	reportPayload, err := s.GetReport(ctx, rec.PlaceID)
 	if err != nil {
 		return InterestedRecord{}, PlaceDetails{}, err
 	}
 
-	if rec.LeadRestaurantID == nil {
-		leadID, upsertErr := s.upsertLead(ctx, reportPayload.Place, rec.Email)
-		if upsertErr != nil {
-			s.log.WarnContext(ctx, "seo_click_lead_upsert_failed", "error", upsertErr)
-		} else {
-			if verified, markErr := s.interested.MarkVerified(ctx, rec.ID, leadID); markErr == nil {
-				rec = verified
-			}
-		}
-	}
-
-	if !rec.Interested {
-		rec, err = s.interested.MarkInterested(ctx, rec.ID)
+	if rec.VerifiedAt == nil {
+		rec, err = s.interested.MarkEmailVerified(ctx, rec.ID, time.Now().UTC().Add(unlockTTL))
 		if err != nil {
 			return InterestedRecord{}, PlaceDetails{}, err
 		}
@@ -279,7 +310,7 @@ func (s *Service) GetReportUnlocked(ctx context.Context, placeID, unlockToken st
 	if sanitizePlaceID(rec.PlaceID) != sanitizePlaceID(placeID) {
 		return payload, nil
 	}
-	if rec.Interested || rec.VerifiedAt != nil {
+	if rec.VerifiedAt != nil && !rec.UnlockExpiresAt.IsZero() && time.Now().UTC().Before(rec.UnlockExpiresAt.UTC()) {
 		payload.Report = unlockReport(payload.Report)
 	}
 	return payload, nil
@@ -295,6 +326,15 @@ func (s *Service) upsertLead(ctx context.Context, place PlaceDetails, email stri
 func (s *Service) isLocalEnv() bool {
 	env := strings.ToLower(strings.TrimSpace(s.appEnv))
 	return env == "" || env == config.EnvLocal || env == config.EnvTest
+}
+
+func (s *Service) unlockOTPSecret() (string, error) {
+	value, ok := serviceOTPSecrets.Load(s)
+	secret, isString := value.(string)
+	if !ok || !isString || strings.TrimSpace(secret) == "" {
+		return "", fmt.Errorf("unlock otp secret unavailable")
+	}
+	return secret, nil
 }
 
 func unlockReport(report Report) Report {
