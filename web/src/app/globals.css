@@ -207,6 +207,17 @@
   }
 }
 
+@keyframes scan-photo-flip {
+  from {
+    opacity: 0;
+    transform: perspective(720px) rotateY(-82deg) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: perspective(720px) rotateY(0deg) scale(1);
+  }
+}
+
 @keyframes scan-review-scroll {
   from {
     transform: translateY(0);
@@ -288,6 +299,17 @@
   animation: scan-photo-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+.scan-photo-in {
+  animation: scan-photo-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.scan-photo-flip {
+  animation: scan-photo-flip 0.58s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: var(--scan-photo-delay, 0ms);
+  transform-origin: center;
+  will-change: transform, opacity;
+}
+
 .scan-photo-swap {
   transform: rotate(var(--scan-photo-rotation, 0deg));
   animation: scan-photo-swap 0.28s ease-out both;
@@ -349,12 +371,18 @@
   .scan-step-active,
   .scan-card-float,
   .scan-photo-float,
+  .scan-photo-in,
+  .scan-photo-flip,
   .scan-photo-swap,
   .scan-capture-in,
   .scan-phone-mockup,
   .scan-map-pin,
   .scan-review-track {
     animation: none;
+  }
+
+  .scan-review-track.scan-review-force-motion {
+    animation: scan-review-scroll var(--scan-review-duration, 24s) linear infinite;
   }
 
   .scan-photo-swap {
@@ -365,8 +393,16 @@
     display: none;
   }
 
+  .scan-review-track.scan-review-force-motion .scan-review-copy {
+    display: block;
+  }
+
   .scan-review-viewport {
     overflow-y: auto;
+  }
+
+  .scan-review-viewport.scan-review-force-viewport {
+    overflow-y: hidden;
   }
 
   .scan-progress-fill {

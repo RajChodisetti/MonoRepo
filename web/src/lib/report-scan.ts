@@ -16,6 +16,12 @@ export type WebsiteCaptureEvidence = {
   src: string;
 };
 
+export type ScanReviewStreamItem = {
+  review: ScanReviewEvidence;
+  sourceIndex: number;
+  repeated: boolean;
+};
+
 /** Keep every distinct photo with a usable source. Empty cards are never data. */
 export function normalizeScanPhotos(
   primarySrc: string | undefined,
@@ -64,6 +70,48 @@ export function normalizeScanReviews(reviews: ScanReviewEvidence[]): ScanReviewE
       ...(relativeTime ? { relativeTime } : {}),
       ...(sentiment ? { sentiment } : {}),
     }];
+  });
+}
+
+/**
+ * Fill at most six board positions, then distribute overflow photos across the
+ * occupied positions so each card can flip without ever rendering an empty
+ * placeholder.
+ */
+export function buildScanPhotoSlots(
+  photos: ScanPhotoEvidence[],
+  maximumSlots = 6,
+): ScanPhotoEvidence[][] {
+  const slotLimit = Math.max(0, Math.floor(maximumSlots));
+  const slotCount = Math.min(slotLimit, photos.length);
+  if (slotCount === 0) return [];
+
+  const slots = Array.from({ length: slotCount }, () => [] as ScanPhotoEvidence[]);
+  photos.forEach((photo, index) => {
+    slots[index % slotCount].push(photo);
+  });
+  return slots;
+}
+
+/**
+ * Build a ten-card visual stream from genuine review evidence. Google Places
+ * currently returns at most five review texts, so repeats are flagged for
+ * assistive technology instead of being represented as additional reviews.
+ */
+export function buildScanReviewStream(
+  reviews: ScanReviewEvidence[],
+  targetCards = 10,
+): ScanReviewStreamItem[] {
+  const cardCount = Math.max(0, Math.floor(targetCards));
+  if (reviews.length === 0 || cardCount === 0) return [];
+
+  return Array.from({ length: cardCount }, (_, index) => {
+    const sourceIndex = index % reviews.length;
+    return {
+      review: reviews[sourceIndex],
+      sourceIndex,
+      repeated: index >= reviews.length,
+    };
   });
 }
 
