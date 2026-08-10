@@ -93,7 +93,7 @@ func buildDeterministicSummary(place PlaceDetails, report Report, reviews []Revi
 		case "order_online":
 			gaps = append(gaps, "clear order-online / delivery signals")
 		case "menu":
-			gaps = append(gaps, "structured menu items and menu photos")
+			gaps = append(gaps, "a verified public menu link and structured Menu data")
 		case "contact":
 			if place.Phone == "" {
 				gaps = append(gaps, "a verified phone number")
@@ -112,10 +112,10 @@ func buildDeterministicSummary(place PlaceDetails, report Report, reviews []Revi
 		gaps = append(gaps, "weekly photo freshness and continued review replies")
 	}
 
-	line1 := fmt.Sprintf("%s scores %d/100 (%s) on local SEO visibility right now.", place.Name, report.OverallScore, report.OverallLabel)
+	line1 := fmt.Sprintf("%s scores %d/100 (%s) on the observable digital-footprint criteria in this review.", place.Name, report.OverallScore, report.OverallLabel)
 	line2 := "Biggest gains come from improving " + joinNatural(gaps) + "."
-	line3 := "Focus on guest-facing listing completeness so Google can trust and rank you in the Map Pack."
-	line4 := "Unlock the full report with a Tuvi membership for a prioritized fix plan."
+	line3 := "Focus first on the guest-facing evidence and conversion paths identified in the scored criteria."
+	line4 := "Use the unlocked recommendations as the prioritized plan; Tuvi can help implement and measure the changes."
 
 	if len(reviews) > 0 {
 		avg := 0.0

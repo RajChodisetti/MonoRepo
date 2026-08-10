@@ -28,6 +28,7 @@ var searchFieldMask = strings.Join([]string{
 	"places.rating",
 	"places.userRatingCount",
 	"places.businessStatus",
+	"places.attributions",
 }, ",")
 
 var detailFieldMask = strings.Join([]string{
@@ -45,6 +46,7 @@ var detailFieldMask = strings.Join([]string{
 	"types",
 	"primaryType",
 	"businessStatus",
+	"attributions",
 	"editorialSummary",
 	"reviews",
 	"photos",
@@ -68,6 +70,7 @@ var nearbyCompetitorFieldMask = strings.Join([]string{
 	"places.types",
 	"places.primaryType",
 	"places.businessStatus",
+	"places.attributions",
 	"places.photos",
 	"places.regularOpeningHours",
 	"places.delivery",
@@ -170,10 +173,11 @@ func (c *PlacesClient) SearchRestaurants(ctx context.Context, query, location st
 			continue
 		}
 		summary := PlaceSummary{
-			PlaceID: placeID,
-			Name:    localizedText(place["displayName"]),
-			Address: asString(place["formattedAddress"]),
-			Source:  "places",
+			PlaceID:      placeID,
+			Name:         localizedText(place["displayName"]),
+			Address:      asString(place["formattedAddress"]),
+			Attributions: parsePlaceAttributions(place["attributions"]),
+			Source:       "places",
 		}
 		if summary.Name == "" {
 			summary.Name = "Restaurant"
@@ -195,11 +199,13 @@ func (c *PlacesClient) SearchRestaurants(ctx context.Context, query, location st
 
 // placePhoto is a raw Places photo resource used for media URLs.
 type placePhoto struct {
-	Name          string
-	WidthPx       int
-	HeightPx      int
-	Attribution   string
-	GoogleMapsURI string
+	Name               string
+	WidthPx            int
+	HeightPx           int
+	Attribution        string
+	AuthorAttributions []AuthorAttribution
+	GoogleMapsURI      string
+	FlagContentURI     string
 }
 
 // placeSnapshot is the internal Places details model used for scoring.
@@ -376,6 +382,7 @@ func parsePlaceSnapshot(place map[string]any, fallbackID string) placeSnapshot {
 			Types:            asStringSlice(place["types"]),
 			PrimaryType:      asString(place["primaryType"]),
 			EditorialSummary: localizedText(place["editorialSummary"]),
+			Attributions:     parsePlaceAttributions(place["attributions"]),
 			Source:           "places",
 		},
 	}
@@ -419,8 +426,12 @@ func parsePlaceSnapshot(place map[string]any, fallbackID string) placeSnapshot {
 				continue
 			}
 			author := ""
+			authorURI := ""
+			authorPhotoURI := ""
 			if attr, ok := revMap["authorAttribution"].(map[string]any); ok {
 				author = asString(attr["displayName"])
+				authorURI = asString(attr["uri"])
+				authorPhotoURI = asString(attr["photoUri"])
 			}
 			text := localizedText(revMap["originalText"])
 			if text == "" {
@@ -428,16 +439,58 @@ func parsePlaceSnapshot(place map[string]any, fallbackID string) placeSnapshot {
 			}
 			rating, _ := asFloat(revMap["rating"])
 			snap.Reviews = append(snap.Reviews, Review{
-				Author:       author,
-				Text:         text,
-				Rating:       rating,
-				RelativeTime: asString(revMap["relativePublishTimeDescription"]),
-				PublishTime:  asString(revMap["publishTime"]),
+				Author:         author,
+				AuthorURI:      authorURI,
+				AuthorPhotoURI: authorPhotoURI,
+				GoogleMapsURI:  asString(revMap["googleMapsUri"]),
+				FlagContentURI: asString(revMap["flagContentUri"]),
+				Text:           text,
+				Rating:         rating,
+				RelativeTime:   asString(revMap["relativePublishTimeDescription"]),
+				PublishTime:    asString(revMap["publishTime"]),
+				VisitDate:      parseReviewVisitDate(revMap["visitDate"]),
 			})
 		}
 	}
 
 	return snap
+}
+
+func parsePlaceAttributions(value any) []PlaceAttribution {
+	items, ok := value.([]any)
+	if !ok {
+		return nil
+	}
+	attributions := make([]PlaceAttribution, 0, len(items))
+	for _, item := range items {
+		raw, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		attribution := PlaceAttribution{
+			Provider:    asString(raw["provider"]),
+			ProviderURI: asString(raw["providerUri"]),
+		}
+		if attribution.Provider == "" && attribution.ProviderURI == "" {
+			continue
+		}
+		attributions = append(attributions, attribution)
+	}
+	return attributions
+}
+
+func parseReviewVisitDate(value any) *ReviewVisitDate {
+	raw, ok := value.(map[string]any)
+	if !ok {
+		return nil
+	}
+	year, _ := asInt(raw["year"])
+	month, _ := asInt(raw["month"])
+	day, _ := asInt(raw["day"])
+	if year == 0 && month == 0 && day == 0 {
+		return nil
+	}
+	return &ReviewVisitDate{Year: year, Month: month, Day: day}
 }
 
 func competitorCuisineType(place PlaceDetails) string {
@@ -539,21 +592,48 @@ func parsePlacePhotos(photos []any) []placePhoto {
 		if name == "" {
 			continue
 		}
-		p := placePhoto{Name: name, GoogleMapsURI: asString(m["googleMapsUri"])}
+		p := placePhoto{
+			Name:           name,
+			GoogleMapsURI:  asString(m["googleMapsUri"]),
+			FlagContentURI: asString(m["flagContentUri"]),
+		}
 		if w, ok := asInt(m["widthPx"]); ok {
 			p.WidthPx = w
 		}
 		if h, ok := asInt(m["heightPx"]); ok {
 			p.HeightPx = h
 		}
-		if attrs, ok := m["authorAttributions"].([]any); ok && len(attrs) > 0 {
-			if attr, ok := attrs[0].(map[string]any); ok {
-				p.Attribution = asString(attr["displayName"])
+		if attrs, ok := m["authorAttributions"].([]any); ok {
+			for _, item := range attrs {
+				attr, ok := item.(map[string]any)
+				if !ok {
+					continue
+				}
+				parsed := AuthorAttribution{
+					DisplayName: asString(attr["displayName"]),
+					URI:         asString(attr["uri"]),
+					PhotoURI:    asString(attr["photoUri"]),
+				}
+				if parsed.DisplayName == "" && parsed.URI == "" && parsed.PhotoURI == "" {
+					continue
+				}
+				p.AuthorAttributions = append(p.AuthorAttributions, parsed)
 			}
+			p.Attribution = joinAttributionNames(p.AuthorAttributions)
 		}
 		out = append(out, p)
 	}
 	return out
+}
+
+func joinAttributionNames(attributions []AuthorAttribution) string {
+	names := make([]string, 0, len(attributions))
+	for _, attribution := range attributions {
+		if name := strings.TrimSpace(attribution.DisplayName); name != "" {
+			names = append(names, name)
+		}
+	}
+	return strings.Join(names, ", ")
 }
 
 func sanitizePhotoName(photoName string) string {

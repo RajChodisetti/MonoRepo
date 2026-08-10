@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/config"
-	repository "github.com/rajchodisetti/restaurant-platform/backend/internal/platform/errors"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/profiles"
 	llmlib "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/llm"
 	"golang.org/x/sync/singleflight"
@@ -30,27 +29,28 @@ var (
 
 var sharedReportGenerationSlots = make(chan struct{}, maxConcurrentReports)
 
-// Service orchestrates Places + inventory enrichment + scoring + summary.
+// Service orchestrates public Places data, official-website evidence, scoring,
+// and summary generation. It deliberately has no restaurant-profile repository:
+// the public review surface must not consume unreviewed internal inventory data.
 type Service struct {
 	places     *PlacesClient
-	profiles   profiles.SiteRepository
 	summarizer Summarizer
 	llm        llmlib.Client
 	log        *slog.Logger
 
-	interested    InterestedRepository
-	leads         LeadUpserter
-	mailer        EmailSender
-	appEnv        string
-	publicBaseURL string
-	publicWebURL  string
+	interested InterestedRepository
+	mailer     EmailSender
+	appEnv     string
+	unlockRate *unlockRequestLimiter
 
 	reportCalls singleflight.Group
 	reportSlots chan struct{}
 
 	// Private hooks keep orchestration testable without provider calls. Production
-	// constructors always wire the concrete Places, profile, and website clients.
-	fetchPlaceDetails      func(context.Context, string) (*placeSnapshot, error)
+	// constructors always wire the concrete Places and website clients.
+	fetchPlaceDetails func(context.Context, string) (*placeSnapshot, error)
+	// Deprecated compatibility hook for older focused tests. Public search and
+	// report generation deliberately never invoke it, and NewService never wires it.
 	fetchSiteContent       func(context.Context, string) (profiles.SiteContent, bool)
 	fetchNearbyCompetitors func(context.Context, PlaceDetails, float64, int) ([]placeSnapshot, string, error)
 	auditWebsite           func(context.Context, string, llmlib.Client) WebsiteAudit
@@ -64,30 +64,30 @@ func NewService(
 	llmClient llmlib.Client,
 	log *slog.Logger,
 ) *Service {
+	// Preserve the constructor contract for current callers while intentionally
+	// refusing to retain the internal profile repository on this public surface.
+	_ = profilesRepo
 	if log == nil {
 		log = slog.Default()
 	}
-	var summarizer Summarizer = DeterministicSummarizer{}
-	if llmClient != nil && llmClient.Enabled() {
-		summarizer = LLMSummarizer{Client: llmClient, Fallback: DeterministicSummarizer{}}
-	}
 	service := &Service{
-		places:       NewPlacesClient(placesCfg),
-		profiles:     profilesRepo,
-		summarizer:   summarizer,
+		places: NewPlacesClient(placesCfg),
+		// Places listing and review content stays in the deterministic pipeline.
+		// The LLM client is reserved for first-party website screenshot analysis.
+		summarizer:   DeterministicSummarizer{},
 		llm:          llmClient,
 		log:          log,
 		reportBudget: reportGenerationBudget,
 		reportSlots:  sharedReportGenerationSlots,
+		unlockRate:   newUnlockRequestLimiter(),
 	}
 	service.fetchPlaceDetails = service.places.GetPlaceDetails
-	service.fetchSiteContent = service.loadSiteContent
 	service.fetchNearbyCompetitors = service.places.SearchNearbyCuisine
 	service.auditWebsite = AuditWebsite
 	return service
 }
 
-// SearchRestaurants merges inventory + Places search results.
+// SearchRestaurants returns only public Google Places search results.
 // location is a city name or postcode; empty defaults to Australia.
 func (s *Service) SearchRestaurants(ctx context.Context, query, location string, limit int) (SearchResponse, error) {
 	query = strings.TrimSpace(query)
@@ -103,42 +103,23 @@ func (s *Service) SearchRestaurants(ctx context.Context, query, location string,
 		Results: []PlaceSummary{},
 		Meta: SearchMeta{
 			PlacesEnabled:    s.places.Enabled(),
-			InventoryEnabled: s.profiles != nil,
+			InventoryEnabled: false,
 		},
 	}
 	if len(query) < 2 {
 		return resp, nil
 	}
 
-	seen := make(map[string]struct{})
-	add := func(item PlaceSummary) {
-		key := strings.ToLower(strings.TrimSpace(item.PlaceID))
-		if key == "" {
-			return
-		}
-		if _, ok := seen[key]; ok {
-			return
-		}
-		seen[key] = struct{}{}
-		resp.Results = append(resp.Results, item)
-	}
-
-	if s.profiles != nil {
-		for _, item := range s.searchInventory(ctx, query, location, 5) {
-			add(item)
-			if len(resp.Results) >= limit {
-				return resp, nil
-			}
-		}
-	}
-
 	if s.places.Enabled() {
-		places, err := s.places.SearchRestaurants(ctx, query, location, 6)
+		places, err := s.places.SearchRestaurants(ctx, query, location, limit)
 		if err != nil {
 			s.log.WarnContext(ctx, "seo_places_search_failed", "error", err)
 		} else {
 			for _, item := range places {
-				add(item)
+				if strings.TrimSpace(item.PlaceID) == "" {
+					continue
+				}
+				resp.Results = append(resp.Results, item)
 				if len(resp.Results) >= limit {
 					break
 				}
@@ -199,27 +180,15 @@ func (s *Service) generateReport(ctx context.Context, placeID string) (ReportRes
 	reportCtx, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
 
-	// Places and profile inventory are independent. Starting both immediately
-	// removes a full network/database waterfall from the critical path.
 	type placeResult struct {
 		snapshot *placeSnapshot
 		err      error
 	}
-	type contentResult struct {
-		content profiles.SiteContent
-		ok      bool
-	}
 	placeCh := make(chan placeResult, 1)
-	contentCh := make(chan contentResult, 1)
 	fetchPlaceDetails := s.fetchPlaceDetails
 	if fetchPlaceDetails == nil && s.places != nil {
 		fetchPlaceDetails = s.places.GetPlaceDetails
 	}
-	fetchSiteContent := s.fetchSiteContent
-	if fetchSiteContent == nil {
-		fetchSiteContent = s.loadSiteContent
-	}
-
 	go func() {
 		if fetchPlaceDetails == nil {
 			placeCh <- placeResult{}
@@ -228,32 +197,17 @@ func (s *Service) generateReport(ctx context.Context, placeID string) (ReportRes
 		snapshot, err := fetchPlaceDetails(reportCtx, placeID)
 		placeCh <- placeResult{snapshot: snapshot, err: err}
 	}()
-	go func() {
-		content, ok := fetchSiteContent(reportCtx, placeID)
-		contentCh <- contentResult{content: content, ok: ok}
-	}()
 
 	var (
 		snap       *placeSnapshot
 		detailsErr error
-		content    profiles.SiteContent
-		hasContent bool
 	)
-	for pending := 2; pending > 0; {
-		select {
-		case result := <-placeCh:
-			snap = result.snapshot
-			detailsErr = result.err
-			placeCh = nil
-			pending--
-		case result := <-contentCh:
-			content = result.content
-			hasContent = result.ok
-			contentCh = nil
-			pending--
-		case <-reportCtx.Done():
-			pending = 0
-		}
+	select {
+	case result := <-placeCh:
+		snap = result.snapshot
+		detailsErr = result.err
+		placeCh = nil
+	case <-reportCtx.Done():
 	}
 	// A source can finish in the same scheduler tick as the deadline. Prefer an
 	// already-buffered useful result over dropping it because Done won the select.
@@ -265,25 +219,15 @@ func (s *Service) generateReport(ctx context.Context, placeID string) (ReportRes
 		default:
 		}
 	}
-	if contentCh != nil {
-		select {
-		case result := <-contentCh:
-			content = result.content
-			hasContent = result.ok
-		default:
-		}
-	}
 	if detailsErr != nil {
 		s.log.WarnContext(ctx, "seo_places_details_failed", "error", detailsErr, "place_id", placeID)
 	}
-
-	enrichment := enrichmentFromSiteContent(content, hasContent)
 
 	place := PlaceDetails{PlaceID: placeID, Source: "places"}
 	reviews := []Review(nil)
 	photoCount := 0
 	hasHours := false
-	scoreIn := ScoreInput{Enrichment: enrichment}
+	scoreIn := ScoreInput{}
 
 	if snap != nil {
 		place = snap.Details
@@ -296,26 +240,13 @@ func (s *Service) generateReport(ctx context.Context, placeID string) (ReportRes
 		scoreIn.DeliveryKnown = snap.DeliveryKnown
 		scoreIn.TakeoutKnown = snap.TakeoutKnown
 		scoreIn.ReservableKnown = snap.ReservableKnown
-	} else if hasContent && strings.TrimSpace(content.Name) != "" {
-		place = placeFromSite(content)
 	} else {
 		return ReportResponse{}, ErrNotFound
 	}
 
-	if enrichment.Phone != "" && place.Phone == "" {
-		place.Phone = enrichment.Phone
-	}
-	if enrichment.Email != "" {
-		place.Email = enrichment.Email
-	}
-	if enrichment.Website != "" && place.Website == "" {
-		place.Website = enrichment.Website
-	}
-
-	scoreIn.Place = place
 	scoreIn.Reviews = reviews
 	scoreIn.PhotoCount = photoCount
-	scoreIn.HasHours = hasHours || enrichment.HasHours
+	scoreIn.HasHours = hasHours
 
 	var photos []placePhoto
 	if snap != nil {
@@ -364,17 +295,26 @@ func (s *Service) generateReport(ctx context.Context, placeID string) (ReportRes
 		} else {
 			audit = fallbackWebsiteAudit(place.Website, "report budget exhausted")
 		}
-		if audit.QualityScore > 0 || audit.Source == "social" || audit.Source == "fallback" || audit.Source == "vision" {
+		scoreIn.WebsiteReachable = audit.Reachable
+		if audit.Reachable && audit.Source == "vision" && audit.ViewportCoverage == "desktop_and_mobile" {
 			scoreIn.WebsiteQualityKnown = true
 			scoreIn.WebsiteQualityScore = audit.QualityScore
-			scoreIn.WebsiteReview = audit.Review
-			scoreIn.WebsiteScreenshot = audit.Screenshot
-			scoreIn.WebsiteMobileScreenshot = audit.MobileScreenshot
+		}
+		scoreIn.WebsiteReview = audit.Review
+		scoreIn.WebsiteScreenshot = audit.Screenshot
+		scoreIn.WebsiteMobileScreenshot = audit.MobileScreenshot
+		scoreIn.WebsitePageEvidence = audit.PageEvidence
+		if strings.TrimSpace(place.Email) == "" && strings.TrimSpace(audit.PublicEmail) != "" {
+			place.Email = strings.TrimSpace(audit.PublicEmail)
+		}
+		if strings.TrimSpace(place.Phone) == "" && strings.TrimSpace(audit.PublicPhone) != "" {
+			place.Phone = strings.TrimSpace(audit.PublicPhone)
 		}
 		if audit.Source == "fallback" {
 			s.log.WarnContext(ctx, "seo_website_audit_fallback", "website", place.Website, "source", audit.Source, "reason", audit.FailureReason)
 		}
 	}
+	scoreIn.Place = place
 	scoreIn.MenuEvidence = audit.MenuEvidence
 	scoreIn.SocialPresence = audit.SocialPresence
 	competitorFailed := false
@@ -448,12 +388,20 @@ func (s *Service) generateReport(ctx context.Context, placeID string) (ReportRes
 	if strings.TrimSpace(place.Website) != "" && (audit.Source == "fallback" || audit.Source == "none") {
 		partial = true
 	}
-	if s.places != nil && s.places.Enabled() && snap == nil && hasContent {
+	if audit.Source == "vision" && audit.ViewportCoverage != "desktop_and_mobile" {
 		partial = true
 	}
 	if partial {
 		report.AnalysisStatus = "partial"
 		report.AnalysisNotice = "Some live signals did not finish within the scan window, so conservative fallback scoring was used."
+		if audit.Source == "vision" {
+			switch audit.ViewportCoverage {
+			case "desktop":
+				report.AnalysisNotice = "Only the desktop homepage capture was available; mobile presentation was not visually assessed."
+			case "mobile":
+				report.AnalysisNotice = "Only the mobile homepage capture was available; desktop presentation was not visually assessed."
+			}
+		}
 	} else {
 		report.AnalysisStatus = "complete"
 		if audit.Source == "vision" {
@@ -470,49 +418,6 @@ func (s *Service) generateReport(ctx context.Context, placeID string) (ReportRes
 	return payload, nil
 }
 
-func (s *Service) searchInventory(ctx context.Context, query, location string, limit int) []PlaceSummary {
-	if s.profiles == nil {
-		return nil
-	}
-	list, err := s.profiles.ListSiteRestaurants(ctx)
-	if err != nil {
-		s.log.WarnContext(ctx, "seo_inventory_search_failed", "error", err)
-		return nil
-	}
-	q := strings.ToLower(query)
-	loc := strings.ToLower(strings.TrimSpace(location))
-	filterLoc := loc != "" && loc != "australia"
-	out := make([]PlaceSummary, 0, limit)
-	for _, item := range list {
-		name := strings.TrimSpace(item.Name)
-		if name == "" || !strings.Contains(strings.ToLower(name), q) {
-			continue
-		}
-		city := strings.TrimSpace(item.City)
-		if filterLoc {
-			hay := strings.ToLower(city + " " + name)
-			if !strings.Contains(hay, loc) {
-				// Allow numeric postcode matches only against city/name text we have.
-				continue
-			}
-		}
-		placeID := strings.TrimSpace(item.PlaceID)
-		if placeID == "" {
-			placeID = item.ID.String()
-		}
-		out = append(out, PlaceSummary{
-			PlaceID: placeID,
-			Name:    name,
-			Address: city,
-			Source:  "monorepo",
-		})
-		if len(out) >= limit {
-			break
-		}
-	}
-	return out
-}
-
 func normalizeSearchLocation(location string) string {
 	loc := strings.TrimSpace(location)
 	if loc == "" {
@@ -521,72 +426,10 @@ func normalizeSearchLocation(location string) string {
 	return loc
 }
 
-func (s *Service) loadEnrichment(ctx context.Context, placeID string) Enrichment {
-	content, ok := s.loadSiteContent(ctx, placeID)
-	return enrichmentFromSiteContent(content, ok)
-}
-
-func enrichmentFromSiteContent(content profiles.SiteContent, ok bool) Enrichment {
-	if !ok {
-		return Enrichment{}
-	}
-	return Enrichment{
-		Email:          strings.TrimSpace(content.Email),
-		Phone:          strings.TrimSpace(content.Phone),
-		Website:        strings.TrimSpace(content.Website),
-		MenuItemCount:  len(content.MenuItems),
-		MenuImageCount: len(content.GalleryImages),
-		HasHours:       len(content.Hours) > 2,
-	}
-}
-
-func (s *Service) loadSiteContent(ctx context.Context, placeID string) (profiles.SiteContent, bool) {
-	if s.profiles == nil {
-		return profiles.SiteContent{}, false
-	}
-	content, err := s.profiles.GetSiteContentByPlaceID(ctx, placeID)
-	if err != nil {
-		if !errors.Is(err, repository.ErrNotFound) {
-			s.log.WarnContext(ctx, "seo_site_content_failed", "error", err, "place_id", placeID)
-		}
-		return profiles.SiteContent{}, false
-	}
-	return content, true
-}
-
-func placeFromSite(content profiles.SiteContent) PlaceDetails {
-	place := PlaceDetails{
-		PlaceID: firstNonEmpty(content.PlaceID, content.RestaurantID.String()),
-		Name:    firstNonEmpty(content.Name, "Restaurant"),
-		Address: strings.TrimSpace(strings.Join(filterEmpty([]string{content.Address, content.City, content.State}), ", ")),
-		Phone:   content.Phone,
-		Email:   content.Email,
-		Website: content.Website,
-		Source:  "monorepo",
-	}
-	if content.Rating != nil {
-		place.Rating = content.Rating
-	}
-	if content.ReviewsCount != nil {
-		place.UserRatingCount = content.ReviewsCount
-	}
-	return place
-}
-
 // FetchPlacePhoto proxies a Google Places photo through the server.
 func (s *Service) FetchPlacePhoto(ctx context.Context, photoName string, maxPx int) ([]byte, string, error) {
 	if s == nil || s.places == nil || !s.places.Enabled() {
 		return nil, "", ErrNotFound
 	}
 	return s.places.FetchPhotoMedia(ctx, photoName, maxPx)
-}
-
-func filterEmpty(values []string) []string {
-	out := make([]string, 0, len(values))
-	for _, v := range values {
-		if strings.TrimSpace(v) != "" {
-			out = append(out, strings.TrimSpace(v))
-		}
-	}
-	return out
 }

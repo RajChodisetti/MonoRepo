@@ -5,40 +5,45 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/seoreport"
 )
 
-const maxSEOUnlockBodyBytes = 8 << 10
+const (
+	maxSEOUnlockBodyBytes   = 8 << 10
+	seoUnlockTokenHexLength = 48
+)
 
 // SEOPublicHandler serves public SEO search and report endpoints.
 type SEOPublicHandler struct {
-	service      *seoreport.Service
-	publicWebURL string
-	writeJSON    func(http.ResponseWriter, int, any)
-	writeError   func(http.ResponseWriter, int, string, string)
+	service    *seoreport.Service
+	limiter    *seoPublicRateLimiter
+	writeJSON  func(http.ResponseWriter, int, any)
+	writeError func(http.ResponseWriter, int, string, string)
 }
 
 // NewSEOPublicHandler constructs the public SEO handler.
 func NewSEOPublicHandler(
 	service *seoreport.Service,
-	publicWebURL string,
 	writeJSON func(http.ResponseWriter, int, any),
 	writeError func(http.ResponseWriter, int, string, string),
 ) *SEOPublicHandler {
 	return &SEOPublicHandler{
-		service:      service,
-		publicWebURL: strings.TrimRight(strings.TrimSpace(publicWebURL), "/"),
-		writeJSON:    writeJSON,
-		writeError:   writeError,
+		service:    service,
+		limiter:    newSEOPublicRateLimiter(),
+		writeJSON:  writeJSON,
+		writeError: writeError,
 	}
 }
 
 // Search handles GET /api/public/v1/seo/search?q=&location=
 func (handler *SEOPublicHandler) Search(w http.ResponseWriter, r *http.Request) {
+	setNoStore(w)
+	if !handler.allowPublicSEORequest(w, r, "search") {
+		return
+	}
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
 	location := strings.TrimSpace(r.URL.Query().Get("location"))
 	payload, err := handler.service.SearchRestaurants(r.Context(), q, location, 8)
@@ -51,16 +56,17 @@ func (handler *SEOPublicHandler) Search(w http.ResponseWriter, r *http.Request) 
 
 // Report handles GET /api/public/v1/seo/report/{place_id}
 func (handler *SEOPublicHandler) Report(w http.ResponseWriter, r *http.Request) {
+	setNoStore(w)
+	if !handler.allowPublicSEORequest(w, r, "report") {
+		return
+	}
 	placeID := strings.TrimSpace(r.PathValue("place_id"))
 	if placeID == "" {
 		handler.writeError(w, http.StatusBadRequest, "invalid_place_id", "Google place id is required.")
 		return
 	}
 
-	unlockToken := strings.TrimSpace(r.URL.Query().Get("unlock"))
-	if unlockToken != "" {
-		setNoStore(w)
-	}
+	unlockToken := reportUnlockBearer(r.Header.Get("Authorization"))
 	var (
 		payload seoreport.ReportResponse
 		err     error
@@ -102,6 +108,9 @@ type seoUnlockVerifyBody struct {
 // RequestUnlock handles POST /api/public/v1/seo/unlock/request
 func (handler *SEOPublicHandler) RequestUnlock(w http.ResponseWriter, r *http.Request) {
 	setNoStore(w)
+	if !handler.allowPublicSEORequest(w, r, "unlock_request") {
+		return
+	}
 	var body seoUnlockRequestBody
 	if err := decodeSEOUnlockBody(w, r, &body); err != nil {
 		handler.writeError(w, http.StatusBadRequest, "invalid_body", "Request body must be JSON.")
@@ -118,6 +127,9 @@ func (handler *SEOPublicHandler) RequestUnlock(w http.ResponseWriter, r *http.Re
 // VerifyUnlock handles POST /api/public/v1/seo/unlock/verify
 func (handler *SEOPublicHandler) VerifyUnlock(w http.ResponseWriter, r *http.Request) {
 	setNoStore(w)
+	if !handler.allowPublicSEORequest(w, r, "unlock_verify") {
+		return
+	}
 	var body seoUnlockVerifyBody
 	if err := decodeSEOUnlockBody(w, r, &body); err != nil {
 		handler.writeError(w, http.StatusBadRequest, "invalid_body", "Request body must be JSON.")
@@ -131,29 +143,13 @@ func (handler *SEOPublicHandler) VerifyUnlock(w http.ResponseWriter, r *http.Req
 	handler.writeJSON(w, http.StatusOK, payload)
 }
 
-// ClickUnlock handles GET /api/public/v1/seo/unlock/click/{token}
-// Verifies possession of an unexpired emailed token without recording marketing
-// interest, then redirects to the report page.
-func (handler *SEOPublicHandler) ClickUnlock(w http.ResponseWriter, r *http.Request) {
-	setNoStore(w)
-	token := strings.TrimSpace(r.PathValue("token"))
-	rec, place, err := handler.service.ConfirmUnlockClick(r.Context(), token)
-	if err != nil {
-		handler.writeUnlockError(w, err)
-		return
-	}
-
-	base := handler.publicWebURL
-	if base == "" {
-		base = "http://localhost:3000"
-	}
-	dest := base + "/report/" + url.PathEscape(place.PlaceID) + "?unlock=" + url.QueryEscape(rec.UnlockToken)
-	http.Redirect(w, r, dest, http.StatusFound)
-}
-
 // Photo handles GET /api/public/v1/seo/photo?name=&max=
 // Proxies Google Places photo media so the API key stays server-side.
 func (handler *SEOPublicHandler) Photo(w http.ResponseWriter, r *http.Request) {
+	setNoStore(w)
+	if !handler.allowPublicSEORequest(w, r, "photo") {
+		return
+	}
 	name := strings.TrimSpace(r.URL.Query().Get("name"))
 	if name == "" {
 		handler.writeError(w, http.StatusBadRequest, "invalid_photo", "Photo name is required.")
@@ -177,7 +173,10 @@ func (handler *SEOPublicHandler) Photo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", contentType)
-	w.Header().Set("Cache-Control", "public, max-age=86400")
+	// Places photo resources and image bytes are resolved live. Google Maps
+	// Platform policy does not allow the application to cache them.
+	w.Header().Set("Cache-Control", "private, no-store, max-age=0")
+	w.Header().Set("Pragma", "no-cache")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(body)
 }
@@ -195,7 +194,7 @@ func (handler *SEOPublicHandler) writeUnlockError(w http.ResponseWriter, err err
 	case errors.Is(err, seoreport.ErrInvalidUnlock):
 		handler.writeError(w, http.StatusNotFound, "invalid_unlock", "Unlock link is invalid or expired.")
 	case errors.Is(err, seoreport.ErrUnlockRateLimit):
-		w.Header().Set("Retry-After", strconv.Itoa(60))
+		w.Header().Set("Retry-After", strconv.Itoa(seoreport.UnlockRetryAfterSeconds(err)))
 		handler.writeError(w, http.StatusTooManyRequests, "unlock_rate_limited", "Please wait before requesting another code.")
 	case errors.Is(err, seoreport.ErrNotFound):
 		handler.writeError(w, http.StatusNotFound, "not_found", "Restaurant was not found.")
@@ -227,4 +226,23 @@ func decodeSEOUnlockBody(w http.ResponseWriter, r *http.Request, target any) err
 func setNoStore(w http.ResponseWriter) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Pragma", "no-cache")
+}
+
+func reportUnlockBearer(value string) string {
+	parts := strings.Fields(value)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+		return ""
+	}
+	token := strings.TrimSpace(parts[1])
+	// Generated tokens are 48 lowercase hex characters. Enforcing that shape
+	// avoids passing arbitrary JWTs or attacker-controlled blobs into the lookup.
+	if len(token) != seoUnlockTokenHexLength {
+		return ""
+	}
+	for _, char := range token {
+		if (char < '0' || char > '9') && (char < 'a' || char > 'f') {
+			return ""
+		}
+	}
+	return token
 }

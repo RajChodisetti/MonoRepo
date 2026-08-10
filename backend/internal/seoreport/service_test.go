@@ -2,7 +2,6 @@ package seoreport
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -25,72 +24,38 @@ func newReportTestService() *Service {
 	)
 }
 
-func TestGetReportStartsIndependentSourcesConcurrently(t *testing.T) {
-	service := newReportTestService()
-	service.reportBudget = time.Second
+type panicProfileRepository struct{ profiles.SiteRepository }
 
-	release := make(chan struct{})
-	placeStarted := make(chan struct{})
-	contentStarted := make(chan struct{})
-	service.fetchPlaceDetails = func(ctx context.Context, _ string) (*placeSnapshot, error) {
-		close(placeStarted)
-		select {
-		case <-release:
-			return &placeSnapshot{Details: PlaceDetails{
-				PlaceID: "place-1",
-				Name:    "Parallel Cafe",
-				Address: "Melbourne VIC",
-				Source:  "places",
-			}}, nil
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
+func TestNewServiceNeverUsesInternalProfilesForPublicSearchOrReport(t *testing.T) {
+	// Any call through the embedded nil interface would panic. Passing this
+	// repository proves the public constructor neither retains nor invokes it.
+	service := NewService(
+		config.PlacesConfig{},
+		&panicProfileRepository{},
+		nil,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+	)
+	search, err := service.SearchRestaurants(context.Background(), "Thai", "Sydney", 8)
+	if err != nil {
+		t.Fatalf("SearchRestaurants: %v", err)
 	}
-	service.fetchSiteContent = func(ctx context.Context, _ string) (profiles.SiteContent, bool) {
-		close(contentStarted)
-		select {
-		case <-release:
-			return profiles.SiteContent{}, false
-		case <-ctx.Done():
-			return profiles.SiteContent{}, false
-		}
+	if search.Meta.InventoryEnabled || len(search.Results) != 0 {
+		t.Fatalf("public search exposed internal inventory: %#v", search)
 	}
 
-	type response struct {
-		payload ReportResponse
-		err     error
+	service.fetchPlaceDetails = func(context.Context, string) (*placeSnapshot, error) {
+		return &placeSnapshot{Details: PlaceDetails{
+			PlaceID: "place-1",
+			Name:    "Public Places Cafe",
+			Source:  "places",
+		}}, nil
 	}
-	resultCh := make(chan response, 1)
-	go func() {
-		payload, err := service.GetReport(context.Background(), "place-1")
-		resultCh <- response{payload: payload, err: err}
-	}()
-
-	for name, started := range map[string]<-chan struct{}{
-		"Places":  placeStarted,
-		"profile": contentStarted,
-	} {
-		select {
-		case <-started:
-		case <-time.After(300 * time.Millisecond):
-			t.Fatalf("%s source did not start concurrently", name)
-		}
+	payload, err := service.GetReport(context.Background(), "place-1")
+	if err != nil {
+		t.Fatalf("GetReport: %v", err)
 	}
-	close(release)
-
-	select {
-	case result := <-resultCh:
-		if result.err != nil {
-			t.Fatalf("GetReport returned error: %v", result.err)
-		}
-		if result.payload.Report.AnalysisSource != "automated" {
-			t.Fatalf("expected truthful automated source, got %q", result.payload.Report.AnalysisSource)
-		}
-		if result.payload.Report.AnalysisStatus != "complete" {
-			t.Fatalf("expected complete report, got %q", result.payload.Report.AnalysisStatus)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("GetReport did not complete after both sources were released")
+	if payload.Place.Source != "places" || payload.Place.Name != "Public Places Cafe" {
+		t.Fatalf("public report source=%#v", payload.Place)
 	}
 }
 
@@ -105,9 +70,6 @@ func TestGetReportReturnsConservativePartialAtBudget(t *testing.T) {
 			Website: "https://slow.example",
 			Source:  "places",
 		}}, nil
-	}
-	service.fetchSiteContent = func(context.Context, string) (profiles.SiteContent, bool) {
-		return profiles.SiteContent{}, false
 	}
 	auditStopped := make(chan struct{})
 	service.auditWebsite = func(ctx context.Context, website string, _ llmlib.Client) WebsiteAudit {
@@ -135,8 +97,202 @@ func TestGetReportReturnsConservativePartialAtBudget(t *testing.T) {
 	if payload.Report.AnalysisSource != "automated" {
 		t.Fatalf("fallback must not claim AI, got %q", payload.Report.AnalysisSource)
 	}
-	if payload.Report.WebsiteQualityScore == 0 {
-		t.Fatal("expected conservative website fallback score")
+	if payload.Report.WebsiteQualityScore != 0 {
+		t.Fatalf("unreachable website received visual quality=%d", payload.Report.WebsiteQualityScore)
+	}
+	for _, metric := range payload.Report.Metrics {
+		if metric.Key == "website" && metric.Score != 0 {
+			t.Fatalf("unreachable website metric=%d, want zero", metric.Score)
+		}
+	}
+}
+
+func TestGetReportDoesNotAuditLinktreeAsDedicatedWebsite(t *testing.T) {
+	service := newReportTestService()
+	service.fetchPlaceDetails = func(context.Context, string) (*placeSnapshot, error) {
+		return &placeSnapshot{Details: PlaceDetails{
+			PlaceID: "linktree-listing",
+			Name:    "Aggregator Cafe",
+			Website: "https://linktr.ee/aggregator-cafe",
+			Source:  "places",
+		}}, nil
+	}
+
+	payload, err := service.GetReport(context.Background(), "linktree-listing")
+	if err != nil {
+		t.Fatalf("GetReport: %v", err)
+	}
+	for _, metric := range payload.Report.Metrics {
+		if metric.Key != "website" {
+			continue
+		}
+		if metric.Score != 0 || !strings.Contains(metric.Rationale, "Linktree aggregator") {
+			t.Fatalf("Linktree website metric=%#v", metric)
+		}
+		if len(metric.Evidence) == 0 || metric.Evidence[0] != "Listed destination: Linktree aggregator" {
+			t.Fatalf("Linktree website evidence=%#v", metric.Evidence)
+		}
+		return
+	}
+	t.Fatal("website metric missing")
+}
+
+func TestGetReportInvalidVisionUsesReachabilityOnlyAutomatedPartial(t *testing.T) {
+	service := newReportTestService()
+	service.fetchPlaceDetails = func(context.Context, string) (*placeSnapshot, error) {
+		return &placeSnapshot{Details: PlaceDetails{
+			PlaceID: "invalid-vision",
+			Name:    "Vision Truth Cafe",
+			Website: "https://vision.example",
+			Source:  "places",
+		}}, nil
+	}
+	service.auditWebsite = func(context.Context, string, llmlib.Client) WebsiteAudit {
+		// These are the capture properties AuditWebsite attaches after the exact
+		// response parser rejects malformed provider output.
+		audit := websiteAuditFromVisionResponse("https://vision.example", `{"score":"excellent"}`)
+		audit.Reachable = true
+		audit.ViewportCoverage = "desktop_and_mobile"
+		audit.Screenshot = "data:image/jpeg;base64,desktop"
+		audit.MobileScreenshot = "data:image/jpeg;base64,mobile"
+		audit.Review = "The live homepage was reached, but automated visual-quality analysis did not complete. Only reachability was scored; no visual-quality claim was made."
+		audit.MenuEvidence = MenuEvidence{Status: "not_found", Rationale: "No menu link."}
+		audit.SocialPresence = SocialPresence{Status: "not_found"}
+		return audit
+	}
+
+	payload, err := service.GetReport(context.Background(), "invalid-vision")
+	if err != nil {
+		t.Fatalf("GetReport: %v", err)
+	}
+	if payload.Report.AnalysisSource != "automated" || payload.Report.AnalysisStatus != "partial" {
+		t.Fatalf("invalid vision source/status=%q/%q, want automated/partial", payload.Report.AnalysisSource, payload.Report.AnalysisStatus)
+	}
+	if payload.Report.WebsiteQualityScore != 0 {
+		t.Fatalf("invalid vision published quality score=%d, want zero", payload.Report.WebsiteQualityScore)
+	}
+	for _, metric := range payload.Report.Metrics {
+		if metric.Key == "website" {
+			if metric.Score != 4 {
+				t.Fatalf("invalid vision website score=%d, want reachability-only 4", metric.Score)
+			}
+			return
+		}
+	}
+	t.Fatal("website metric missing")
+}
+
+func TestGetReportFillsOnlyMissingPlaceContactsFromOfficialWebsiteLinks(t *testing.T) {
+	tests := []struct {
+		name      string
+		place     PlaceDetails
+		wantEmail string
+		wantPhone string
+	}{
+		{
+			name: "fills missing contacts",
+			place: PlaceDetails{
+				PlaceID: "contact-missing",
+				Name:    "Contact Cafe",
+				Website: "https://contact.example",
+				Source:  "places",
+			},
+			wantEmail: "hello@contact.example",
+			wantPhone: "+61 3 9000 0000",
+		},
+		{
+			name: "preserves Places contacts",
+			place: PlaceDetails{
+				PlaceID: "contact-existing",
+				Name:    "Existing Contact Cafe",
+				Website: "https://contact.example",
+				Email:   "places@contact.example",
+				Phone:   "+61 2 8111 1111",
+				Source:  "places",
+			},
+			wantEmail: "places@contact.example",
+			wantPhone: "+61 2 8111 1111",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			service := newReportTestService()
+			service.fetchPlaceDetails = func(context.Context, string) (*placeSnapshot, error) {
+				return &placeSnapshot{Details: test.place}, nil
+			}
+			service.auditWebsite = func(context.Context, string, llmlib.Client) WebsiteAudit {
+				return WebsiteAudit{
+					Listed:           true,
+					Reachable:        true,
+					ViewportCoverage: "desktop_and_mobile",
+					Source:           "vision",
+					QualityScore:     50,
+					PublicEmail:      "hello@contact.example",
+					PublicPhone:      "+61 3 9000 0000",
+					MenuEvidence:     MenuEvidence{Status: "not_found", Rationale: "No menu link."},
+					SocialPresence:   SocialPresence{Status: "not_found"},
+				}
+			}
+
+			payload, err := service.GetReport(context.Background(), test.place.PlaceID)
+			if err != nil {
+				t.Fatalf("GetReport: %v", err)
+			}
+			if payload.Place.Email != test.wantEmail || payload.Place.Phone != test.wantPhone {
+				t.Fatalf("contacts email=%q phone=%q, want %q / %q", payload.Place.Email, payload.Place.Phone, test.wantEmail, test.wantPhone)
+			}
+			contactScored := false
+			for _, metric := range payload.Report.Metrics {
+				if metric.Key == "contact" {
+					contactScored = true
+					if metric.Score != 10 {
+						t.Fatalf("contact score=%d, want contacts applied before scoring", metric.Score)
+					}
+				}
+			}
+			if !contactScored {
+				t.Fatal("contact metric missing")
+			}
+		})
+	}
+}
+
+func TestGetReportMarksSingleViewportVisionAsPartial(t *testing.T) {
+	service := newReportTestService()
+	service.fetchPlaceDetails = func(context.Context, string) (*placeSnapshot, error) {
+		return &placeSnapshot{Details: PlaceDetails{
+			PlaceID: "mobile-only",
+			Name:    "Mobile Cafe",
+			Website: "https://mobile.example",
+			Source:  "places",
+		}}, nil
+	}
+	service.auditWebsite = func(context.Context, string, llmlib.Client) WebsiteAudit {
+		return WebsiteAudit{
+			Listed:           true,
+			Reachable:        true,
+			ViewportCoverage: "mobile",
+			Source:           "vision",
+			QualityScore:     55,
+			MobileScreenshot: "data:image/jpeg;base64,mobile",
+			MenuEvidence:     MenuEvidence{Status: "not_found", Rationale: "No menu link."},
+			SocialPresence:   SocialPresence{Status: "not_found"},
+		}
+	}
+	payload, err := service.GetReport(context.Background(), "mobile-only")
+	if err != nil {
+		t.Fatalf("GetReport: %v", err)
+	}
+	if payload.Report.AnalysisStatus != "partial" || !strings.Contains(payload.Report.AnalysisNotice, "Only the mobile") {
+		t.Fatalf("single viewport status=%q notice=%q", payload.Report.AnalysisStatus, payload.Report.AnalysisNotice)
+	}
+	if payload.Report.WebsiteQualityScore != 0 {
+		t.Fatalf("single viewport quality score=%d, want no visual-quality score", payload.Report.WebsiteQualityScore)
+	}
+	for _, metric := range payload.Report.Metrics {
+		if metric.Key == "website" && metric.Score != 4 {
+			t.Fatalf("single viewport website score=%d, want reachability-only 4", metric.Score)
+		}
 	}
 }
 
@@ -147,8 +303,7 @@ func TestGetReportCoalescesConcurrentSamePlaceGeneration(t *testing.T) {
 
 	release := make(chan struct{})
 	placeStarted := make(chan struct{})
-	contentStarted := make(chan struct{})
-	var placeCalls, contentCalls atomic.Int32
+	var placeCalls atomic.Int32
 	service.fetchPlaceDetails = func(ctx context.Context, _ string) (*placeSnapshot, error) {
 		placeCalls.Add(1)
 		close(placeStarted)
@@ -163,17 +318,6 @@ func TestGetReportCoalescesConcurrentSamePlaceGeneration(t *testing.T) {
 			return nil, ctx.Err()
 		}
 	}
-	service.fetchSiteContent = func(ctx context.Context, _ string) (profiles.SiteContent, bool) {
-		contentCalls.Add(1)
-		close(contentStarted)
-		select {
-		case <-release:
-			return profiles.SiteContent{}, false
-		case <-ctx.Done():
-			return profiles.SiteContent{}, false
-		}
-	}
-
 	type response struct {
 		payload ReportResponse
 		err     error
@@ -188,12 +332,6 @@ func TestGetReportCoalescesConcurrentSamePlaceGeneration(t *testing.T) {
 	case <-time.After(300 * time.Millisecond):
 		t.Fatal("first Places call did not start")
 	}
-	select {
-	case <-contentStarted:
-	case <-time.After(300 * time.Millisecond):
-		t.Fatal("first profile call did not start")
-	}
-
 	second := make(chan response, 1)
 	go func() {
 		payload, err := service.GetReport(context.Background(), "shared-place")
@@ -219,8 +357,8 @@ func TestGetReportCoalescesConcurrentSamePlaceGeneration(t *testing.T) {
 			t.Fatalf("%s GetReport did not return", name)
 		}
 	}
-	if placeCalls.Load() != 1 || contentCalls.Load() != 1 {
-		t.Fatalf("provider calls: Places=%d profile=%d, want one each", placeCalls.Load(), contentCalls.Load())
+	if placeCalls.Load() != 1 {
+		t.Fatalf("Places calls=%d, want one", placeCalls.Load())
 	}
 }
 
@@ -236,10 +374,6 @@ func TestGetReportDoesNotCachePlacesContentAfterGeneration(t *testing.T) {
 			Source:  "places",
 		}}, nil
 	}
-	service.fetchSiteContent = func(context.Context, string) (profiles.SiteContent, bool) {
-		return profiles.SiteContent{}, false
-	}
-
 	for i := 0; i < 2; i++ {
 		if _, err := service.GetReport(context.Background(), "fresh-place"); err != nil {
 			t.Fatalf("GetReport call %d: %v", i+1, err)
@@ -259,11 +393,6 @@ func TestGetReportCapacityExhaustionFailsBeforeProviderCalls(t *testing.T) {
 		providerCalls.Add(1)
 		return nil, errors.New("provider should not run")
 	}
-	service.fetchSiteContent = func(context.Context, string) (profiles.SiteContent, bool) {
-		providerCalls.Add(1)
-		return profiles.SiteContent{}, false
-	}
-
 	started := time.Now()
 	_, err := service.GetReport(context.Background(), "busy-place")
 	if !errors.Is(err, ErrReportBusy) {
@@ -277,7 +406,7 @@ func TestGetReportCapacityExhaustionFailsBeforeProviderCalls(t *testing.T) {
 	}
 }
 
-func TestGetReportNeverPublishesLegacyInventoryImageURLs(t *testing.T) {
+func TestGetReportPublishesOnlyLivePlacesPhotoResources(t *testing.T) {
 	service := newReportTestService()
 	service.reportSlots = make(chan struct{}, 1)
 	service.fetchPlaceDetails = func(context.Context, string) (*placeSnapshot, error) {
@@ -294,37 +423,9 @@ func TestGetReportNeverPublishesLegacyInventoryImageURLs(t *testing.T) {
 			}},
 		}, nil
 	}
-	service.fetchSiteContent = func(context.Context, string) (profiles.SiteContent, bool) {
-		return profiles.SiteContent{
-			Name: "Media Cafe",
-			MenuItems: []profiles.SiteMenuItem{{
-				Name:     "Legacy dish",
-				ImageURL: "https://legacy.example/tripadvisor-menu.jpg",
-			}},
-			GalleryImages: []profiles.GalleryImage{{
-				URL:          "https://legacy.example/gallery.jpg",
-				ThumbnailURL: "https://legacy.example/gallery-thumb.jpg",
-			}},
-		}, true
-	}
-
 	payload, err := service.GetReport(context.Background(), "media-place")
 	if err != nil {
 		t.Fatalf("GetReport error: %v", err)
-	}
-	encoded, err := json.Marshal(payload)
-	if err != nil {
-		t.Fatalf("marshal report: %v", err)
-	}
-	for _, forbidden := range []string{
-		"tripadvisor-menu.jpg",
-		"gallery.jpg",
-		"gallery-thumb.jpg",
-		"legacy.example",
-	} {
-		if strings.Contains(string(encoded), forbidden) {
-			t.Fatalf("public report exposed legacy inventory URL fragment %q", forbidden)
-		}
 	}
 	if payload.Place.Media == nil || len(payload.Place.Media.PhotosAndVideos) == 0 {
 		t.Fatal("expected live Places photo media")

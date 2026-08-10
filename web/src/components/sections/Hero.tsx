@@ -12,8 +12,21 @@ type SearchHit = {
   latitude?: number;
   longitude?: number;
   rating?: number;
+  attributions?: Array<{ provider?: string; providerUri?: string }>;
   source: "monorepo" | "places";
 };
+
+function safeExternalURL(value?: string): string | undefined {
+  if (!value) return undefined;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "https:" || parsed.protocol === "http:"
+      ? parsed.toString()
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 function StarIcon() {
   return (
@@ -356,29 +369,72 @@ export default function Hero() {
               ) : results.length === 0 ? (
                 <p className="px-4 py-3 text-[14px] text-muted">No matches yet — keep typing.</p>
               ) : (
-                <ul className="max-h-[280px] overflow-auto py-1">
-                  {results.map((hit, i) => (
-                    <li key={`${hit.source}-${hit.placeId}`}>
-                      <button
-                        type="button"
-                        id={`${listId}-opt-${i}`}
-                        role="option"
-                        aria-selected={i === highlight}
-                        className={`flex w-full cursor-pointer flex-col gap-0.5 px-4 py-2.5 text-left transition-colors ${
+                <>
+                  <ul className="max-h-[280px] overflow-auto py-1">
+                    {results.map((hit, i) => (
+                      <li
+                        key={`${hit.source}-${hit.placeId}`}
+                        className={`flex w-full flex-col gap-0.5 px-4 py-2.5 text-left transition-colors ${
                           i === highlight ? "bg-[#eef4f0]" : "hover:bg-[#f5f7f6]"
                         }`}
                         onMouseEnter={() => setHighlight(i)}
-                        onClick={() => goToReport(hit)}
                       >
-                        <span className="truncate text-[15px] font-semibold text-ink">{hit.name}</span>
-                        <span className="truncate text-[12.5px] text-muted">
-                          {hit.address || (hit.source === "monorepo" ? "From your inventory" : "Google Places")}
-                          {hit.rating != null ? ` · ${hit.rating.toFixed(1)}★` : ""}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+                        <button
+                          type="button"
+                          id={`${listId}-opt-${i}`}
+                          role="option"
+                          aria-selected={i === highlight}
+                          className="flex w-full cursor-pointer flex-col gap-0.5 text-left"
+                          onClick={() => goToReport(hit)}
+                        >
+                          <span className="truncate text-[15px] font-semibold text-ink">{hit.name}</span>
+                          <span className="truncate text-[12.5px] text-muted">
+                            {hit.address || (hit.source === "monorepo" ? "From your inventory" : "Google Places")}
+                            {hit.rating != null ? ` · ${hit.rating.toFixed(1)}★` : ""}
+                          </span>
+                        </button>
+                          {hit.attributions?.map((attribution, attributionIndex) => {
+                            const providerURL = safeExternalURL(attribution.providerUri);
+                            const provider = attribution.provider?.trim() || "Data source";
+                            return providerURL ? (
+                              <a
+                                key={`${provider}-${attributionIndex}`}
+                                href={providerURL}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-[12px] leading-4 text-[#5e5e5e] underline underline-offset-2"
+                              >
+                                Source: {provider}
+                              </a>
+                            ) : (
+                              <span
+                                key={`${provider}-${attributionIndex}`}
+                                className="text-[12px] leading-4 text-[#5e5e5e]"
+                              >
+                                Source: {provider}
+                              </span>
+                            );
+                          })}
+                      </li>
+                    ))}
+                  </ul>
+                  {results.some((hit) => hit.source === "places") ? (
+                    <div
+                      role="presentation"
+                      className="border-t border-border px-4 py-2 text-[12px] font-normal leading-4 text-[#5e5e5e]"
+                      translate="no"
+                    >
+                      <a
+                        href="https://www.google.com/maps"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline-offset-2 hover:underline"
+                      >
+                        Google Maps
+                      </a>
+                    </div>
+                  ) : null}
+                </>
               )}
             </div>
           ) : null}

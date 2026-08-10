@@ -1,15 +1,15 @@
 const issues = [
   {
-    title: "Not ranking in 3 nearby areas",
-    description: "Missing keywords to rank nearby for terms competitors are winning with.",
+    title: "Local discovery signals are incomplete",
+    description: "Clear cuisine and suburb context helps guests and search engines understand the venue.",
   },
   {
     title: "Title missing primary keyword",
-    description: 'Including "Pizza in Springfield" will increase Google rankings.',
+    description: 'A descriptive title such as "Pizza in Springfield" makes the page topic and location clearer.',
   },
   {
     title: "2 images missing alt tags",
-    description: "Adding alt tags to all images will boost visibility on Google Maps and Google Images.",
+    description: "Meaningful alt text improves accessibility and gives website images clearer context.",
   },
 ] as const;
 
@@ -33,7 +33,7 @@ export default function IssuesCard() {
         Here&apos;s where you can improve
       </p>
       <p className="mt-1.5 text-[12.5px] leading-snug text-[#8a8580]">
-        You&apos;re losing $450 a month in sales until these are fixed.
+        Illustrative preview — the live review does not infer revenue loss without your sales data.
       </p>
 
       <ul className="mt-4 space-y-2.5">
@@ -69,12 +69,9 @@ export default function IssuesCard() {
         Improve your score to drive more sales
       </p>
 
-      <button
-        type="button"
-        className="mt-3 w-full rounded-full bg-[#111111] px-4 py-3.5 text-[14px] font-semibold text-white"
-      >
-        Verify email — unlock free AI fixes
-      </button>
+      <p className="mt-3 w-full rounded-full bg-[#111111] px-4 py-3.5 text-center text-[14px] font-semibold text-white">
+        Select a restaurant above for the live review
+      </p>
     </div>
   );
 }

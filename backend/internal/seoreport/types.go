@@ -4,14 +4,15 @@ import "encoding/json"
 
 // PlaceSummary is a lightweight search hit.
 type PlaceSummary struct {
-	PlaceID         string   `json:"placeId"`
-	Name            string   `json:"name"`
-	Address         string   `json:"address"`
-	Latitude        *float64 `json:"latitude,omitempty"`
-	Longitude       *float64 `json:"longitude,omitempty"`
-	Rating          *float64 `json:"rating,omitempty"`
-	UserRatingCount *int     `json:"userRatingCount,omitempty"`
-	Source          string   `json:"source"`
+	PlaceID         string             `json:"placeId"`
+	Name            string             `json:"name"`
+	Address         string             `json:"address"`
+	Latitude        *float64           `json:"latitude,omitempty"`
+	Longitude       *float64           `json:"longitude,omitempty"`
+	Rating          *float64           `json:"rating,omitempty"`
+	UserRatingCount *int               `json:"userRatingCount,omitempty"`
+	Attributions    []PlaceAttribution `json:"attributions,omitempty"`
+	Source          string             `json:"source"`
 }
 
 // PlaceDetails is the restaurant identity returned with a report.
@@ -24,28 +25,49 @@ type PlaceDetails struct {
 	Website string `json:"website,omitempty"`
 	MapsURI string `json:"mapsUri,omitempty"`
 	// Latitude / Longitude from Places location (WGS84) for map pin.
-	Latitude         *float64 `json:"latitude,omitempty"`
-	Longitude        *float64 `json:"longitude,omitempty"`
-	Rating           *float64 `json:"rating,omitempty"`
-	UserRatingCount  *int     `json:"userRatingCount,omitempty"`
-	PriceLevel       string   `json:"priceLevel,omitempty"`
-	BusinessStatus   string   `json:"businessStatus,omitempty"`
-	Types            []string `json:"types,omitempty"`
-	PrimaryType      string   `json:"primaryType,omitempty"`
-	EditorialSummary string   `json:"editorialSummary,omitempty"`
-	Source           string   `json:"source"`
+	Latitude         *float64           `json:"latitude,omitempty"`
+	Longitude        *float64           `json:"longitude,omitempty"`
+	Rating           *float64           `json:"rating,omitempty"`
+	UserRatingCount  *int               `json:"userRatingCount,omitempty"`
+	PriceLevel       string             `json:"priceLevel,omitempty"`
+	BusinessStatus   string             `json:"businessStatus,omitempty"`
+	Types            []string           `json:"types,omitempty"`
+	PrimaryType      string             `json:"primaryType,omitempty"`
+	EditorialSummary string             `json:"editorialSummary,omitempty"`
+	Attributions     []PlaceAttribution `json:"attributions,omitempty"`
+	Source           string             `json:"source"`
 	// Media contains only live Google Places photo resource names and attribution links.
 	Media *PlaceMedia `json:"media,omitempty"`
 }
 
+// PlaceAttribution identifies a third-party data provider that Google requires
+// clients to display with the specific Place content that carried it.
+type PlaceAttribution struct {
+	Provider    string `json:"provider,omitempty"`
+	ProviderURI string `json:"providerUri,omitempty"`
+}
+
+// AuthorAttribution is the contributor identity Google returns for a photo or
+// review. URI and PhotoURI are kept alongside the display name so public
+// surfaces can render the attribution Google requires without guessing a
+// generic listing source.
+type AuthorAttribution struct {
+	DisplayName string `json:"displayName,omitempty"`
+	URI         string `json:"uri,omitempty"`
+	PhotoURI    string `json:"photoUri,omitempty"`
+}
+
 // MediaCard is one tile in the listing media carousels.
 type MediaCard struct {
-	Kind      string `json:"kind"` // menu | highlight | photo | latest | video
-	Label     string `json:"label"`
-	Subtitle  string `json:"subtitle,omitempty"`
-	ImageURL  string `json:"imageUrl,omitempty"`
-	PhotoName string `json:"photoName,omitempty"`
-	Href      string `json:"href,omitempty"`
+	Kind               string              `json:"kind"` // menu | highlight | photo | latest | video
+	Label              string              `json:"label"`
+	Subtitle           string              `json:"subtitle,omitempty"`
+	ImageURL           string              `json:"imageUrl,omitempty"`
+	PhotoName          string              `json:"photoName,omitempty"`
+	Href               string              `json:"href,omitempty"`
+	AuthorAttributions []AuthorAttribution `json:"authorAttributions,omitempty"`
+	GoogleMapsURI      string              `json:"googleMapsUri,omitempty"`
+	FlagContentURI     string              `json:"flagContentUri,omitempty"`
 }
 
 // PlaceMedia groups scraped listing visuals for the report UI.
@@ -57,13 +79,26 @@ type PlaceMedia struct {
 
 // Review is a single Google review used for scoring/summary.
 type Review struct {
-	Author       string  `json:"author,omitempty"`
-	Text         string  `json:"text,omitempty"`
-	Rating       float64 `json:"rating,omitempty"`
-	RelativeTime string  `json:"relativeTime,omitempty"`
-	PublishTime  string  `json:"publishTime,omitempty"`
+	Author         string           `json:"author,omitempty"`
+	AuthorURI      string           `json:"authorUri,omitempty"`
+	AuthorPhotoURI string           `json:"authorPhotoUri,omitempty"`
+	GoogleMapsURI  string           `json:"googleMapsUri,omitempty"`
+	FlagContentURI string           `json:"flagContentUri,omitempty"`
+	Text           string           `json:"text,omitempty"`
+	Rating         float64          `json:"rating,omitempty"`
+	RelativeTime   string           `json:"relativeTime,omitempty"`
+	PublishTime    string           `json:"publishTime,omitempty"`
+	VisitDate      *ReviewVisitDate `json:"visitDate,omitempty"`
 	// Sentiment is a coarse label for scan UI: positive | mixed | negative.
 	Sentiment string `json:"sentiment,omitempty"`
+}
+
+// ReviewVisitDate is the Google-provided visit month/year. Google can also
+// return a day, so retain it when present instead of narrowing the source data.
+type ReviewVisitDate struct {
+	Year  int `json:"year,omitempty"`
+	Month int `json:"month,omitempty"`
+	Day   int `json:"day,omitempty"`
 }
 
 // Metric is one scored bucket of the SEO report.
@@ -88,18 +123,19 @@ type Issue struct {
 
 // CompetitorRow is a simplified comparison row for the UI.
 type CompetitorRow struct {
-	Rank            string   `json:"rank"`
-	PlaceID         string   `json:"placeId,omitempty"`
-	Name            string   `json:"name"`
-	Rating          string   `json:"rating"`
-	UserRatingCount int      `json:"userRatingCount,omitempty"`
-	Score           string   `json:"score"`
-	VisibilityScore int      `json:"visibilityScore"`
-	ScoreMax        int      `json:"scoreMax"`
-	DistanceKM      float64  `json:"distanceKm"`
-	Reasons         []string `json:"reasons,omitempty"`
-	ScoreColor      string   `json:"scoreColor"`
-	Highlight       bool     `json:"highlight"`
+	Rank            string             `json:"rank"`
+	PlaceID         string             `json:"placeId,omitempty"`
+	Name            string             `json:"name"`
+	Rating          string             `json:"rating"`
+	UserRatingCount int                `json:"userRatingCount,omitempty"`
+	Score           string             `json:"score"`
+	VisibilityScore int                `json:"visibilityScore"`
+	ScoreMax        int                `json:"scoreMax"`
+	DistanceKM      float64            `json:"distanceKm"`
+	Reasons         []string           `json:"reasons,omitempty"`
+	Attributions    []PlaceAttribution `json:"attributions,omitempty"`
+	ScoreColor      string             `json:"scoreColor"`
+	Highlight       bool               `json:"highlight"`
 }
 
 // CompetitorScan describes a bounded, same-cuisine Google Places comparison.
@@ -150,21 +186,22 @@ type SocialPresence struct {
 
 // Report is the scored SEO report payload.
 type Report struct {
-	RestaurantName       string          `json:"restaurantName"`
-	Address              string          `json:"address"`
-	OverallScore         int             `json:"overallScore"`
-	OverallLabel         string          `json:"overallLabel"`
-	OverallColor         string          `json:"overallColor"`
-	Metrics              []Metric        `json:"metrics"`
-	Competitors          []CompetitorRow `json:"competitors"`
-	CompetitorScan       CompetitorScan  `json:"competitorScan"`
-	MenuEvidence         MenuEvidence    `json:"menuEvidence"`
-	SocialPresence       SocialPresence  `json:"socialPresence"`
-	Issues               []Issue         `json:"issues"`
-	AISummary            string          `json:"aiSummary"`
-	EstimatedMonthlyLoss int             `json:"estimatedMonthlyLoss"`
-	FullReportLocked     bool            `json:"fullReportLocked"`
-	UnlockCTA            string          `json:"unlockCta"`
+	RestaurantName string          `json:"restaurantName"`
+	Address        string          `json:"address"`
+	OverallScore   int             `json:"overallScore"`
+	OverallLabel   string          `json:"overallLabel"`
+	OverallColor   string          `json:"overallColor"`
+	Metrics        []Metric        `json:"metrics"`
+	Competitors    []CompetitorRow `json:"competitors"`
+	CompetitorScan CompetitorScan  `json:"competitorScan"`
+	MenuEvidence   MenuEvidence    `json:"menuEvidence"`
+	SocialPresence SocialPresence  `json:"socialPresence"`
+	Issues         []Issue         `json:"issues"`
+	AISummary      string          `json:"aiSummary"`
+	// Deprecated: always zero because no venue sales/conversion data is available.
+	EstimatedMonthlyLoss int    `json:"estimatedMonthlyLoss"`
+	FullReportLocked     bool   `json:"fullReportLocked"`
+	UnlockCTA            string `json:"unlockCta"`
 	// Website visual audit (screenshot + AI design review).
 	WebsiteScreenshot       string `json:"websiteScreenshot,omitempty"`
 	WebsiteMobileScreenshot string `json:"websiteMobileScreenshot,omitempty"`
@@ -183,15 +220,18 @@ type Report struct {
 	RecentReviews []Review `json:"recentReviews,omitempty"`
 }
 
-// RedactLockedReport removes verification-gated data on the server. The full
-// values remain in the cached in-memory Report so the existing unlock flow can
-// reveal them simply by setting FullReportLocked=false.
+// RedactLockedReport removes verification-gated data on the server. An unlocked
+// request regenerates the authoritative report and sets FullReportLocked=false.
 func RedactLockedReport(report Report) Report {
 	if !report.FullReportLocked {
 		return report
 	}
+	report = cloneReportSlices(report)
 	report.Competitors = nil
-	report.CompetitorScan.Rows = nil
+	// Competitor status, cuisine, sample size, current score/position, leading
+	// conclusion, notice, and rows are all verification-gated. A neutral marker
+	// lets clients render a locked placeholder without receiving those findings.
+	report.CompetitorScan = CompetitorScan{Status: "locked"}
 	report.Issues = nil
 	report.AISummary = ""
 	report.WebsiteReview = ""
@@ -207,11 +247,45 @@ func RedactLockedReport(report Report) Report {
 	return report
 }
 
+func cloneReportSlices(report Report) Report {
+	report.Metrics = append([]Metric(nil), report.Metrics...)
+	for index := range report.Metrics {
+		report.Metrics[index].Evidence = append([]string(nil), report.Metrics[index].Evidence...)
+	}
+	report.Competitors = cloneCompetitorRows(report.Competitors)
+	report.CompetitorScan.Rows = cloneCompetitorRows(report.CompetitorScan.Rows)
+	report.Issues = append([]Issue(nil), report.Issues...)
+	report.SocialPresence.Profiles = append([]SocialProfile(nil), report.SocialPresence.Profiles...)
+	report.RecentReviews = append([]Review(nil), report.RecentReviews...)
+	return report
+}
+
+func cloneCompetitorRows(rows []CompetitorRow) []CompetitorRow {
+	cloned := append([]CompetitorRow(nil), rows...)
+	for index := range cloned {
+		cloned[index].Reasons = append([]string(nil), cloned[index].Reasons...)
+	}
+	return cloned
+}
+
 // MarshalJSON enforces locked-report redaction at the serialization boundary.
 // This prevents CSS blur or client code from becoming the access-control layer.
 func (report Report) MarshalJSON() ([]byte, error) {
 	view := RedactLockedReport(report)
 	type reportJSON Report
+	if view.FullReportLocked {
+		return json.Marshal(struct {
+			reportJSON
+			CompetitorScan struct {
+				Status string `json:"status"`
+			} `json:"competitorScan"`
+		}{
+			reportJSON: reportJSON(view),
+			CompetitorScan: struct {
+				Status string `json:"status"`
+			}{Status: "locked"},
+		})
+	}
 	return json.Marshal(reportJSON(view))
 }
 

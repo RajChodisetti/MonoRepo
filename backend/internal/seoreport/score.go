@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"unicode"
 )
 
 const (
@@ -44,12 +45,14 @@ type ScoreInput struct {
 	ReservableKnown bool
 	Enrichment      Enrichment
 	// Website visual audit (from screenshot + AI). When QualityKnown is false,
-	// scoreWebsite uses a conservative presence fallback (never full 20).
+	// scoreWebsite awards only a small reachability score (never visual points).
+	WebsiteReachable        bool
 	WebsiteQualityKnown     bool
 	WebsiteQualityScore     int // 0–100
 	WebsiteReview           string
 	WebsiteScreenshot       string
 	WebsiteMobileScreenshot string
+	WebsitePageEvidence     WebsitePageEvidence
 	MenuEvidence            MenuEvidence
 	SocialPresence          SocialPresence
 	CompetitorScan          CompetitorScan
@@ -75,9 +78,13 @@ func BuildReport(in ScoreInput) Report {
 	in.MenuEvidence = menuEvidence
 	in.SocialPresence = socialPresence
 
-	seo := scoreSEO(place)
+	websiteTitle := ""
+	if in.WebsiteReachable {
+		websiteTitle = in.WebsitePageEvidence.Title
+	}
+	seo := scoreSEO(place, websiteTitle)
 	reviews := scoreReviews(place, in.Reviews)
-	website := scoreWebsite(place.Website, in.WebsiteQualityKnown, in.WebsiteQualityScore)
+	website := scoreWebsite(place.Website, in.WebsiteReachable, in.WebsiteQualityKnown, in.WebsiteQualityScore)
 	order := scoreOrderOnline(place.Website, in)
 	menu := scoreMenu(menuEvidence)
 	contact := scoreContact(place.Phone, place.Email)
@@ -95,15 +102,15 @@ func BuildReport(in ScoreInput) Report {
 	metrics := []Metric{
 		metricOf("seo", "SEO keywords", seo, 20,
 			"Cuisine, locality, and descriptive listing signals determine how clearly Google can understand the venue.",
-			seoEvidence(place),
+			seoEvidence(place, websiteTitle),
 			"Use the primary cuisine and suburb naturally in the business description, website title, and local posts."),
 		metricOf("reviews", "Recent reviews", reviews, 25,
 			fmt.Sprintf("The listing has %d reviews and a %s rating; recent review quality and freshness are also weighted.", intValue(place.UserRatingCount), ratingLabel(place.Rating)),
 			reviewEvidence(place, in.Reviews),
 			"Ask recent guests for specific, honest feedback and reply consistently to new reviews."),
 		metricOf("website", "Website design", website, 20,
-			websiteRationale(place.Website, in.WebsiteQualityKnown, in.WebsiteQualityScore),
-			websiteEvidence(place.Website, in.WebsiteScreenshot, in.WebsiteMobileScreenshot),
+			websiteRationale(place.Website, in.WebsiteReachable, in.WebsiteQualityKnown, in.WebsiteQualityScore),
+			websiteEvidence(place.Website, in.WebsiteReachable, in.WebsiteScreenshot, in.WebsiteMobileScreenshot, in.WebsitePageEvidence),
 			"Keep the homepage fast, mobile-readable, and explicit about cuisine, menu, ordering, and reservations."),
 		metricOf("order_online", "Order online", order, 5,
 			"Delivery, takeout, reservations, and a clear direct-order path are scored from known listing and website signals.",
@@ -128,21 +135,22 @@ func BuildReport(in ScoreInput) Report {
 	label, color := labelForScore(overall)
 
 	issues := buildIssues(place, in, seo, reviews, website, order, menu, contact)
-	loss := int(math.Round(float64(100-overall)*12)) + ternaryInt(place.Website == "", 180, 0)
 
 	return Report{
-		RestaurantName:          place.Name,
-		Address:                 place.Address,
-		OverallScore:            overall,
-		OverallLabel:            label,
-		OverallColor:            color,
-		Metrics:                 metrics,
-		Competitors:             competitorScan.Rows,
-		CompetitorScan:          competitorScan,
-		MenuEvidence:            menuEvidence,
-		SocialPresence:          socialPresence,
-		Issues:                  issues,
-		EstimatedMonthlyLoss:    loss,
+		RestaurantName: place.Name,
+		Address:        place.Address,
+		OverallScore:   overall,
+		OverallLabel:   label,
+		OverallColor:   color,
+		Metrics:        metrics,
+		Competitors:    competitorScan.Rows,
+		CompetitorScan: competitorScan,
+		MenuEvidence:   menuEvidence,
+		SocialPresence: socialPresence,
+		Issues:         issues,
+		// Revenue impact needs venue sales and conversion data. Keep this legacy
+		// compatibility field neutral instead of publishing a fabricated estimate.
+		EstimatedMonthlyLoss:    0,
 		FullReportLocked:        true,
 		UnlockCTA:               "Unlock the full SEO report by verifying your email.",
 		WebsiteScreenshot:       in.WebsiteScreenshot,
@@ -205,7 +213,7 @@ func reviewSentiment(r Review) string {
 	}
 }
 
-func scoreSEO(place PlaceDetails) int {
+func scoreSEO(place PlaceDetails, websiteTitle string) int {
 	points := 0
 	cuisines := cuisineLabels(append([]string{place.PrimaryType}, place.Types...))
 	blob := strings.ToLower(strings.Join([]string{
@@ -229,8 +237,11 @@ func scoreSEO(place PlaceDetails) int {
 			points += 4
 		}
 	}
-	// Locality signal: address suburb/city tokens appear with restaurant name context.
-	if hasLocalityKeyword(place.Name, place.Address) {
+	// A formatted address proves where the venue is, but not that its public
+	// title/content targets that locality. Award locality points only when a
+	// locality component from the address is corroborated by a separate public
+	// signal: the listing name, editorial summary, or captured website title.
+	if hasExplicitLocalityEvidence(place.Address, place.Name, place.EditorialSummary, websiteTitle) {
 		points += 6
 	}
 	return clamp(points, 0, 20)
@@ -282,9 +293,9 @@ func scoreReviews(place PlaceDetails, reviews []Review) int {
 
 // scoreWebsite maps homepage visual quality into the 20-point Website bucket.
 // Presence alone must NEVER award a full 20 — scoring is driven by screenshot + AI review.
-func scoreWebsite(website string, qualityKnown bool, qualityScore int) int {
+func scoreWebsite(website string, reachable, qualityKnown bool, qualityScore int) int {
 	website = strings.TrimSpace(website)
-	if website == "" {
+	if website == "" || isLinkAggregatorWebsite(website) || !reachable {
 		return 0
 	}
 	parsed, err := url.Parse(website)
@@ -293,7 +304,7 @@ func scoreWebsite(website string, qualityKnown bool, qualityScore int) int {
 	}
 	if isSocialWebsite(website) {
 		// Social links are not a real restaurant website experience.
-		return 4
+		return 2
 	}
 
 	if qualityKnown {
@@ -301,11 +312,8 @@ func scoreWebsite(website string, qualityKnown bool, qualityScore int) int {
 		return clamp(points, 1, 20)
 	}
 
-	// Conservative fallback when screenshot/AI is unavailable — HTTPS dedicated site ≠ 20 pts.
-	if parsed.Scheme == "https" {
-		return 4
-	}
-	return 3
+	// The live homepage was reached, but screenshot quality was not scored.
+	return 4
 }
 
 func scoreOrderOnline(website string, in ScoreInput) int {
@@ -319,11 +327,17 @@ func scoreOrderOnline(website string, in ScoreInput) int {
 	if in.ReservableKnown && in.Reservable {
 		points += 1
 	}
-	lower := strings.ToLower(website)
-	for _, hint := range orderOnlineHints {
-		if strings.Contains(lower, strings.ToLower(hint)) {
+	if in.WebsiteReachable && !isLinkAggregatorWebsite(website) {
+		lower := strings.ToLower(website)
+		if in.WebsitePageEvidence.HasOrderCTA {
 			points += 2
-			break
+		} else {
+			for _, hint := range orderOnlineHints {
+				if strings.Contains(lower, strings.ToLower(hint)) {
+					points += 2
+					break
+				}
+			}
 		}
 	}
 	return clamp(points, 0, 5)
@@ -363,8 +377,8 @@ func scoreListing(place PlaceDetails, hasHours bool, photoCount int, social Soci
 	if hasHours {
 		points += 2
 	}
-	status := strings.ToUpper(place.BusinessStatus)
-	if status == "" || status == "OPERATIONAL" {
+	status := strings.ToUpper(strings.TrimSpace(place.BusinessStatus))
+	if status == "OPERATIONAL" {
 		points += 1
 	}
 	if photoCount >= 8 {
@@ -385,6 +399,16 @@ func buildIssues(place PlaceDetails, in ScoreInput, seo, reviews, website, order
 		issues = append(issues, Issue{
 			Title:       "No website on Google",
 			Description: "Competitors with a dedicated website capture more direct orders and Google clicks.",
+		})
+	} else if isLinkAggregatorWebsite(place.Website) {
+		issues = append(issues, Issue{
+			Title:       "No dedicated restaurant website",
+			Description: "The listing points to a Linktree aggregator. Add a dedicated, mobile-friendly site for menus, direct orders, reservations, and search visibility.",
+		})
+	} else if !in.WebsiteReachable {
+		issues = append(issues, Issue{
+			Title:       "Website listed but not reachable",
+			Description: "The listed homepage could not be verified, so no reachability or visual-quality points were awarded.",
 		})
 	} else if website < 10 {
 		desc := "Your linked site under-delivers on design, clarity, or booking CTAs versus stronger local rivals."
@@ -547,6 +571,7 @@ func buildCompetitorScan(target placeSnapshot, candidates []placeSnapshot, cuisi
 			ScoreMax:        100,
 			DistanceKM:      math.Round(candidate.snapshot.DistanceKM*10) / 10,
 			Reasons:         visibilityReasons(target, candidate.snapshot),
+			Attributions:    append([]PlaceAttribution(nil), details.Attributions...),
 			ScoreColor:      colorGood,
 		})
 	}
@@ -712,6 +737,14 @@ func scoreSocialPresence(presence SocialPresence) SocialPresence {
 		}
 		return presence
 	}
+	verified := socialPresenceFromProfiles(presence.Profiles)
+	presence.Profiles = verified.Profiles
+	if len(presence.Profiles) == 0 {
+		presence.Status = "not_found"
+		presence.Score = 0
+		presence.Rationale = verified.Rationale
+		return presence
+	}
 	platforms := make(map[string]struct{}, len(presence.Profiles))
 	for _, profile := range presence.Profiles {
 		platform := strings.ToLower(strings.TrimSpace(profile.Platform))
@@ -727,7 +760,7 @@ func scoreSocialPresence(presence SocialPresence) SocialPresence {
 	return presence
 }
 
-func seoEvidence(place PlaceDetails) []string {
+func seoEvidence(place PlaceDetails, websiteTitle string) []string {
 	evidence := []string{
 		fmt.Sprintf("Primary category: %s", firstNonEmpty(place.PrimaryType, "not supplied")),
 		fmt.Sprintf("Cuisine categories found: %d", len(cuisineLabels(append([]string{place.PrimaryType}, place.Types...)))),
@@ -737,8 +770,10 @@ func seoEvidence(place PlaceDetails) []string {
 	} else {
 		evidence = append(evidence, "No Google editorial summary")
 	}
-	if strings.TrimSpace(place.Address) != "" {
-		evidence = append(evidence, "Locality/address available")
+	if hasExplicitLocalityEvidence(place.Address, place.Name, place.EditorialSummary, websiteTitle) {
+		evidence = append(evidence, "Locality corroborated in the listing name, editorial summary, or reachable website title")
+	} else if strings.TrimSpace(place.Address) != "" {
+		evidence = append(evidence, "Address available; no separate locality-targeting signal verified")
 	}
 	return evidence
 }
@@ -760,9 +795,15 @@ func reviewEvidence(place PlaceDetails, reviews []Review) []string {
 	return evidence
 }
 
-func websiteRationale(website string, qualityKnown bool, qualityScore int) string {
+func websiteRationale(website string, reachable, qualityKnown bool, qualityScore int) string {
 	if strings.TrimSpace(website) == "" {
 		return "No official website was listed."
+	}
+	if isLinkAggregatorWebsite(website) {
+		return "The listed destination is a Linktree aggregator, not a dedicated restaurant website; no reachability or visual-quality points were awarded."
+	}
+	if !reachable {
+		return "An official website URL is listed, but the live homepage could not be verified as reachable; no reachability or visual-quality points were awarded."
 	}
 	if isSocialWebsite(website) {
 		return "The listing points to a social profile rather than a dedicated restaurant website."
@@ -773,9 +814,23 @@ func websiteRationale(website string, qualityKnown bool, qualityScore int) strin
 	return "A dedicated website is listed, but a complete visual assessment was unavailable."
 }
 
-func websiteEvidence(website, desktopScreenshot, mobileScreenshot string) []string {
+func websiteEvidence(website string, reachable bool, desktopScreenshot, mobileScreenshot string, page WebsitePageEvidence) []string {
+	if isLinkAggregatorWebsite(website) {
+		return []string{
+			"Listed destination: Linktree aggregator",
+			"Dedicated restaurant website: not found",
+			"Website visual-quality assessment: not applicable",
+		}
+	}
 	evidence := []string{fmt.Sprintf("Official website: %s", presenceLabel(website != ""))}
 	evidence = append(evidence,
+		fmt.Sprintf("Live homepage reachable: %s", presenceLabel(reachable)),
+		fmt.Sprintf("Loaded homepage scheme: %s", firstNonEmpty(strings.ToUpper(page.LoadedScheme), "unknown")),
+		fmt.Sprintf("HTML page title: %s", presenceLabel(page.Title != "")),
+		fmt.Sprintf("Mobile viewport metadata: %s", presenceLabel(page.HasMetaViewport)),
+		fmt.Sprintf("Order/reservation CTA: %s", presenceLabel(page.HasOrderCTA)),
+		fmt.Sprintf("Menu CTA: %s", presenceLabel(page.HasMenuCTA)),
+		fmt.Sprintf("Contact CTA: %s", presenceLabel(page.HasContactCTA)),
 		fmt.Sprintf("Desktop capture: %s", presenceLabel(desktopScreenshot != "")),
 		fmt.Sprintf("Mobile capture: %s", presenceLabel(mobileScreenshot != "")),
 	)
@@ -783,11 +838,12 @@ func websiteEvidence(website, desktopScreenshot, mobileScreenshot string) []stri
 }
 
 func orderEvidence(in ScoreInput) []string {
+	websiteEligible := in.WebsiteReachable && !isLinkAggregatorWebsite(in.Place.Website)
 	return []string{
 		fmt.Sprintf("Delivery: %s", knownBoolLabel(in.DeliveryKnown, in.Delivery)),
 		fmt.Sprintf("Takeout: %s", knownBoolLabel(in.TakeoutKnown, in.Takeout)),
 		fmt.Sprintf("Reservations: %s", knownBoolLabel(in.ReservableKnown, in.Reservable)),
-		fmt.Sprintf("Direct-order URL hint: %s", presenceLabel(hasOrderOnlineHint(in.Place.Website))),
+		fmt.Sprintf("Direct-order CTA or URL hint on reachable website: %s", presenceLabel(websiteEligible && (in.WebsitePageEvidence.HasOrderCTA || hasOrderOnlineHint(in.Place.Website)))),
 	}
 }
 
@@ -899,22 +955,61 @@ func cuisineLabels(types []string) []string {
 	return out
 }
 
-func hasLocalityKeyword(name, address string) bool {
-	name = strings.ToLower(name)
-	parts := strings.FieldsFunc(address, func(r rune) bool {
-		return r == ',' || r == ' '
-	})
-	for _, part := range parts {
-		part = strings.ToLower(strings.TrimSpace(part))
-		if len(part) < 4 {
-			continue
+func hasExplicitLocalityEvidence(address string, corroboratingText ...string) bool {
+	terms := formattedAddressLocalityTerms(address)
+	if len(terms) == 0 {
+		return false
+	}
+	words := make(map[string]struct{})
+	for _, text := range corroboratingText {
+		for _, word := range normalizedWords(text) {
+			words[word] = struct{}{}
 		}
-		if strings.Contains(name, part) {
+	}
+	for _, term := range terms {
+		if _, ok := words[term]; ok {
 			return true
 		}
 	}
-	// Address present with a multi-token locality is still a weak local signal.
-	return len(parts) >= 3
+	return false
+}
+
+// formattedAddressLocalityTerms deliberately ignores the first comma-separated
+// component because it is normally a street address. A single undifferentiated
+// address cannot safely identify its locality component and earns no SEO bonus.
+func formattedAddressLocalityTerms(address string) []string {
+	components := strings.Split(address, ",")
+	if len(components) < 2 {
+		return nil
+	}
+	ignored := map[string]struct{}{
+		"australia": {}, "canada": {}, "england": {}, "ireland": {},
+		"kingdom": {}, "states": {}, "united": {}, "zealand": {},
+	}
+	seen := make(map[string]struct{})
+	terms := make([]string, 0, 4)
+	for _, component := range components[1:] {
+		for _, word := range normalizedWords(component) {
+			if len([]rune(word)) < 4 {
+				continue
+			}
+			if _, skip := ignored[word]; skip {
+				continue
+			}
+			if _, exists := seen[word]; exists {
+				continue
+			}
+			seen[word] = struct{}{}
+			terms = append(terms, word)
+		}
+	}
+	return terms
+}
+
+func normalizedWords(value string) []string {
+	return strings.FieldsFunc(strings.ToLower(value), func(r rune) bool {
+		return !unicode.IsLetter(r)
+	})
 }
 
 func firstWord(name string) string {

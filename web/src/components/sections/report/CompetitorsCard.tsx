@@ -21,10 +21,10 @@ export default function CompetitorsCard() {
   return (
     <div className="rounded-[18px] bg-white px-3.5 pb-4 pt-3.5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
       <p className="text-[15px] font-bold leading-snug tracking-[-0.02em] text-[#111111]">
-        Who&apos;s beating you on Google
+        Nearby visibility preview
       </p>
       <p className="mt-1 text-[12px] leading-snug" style={{ color: MUTED }}>
-        Nearby restaurants ranking above you — free AI scoring review.
+        Illustrative only — exact nearby names and scores load after you select a restaurant.
       </p>
 
       <ul className="mt-3.5 space-y-3">

@@ -11,6 +11,7 @@ export type RestaurantSearchResult = {
   longitude?: number;
   rating?: number;
   userRatingCount?: number;
+  attributions?: PlaceAttribution[];
   source: "monorepo" | "places";
 };
 
@@ -29,9 +30,22 @@ export type RestaurantDetails = {
   priceLevel?: string;
   businessStatus?: string;
   types?: string[];
+  primaryType?: string;
   editorialSummary?: string;
+  attributions?: PlaceAttribution[];
   source: "monorepo" | "places";
   media?: PlaceMedia;
+};
+
+export type PlaceAttribution = {
+  provider?: string;
+  providerUri?: string;
+};
+
+export type AuthorAttribution = {
+  displayName?: string;
+  uri?: string;
+  photoUri?: string;
 };
 
 export type MediaCard = {
@@ -41,6 +55,9 @@ export type MediaCard = {
   imageUrl?: string;
   photoName?: string;
   href?: string;
+  authorAttributions?: AuthorAttribution[];
+  googleMapsUri?: string;
+  flagContentUri?: string;
 };
 
 export type PlaceMedia = {
@@ -53,9 +70,22 @@ function monorepoBase(): string {
   return (process.env.MONOREPO_API_URL?.trim() || "http://localhost:8080").replace(/\/$/, "");
 }
 
+async function throwSEOAPIError(response: Response, operation: string): Promise<never> {
+  const text = await response.text().catch(() => "");
+  const error = new Error(`${operation} failed (${response.status}): ${text.slice(0, 200)}`) as Error & {
+    status?: number;
+    retryAfter?: string;
+  };
+  error.status = response.status;
+  const retryAfter = response.headers.get("retry-after")?.trim();
+  if (retryAfter) error.retryAfter = retryAfter;
+  throw error;
+}
+
 export async function searchSeoRestaurants(
   query: string,
   location = "Australia",
+  forwardedHeaders: Record<string, string> = {},
 ): Promise<{
   results: RestaurantSearchResult[];
   meta: { placesEnabled: boolean; inventoryEnabled: boolean };
@@ -69,11 +99,10 @@ export async function searchSeoRestaurants(
   const params = new URLSearchParams({ q, location: loc });
   const res = await fetch(
     `${monorepoBase()}/api/public/v1/seo/search?${params.toString()}`,
-    { cache: "no-store" },
+    { cache: "no-store", headers: forwardedHeaders },
   );
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`SEO search failed (${res.status}): ${text.slice(0, 200)}`);
+    await throwSEOAPIError(res, "SEO search");
   }
 
   const data = (await res.json()) as {
@@ -85,6 +114,7 @@ export async function searchSeoRestaurants(
       longitude?: number;
       rating?: number;
       userRatingCount?: number;
+      attributions?: Array<{ provider?: unknown; providerUri?: unknown }>;
       source?: string;
     }>;
     meta?: { placesEnabled?: boolean; inventoryEnabled?: boolean };
@@ -103,6 +133,15 @@ export async function searchSeoRestaurants(
       rating: typeof item.rating === "number" ? item.rating : undefined,
       userRatingCount:
         typeof item.userRatingCount === "number" ? item.userRatingCount : undefined,
+      attributions: (item.attributions || []).flatMap((attribution) => {
+        const provider =
+          typeof attribution.provider === "string" ? attribution.provider.trim() : "";
+        const providerUri =
+          typeof attribution.providerUri === "string"
+            ? attribution.providerUri.trim()
+            : "";
+        return provider || providerUri ? [{ provider, providerUri }] : [];
+      }),
       source: item.source === "monorepo" ? "monorepo" : "places",
     });
   }
@@ -119,6 +158,7 @@ export async function searchSeoRestaurants(
 export async function getSeoReport(
   placeId: string,
   unlockToken?: string,
+  forwardedHeaders: Record<string, string> = {},
 ): Promise<{
   place: RestaurantDetails;
   report: import("@/lib/report").RestaurantReport;
@@ -128,21 +168,21 @@ export async function getSeoReport(
     throw new Error("Missing placeId");
   }
 
-  const qs = unlockToken?.trim()
-    ? `?unlock=${encodeURIComponent(unlockToken.trim())}`
-    : "";
-  const res = await fetch(
-    `${monorepoBase()}/api/public/v1/seo/report/${encodeURIComponent(id)}${qs}`,
-    { cache: "no-store" },
-  );
+  const headers = { ...forwardedHeaders };
+  if (unlockToken?.trim()) {
+    headers.Authorization = `Bearer ${unlockToken.trim()}`;
+  }
+  const res = await fetch(`${monorepoBase()}/api/public/v1/seo/report/${encodeURIComponent(id)}`, {
+    cache: "no-store",
+    headers,
+  });
   if (res.status === 404) {
     const err = new Error("Restaurant not found");
     (err as Error & { status?: number }).status = 404;
     throw err;
   }
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`SEO report failed (${res.status}): ${text.slice(0, 200)}`);
+    await throwSEOAPIError(res, "SEO report");
   }
 
   return (await res.json()) as {

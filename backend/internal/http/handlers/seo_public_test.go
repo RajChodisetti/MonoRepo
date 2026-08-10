@@ -13,7 +13,6 @@ import (
 func newSEOUnlockHandlerForTest() *SEOPublicHandler {
 	return NewSEOPublicHandler(
 		&seoreport.Service{},
-		"https://www.example.test",
 		func(w http.ResponseWriter, status int, value any) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(status)
@@ -156,14 +155,26 @@ func TestSEOUnlockRateLimitResponse(t *testing.T) {
 	}
 }
 
-func TestSEOUnlockMagicLinkResponseIsNotCacheable(t *testing.T) {
-	request := httptest.NewRequest(http.MethodGet, "/api/public/v1/seo/unlock/click/token", nil)
-	request.SetPathValue("token", "token")
-	response := httptest.NewRecorder()
-	newSEOUnlockHandlerForTest().ClickUnlock(response, request)
-
-	if response.Code != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want controlled unavailable response; body=%s", response.Code, response.Body.String())
+func TestReportUnlockBearerAcceptsOnlyGeneratedTokenShape(t *testing.T) {
+	valid := strings.Repeat("a1", 24)
+	tests := []struct {
+		name   string
+		header string
+		want   string
+	}{
+		{name: "valid", header: "Bearer " + valid, want: valid},
+		{name: "case insensitive scheme", header: "bearer " + valid, want: valid},
+		{name: "missing", header: ""},
+		{name: "wrong scheme", header: "Basic " + valid},
+		{name: "jwt", header: "Bearer eyJhbGciOiJIUzI1NiJ9.payload.signature"},
+		{name: "uppercase hex rejected", header: "Bearer " + strings.Repeat("A1", 24)},
+		{name: "extra value", header: "Bearer " + valid + " extra"},
 	}
-	assertSEOUnlockNoStore(t, response)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := reportUnlockBearer(test.header); got != test.want {
+				t.Fatalf("reportUnlockBearer(%q) = %q, want %q", test.header, got, test.want)
+			}
+		})
+	}
 }

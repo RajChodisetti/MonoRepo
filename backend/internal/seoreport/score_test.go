@@ -43,6 +43,7 @@ func TestBuildReportPointBudgets(t *testing.T) {
 			Email:          "hello@bistro.test",
 			Phone:          "+61 3 9000 0000",
 		},
+		WebsiteReachable:        true,
 		WebsiteQualityKnown:     true,
 		WebsiteQualityScore:     100,
 		WebsiteReview:           "Clean layout but weak order CTA and menu prominence.",
@@ -118,31 +119,70 @@ func TestBuildReportMissingSignals(t *testing.T) {
 	}
 }
 
+func TestScoreSEOGenericAddressAloneEarnsNoLocalityBonus(t *testing.T) {
+	place := PlaceDetails{
+		Name:    "Quiet Cafe",
+		Address: "123 Main Street, Springfield NSW 2000, Australia",
+	}
+	if got := scoreSEO(place, ""); got != 0 {
+		t.Fatalf("generic address-only SEO score=%d, want zero without corroborated locality content", got)
+	}
+
+	place.Name = "Quiet Cafe Springfield"
+	if got := scoreSEO(place, ""); got != 6 {
+		t.Fatalf("corroborated listing-name locality score=%d, want 6", got)
+	}
+}
+
 func TestScoreWebsiteSocialPenalty(t *testing.T) {
-	social := scoreWebsite("https://instagram.com/myrestaurant", true, 40)
-	dedicated := scoreWebsite("https://myrestaurant.com.au", true, 40)
+	social := scoreWebsite("https://instagram.com/myrestaurant", true, true, 40)
+	dedicated := scoreWebsite("https://myrestaurant.com.au", true, true, 40)
 	if social >= dedicated {
 		t.Fatalf("social website should score lower than dedicated site (%d >= %d)", social, dedicated)
 	}
 }
 
 func TestScoreWebsiteNoFreeFullMarks(t *testing.T) {
-	// Presence alone (no visual audit) must not award the old free ~20 points.
-	presenceOnly := scoreWebsite("https://myrestaurant.com.au", false, 0)
-	if presenceOnly >= 12 {
-		t.Fatalf("presence-only website score too high: %d", presenceOnly)
+	// Verified reachability alone (no visual audit) must not award visual points.
+	reachabilityOnly := scoreWebsite("https://myrestaurant.com.au", true, false, 0)
+	if reachabilityOnly >= 12 {
+		t.Fatalf("reachability-only website score too high: %d", reachabilityOnly)
 	}
 	// Mid quality maps proportionally into the explicit 20-point budget.
-	mid := scoreWebsite("https://myrestaurant.com.au", true, 45)
+	mid := scoreWebsite("https://myrestaurant.com.au", true, true, 45)
 	if mid < 4 || mid > 10 {
 		t.Fatalf("expected mid visual quality to map ~4–10/20, got %d", mid)
 	}
-	if got := scoreWebsite("https://myrestaurant.com.au", true, 100); got != 20 {
+	if got := scoreWebsite("https://myrestaurant.com.au", true, true, 100); got != 20 {
 		t.Fatalf("expected website metric to reach 20/20, got %d", got)
 	}
-	if scoreWebsite("", true, 90) != 0 {
+	if scoreWebsite("", true, true, 90) != 0 {
 		t.Fatal("empty website must score 0")
 	}
+}
+
+func TestScoreWebsiteListedButUnreachableGetsNoPoints(t *testing.T) {
+	if got := scoreWebsite("https://dead.example", false, true, 100); got != 0 {
+		t.Fatalf("unreachable listed website score=%d, want zero", got)
+	}
+	report := BuildReport(ScoreInput{
+		Place:               PlaceDetails{Name: "Dead Link Cafe", Website: "https://dead.example"},
+		WebsiteQualityKnown: true,
+		WebsiteQualityScore: 100,
+	})
+	for _, metric := range report.Metrics {
+		if metric.Key != "website" {
+			continue
+		}
+		if metric.Score != 0 || !strings.Contains(metric.Rationale, "could not be verified as reachable") {
+			t.Fatalf("unreachable website metric=%#v", metric)
+		}
+		if len(metric.Evidence) < 2 || metric.Evidence[0] != "Official website: present" || metric.Evidence[1] != "Live homepage reachable: not found" {
+			t.Fatalf("listed/reachable evidence=%#v", metric.Evidence)
+		}
+		return
+	}
+	t.Fatal("website metric missing")
 }
 
 func TestOverallScorePreservesHundredPointContract(t *testing.T) {
@@ -186,6 +226,49 @@ func TestSocialPresenceContributesExactlyThreeListingPoints(t *testing.T) {
 	with := scoreListing(place, false, 0, presence)
 	if presence.Score != 3 || with-without != 3 {
 		t.Fatalf("social score=%d listing delta=%d, want 3", presence.Score, with-without)
+	}
+}
+
+func TestLinkAggregatorNeverEarnsDedicatedWebsiteOrOrderPoints(t *testing.T) {
+	report := BuildReport(ScoreInput{
+		Place:               PlaceDetails{Name: "Aggregator Cafe", Website: "https://linktr.ee/order-online"},
+		WebsiteReachable:    true,
+		WebsiteQualityKnown: true,
+		WebsiteQualityScore: 100,
+		WebsitePageEvidence: WebsitePageEvidence{HasOrderCTA: true},
+		SocialPresence: SocialPresence{
+			Status:   "present",
+			Profiles: []SocialProfile{{Platform: "Linktree", Handle: "order-online", URL: "https://linktr.ee/order-online"}},
+		},
+	})
+
+	wantScores := map[string]int{"website": 0, "order_online": 0}
+	for _, metric := range report.Metrics {
+		want, checked := wantScores[metric.Key]
+		if !checked {
+			continue
+		}
+		if metric.Score != want {
+			t.Fatalf("%s score=%d, want %d", metric.Key, metric.Score, want)
+		}
+		delete(wantScores, metric.Key)
+	}
+	if len(wantScores) != 0 {
+		t.Fatalf("missing metrics: %#v", wantScores)
+	}
+	if report.SocialPresence.Status != "not_found" || report.SocialPresence.Score != 0 {
+		t.Fatalf("Linktree social presence=%#v", report.SocialPresence)
+	}
+	if len(report.Issues) == 0 || report.Issues[0].Title != "No dedicated restaurant website" {
+		t.Fatalf("Linktree issue classification=%#v", report.Issues)
+	}
+}
+
+func TestUnknownBusinessStatusDoesNotEarnOperationalPoint(t *testing.T) {
+	unknown := scoreListing(PlaceDetails{}, false, 0, SocialPresence{})
+	operational := scoreListing(PlaceDetails{BusinessStatus: "OPERATIONAL"}, false, 0, SocialPresence{})
+	if unknown != 0 || operational != 1 {
+		t.Fatalf("listing status scores unknown=%d operational=%d, want 0/1", unknown, operational)
 	}
 }
 

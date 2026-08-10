@@ -38,18 +38,29 @@ function ProgressRing({
   );
 }
 
-function MetricRow({ metric }: { metric: HealthMetric }) {
+function MetricRow({ metric, detailed = false }: { metric: HealthMetric; detailed?: boolean }) {
   return (
-    <li className="flex items-center gap-2.5">
-      <div className="relative flex h-6 w-6 shrink-0 items-center justify-center">
-        <ProgressRing value={metric.value} size={24} strokeWidth={3} color={metric.statusColor} />
-      </div>
-      <div className="min-w-0 flex-1 text-left">
-        <p className="truncate text-[12.5px] font-semibold leading-tight text-[#111111]">{metric.label}</p>
-        <p className="text-[11.5px] font-semibold leading-tight" style={{ color: metric.statusColor }}>
-          {metric.status}
+    <li>
+      <div className="flex items-center gap-2.5">
+        <div className="relative flex h-6 w-6 shrink-0 items-center justify-center">
+          <ProgressRing value={metric.value} size={24} strokeWidth={3} color={metric.statusColor} />
+        </div>
+        <div className="min-w-0 flex-1 text-left">
+          <p className="truncate text-[12.5px] font-semibold leading-tight text-[#111111]">{metric.label}</p>
+          <p className="text-[11.5px] font-semibold leading-tight" style={{ color: metric.statusColor }}>
+            {metric.status}
+          </p>
+        </div>
+        <p className="shrink-0 text-[12px] font-bold tabular-nums text-ink">
+          {metric.score}/{metric.max ?? "–"}
         </p>
       </div>
+      {detailed && (metric.rationale || metric.recommendation) ? (
+        <div className="ml-[34px] mt-1.5 space-y-1 text-[11px] leading-relaxed text-muted">
+          {metric.rationale ? <p><span className="font-semibold text-ink">Why:</span> {metric.rationale}</p> : null}
+          {metric.recommendation ? <p><span className="font-semibold text-ink">Improve:</span> {metric.recommendation}</p> : null}
+        </div>
+      ) : null}
     </li>
   );
 }
@@ -67,6 +78,8 @@ export default function LiveHealthCard({
   overallColor,
   metrics,
   locked = false,
+  onUnlock,
+  pdfHref,
 }: {
   restaurantName: string;
   overallScore: number;
@@ -74,6 +87,8 @@ export default function LiveHealthCard({
   overallColor: string;
   metrics: HealthMetric[];
   locked?: boolean;
+  onUnlock?: () => void;
+  pdfHref?: string;
 }) {
   const websiteIdx = metrics.findIndex(isWebsiteMetric);
   const splitAt = websiteIdx >= 0 ? websiteIdx + 1 : Math.min(3, metrics.length);
@@ -101,7 +116,7 @@ export default function LiveHealthCard({
             {overallScore}
           </span>
           <span className="mt-0.5 text-[12px] font-medium" style={{ color: MUTED }}>
-            SEO score
+            out of 100
           </span>
         </div>
       </div>
@@ -115,13 +130,30 @@ export default function LiveHealthCard({
         </p>
       </div>
 
+      {locked ? (
+        <button
+          type="button"
+          onClick={onUnlock}
+          className="mt-4 min-h-11 w-full cursor-pointer rounded-full bg-primary px-4 py-2.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-primary-dim focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        >
+          Unlock to improve this score
+        </button>
+      ) : pdfHref ? (
+        <a
+          href={pdfHref}
+          className="mt-4 flex min-h-11 w-full items-center justify-center rounded-full bg-primary px-4 py-2.5 text-center text-[12.5px] font-semibold text-white transition-colors hover:bg-primary-dim focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        >
+          Download 2-page PDF
+        </a>
+      ) : null}
+
       <div className="mt-4 border-t border-[#efebe6] pt-4">
         <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: MUTED }}>
           Score breakdown
         </p>
         <ul className="space-y-3">
           {visibleMetrics.map((metric) => (
-            <MetricRow key={metric.key || metric.label} metric={metric} />
+            <MetricRow key={metric.key || metric.label} metric={metric} detailed={!locked} />
           ))}
         </ul>
 
@@ -130,10 +162,11 @@ export default function LiveHealthCard({
             locked={locked}
             label="Verify email to unlock full scoring"
             className="mt-3 rounded-xl"
+            onUnlock={onUnlock}
           >
             <ul className="space-y-3 pt-1">
               {gatedMetrics.map((metric) => (
-                <MetricRow key={metric.key || metric.label} metric={metric} />
+                <MetricRow key={metric.key || metric.label} metric={metric} detailed={!locked} />
               ))}
             </ul>
           </LockedBlur>

@@ -12,20 +12,10 @@ func buildPlaceMedia(place PlaceDetails, photos []placePhoto) *PlaceMedia {
 	photoStart := 0
 	if len(photos) > 0 {
 		photo := photos[0]
-		menuAndHighlights = append(menuAndHighlights, MediaCard{
-			Kind:      "photo",
-			Label:     "Listing photo",
-			Subtitle:  strings.TrimSpace(photo.Attribution),
-			PhotoName: photo.Name,
-			Href:      firstNonEmpty(photo.GoogleMapsURI, mapsURI, place.Website),
-		})
+		menuAndHighlights = append(menuAndHighlights, mediaCardForPhoto(
+			photo, "photo", "Listing photo", mapsURI, place.Website,
+		))
 		photoStart = 1
-	} else if mapsURI != "" || place.Website != "" {
-		menuAndHighlights = append(menuAndHighlights, MediaCard{
-			Kind:  "menu",
-			Label: "Menu",
-			Href:  firstNonEmpty(place.Website, mapsURI),
-		})
 	}
 
 	for i := photoStart; i < len(photos) && len(menuAndHighlights) < 7; i++ {
@@ -37,40 +27,24 @@ func buildPlaceMedia(place PlaceDetails, photos []placePhoto) *PlaceMedia {
 		case i > photoStart+1:
 			label = firstNonEmpty(photo.Attribution, "Highlight")
 		}
-		menuAndHighlights = append(menuAndHighlights, MediaCard{
-			Kind:      "highlight",
-			Label:     truncateRunes(label, 42),
-			Subtitle:  strings.TrimSpace(photo.Attribution),
-			PhotoName: photo.Name,
-			Href:      firstNonEmpty(photo.GoogleMapsURI, mapsURI, place.Website),
-		})
+		menuAndHighlights = append(menuAndHighlights, mediaCardForPhoto(
+			photo, "highlight", truncateRunes(label, 42), mapsURI, place.Website,
+		))
 	}
 
 	if len(photosAndVideos) == 0 && len(photos) > 0 {
-		photosAndVideos = append(photosAndVideos, MediaCard{
-			Kind:      "photo",
-			Label:     "All",
-			Subtitle:  strings.TrimSpace(photos[0].Attribution),
-			PhotoName: photos[0].Name,
-			Href:      firstNonEmpty(photos[0].GoogleMapsURI, mapsURI, place.Website),
-		})
+		photosAndVideos = append(photosAndVideos, mediaCardForPhoto(
+			photos[0], "photo", "All", mapsURI, place.Website,
+		))
 		if len(photos) > 1 {
-			photosAndVideos = append(photosAndVideos, MediaCard{
-				Kind:      "latest",
-				Label:     "Latest",
-				Subtitle:  firstNonEmpty(photos[1].Attribution, "From Google listing"),
-				PhotoName: photos[1].Name,
-				Href:      firstNonEmpty(photos[1].GoogleMapsURI, mapsURI, place.Website),
-			})
+			card := mediaCardForPhoto(photos[1], "latest", "Latest", mapsURI, place.Website)
+			card.Subtitle = firstNonEmpty(card.Subtitle, "From Google listing")
+			photosAndVideos = append(photosAndVideos, card)
 		}
 		for i := 2; i < len(photos) && len(photosAndVideos) < 8; i++ {
-			photosAndVideos = append(photosAndVideos, MediaCard{
-				Kind:      "photo",
-				Label:     firstNonEmpty(photos[i].Attribution, "Photo"),
-				Subtitle:  strings.TrimSpace(photos[i].Attribution),
-				PhotoName: photos[i].Name,
-				Href:      firstNonEmpty(photos[i].GoogleMapsURI, mapsURI, place.Website),
-			})
+			photosAndVideos = append(photosAndVideos, mediaCardForPhoto(
+				photos[i], "photo", firstNonEmpty(photos[i].Attribution, "Photo"), mapsURI, place.Website,
+			))
 		}
 	}
 
@@ -82,6 +56,19 @@ func buildPlaceMedia(place PlaceDetails, photos []placePhoto) *PlaceMedia {
 		MenuAndHighlights: menuAndHighlights,
 		PhotosAndVideos:   photosAndVideos,
 		MapsURI:           mapsURI,
+	}
+}
+
+func mediaCardForPhoto(photo placePhoto, kind, label, mapsURI, website string) MediaCard {
+	return MediaCard{
+		Kind:               kind,
+		Label:              label,
+		Subtitle:           strings.TrimSpace(photo.Attribution),
+		PhotoName:          photo.Name,
+		Href:               firstNonEmpty(photo.GoogleMapsURI, mapsURI, website),
+		AuthorAttributions: append([]AuthorAttribution(nil), photo.AuthorAttributions...),
+		GoogleMapsURI:      photo.GoogleMapsURI,
+		FlagContentURI:     photo.FlagContentURI,
 	}
 }
 

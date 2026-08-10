@@ -1,24 +1,46 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import type { MediaCard, RestaurantDetails } from "@/lib/places";
+import type { MediaCard, PlaceAttribution, RestaurantDetails } from "@/lib/places";
 import type { RestaurantReport } from "@/lib/report";
 import { parsePreviewCoordinates } from "@/lib/report-preview";
 import LiveCompetitorsCard from "@/components/report/LiveCompetitorsCard";
 import LiveHealthCard from "@/components/report/LiveHealthCard";
 import LiveIssuesCard from "@/components/report/LiveIssuesCard";
 import LiveListingMedia from "@/components/report/LiveListingMedia";
+import LivePresenceEvidence from "@/components/report/LivePresenceEvidence";
 import LockedBlur from "@/components/report/LockedBlur";
 import ReportSection from "@/components/report/ReportSection";
 import ScanExperience, { type ScanPhoto } from "@/components/report/ScanExperience";
+import UnlockReportDialog from "@/components/report/UnlockReportDialog";
 
 type Payload = {
   place: RestaurantDetails;
   report: RestaurantReport;
 };
+
+function boundedRetryAfterMs(raw: string | null): number {
+  const seconds = Number.parseInt(raw || "", 10);
+  if (!Number.isFinite(seconds) || seconds < 1) return 3_000;
+  return Math.min(seconds * 1_000, 5_000);
+}
+
+function waitForRetry(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      signal.removeEventListener("abort", handleAbort);
+      resolve();
+    }, ms);
+    const handleAbort = () => {
+      window.clearTimeout(timer);
+      reject(new DOMException("The report retry was cancelled.", "AbortError"));
+    };
+    signal.addEventListener("abort", handleAbort, { once: true });
+  });
+}
 
 function reportMapSrc(place: RestaurantDetails): string | null {
   const { latitude, longitude } = place;
@@ -53,10 +75,26 @@ function listingPhotoSrc(card?: MediaCard): string | null {
   return card.imageUrl || null;
 }
 
+function safeExternalHref(raw?: string): string | undefined {
+  const value = (raw || "").trim();
+  if (!value) return undefined;
+  try {
+    const parsed = new URL(value.startsWith("//") ? `https:${value}` : value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:"
+      ? parsed.toString()
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function ListingPhoto({ card, restaurantName }: { card?: MediaCard; restaurantName: string }) {
   const src = listingPhotoSrc(card);
   const sourceLabel = card?.subtitle || (card?.photoName ? "From Google listing" : "");
-  const tile = (
+  const sourceHref = safeExternalHref(card?.googleMapsUri || card?.href);
+  const flagContentHref = safeExternalHref(card?.flagContentUri);
+  const attributions = card?.authorAttributions || [];
+  return (
     <div className="relative h-full min-h-0 overflow-hidden rounded-2xl bg-[#e8e2da]">
       {src ? (
         <Image
@@ -75,32 +113,125 @@ function ListingPhoto({ card, restaurantName }: { card?: MediaCard; restaurantNa
       )}
       {card?.label || sourceLabel ? (
         <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-3 pb-2.5 pt-9 text-white">
-          {card?.label ? <p className="truncate text-[11px] font-semibold">{card.label}</p> : null}
-          {sourceLabel ? <p className="mt-0.5 truncate text-[9px] font-medium text-white/80">{sourceLabel}</p> : null}
+          {card?.label ? <p className="truncate text-[12px] font-semibold">{card.label}</p> : null}
+          {attributions.length > 0 ? (
+            <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[12px] font-medium leading-4 text-white/85">
+              <span>Photo by</span>
+              {attributions.map((attribution, index) => {
+                const href = safeExternalHref(attribution.uri);
+                const photoHref = safeExternalHref(attribution.photoUri);
+                const name = attribution.displayName || "Google contributor";
+                return (
+                  <span key={`${name}-${index}`} className="inline-flex items-center gap-1">
+                    {index > 0 ? <span aria-hidden="true">·</span> : null}
+                    {photoHref ? (
+                      // Google photo contributor avatar remains live and unoptimized.
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={photoHref}
+                        alt=""
+                        className="h-4 w-4 rounded-full object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : null}
+                    {href ? (
+                      <a
+                        href={href}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline decoration-white/50 underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-white"
+                      >
+                        {name}
+                      </a>
+                    ) : (
+                      name
+                    )}
+                  </span>
+                );
+              })}
+            </div>
+          ) : sourceLabel ? (
+            <p className="mt-0.5 truncate text-[12px] font-medium text-white/80">{sourceLabel}</p>
+          ) : null}
+          {sourceHref || flagContentHref ? (
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] font-semibold">
+              {sourceHref ? (
+                <a
+                  href={sourceHref}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline decoration-white/50 underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-white"
+                >
+                  {card?.googleMapsUri ? "Google Maps" : "Photo source"}
+                </a>
+              ) : null}
+              {flagContentHref ? (
+                <a
+                  href={flagContentHref}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline decoration-white/50 underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-white"
+                >
+                  Report photo
+                </a>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>
   );
+}
 
-  if (card?.href) {
-    return (
-      <a
-        href={card.href}
-        target="_blank"
-        rel="noreferrer"
-        aria-label={`Open ${card.label || restaurantName} photo source`}
-        className="block h-full min-h-0 rounded-2xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-      >
-        {tile}
-      </a>
-    );
-  }
-  return tile;
+function PlaceDataAttribution({
+  attributions,
+  mapsUri,
+  showGoogleMaps,
+}: {
+  attributions?: PlaceAttribution[];
+  mapsUri?: string;
+  showGoogleMaps: boolean;
+}) {
+  if (!showGoogleMaps && !attributions?.length) return null;
+  const googleMapsHref = safeExternalHref(mapsUri) || "https://www.google.com/maps";
+  return (
+    <div
+      className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] font-normal leading-4 text-[#5e5e5e]"
+      translate="no"
+    >
+      {showGoogleMaps ? (
+        <a
+          href={googleMapsHref}
+          target="_blank"
+          rel="noreferrer"
+          className="underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        >
+          Google Maps
+        </a>
+      ) : null}
+      {attributions?.map((attribution, index) => {
+        const providerHref = safeExternalHref(attribution.providerUri);
+        const provider = attribution.provider?.trim() || "Data source";
+        return providerHref ? (
+          <a
+            key={`${provider}-${index}`}
+            href={providerHref}
+            target="_blank"
+            rel="noreferrer"
+            className="underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          >
+            Source: {provider}
+          </a>
+        ) : (
+          <span key={`${provider}-${index}`}>Source: {provider}</span>
+        );
+      })}
+    </div>
+  );
 }
 
 export default function ReportClient({ placeId }: { placeId: string }) {
   const searchParams = useSearchParams();
-  const unlockFromLink = (searchParams.get("unlock") || "").trim();
   const nameFromQuery = (searchParams.get("name") || "").trim();
   const addressFromQuery = (searchParams.get("address") || "").trim();
   const previewCoordinates = parsePreviewCoordinates(
@@ -109,25 +240,15 @@ export default function ReportClient({ placeId }: { placeId: string }) {
   );
   const latPreview = previewCoordinates.latitude;
   const lngPreview = previewCoordinates.longitude;
-
   const [data, setData] = useState<Payload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [phase, setPhase] = useState<"scan" | "ready">("scan");
   const [fetchComplete, setFetchComplete] = useState(false);
   const bootstrappingRef = useRef(true);
   const activePlaceIdRef = useRef<string | null>(null);
-  const [email, setEmail] = useState("");
-  const [otp, setOtp] = useState("");
-  const [unlockToken, setUnlockToken] = useState(unlockFromLink);
-  const [step, setStep] = useState<"email" | "otp" | "unlocked">(
-    unlockFromLink ? "unlocked" : "email",
-  );
-  const [leadStatus, setLeadStatus] = useState<"idle" | "sending" | "ok" | "err">("idle");
-  const [leadMessage, setLeadMessage] = useState("");
-  const [devOtp, setDevOtp] = useState("");
-  const leadRef = useRef<HTMLDivElement>(null);
-  const emailId = useId();
-  const otpId = useId();
+  const [unlockOpen, setUnlockOpen] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
+  const [canRetry, setCanRetry] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -149,25 +270,31 @@ export default function ReportClient({ placeId }: { placeId: string }) {
         setFetchComplete(false);
         setData(null);
         setError(null);
+        setCanRetry(false);
       }
       try {
-        const qs = unlockToken
-          ? `?unlock=${encodeURIComponent(unlockToken)}`
-          : "";
-        const res = await fetch(`/api/restaurants/${encodeURIComponent(placeId)}${qs}`, {
-          signal: controller.signal,
-        });
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.error || "Failed to load report");
+        let res: Response | null = null;
+        let json: unknown = {};
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          res = await fetch(`/api/restaurants/${encodeURIComponent(placeId)}`, {
+            signal: controller.signal,
+            cache: "no-store",
+          });
+          json = await res.json().catch(() => ({}));
+          if (res.status !== 503 || attempt === 1) break;
+          await waitForRetry(boundedRetryAfterMs(res.headers.get("retry-after")), controller.signal);
+        }
+        if (!res) throw new Error("Failed to load report");
+        if (!res.ok) {
+          const payload = json && typeof json === "object" ? (json as { error?: string }) : {};
+          throw new Error(payload.error || "Failed to load report");
+        }
         if (!cancelled) {
           const payload = json as Payload;
           if (!payload?.report || !payload?.place) {
             throw new Error("Invalid report payload from server");
           }
           setData(payload);
-          if (payload.report.fullReportLocked === false) {
-            setStep("unlocked");
-          }
           if (quiet) {
             setPhase("ready");
           } else {
@@ -185,6 +312,7 @@ export default function ReportClient({ placeId }: { placeId: string }) {
           setPhase("ready");
           setFetchComplete(true);
           bootstrappingRef.current = false;
+          setCanRetry(true);
           return;
         }
         if (controller.signal.aborted) return;
@@ -192,6 +320,7 @@ export default function ReportClient({ placeId }: { placeId: string }) {
           setError(e instanceof Error ? e.message : "Failed to load report");
           setPhase("ready");
           bootstrappingRef.current = false;
+          setCanRetry(true);
         }
       } finally {
         window.clearTimeout(timeout);
@@ -203,77 +332,30 @@ export default function ReportClient({ placeId }: { placeId: string }) {
       window.clearTimeout(timeout);
       controller.abort();
     };
-  }, [placeId, unlockToken]);
+  }, [placeId, retryKey]);
 
   const handleScanReady = useCallback(() => {
     setPhase("ready");
   }, []);
 
-  async function requestOtp(event: FormEvent) {
-    event.preventDefault();
-    if (!data) return;
-    setLeadStatus("sending");
-    setLeadMessage("");
-    setDevOtp("");
-    try {
-      const res = await fetch("/api/leads", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email,
-          placeId: data.place.placeId,
-          restaurantName: data.place.name,
-        }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        throw new Error(json.error?.message || json.error || json.message || "Could not send code");
-      }
-      setLeadStatus("ok");
-      setLeadMessage(json.message || "Check your inbox for the verification code.");
-      if (json.devOtp) setDevOtp(String(json.devOtp));
-      setStep("otp");
-    } catch (e) {
-      setLeadStatus("err");
-      setLeadMessage(e instanceof Error ? e.message : "Something went wrong");
-    }
-  }
-
-  async function verifyOtp(event: FormEvent) {
-    event.preventDefault();
-    if (!data) return;
-    setLeadStatus("sending");
-    setLeadMessage("");
-    try {
-      const res = await fetch("/api/leads/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email,
-          placeId: data.place.placeId,
-          otp,
-        }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        throw new Error(json.error?.message || json.error || "Invalid verification code");
-      }
-      setLeadStatus("ok");
-      setLeadMessage("Email verified. Full report unlocked.");
-      if (json.unlockToken) setUnlockToken(String(json.unlockToken));
-      if (json.place && json.report) {
-        setData({ place: json.place, report: json.report });
-      }
-      setStep("unlocked");
-    } catch (e) {
-      setLeadStatus("err");
-      setLeadMessage(e instanceof Error ? e.message : "Something went wrong");
-    }
-  }
+  const retryReport = useCallback(() => {
+    bootstrappingRef.current = true;
+    setPhase("scan");
+    setFetchComplete(false);
+    setData(null);
+    setError(null);
+    setCanRetry(false);
+    setRetryKey((key) => key + 1);
+  }, []);
 
   if (phase === "scan" && !error) {
     const previewName = data?.place.name || nameFromQuery || "Your restaurant";
-    const categoryRaw = data?.place.types?.[0]?.replace(/_/g, " ") || "Restaurant";
+    const categoryRaw = (
+      data?.report.competitorScan?.cuisine ||
+      data?.place.primaryType ||
+      data?.place.types?.[0] ||
+      "Restaurant"
+    ).replace(/_/g, " ");
     const category = categoryRaw.replace(/\b\w/g, (c) => c.toUpperCase());
 
     const photoCards = [
@@ -299,8 +381,11 @@ export default function ReportClient({ placeId }: { placeId: string }) {
           src,
           label,
           sourceLabel,
+          authorAttributions: card.authorAttributions,
+          googleMapsUri: card.googleMapsUri,
+          flagContentUri: card.flagContentUri,
           sourceUrl: card.photoName
-            ? card.href || listingMapsUrl
+            ? card.googleMapsUri || card.href || listingMapsUrl
             : card.href,
           alt: `${previewName} listing photo${label ? ` — ${label}` : ""}`,
         };
@@ -322,6 +407,7 @@ export default function ReportClient({ placeId }: { placeId: string }) {
         website={data?.place.website}
         placeId={placeId}
         mapsUri={data?.place.mapsUri || data?.place.media?.mapsUri}
+        placeAttributions={data?.place.attributions}
         latitude={data?.place.latitude ?? latPreview}
         longitude={data?.place.longitude ?? lngPreview}
         photoUrl={heroPhoto}
@@ -341,9 +427,23 @@ export default function ReportClient({ placeId }: { placeId: string }) {
       <div className="mx-auto max-w-3xl px-6 py-24 text-center">
         <p className="font-display text-2xl font-semibold text-ink">Report unavailable</p>
         <p className="mt-2 text-muted">{error || "Restaurant not found."}</p>
-        <Link href="/" className="mt-6 inline-block font-semibold text-primary underline">
-          Search again
-        </Link>
+        <div className="mt-6 flex flex-wrap justify-center gap-3">
+          {canRetry ? (
+            <button
+              type="button"
+              onClick={retryReport}
+              className="min-h-11 cursor-pointer rounded-full bg-primary px-5 font-semibold text-white hover:bg-primary-dim focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            >
+              Try the live scan again
+            </button>
+          ) : null}
+          <Link
+            href="/"
+            className="inline-flex min-h-11 items-center rounded-full border border-primary px-5 font-semibold text-primary underline underline-offset-4"
+          >
+            Search again
+          </Link>
+        </div>
       </div>
     );
   }
@@ -353,7 +453,9 @@ export default function ReportClient({ placeId }: { placeId: string }) {
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
-  const unlocked = report.fullReportLocked === false || step === "unlocked";
+  // Unlock state is authoritative only when the server validates the HttpOnly
+  // report cookie and returns an explicitly unlocked payload.
+  const unlocked = report.fullReportLocked === false;
   const aiAssisted = report.analysisSource === "ai-assisted";
   const partial = report.analysisStatus === "partial";
   const analysisLabel = aiAssisted ? "AI-assisted" : "Automated signals";
@@ -368,10 +470,8 @@ export default function ReportClient({ placeId }: { placeId: string }) {
     typeof report.generatedInMs === "number" && report.generatedInMs >= 0
       ? `${Math.max(0.1, report.generatedInMs / 1000).toFixed(1)}s`
       : "Ready";
-  const scrollToLead = () => {
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    leadRef.current?.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "center" });
-  };
+  const openUnlock = () => setUnlockOpen(true);
+  const pdfHref = `/api/restaurants/${encodeURIComponent(place.placeId)}/report.pdf`;
 
   return (
     <div className="hero-atmosphere min-h-[70vh] px-4 py-4 sm:px-8 sm:py-8 md:px-10 md:py-12">
@@ -399,6 +499,11 @@ export default function ReportClient({ placeId }: { placeId: string }) {
                 {report.address}
               </p>
             ) : null}
+            <PlaceDataAttribution
+              attributions={place.attributions}
+              mapsUri={place.mapsUri}
+              showGoogleMaps={place.source === "places"}
+            />
           </header>
 
           <div className="px-3 pb-4 sm:px-5 sm:pb-5">
@@ -417,8 +522,11 @@ export default function ReportClient({ placeId }: { placeId: string }) {
                     Map location unavailable
                   </div>
                 )}
-                <span className="absolute bottom-2 left-2 rounded-full bg-white/95 px-2.5 py-1 text-[10px] font-semibold text-ink shadow-sm">
-                  Google listing
+                <span
+                  className="absolute bottom-2 left-2 rounded-full bg-white/95 px-2.5 py-1 text-[12px] font-normal text-[#5e5e5e] shadow-sm"
+                  translate="no"
+                >
+                  Google Maps
                 </span>
               </div>
               <ListingPhoto card={heroPhoto} restaurantName={report.restaurantName} />
@@ -475,127 +583,39 @@ export default function ReportClient({ placeId }: { placeId: string }) {
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(300px,0.95fr)] lg:items-start lg:gap-6">
           {/* Left column — narrative sections */}
           <div className="space-y-5">
-            {summaryLines.length > 0 ? (
+            {summaryLines.length > 0 || !unlocked ? (
               <ReportSection eyebrow="01 · Findings" title={summaryTitle}>
                 <div className="space-y-3 text-[15px] leading-relaxed text-ink">
-                  {summaryLines.map((line) => (
-                    <p key={line}>{line}</p>
-                  ))}
+                  {summaryLines.length > 0 ? (
+                    summaryLines.map((line) => <p key={line}>{line}</p>)
+                  ) : (
+                    <p>
+                      Your headline score is ready. Confirm your email to reveal the evidence-backed observations and prioritized improvement plan.
+                    </p>
+                  )}
                 </div>
                 {!unlocked ? (
-                  <p className="mt-5 rounded-xl bg-[#f7f4ef] px-4 py-3 text-[13px] font-medium text-primary">
-                    {report.unlockCta || "Unlock the full SEO report by verifying your email."}
-                  </p>
+                  <button
+                    type="button"
+                    onClick={openUnlock}
+                    className="mt-5 min-h-11 w-full cursor-pointer rounded-xl bg-[#f7f4ef] px-4 py-3 text-left text-[13px] font-semibold text-primary ring-1 ring-primary/10 transition-colors hover:bg-[#efe9e1] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                  >
+                    Confirm email for the full venue pulse →
+                  </button>
                 ) : (
-                  <p className="mt-5 rounded-xl bg-[#eef6f1] px-4 py-3 text-[13px] font-medium text-accent">
-                    Full report unlocked.
-                  </p>
+                  <a
+                    href={pdfHref}
+                    className="mt-5 flex min-h-11 items-center justify-center rounded-xl bg-[#eef6f1] px-4 py-3 text-[13px] font-semibold text-accent ring-1 ring-accent/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                  >
+                    Full report unlocked · Download the 2-page PDF
+                  </a>
                 )}
               </ReportSection>
             ) : null}
 
-            <ReportSection
-              eyebrow="02 · Access"
-              title={unlocked ? "Report unlocked" : "Verify email"}
-            >
-              <div ref={leadRef}>
-                {unlocked ? (
-                  <p className="text-[15px] leading-relaxed text-ink">
-                    You&apos;re on the list — we saved this restaurant as an interested lead. Full competitor
-                    rankings and fix suggestions are open on the right.
-                  </p>
-                ) : step === "otp" ? (
-                  <>
-                    <p className="text-[15px] font-semibold text-ink">Enter the verification code</p>
-                    <p className="mt-1 text-[13px] text-muted">We sent a 6-digit code to {email}.</p>
-                    {devOtp ? (
-                      <p className="mt-3 rounded-lg bg-[#f3f1ed] px-3 py-2 text-[13px] text-ink">
-                        Local dev code: <strong>{devOtp}</strong>
-                      </p>
-                    ) : null}
-                    <form className="mt-4 flex flex-col gap-2 sm:flex-row" onSubmit={verifyOtp}>
-                      <label htmlFor={otpId} className="sr-only">
-                        Verification code
-                      </label>
-                      <input
-                        id={otpId}
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        maxLength={6}
-                        required
-                        value={otp}
-                        onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                        placeholder="123456"
-                        className="min-w-0 flex-1 rounded-xl border border-border bg-transparent px-4 py-3 text-[15px] tracking-[0.3em] text-ink outline-none placeholder:text-secondary focus:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
-                      />
-                      <button
-                        type="submit"
-                        disabled={leadStatus === "sending" || otp.length < 4}
-                        className="cursor-pointer rounded-xl bg-primary px-5 py-3 text-[15px] font-semibold text-bg hover:bg-primary-dim disabled:opacity-60"
-                      >
-                        {leadStatus === "sending" ? "Verifying…" : "Unlock report"}
-                      </button>
-                    </form>
-                    <button
-                      type="button"
-                      className="mt-3 text-[13px] font-medium text-primary underline"
-                      onClick={() => {
-                        setStep("email");
-                        setLeadStatus("idle");
-                        setLeadMessage("");
-                      }}
-                    >
-                      Use a different email
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-[15px] leading-relaxed text-muted">
-                      Free forever for this restaurant. Unlock full competitor rankings and every fix
-                      suggestion.
-                    </p>
-                    <form className="mt-4 flex flex-col gap-2 sm:flex-row" onSubmit={requestOtp}>
-                      <label htmlFor={emailId} className="sr-only">
-                        Email
-                      </label>
-                      <input
-                        id={emailId}
-                        type="email"
-                        required
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        placeholder="you@restaurant.com"
-                        className="min-w-0 flex-1 rounded-xl border border-border bg-transparent px-4 py-3 text-[15px] text-ink outline-none placeholder:text-secondary focus:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
-                      />
-                      <button
-                        type="submit"
-                        disabled={leadStatus === "sending"}
-                        className="cursor-pointer rounded-xl bg-primary px-5 py-3 text-[15px] font-semibold text-bg hover:bg-primary-dim disabled:opacity-60"
-                      >
-                        {leadStatus === "sending" ? "Sending…" : "Send code"}
-                      </button>
-                    </form>
-                  </>
-                )}
-                {leadMessage ? (
-                  <p
-                    className={`mt-3 text-[13px] ${
-                      leadStatus === "ok"
-                        ? "text-accent"
-                        : leadStatus === "err"
-                          ? "text-[#b42318]"
-                          : "text-muted"
-                    }`}
-                  >
-                    {leadMessage}
-                  </p>
-                ) : null}
-              </div>
-            </ReportSection>
-
             {report.websiteScreenshot || report.websiteReview ? (
               <ReportSection
-                eyebrow="03 · Website"
+                eyebrow="02 · Website"
                 title={aiAssisted ? "Screenshot & AI-assisted design review" : "Screenshot & design signals"}
                 bodyClassName="p-0"
               >
@@ -611,11 +631,7 @@ export default function ReportClient({ placeId }: { placeId: string }) {
                     <p className="text-[14px] text-muted">Live homepage capture + design notes.</p>
                   )}
                 </div>
-                <LockedBlur
-                  locked={!unlocked}
-                  label="Verify email to unlock the full website review"
-                  className="min-h-[120px]"
-                >
+                <LockedBlur locked={!unlocked} label="Confirm email for the full venue pulse" className="min-h-[100px]" onUnlock={openUnlock}>
                   <div className="px-5 py-4 sm:px-6">
                     {report.websiteReview ? (
                       <p className="text-[14px] leading-relaxed text-muted">{report.websiteReview}</p>
@@ -625,17 +641,36 @@ export default function ReportClient({ placeId }: { placeId: string }) {
                       </p>
                     )}
                   </div>
-                  {report.websiteScreenshot ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={report.websiteScreenshot}
-                      alt={`${report.restaurantName} website homepage screenshot`}
-                      className="block w-full bg-[#efebe6] object-cover object-top"
-                    />
-                  ) : null}
                 </LockedBlur>
+                {report.websiteScreenshot || report.websiteMobileScreenshot ? (
+                  <div className="grid gap-3 border-t border-border bg-[#f7f4ef] p-4 sm:grid-cols-[minmax(0,1fr)_180px] sm:p-5">
+                    {report.websiteScreenshot ? (
+                      <figure className="overflow-hidden rounded-xl border border-border bg-white">
+                        <figcaption className="border-b border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-muted">Desktop capture</figcaption>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={report.websiteScreenshot} alt={`${report.restaurantName} website desktop capture`} className="block aspect-[16/9] w-full object-cover object-top" />
+                      </figure>
+                    ) : null}
+                    {report.websiteMobileScreenshot ? (
+                      <figure className="overflow-hidden rounded-xl border border-border bg-white">
+                        <figcaption className="border-b border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-muted">Mobile capture</figcaption>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={report.websiteMobileScreenshot} alt={`${report.restaurantName} website mobile capture`} className="block aspect-[390/520] w-full object-cover object-top" />
+                      </figure>
+                    ) : null}
+                  </div>
+                ) : null}
               </ReportSection>
             ) : null}
+
+            <ReportSection eyebrow="03 · Evidence" title="Menu & social presence">
+              <LivePresenceEvidence
+                menu={report.menuEvidence}
+                social={report.socialPresence}
+                locked={!unlocked}
+                onUnlock={openUnlock}
+              />
+            </ReportSection>
           </div>
 
           {/* Right column — scorecard stack */}
@@ -648,23 +683,25 @@ export default function ReportClient({ placeId }: { placeId: string }) {
                 overallColor={report.overallColor}
                 metrics={report.metrics}
                 locked={!unlocked}
+                onUnlock={openUnlock}
+                pdfHref={unlocked ? pdfHref : undefined}
               />
             </ReportSection>
 
             <ReportSection eyebrow="05 · Market" bodyClassName="bg-[#f4f0ea] p-3 sm:p-3.5">
               <LiveCompetitorsCard
                 rows={report.competitors}
+                scan={report.competitorScan}
                 locked={!unlocked}
-                onUnlock={scrollToLead}
+                onUnlock={openUnlock}
               />
             </ReportSection>
 
             <ReportSection eyebrow="06 · Fixes" bodyClassName="bg-[#f4f0ea] p-3 sm:p-3.5">
               <LiveIssuesCard
                 issues={report.issues}
-                estimatedMonthlyLoss={report.estimatedMonthlyLoss}
                 locked={!unlocked}
-                onFix={scrollToLead}
+                onFix={openUnlock}
               />
             </ReportSection>
           </aside>
@@ -672,6 +709,15 @@ export default function ReportClient({ placeId }: { placeId: string }) {
 
         <LiveListingMedia media={place.media} />
       </div>
+      <UnlockReportDialog
+        open={unlockOpen}
+        placeId={place.placeId}
+        restaurantName={report.restaurantName}
+        onClose={() => setUnlockOpen(false)}
+        onUnlocked={(payload) => {
+          setData(payload);
+        }}
+      />
     </div>
   );
 }

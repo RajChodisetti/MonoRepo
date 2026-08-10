@@ -148,10 +148,8 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 		writeError,
 	)
 	var interestedRepo seoreport.InterestedRepository
-	var leadUpserter seoreport.LeadUpserter
 	if pool := dataStore.Pool(); pool != nil {
 		interestedRepo = seoreport.NewInterestedPostgres(pool)
-		leadUpserter = seoreport.NewLeadUpserter(pool)
 	}
 	// Prefer the same Google Workspace mailbox used for outreach sending.
 	seoMailer := emailProvider
@@ -167,16 +165,14 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	seoService := seoreport.NewServiceFull(
 		cfg.Places,
 		cfg.App,
-		cfg.AppURLs,
 		dataStore.Profiles,
 		interestedRepo,
-		leadUpserter,
 		seoMailer,
 		llmprovider.NewFromConfig(cfg.LLM),
 		cfg.Token.Secret,
 		log,
 	)
-	seoPublicHandler := handlers.NewSEOPublicHandler(seoService, cfg.AppURLs.PublicWebURL, writeJSON, writeError)
+	seoPublicHandler := handlers.NewSEOPublicHandler(seoService, writeJSON, writeError)
 	contactPublicHandler := handlers.NewContactPublicHandler(
 		seoMailer,
 		cfg.Consultations.NotifyEmail,
@@ -281,7 +277,6 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	mux.HandleFunc("GET /api/public/v1/seo/photo", seoPublicHandler.Photo)
 	mux.HandleFunc("POST /api/public/v1/seo/unlock/request", seoPublicHandler.RequestUnlock)
 	mux.HandleFunc("POST /api/public/v1/seo/unlock/verify", seoPublicHandler.VerifyUnlock)
-	mux.HandleFunc("GET /api/public/v1/seo/unlock/click/{token}", seoPublicHandler.ClickUnlock)
 	mux.HandleFunc("POST /api/public/v1/contact", contactPublicHandler.Submit)
 	mux.HandleFunc("GET /api/public/v1/restaurants/{id}/table-availability", reservationPublicHandler.GetTableAvailability)
 	mux.HandleFunc("PUT /api/public/v1/restaurants/{id}/reservations", reservationPublicHandler.PutReservation)

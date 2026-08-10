@@ -21,6 +21,7 @@ export default function ValueFeatures() {
   const targetRef = useRef(0);
   const displayRef = useRef(0);
   const rafRef = useRef(0);
+  const advanceTimerRef = useRef<number | null>(null);
 
   // Water-smooth lerp toward target progress
   useEffect(() => {
@@ -51,17 +52,22 @@ export default function ValueFeatures() {
   const goNext = useCallback(() => {
     if (advancingRef.current) return;
     advancingRef.current = true;
-    window.setTimeout(() => {
+    advanceTimerRef.current = window.setTimeout(() => {
       setActive((a) => (a + 1) % tabs.length);
       targetRef.current = 0;
       displayRef.current = 0;
       setProgress(0);
       setDisplayProgress(0);
       advancingRef.current = false;
+      advanceTimerRef.current = null;
     }, 450);
   }, []);
 
   const selectTab = (index: number) => {
+    if (advanceTimerRef.current !== null) {
+      window.clearTimeout(advanceTimerRef.current);
+      advanceTimerRef.current = null;
+    }
     advancingRef.current = false;
     setActive(index);
     targetRef.current = 0;
@@ -69,6 +75,15 @@ export default function ValueFeatures() {
     setProgress(0);
     setDisplayProgress(0);
   };
+
+  useEffect(
+    () => () => {
+      if (advanceTimerRef.current !== null) {
+        window.clearTimeout(advanceTimerRef.current);
+      }
+    },
+    [],
+  );
 
   return (
     <section className="bg-bg px-4 pb-14 pt-6 sm:px-8 sm:pb-16 sm:pt-8 md:px-12">

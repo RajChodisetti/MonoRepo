@@ -72,7 +72,7 @@ export default function HealthCard() {
 
         <div className="mt-2.5 text-center">
           <p className="text-[12px] font-medium" style={{ color: MUTED }}>
-            AI scoring review
+            Digital footprint review
           </p>
           <p className="mt-0.5 text-[20px] font-bold tracking-[-0.03em]" style={{ color: ACCENT }}>
             Poor

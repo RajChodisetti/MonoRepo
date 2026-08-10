@@ -28,12 +28,10 @@ function IssueRow({ issue }: { issue: ReportIssue }) {
 
 export default function LiveIssuesCard({
   issues,
-  estimatedMonthlyLoss,
   locked = false,
   onFix,
 }: {
   issues: ReportIssue[];
-  estimatedMonthlyLoss: number;
   locked?: boolean;
   onFix?: () => void;
 }) {
@@ -46,18 +44,34 @@ export default function LiveIssuesCard({
         Here&apos;s where you can improve
       </p>
       <p className="mt-1.5 text-[12.5px] leading-snug text-[#8a8580]">
-        You&apos;re losing ${estimatedMonthlyLoss.toLocaleString()} a month in sales until these are fixed.
+        These gaps can reduce discovery and direct conversions. Tuvi does not infer a dollar loss without your venue&apos;s sales data.
       </p>
 
       <ul className="mt-4 space-y-2.5">
         {first ? <IssueRow issue={first} /> : null}
       </ul>
 
+      {locked && !first ? (
+        <LockedBlur
+          locked
+          label="Verify email to see suggested fixes"
+          className="mt-4 rounded-2xl"
+          onUnlock={onFix}
+        >
+          <div className="space-y-2.5" aria-hidden="true">
+            {[0, 1, 2].map((item) => (
+              <div key={item} className="h-[70px] rounded-2xl bg-[#e7e2db]" />
+            ))}
+          </div>
+        </LockedBlur>
+      ) : null}
+
       {rest.length > 0 ? (
         <LockedBlur
           locked={locked}
           label="Verify email to see all suggestions"
           className="mt-2.5 rounded-2xl"
+          onUnlock={onFix}
         >
           <ul className="space-y-2.5">
             {rest.map((issue) => (

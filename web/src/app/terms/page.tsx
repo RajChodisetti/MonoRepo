@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { LegalList, LegalPage, LegalSection } from "@/components/legal/LegalPage";
 
-const updated = "14 July 2026";
+const updated = "10 August 2026";
 
 export const metadata: Metadata = {
   title: "Terms of Service | Tuvi Solutions",
@@ -45,6 +45,13 @@ export default function TermsPage() {
           deliver a project. Any paid work, deliverables, fees, timelines, warranties,
           ownership terms, and support obligations will be governed by a separate
           written proposal or service agreement.
+        </p>
+        <p>
+          A Venue Pulse report is an informational snapshot of public signals observed
+          when the scan runs. Scores, suggestions, and competitor comparisons are not
+          guarantees of search position, revenue, or business results. Email-code
+          verification proves access to the submitted inbox only; it does not establish
+          ownership or control of the restaurant listing.
         </p>
       </LegalSection>
 
@@ -133,6 +140,30 @@ export default function TermsPage() {
           communications providers, or hosting providers. Their services are governed
           by their own terms and privacy practices. Tuvi is not responsible for
           third-party services outside our control.
+        </p>
+        <p>
+          Restaurant search and digital-footprint reports may use Google Maps Platform
+          and the Places API to display public Place information, maps, photos, reviews,
+          source links, and data-provider attributions. Google content can change between
+          scans and remains subject to the{" "}
+          <a
+            href="https://cloud.google.com/maps-platform/terms"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold text-primary underline decoration-primary/30 underline-offset-4 transition hover:text-accent"
+          >
+            Google Maps Platform Terms of Service
+          </a>{" "}
+          and Google&apos;s{" "}
+          <a
+            href="https://policies.google.com/privacy"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold text-primary underline decoration-primary/30 underline-offset-4 transition hover:text-accent"
+          >
+            Privacy Policy
+          </a>
+          . Tuvi displays Google and third-party attribution with that content where supplied.
         </p>
       </LegalSection>
 

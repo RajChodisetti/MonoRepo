@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { LegalList, LegalPage, LegalSection } from "@/components/legal/LegalPage";
 
-const updated = "14 July 2026";
+const updated = "10 August 2026";
 
 export const metadata: Metadata = {
   title: "Privacy Policy | Tuvi Solutions",
@@ -51,6 +51,13 @@ export default function PrivacyPage() {
             contact details, restaurant or company information, outreach status,
             delivery events, responses, and opt-out preferences. This information may
             come from public sources, service providers, or directly from the business contact.
+          </li>
+          <li>
+            <strong className="text-ink">Venue Pulse verification information:</strong> the
+            name, email address, and phone number you submit, the selected restaurant
+            listing, verification-code request and attempt timestamps, and report-access
+            status. We keep these details with the report request for verification,
+            security, and support. Verifying an email is not marketing consent.
           </li>
           <li>
             <strong className="text-ink">Technical information:</strong> standard hosting
@@ -106,12 +113,44 @@ export default function PrivacyPage() {
           </a>
           , including its Limited Use requirements.
         </p>
+        <p>
+          When you request a restaurant search or digital-footprint report, Tuvi may send
+          the restaurant query, location, or Place identifier to Google Maps Platform and
+          receive public Place information such as the business name, address, rating,
+          review count, website, phone number, map links, photos, reviews, and contributor
+          or third-party provider attributions. Those results are displayed with their
+          supplied attribution and can change when a new live scan runs. Google Maps embeds
+          and source links may also receive standard browser, device, and request information
+          under Google&apos;s{" "}
+          <a
+            href="https://policies.google.com/privacy"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold text-primary underline decoration-primary/30 underline-offset-4 transition hover:text-accent"
+          >
+            Privacy Policy
+          </a>
+          . Use of that content is also subject to the{" "}
+          <a
+            href="https://cloud.google.com/maps-platform/terms"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold text-primary underline decoration-primary/30 underline-offset-4 transition hover:text-accent"
+          >
+            Google Maps Platform Terms of Service
+          </a>
+          .
+        </p>
       </LegalSection>
 
       <LegalSection title="4. How we use information">
         <LegalList>
           <li>Provide, operate, secure, and improve our website and services.</li>
           <li>Schedule consultations, place requested callbacks, and send confirmations.</li>
+          <li>
+            Generate restaurant digital-footprint reports, send requested verification
+            codes, control access to detailed findings, and prevent report abuse.
+          </li>
           <li>
             Prepare and send reviewed business communications and maintain suppression
             and unsubscribe records.

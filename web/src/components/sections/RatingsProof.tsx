@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import {
   ratingReviewsRow1,
   ratingReviewsRow2,
@@ -33,8 +32,11 @@ function ReviewCard({ review }: { review: RatingReview }) {
         &ldquo;{review.title}&rdquo;
       </p>
       <div className="mt-4 flex items-center gap-2.5">
-        <span className="relative h-8 w-8 shrink-0 overflow-hidden rounded-full">
-          <Image src={review.avatar} alt="" fill className="object-cover" sizes="32px" />
+        <span
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-[12px] font-bold uppercase text-white"
+          aria-hidden="true"
+        >
+          {review.name.trim().charAt(0) || "R"}
         </span>
         <span className="text-[13px] font-semibold text-[#1a1a1a]">{review.name}</span>
       </div>
@@ -100,18 +102,12 @@ export default function RatingsProof() {
 
           <div className="relative z-10 mx-auto max-w-[820px] px-6 text-center sm:px-8">
             <h2 className="font-display text-[clamp(2.5rem,5vw,4rem)] font-semibold leading-[1.1] tracking-[-0.03em] text-bg">
-              <span className="block">See why owners switch</span>
-              <span className="block">to Tuvi</span>
+              <span className="block">What switching to Tuvi</span>
+              <span className="block">can feel like</span>
             </h2>
 
-            <p className="mt-6 flex flex-wrap items-center justify-center gap-x-2.5 gap-y-1 text-[16px] font-medium text-bg/75 sm:mt-8 sm:text-[18px]">
-              <span>4.8</span>
-              <span className="inline-flex items-center gap-1 text-bg" aria-label="4.8 stars">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <StarIcon key={i} className="h-4 w-4 sm:h-[18px] sm:w-[18px]" />
-                ))}
-              </span>
-              <span>Trusted by 200+ restaurants growing direct sales with Tuvi</span>
+            <p className="mx-auto mt-6 max-w-[56ch] text-[16px] font-medium leading-relaxed text-bg/75 sm:mt-8 sm:text-[18px]">
+              Fictional, illustrative owner scenarios showing common goals for independent restaurants. Results vary by venue.
             </p>
           </div>
 

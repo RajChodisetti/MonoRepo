@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { searchSeoRestaurants } from "@/lib/places";
+import { seoForwardingHeaders } from "@/lib/seo-forwarding";
 
 export const dynamic = "force-dynamic";
 
@@ -15,9 +16,11 @@ export async function GET(request: Request) {
   }
 
   try {
-    const payload = await searchSeoRestaurants(q, location);
+    const payload = await searchSeoRestaurants(q, location, seoForwardingHeaders(request));
     return NextResponse.json(payload);
   } catch (err) {
+    const status = (err as Error & { status?: number }).status;
+    const retryAfter = (err as Error & { retryAfter?: string }).retryAfter;
     console.error("[restaurants/search]", err);
     return NextResponse.json(
       {
@@ -25,7 +28,13 @@ export async function GET(request: Request) {
         results: [],
         meta: { placesEnabled: false, inventoryEnabled: false },
       },
-      { status: 500 },
+      {
+        status: status === 429 ? 429 : 500,
+        headers: {
+          "Cache-Control": "private, no-store",
+          ...(status === 429 && retryAfter ? { "Retry-After": retryAfter } : {}),
+        },
+      },
     );
   }
 }

@@ -10,23 +10,39 @@ import {
   isScanCompletionReady,
   nextEvidenceBatchStart,
 } from "@/lib/scan-timeline";
+import type { AuthorAttribution, PlaceAttribution } from "@/lib/places";
 
 const STEP_INTERVAL_MS = 2_200;
 const FINISH_HOLD_MS = 320;
+const REVIEW_RELEVANCE_NOTICE =
+  "Google Maps supplies up to five reviews ordered by relevance. Tuvi shows that relevance-ordered sample and may visually shorten long text in this scan.";
 
 export type ScanPhoto = {
   src: string;
   label?: string;
   sourceLabel?: string;
   sourceUrl?: string;
+  authorAttributions?: AuthorAttribution[];
+  googleMapsUri?: string;
+  flagContentUri?: string;
   alt?: string;
 };
 
 export type ScanReview = {
   author?: string;
+  authorUri?: string;
+  authorPhotoUri?: string;
+  googleMapsUri?: string;
+  flagContentUri?: string;
   text?: string;
   rating?: number;
   relativeTime?: string;
+  publishTime?: string;
+  visitDate?: {
+    year?: number;
+    month?: number;
+    day?: number;
+  };
   sentiment?: string;
 };
 
@@ -38,6 +54,7 @@ export type ScanExperienceProps = {
   website?: string;
   placeId?: string;
   mapsUri?: string;
+  placeAttributions?: PlaceAttribution[];
   latitude?: number;
   longitude?: number;
   photoUrl?: string;
@@ -104,17 +121,48 @@ function sentimentMeta(sentiment: string) {
 
 type ScanEvidence = {
   id: string;
-  kind: "listing" | "desktop" | "mobile" | "website" | "review";
+  kind: "listing" | "desktop" | "mobile" | "website" | "review" | "competitor";
   label: string;
   sourceLabel: string;
   alt: string;
   src?: string;
   sourceUrl?: string;
+  authorAttributions?: AuthorAttribution[];
+  googleMapsUri?: string;
+  flagContentUri?: string;
   unavailableMessage?: string;
   review?: ScanReview;
 };
 
 type ImageLoadStatus = "loaded" | "failed";
+
+function safeHttpUrl(raw?: string): string | undefined {
+  const value = (raw || "").trim();
+  if (!value) return undefined;
+  try {
+    const parsed = new URL(value.startsWith("//") ? `https:${value}` : value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:"
+      ? parsed.toString()
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function reviewVisitLabel(visitDate?: ScanReview["visitDate"]): string | undefined {
+  const year = visitDate?.year;
+  const month = visitDate?.month;
+  if (!Number.isInteger(year) || !year || year < 1) return undefined;
+  if (!Number.isInteger(month) || !month || month < 1 || month > 12) {
+    return `Visited ${year}`;
+  }
+  const value = new Date(Date.UTC(year, month - 1, 1));
+  return `Visited ${new Intl.DateTimeFormat("en", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(value)}`;
+}
 
 const COLLAGE_SLOTS = [
   {
@@ -180,18 +228,15 @@ function EvidenceCard({
   const sentiment = evidence.review?.sentiment
     ? sentimentMeta(evidence.review.sentiment)
     : null;
-  const sourceUrl = useMemo(() => {
-    const raw = (evidence.sourceUrl || "").trim();
-    if (!raw) return undefined;
-    try {
-      const parsed = new URL(raw.startsWith("//") ? `https:${raw}` : raw);
-      return parsed.protocol === "http:" || parsed.protocol === "https:"
-        ? parsed.toString()
-        : undefined;
-    } catch {
-      return undefined;
-    }
-  }, [evidence.sourceUrl]);
+  const sourceUrl = safeHttpUrl(evidence.sourceUrl);
+  const googleMapsUri = safeHttpUrl(evidence.googleMapsUri);
+  const flagContentUri = safeHttpUrl(evidence.flagContentUri);
+  const reviewAuthorUri = safeHttpUrl(evidence.review?.authorUri);
+  const reviewAuthorPhotoUri = safeHttpUrl(evidence.review?.authorPhotoUri);
+  const visitLabel = reviewVisitLabel(evidence.review?.visitDate);
+  const sourceLinks = [googleMapsUri, sourceUrl].filter(
+    (value, index, links): value is string => Boolean(value) && links.indexOf(value) === index,
+  );
   const imageFailed = Boolean(evidence.src) && imageStatus === "failed";
   const imageLoaded = Boolean(evidence.src) && imageStatus === "loaded";
 
@@ -200,8 +245,7 @@ function EvidenceCard({
       className={`overflow-hidden rounded-2xl border-[3px] bg-white shadow-[0_18px_50px_rgba(15,39,31,0.24)] transition-opacity duration-500 motion-reduce:transition-none ${
         active ? "border-white opacity-100" : "border-white/90 opacity-90"
       }`}
-      aria-hidden={!active}
-      aria-label={active ? `${evidence.label}. ${evidence.sourceLabel}` : undefined}
+      aria-label={`${evidence.label}. ${evidence.sourceLabel}`}
       data-source-url={evidence.sourceUrl || undefined}
     >
       <div className="flex items-center justify-between gap-2 bg-white px-2.5 py-1.5">
@@ -228,15 +272,41 @@ function EvidenceCard({
       {evidence.review ? (
         <div className={`${active ? "min-h-36 p-4" : "min-h-24 p-2.5"} bg-[#fbfaf8]`}>
           <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <p className={`${active ? "text-[13px]" : "text-[10px]"} truncate font-semibold text-ink`}>
-                {evidence.review.author || "Recent review"}
-              </p>
-              <div className="mt-1 flex items-center gap-1.5">
-                {typeof evidence.review.rating === "number" ? <Stars rating={evidence.review.rating} /> : null}
-                {evidence.review.relativeTime ? (
-                  <span className="truncate text-[9px] text-muted">{evidence.review.relativeTime}</span>
-                ) : null}
+            <div className="flex min-w-0 items-start gap-2">
+              {reviewAuthorPhotoUri ? (
+                // Google reviewer avatar stays live from the supplied attribution URI.
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={reviewAuthorPhotoUri}
+                  alt=""
+                  className={`${active ? "h-8 w-8" : "h-6 w-6"} shrink-0 rounded-full object-cover`}
+                  referrerPolicy="no-referrer"
+                />
+              ) : null}
+              <div className="min-w-0">
+                {reviewAuthorUri ? (
+                  <a
+                    href={reviewAuthorUri}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="pointer-events-auto block truncate text-[13px] font-semibold text-primary underline decoration-primary/30 underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                  >
+                    {evidence.review.author || "Recent reviewer"}
+                  </a>
+                ) : (
+                  <p className="truncate text-[12px] font-semibold text-ink">
+                    {evidence.review.author || "Recent review"}
+                  </p>
+                )}
+                <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                  {typeof evidence.review.rating === "number" ? <Stars rating={evidence.review.rating} /> : null}
+                  {evidence.review.relativeTime ? (
+                    <span className="truncate text-[12px] text-muted">{evidence.review.relativeTime}</span>
+                  ) : null}
+                  {visitLabel ? (
+                    <span className="truncate text-[12px] text-muted">· {visitLabel}</span>
+                  ) : null}
+                </div>
               </div>
             </div>
             {sentiment ? (
@@ -249,13 +319,29 @@ function EvidenceCard({
             {evidence.review.text ? `“${evidence.review.text}”` : "Review text was not provided."}
           </p>
         </div>
+      ) : evidence.kind === "competitor" ? (
+        <div className={`${active ? "min-h-44 p-4 sm:min-h-52" : "min-h-24 p-2.5"} flex items-center bg-[#f4f0ea]`}>
+          <div>
+            <p className={`${active ? "text-[10px]" : "text-[8px]"} font-bold uppercase tracking-[0.12em] text-primary`}>
+              10 km discovery radius
+            </p>
+            <p className={`${active ? "mt-2 text-[15px]" : "mt-1 text-[10px]"} font-semibold leading-snug text-ink`}>
+              Nearby same-cuisine restaurants
+            </p>
+            {active ? (
+              <p className="mt-2 text-[11px] leading-relaxed text-muted">
+                Comparing Google visibility signals now. Restaurant names and scores stay hidden until the report is unlocked.
+              </p>
+            ) : null}
+          </div>
+        </div>
       ) : evidence.src && !imageFailed ? (
         <div className={`${active ? "h-44 sm:h-52" : "h-24 sm:h-28"} relative overflow-hidden bg-[#e9e4dc]`}>
           {/* Evidence is rendered only from URLs/data received in the report payload. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={evidence.src}
-            alt={active ? evidence.alt : ""}
+            alt={evidence.alt}
             className={`h-full w-full object-top transition-opacity duration-200 motion-reduce:transition-none ${
               evidence.kind === "mobile" || evidence.kind === "website"
                 ? "object-contain"
@@ -291,17 +377,69 @@ function EvidenceCard({
       <div className={`${active ? "px-3 py-2.5" : "px-2 py-1.5"} flex items-end justify-between gap-2 bg-white`}>
         <div className="min-w-0">
           <p className={`${active ? "text-[12px]" : "text-[9px]"} truncate font-semibold text-ink`}>{evidence.label}</p>
-          <p className={`${active ? "mt-0.5 text-[9px]" : "text-[7px]"} truncate font-medium text-muted`}>{evidence.sourceLabel}</p>
+          <p className="mt-0.5 truncate text-[12px] font-medium text-muted">{evidence.sourceLabel}</p>
+          {evidence.authorAttributions?.length ? (
+            <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[12px] leading-4 text-muted">
+              <span>Photo by</span>
+              {evidence.authorAttributions.map((attribution, index) => {
+                const authorUri = safeHttpUrl(attribution.uri);
+                const authorPhotoUri = safeHttpUrl(attribution.photoUri);
+                const name = attribution.displayName || "Google contributor";
+                return (
+                  <span key={`${name}-${index}`} className="inline-flex items-center gap-1">
+                    {index > 0 ? <span aria-hidden="true">·</span> : null}
+                    {authorPhotoUri ? (
+                      // Google photo contributor avatar; never proxied or optimized.
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={authorPhotoUri}
+                        alt=""
+                        className="h-4 w-4 rounded-full object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : null}
+                    {authorUri ? (
+                      <a
+                        href={authorUri}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="pointer-events-auto text-primary underline decoration-primary/30 underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary"
+                      >
+                        {name}
+                      </a>
+                    ) : (
+                      name
+                    )}
+                  </span>
+                );
+              })}
+            </div>
+          ) : null}
         </div>
-        {active && sourceUrl ? (
-          <a
-            href={sourceUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="pointer-events-auto shrink-0 rounded-full border border-ink/15 px-2 py-1 text-[9px] font-semibold text-primary underline decoration-primary/30 underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-          >
-            View source
-          </a>
+        {sourceLinks.length > 0 || flagContentUri ? (
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            {sourceLinks.map((href, index) => (
+              <a
+                key={href}
+                href={href}
+                target="_blank"
+                rel="noreferrer"
+                className="pointer-events-auto rounded-full border border-ink/15 px-2 py-1 text-[12px] font-semibold text-primary underline decoration-primary/30 underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              >
+                {index === 0 && googleMapsUri ? "Google Maps" : "View source"}
+              </a>
+            ))}
+            {flagContentUri ? (
+              <a
+                href={flagContentUri}
+                target="_blank"
+                rel="noreferrer"
+                className="pointer-events-auto text-[12px] font-semibold text-muted underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary"
+              >
+                Report content
+              </a>
+            ) : null}
+          </div>
         ) : null}
       </div>
     </article>
@@ -422,9 +560,11 @@ export default function ScanExperience({
   restaurantName = "Your restaurant",
   address,
   rating,
+  category = "Restaurant",
   website,
   placeId,
   mapsUri,
+  placeAttributions = [],
   latitude,
   longitude,
   photoUrl,
@@ -534,6 +674,9 @@ export default function ScanExperience({
       label: photo.label || `Listing photo ${index + 1}`,
       sourceLabel: photo.sourceLabel || "Google listing photo",
       sourceUrl: photo.sourceUrl,
+      authorAttributions: photo.authorAttributions,
+      googleMapsUri: photo.googleMapsUri,
+      flagContentUri: photo.flagContentUri,
       alt: photo.alt || `${restaurantName} listing photo ${index + 1}`,
       src: photo.src,
     }));
@@ -549,8 +692,10 @@ export default function ScanExperience({
       id: `review-${index}`,
       kind: "review",
       label: review.author ? `Review by ${review.author}` : `Recent review ${index + 1}`,
-      sourceLabel: "Google review evidence",
-      sourceUrl: mapsUri,
+      sourceLabel: review.author ? `Google review by ${review.author}` : "Google review evidence",
+      sourceUrl: review.googleMapsUri || mapsUri,
+      googleMapsUri: review.googleMapsUri,
+      flagContentUri: review.flagContentUri,
       alt: review.author ? `Google review by ${review.author}` : `Recent Google review ${index + 1}`,
       review,
       }));
@@ -631,6 +776,15 @@ export default function ScanExperience({
         ? "Waiting for recent review evidence…"
         : "No recent review evidence was received for this scan.",
     };
+    const cuisineLabel = category.trim() || "Restaurant";
+    const competitorEvidence: ScanEvidence = {
+      id: "competitor-discovery",
+      kind: "competitor",
+      label: "Nearby same-cuisine restaurants",
+      sourceLabel: `Google Maps discovery · ${cuisineLabel} · within 10 km`,
+      sourceUrl: mapsUri,
+      alt: `Nearby ${cuisineLabel.toLowerCase()} restaurant discovery within 10 kilometres`,
+    };
 
     // The first rotation always includes listing, desktop, mobile and review evidence.
     // Additional real evidence replaces cards only after the staggered batch has
@@ -639,11 +793,13 @@ export default function ScanExperience({
       firstListing,
       ...websiteEvidence,
       firstReview,
+      competitorEvidence,
       ...listingEvidence,
       ...reviewEvidence,
     ];
   }, [
     desktopScreenshot,
+    category,
     fetchComplete,
     gallery,
     mapsUri,
@@ -805,8 +961,13 @@ export default function ScanExperience({
             Scanning…
           </h1>
           <p className="mt-3 text-[14px] leading-relaxed text-muted">
-            Checking Google rankings, reviews, photos, website &amp; mobile signals — live.
+            Checking Google listing visibility, reviews, photos, website &amp; mobile signals — live.
           </p>
+          {hasReviewEvidence ? (
+            <p className="mt-3 text-[12px] leading-relaxed text-muted">
+              {REVIEW_RELEVANCE_NOTICE}
+            </p>
+          ) : null}
 
           <ul className="mt-8 flex-1 space-y-3.5">
             {steps.map((label, index) => {
@@ -912,7 +1073,7 @@ export default function ScanExperience({
             <div className="scan-beam absolute left-0 right-0 h-[2px] opacity-70" />
           </div>
 
-          <div className="absolute bottom-4 left-4 z-20 hidden rounded-full bg-white/90 px-3 py-1.5 text-[11px] font-medium text-muted shadow-sm lg:block">
+          <div className="absolute bottom-4 left-4 z-20 hidden rounded-full bg-white/90 px-3 py-1.5 text-[12px] font-medium text-muted shadow-sm lg:block">
             {finishing
               ? "Evidence collected — building report…"
               : activeEvidence
@@ -920,6 +1081,37 @@ export default function ScanExperience({
                 : hasExactPin
                   ? "Google Maps · pinned to listing"
                   : "Live Google listing scan"}
+          </div>
+
+          <div
+            className="pointer-events-auto absolute bottom-4 right-4 z-50 flex max-w-[calc(100%-2rem)] flex-wrap justify-end gap-x-2 gap-y-1 rounded-xl bg-white/95 px-3 py-2 text-[12px] font-normal leading-4 text-[#5e5e5e] shadow-sm"
+            translate="no"
+          >
+            <a
+              href={safeHttpUrl(mapsUri) || "https://www.google.com/maps"}
+              target="_blank"
+              rel="noreferrer"
+              className="underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            >
+              Google Maps
+            </a>
+            {placeAttributions.map((attribution, index) => {
+              const providerHref = safeHttpUrl(attribution.providerUri);
+              const provider = attribution.provider?.trim() || "Data source";
+              return providerHref ? (
+                <a
+                  key={`${provider}-${index}`}
+                  href={providerHref}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                >
+                  Source: {provider}
+                </a>
+              ) : (
+                <span key={`${provider}-${index}`}>Source: {provider}</span>
+              );
+            })}
           </div>
 
           <div className="absolute inset-x-4 bottom-24 z-50 rounded-2xl border border-black/5 bg-white/95 p-4 shadow-[0_18px_50px_rgba(15,39,31,0.2)] backdrop-blur lg:hidden">
@@ -940,6 +1132,11 @@ export default function ScanExperience({
                 style={{ width: `${Math.max(8, progress * 100)}%` }}
               />
             </div>
+            {hasReviewEvidence ? (
+              <p className="mt-2 text-[12px] leading-snug text-muted">
+                {REVIEW_RELEVANCE_NOTICE}
+              </p>
+            ) : null}
           </div>
         </section>
       </div>

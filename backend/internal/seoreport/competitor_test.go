@@ -16,6 +16,7 @@ func TestBuildCompetitorScanReturnsOnlyGenuinelyStrongerEligibleRows(t *testing.
 	strongest.HasHours = true
 	strongest.DeliveryKnown = true
 	strongest.Delivery = true
+	strongest.Details.Attributions = []PlaceAttribution{{Provider: "Nearby data partner", ProviderURI: "https://provider.example/strong-1"}}
 
 	stronger := visibilityFixture("strong-2", "Real Thai Two", 0.02, 0.01, 4.7, 450)
 	stronger.PhotoCount = 10
@@ -51,6 +52,9 @@ func TestBuildCompetitorScanReturnsOnlyGenuinelyStrongerEligibleRows(t *testing.
 	}
 	if scan.Rows[0].Name != "Real Thai One" || scan.Rows[0].Rank != "1st" {
 		t.Fatalf("first row=%#v", scan.Rows[0])
+	}
+	if got := scan.Rows[0].Attributions; len(got) != 1 || got[0].Provider != "Nearby data partner" || got[0].ProviderURI != "https://provider.example/strong-1" {
+		t.Fatalf("first row attribution=%#v", got)
 	}
 	if scan.Rows[1].Name != "Real Thai Two" || scan.Rows[1].Rank != "2nd" {
 		t.Fatalf("second row=%#v", scan.Rows[1])

@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/rajchodisetti/restaurant-platform/backend/internal/profiles"
 	llmlib "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/llm"
 )
 
@@ -16,14 +15,14 @@ func TestGetReportIncludesVerifiedWebsiteEvidenceAndGenuineCompetitorScan(t *tes
 	service.fetchPlaceDetails = func(context.Context, string) (*placeSnapshot, error) {
 		return &target, nil
 	}
-	service.fetchSiteContent = func(context.Context, string) (profiles.SiteContent, bool) {
-		return profiles.SiteContent{}, false
-	}
 	service.auditWebsite = func(context.Context, string, llmlib.Client) WebsiteAudit {
 		return WebsiteAudit{
-			Source:       "vision",
-			QualityScore: 60,
-			MenuEvidence: MenuEvidence{Status: "present", HasWebsiteLink: true, MenuURL: "https://target.example/menu", Rationale: "verified"},
+			Listed:           true,
+			Reachable:        true,
+			ViewportCoverage: "desktop_and_mobile",
+			Source:           "vision",
+			QualityScore:     60,
+			MenuEvidence:     MenuEvidence{Status: "present", HasWebsiteLink: true, MenuURL: "https://target.example/menu", Rationale: "verified"},
 			SocialPresence: SocialPresence{
 				Status: "present",
 				Profiles: []SocialProfile{{
