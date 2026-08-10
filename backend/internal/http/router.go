@@ -173,6 +173,7 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 		leadUpserter,
 		seoMailer,
 		llmprovider.NewFromConfig(cfg.LLM),
+		cfg.Token.Secret,
 		log,
 	)
 	seoPublicHandler := handlers.NewSEOPublicHandler(seoService, cfg.AppURLs.PublicWebURL, writeJSON, writeError)

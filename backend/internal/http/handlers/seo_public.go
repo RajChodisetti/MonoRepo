@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -10,6 +11,8 @@ import (
 
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/seoreport"
 )
+
+const maxSEOUnlockBodyBytes = 8 << 10
 
 // SEOPublicHandler serves public SEO search and report endpoints.
 type SEOPublicHandler struct {
@@ -55,6 +58,9 @@ func (handler *SEOPublicHandler) Report(w http.ResponseWriter, r *http.Request) 
 	}
 
 	unlockToken := strings.TrimSpace(r.URL.Query().Get("unlock"))
+	if unlockToken != "" {
+		setNoStore(w)
+	}
 	var (
 		payload seoreport.ReportResponse
 		err     error
@@ -81,6 +87,13 @@ func (handler *SEOPublicHandler) Report(w http.ResponseWriter, r *http.Request) 
 }
 
 type seoUnlockRequestBody struct {
+	Name    string `json:"name"`
+	Email   string `json:"email"`
+	Phone   string `json:"phone"`
+	PlaceID string `json:"placeId"`
+}
+
+type seoUnlockVerifyBody struct {
 	Email   string `json:"email"`
 	PlaceID string `json:"placeId"`
 	OTP     string `json:"otp"`
@@ -88,12 +101,13 @@ type seoUnlockRequestBody struct {
 
 // RequestUnlock handles POST /api/public/v1/seo/unlock/request
 func (handler *SEOPublicHandler) RequestUnlock(w http.ResponseWriter, r *http.Request) {
+	setNoStore(w)
 	var body seoUnlockRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := decodeSEOUnlockBody(w, r, &body); err != nil {
 		handler.writeError(w, http.StatusBadRequest, "invalid_body", "Request body must be JSON.")
 		return
 	}
-	payload, err := handler.service.RequestUnlockEmail(r.Context(), body.Email, body.PlaceID)
+	payload, err := handler.service.RequestUnlockEmail(r.Context(), body.Name, body.Email, body.Phone, body.PlaceID)
 	if err != nil {
 		handler.writeUnlockError(w, err)
 		return
@@ -103,8 +117,9 @@ func (handler *SEOPublicHandler) RequestUnlock(w http.ResponseWriter, r *http.Re
 
 // VerifyUnlock handles POST /api/public/v1/seo/unlock/verify
 func (handler *SEOPublicHandler) VerifyUnlock(w http.ResponseWriter, r *http.Request) {
-	var body seoUnlockRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	setNoStore(w)
+	var body seoUnlockVerifyBody
+	if err := decodeSEOUnlockBody(w, r, &body); err != nil {
 		handler.writeError(w, http.StatusBadRequest, "invalid_body", "Request body must be JSON.")
 		return
 	}
@@ -117,8 +132,10 @@ func (handler *SEOPublicHandler) VerifyUnlock(w http.ResponseWriter, r *http.Req
 }
 
 // ClickUnlock handles GET /api/public/v1/seo/unlock/click/{token}
-// Marks interested=true then redirects to the marketing report page.
+// Verifies possession of an unexpired emailed token without recording marketing
+// interest, then redirects to the report page.
 func (handler *SEOPublicHandler) ClickUnlock(w http.ResponseWriter, r *http.Request) {
+	setNoStore(w)
 	token := strings.TrimSpace(r.PathValue("token"))
 	rec, place, err := handler.service.ConfirmUnlockClick(r.Context(), token)
 	if err != nil {
@@ -167,12 +184,19 @@ func (handler *SEOPublicHandler) Photo(w http.ResponseWriter, r *http.Request) {
 
 func (handler *SEOPublicHandler) writeUnlockError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, seoreport.ErrInvalidName):
+		handler.writeError(w, http.StatusBadRequest, "invalid_name", "A name between 2 and 100 characters is required.")
 	case errors.Is(err, seoreport.ErrInvalidEmail):
 		handler.writeError(w, http.StatusBadRequest, "invalid_email", "A valid email is required.")
+	case errors.Is(err, seoreport.ErrInvalidPhone):
+		handler.writeError(w, http.StatusBadRequest, "invalid_phone", "A valid phone number is required.")
 	case errors.Is(err, seoreport.ErrInvalidOTP):
 		handler.writeError(w, http.StatusUnauthorized, "invalid_otp", "Invalid or expired verification code.")
 	case errors.Is(err, seoreport.ErrInvalidUnlock):
 		handler.writeError(w, http.StatusNotFound, "invalid_unlock", "Unlock link is invalid or expired.")
+	case errors.Is(err, seoreport.ErrUnlockRateLimit):
+		w.Header().Set("Retry-After", strconv.Itoa(60))
+		handler.writeError(w, http.StatusTooManyRequests, "unlock_rate_limited", "Please wait before requesting another code.")
 	case errors.Is(err, seoreport.ErrNotFound):
 		handler.writeError(w, http.StatusNotFound, "not_found", "Restaurant was not found.")
 	case errors.Is(err, seoreport.ErrEmailSendFailed):
@@ -183,4 +207,24 @@ func (handler *SEOPublicHandler) writeUnlockError(w http.ResponseWriter, err err
 	default:
 		handler.writeError(w, http.StatusInternalServerError, "internal_error", "Unlock request failed.")
 	}
+}
+
+func decodeSEOUnlockBody(w http.ResponseWriter, r *http.Request, target any) error {
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxSEOUnlockBodyBytes))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		return err
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		if err == nil {
+			return errors.New("multiple JSON values")
+		}
+		return err
+	}
+	return nil
+}
+
+func setNoStore(w http.ResponseWriter) {
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Pragma", "no-cache")
 }
