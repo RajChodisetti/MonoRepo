@@ -7,11 +7,13 @@ import {
   EVIDENCE_DWELL_MS,
   EVIDENCE_LAST_CARD_HOLD_MS,
   MAX_SCAN_MS,
+  LISTING_CARD_COUNT,
   MIN_SCAN_MS,
   PHOTO_FLIP_HOLD_MS,
   PHOTO_FLIP_MS,
   REVIEW_WALL_HOLD_MS,
   REVIEW_WALL_LIMIT,
+  dealPhotosToCards,
   evidenceBatchPresentationMs,
   evidenceCardEntryDelayMs,
   isScanCompletionReady,
@@ -21,7 +23,7 @@ import {
   photoFlipCycleMs,
 } from "./scan-timeline.ts";
 
-test("scan always presents for at least fifteen seconds", () => {
+test("scan always presents for at least twenty seconds", () => {
   assert.equal(
     isScanCompletionReady({
       elapsedMs: MIN_SCAN_MS - 1,
@@ -40,8 +42,8 @@ test("scan always presents for at least fifteen seconds", () => {
   );
 });
 
-test("four-card batches enter one-by-one and hold the last completed card", () => {
-  assert.equal(EVIDENCE_BATCH_SIZE, 4);
+test("eight-card batches enter one-by-one and hold the last completed card", () => {
+  assert.equal(EVIDENCE_BATCH_SIZE, 8);
   assert.equal(EVIDENCE_CARD_STAGGER_MS, 750);
   assert.equal(EVIDENCE_CARD_ENTRY_MS, 900);
   assert.equal(EVIDENCE_LAST_CARD_HOLD_MS, 3_000);
@@ -49,12 +51,12 @@ test("four-card batches enter one-by-one and hold the last completed card", () =
     Array.from({ length: EVIDENCE_BATCH_SIZE }, (_, index) =>
       evidenceCardEntryDelayMs(index),
     ),
-    [0, 750, 1_500, 2_250],
+    [0, 750, 1_500, 2_250, 3_000, 3_750, 4_500, 5_250],
   );
 
   const lastCardFullyVisibleAt =
     evidenceCardEntryDelayMs(EVIDENCE_BATCH_SIZE - 1) + EVIDENCE_CARD_ENTRY_MS;
-  assert.equal(evidenceBatchPresentationMs(EVIDENCE_BATCH_SIZE), 6_150);
+  assert.equal(evidenceBatchPresentationMs(EVIDENCE_BATCH_SIZE), 9_150);
   assert.equal(EVIDENCE_DWELL_MS - lastCardFullyVisibleAt, 3_000);
 });
 
@@ -95,13 +97,25 @@ test("scan requires fetch, preserves the evidence dwell, and retains its cap", (
     }),
     false,
   );
+  // Evidence that arrived before the minimum still gets its full dwell.
+  const readyAt = MIN_SCAN_MS - 5_000;
+  assert.ok(readyAt + EVIDENCE_DWELL_MS < MAX_SCAN_MS);
   assert.equal(
     isScanCompletionReady({
-      elapsedMs: MIN_SCAN_MS + EVIDENCE_DWELL_MS - 1,
+      elapsedMs: readyAt + EVIDENCE_DWELL_MS - 1,
+      fetchComplete: true,
+      evidenceReadyAtElapsedMs: readyAt,
+    }),
+    false,
+  );
+  // The cap still wins over a dwell that would outrun it.
+  assert.equal(
+    isScanCompletionReady({
+      elapsedMs: MAX_SCAN_MS,
       fetchComplete: true,
       evidenceReadyAtElapsedMs: MIN_SCAN_MS,
     }),
-    false,
+    true,
   );
   assert.equal(
     isScanCompletionReady({
@@ -130,6 +144,22 @@ test("the hidden face is always loaded one photo ahead and wraps", () => {
   assert.equal(nextPhotoFaceIndex(0, 0), 0);
   assert.equal(nextPhotoFaceIndex(-4, 5), 1);
   assert.equal(nextPhotoFaceIndex(Number.NaN, 5), 1);
+});
+
+test("listing photos spread across five cards before any card repeats", () => {
+  assert.equal(LISTING_CARD_COUNT, 5);
+  // Fewer photos than cards never invents an empty card.
+  assert.deepEqual(dealPhotosToCards(["a", "b", "c"], 5), [["a"], ["b"], ["c"]]);
+  // Every card gets a first photo before any card gets a second.
+  assert.deepEqual(dealPhotosToCards(["a", "b", "c", "d", "e", "f", "g"], 5), [
+    ["a", "f"],
+    ["b", "g"],
+    ["c"],
+    ["d"],
+    ["e"],
+  ]);
+  assert.deepEqual(dealPhotosToCards([], 5), []);
+  assert.deepEqual(dealPhotosToCards(["a"], 0), []);
 });
 
 test("the review wall holds each review and wraps at the sample it was given", () => {

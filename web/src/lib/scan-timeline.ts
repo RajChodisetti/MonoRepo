@@ -1,7 +1,9 @@
-export const MIN_SCAN_MS = 15_000;
-export const MAX_SCAN_MS = 23_000;
-export const TARGET_SCAN_SECONDS = 15;
-export const EVIDENCE_BATCH_SIZE = 4;
+export const MIN_SCAN_MS = 20_000;
+export const MAX_SCAN_MS = 28_000;
+export const TARGET_SCAN_SECONDS = 20;
+export const EVIDENCE_BATCH_SIZE = 8;
+/** Listing photos spread across this many cards before any card repeats. */
+export const LISTING_CARD_COUNT = 5;
 export const EVIDENCE_CARD_STAGGER_MS = 750;
 export const EVIDENCE_CARD_ENTRY_MS = 900;
 export const EVIDENCE_LAST_CARD_HOLD_MS = 3_000;
@@ -54,6 +56,18 @@ export function isScanCompletionReady({
     evidenceReadyAtElapsedMs === null ||
     elapsedMs - evidenceReadyAtElapsedMs >= EVIDENCE_DWELL_MS
   );
+}
+
+/**
+ * Deal decoded photos across the listing cards so every card owns distinct
+ * photos, and a card only carries a second photo once each card has a first.
+ */
+export function dealPhotosToCards<T>(photos: readonly T[], cardCount: number): T[][] {
+  if (photos.length === 0 || cardCount <= 0) return [];
+  const cards = Math.min(Math.floor(cardCount), photos.length);
+  const dealt: T[][] = Array.from({ length: cards }, () => []);
+  photos.forEach((photo, index) => dealt[index % cards].push(photo));
+  return dealt;
 }
 
 /** Rest plus turn: how long one photo owns the card before the next appears. */

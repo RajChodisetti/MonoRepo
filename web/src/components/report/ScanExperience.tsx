@@ -4,10 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   EVIDENCE_BATCH_SIZE,
   EVIDENCE_CARD_ENTRY_MS,
+  LISTING_CARD_COUNT,
   PHOTO_FLIP_MS,
   REVIEW_WALL_HOLD_MS,
   REVIEW_WALL_LIMIT,
   TARGET_SCAN_SECONDS,
+  dealPhotosToCards,
   evidenceBatchPresentationMs,
   evidenceCardEntryDelayMs,
   isScanCompletionReady,
@@ -141,6 +143,8 @@ type ScanEvidence = {
    * listing evidence; a single-entry rotation simply never flips.
    */
   photoRotation?: ScanPhoto[];
+  /** Live Google Maps nearby search shown inside the competitor card. */
+  competitorMapSrc?: string;
 };
 
 type ImageLoadStatus = "loaded" | "failed";
@@ -173,27 +177,51 @@ function reviewVisitLabel(visitDate?: ScanReview["visitDate"]): string | undefin
   }).format(value)}`;
 }
 
+/**
+ * Eight anchors around the map: one hero in the middle and seven satellites.
+ * The bottom-left quadrant stays clear for the review wall, and nothing sits
+ * under the search chip along the top centre.
+ */
 const COLLAGE_SLOTS = [
   {
-    position: "left-1/2 top-1/2 w-[min(270px,74vw)] -translate-x-1/2 -translate-y-1/2 sm:w-[340px]",
+    position: "left-1/2 top-1/2 w-[min(250px,68vw)] -translate-x-1/2 -translate-y-1/2 sm:w-[320px]",
     rotate: "-1.5deg",
     zIndex: 50,
   },
   {
-    position: "left-0 top-[3%] w-[112px] sm:left-[5%] sm:w-[158px]",
+    position: "left-0 top-[2%] w-[100px] sm:left-[3%] sm:w-[146px]",
     rotate: "-6deg",
+    zIndex: 34,
+  },
+  {
+    position: "right-0 top-[6%] w-[98px] sm:right-[3%] sm:w-[142px]",
+    rotate: "6deg",
+    zIndex: 33,
+  },
+  {
+    position: "left-0 top-[26%] w-[94px] sm:left-[1%] sm:w-[134px]",
+    rotate: "3deg",
     zIndex: 32,
   },
   {
-    position: "right-0 top-[8%] w-[108px] sm:right-[5%] sm:w-[154px]",
-    rotate: "6deg",
+    position: "right-0 top-[30%] w-[94px] sm:right-[1%] sm:w-[134px]",
+    rotate: "-4deg",
     zIndex: 31,
   },
   {
-    // Bottom-left belongs to the review wall, so the fourth card sits opposite.
-    position: "bottom-[4%] right-[4%] w-[112px] sm:right-[10%] sm:w-[160px]",
+    position: "bottom-[4%] right-[2%] w-[100px] sm:right-[6%] sm:w-[146px]",
     rotate: "4deg",
     zIndex: 30,
+  },
+  {
+    position: "left-[14%] top-[12%] w-[88px] sm:left-[19%] sm:w-[124px]",
+    rotate: "-3deg",
+    zIndex: 29,
+  },
+  {
+    position: "right-[14%] bottom-[22%] w-[88px] sm:right-[19%] sm:w-[124px]",
+    rotate: "5deg",
+    zIndex: 28,
   },
 ] as const;
 
@@ -369,20 +397,32 @@ function EvidenceCard({
       ) : null}
 
       {evidence.kind === "competitor" ? (
-        <div className={`${active ? "min-h-44 p-4 sm:min-h-52" : "min-h-24 p-2.5"} flex items-center bg-[#f4f0ea]`}>
-          <div>
-            <p className={`${active ? "text-[10px]" : "text-[8px]"} font-bold uppercase tracking-[0.12em] text-primary`}>
+        <div className={`${active ? "h-44 sm:h-52" : "h-24 sm:h-28"} relative overflow-hidden bg-[#f4f0ea]`}>
+          {evidence.competitorMapSrc ? (
+            <iframe
+              title={evidence.alt}
+              src={evidence.competitorMapSrc}
+              className="absolute inset-0 h-full w-full border-0"
+              loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
+            />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center px-3 text-center">
+              <p className={`${active ? "text-[11px]" : "text-[9px]"} font-medium leading-snug text-muted`}>
+                Nearby same-cuisine restaurants are being located on Google Maps.
+              </p>
+            </div>
+          )}
+          <div className="pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-white/95 via-white/70 to-transparent px-2.5 pb-4 pt-1.5">
+            <p className={`${active ? "text-[9px]" : "text-[7px]"} font-bold uppercase tracking-[0.12em] text-primary`}>
               10 km discovery radius
             </p>
-            <p className={`${active ? "mt-2 text-[15px]" : "mt-1 text-[10px]"} font-semibold leading-snug text-ink`}>
-              Nearby same-cuisine restaurants
-            </p>
-            {active ? (
-              <p className="mt-2 text-[11px] leading-relaxed text-muted">
-                Comparing Google visibility signals now. Restaurant names and scores stay hidden until the report is unlocked.
-              </p>
-            ) : null}
           </div>
+          {active ? (
+            <p className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-white/95 to-transparent px-2.5 pb-1.5 pt-4 text-[9px] font-medium leading-snug text-muted">
+              Tuvi&rsquo;s ranking and scores stay hidden until the report is unlocked.
+            </p>
+          ) : null}
         </div>
       ) : rotation && rotation.length > 0 ? (
         <PhotoFlipStage photos={rotation} active={active} onImageError={onImageError} />
@@ -566,7 +606,7 @@ function ReviewWall({
 
   return (
     <section
-      className="pointer-events-auto absolute bottom-28 left-3 z-40 w-[min(320px,calc(100%-1.5rem))] rounded-[22px] border border-black/5 bg-white/95 p-3.5 shadow-[0_18px_50px_rgba(15,39,31,0.2)] backdrop-blur sm:rounded-[24px] lg:bottom-16 lg:left-4"
+      className="pointer-events-auto absolute bottom-28 left-3 z-40 w-[min(430px,calc(100%-1.5rem))] overflow-hidden rounded-[22px] border border-black/5 bg-white/95 p-3.5 shadow-[0_18px_50px_rgba(15,39,31,0.2)] backdrop-blur sm:rounded-[24px] lg:bottom-16 lg:left-4 lg:w-[460px] lg:p-4"
       aria-label="Recent Google reviews"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
@@ -591,7 +631,7 @@ function ReviewWall({
 
       <article
         key={`review-${index}`}
-        className="scan-photo-float mt-3 min-h-[132px] rounded-[18px] bg-[#dce6dd] px-3.5 py-3"
+        className="scan-review-slide mt-3 min-h-[124px] rounded-[18px] bg-[#dce6dd] px-4 py-3.5"
       >
         <div className="flex items-start justify-between gap-2">
           <div className="flex min-w-0 items-start gap-2">
@@ -680,6 +720,48 @@ function ReviewWall({
       </div>
     </section>
   );
+}
+
+/**
+ * A live Google Maps nearby search for the same cuisine. This is Google's own
+ * public result set, not Tuvi's scored competitor rows, which stay redacted
+ * server-side until the report is unlocked.
+ */
+function nearbyCompetitorMapSrc(opts: {
+  cuisine: string;
+  address?: string;
+  latitude?: number;
+  longitude?: number;
+}): string | null {
+  const term = `${opts.cuisine} restaurants`.trim();
+  const lat = opts.latitude;
+  const lng = opts.longitude;
+  if (
+    typeof lat === "number" &&
+    typeof lng === "number" &&
+    Number.isFinite(lat) &&
+    Number.isFinite(lng) &&
+    Math.abs(lat) <= 90 &&
+    Math.abs(lng) <= 180
+  ) {
+    const params = new URLSearchParams({
+      q: term,
+      ll: `${lat},${lng}`,
+      z: "13",
+      hl: "en",
+      output: "embed",
+    });
+    return `https://www.google.com/maps?${params.toString()}`;
+  }
+  const near = (opts.address || "").trim();
+  if (!near) return null;
+  const params = new URLSearchParams({
+    q: `${term} near ${near}`,
+    z: "13",
+    hl: "en",
+    output: "embed",
+  });
+  return `https://www.google.com/maps?${params.toString()}`;
 }
 
 function mapEmbedSrc(opts: {
@@ -898,25 +980,25 @@ export default function ScanExperience({
     const host = websiteLabel === "Website / listing signals" ? "Restaurant website" : websiteLabel;
     const items: ScanEvidence[] = [];
 
-    // One listing card turns through every decoded photo rather than filling the
-    // stage with placeholders for media that has not arrived.
-    if (readyPhotos.length > 0) {
-      const lead = readyPhotos[0];
+    // Decoded photos spread across up to five cards. Each card turns through
+    // its own photos, so extra media deepens the cards instead of hiding.
+    for (const [cardIndex, cardPhotos] of dealPhotosToCards(
+      readyPhotos,
+      LISTING_CARD_COUNT,
+    ).entries()) {
+      const lead = cardPhotos[0];
       items.push({
-        id: "listing-rotation",
+        id: `listing-${cardIndex}`,
         kind: "listing",
-        label:
-          readyPhotos.length > 1
-            ? `Listing photos · ${readyPhotos.length}`
-            : lead.label || "Restaurant listing photo",
+        label: lead.label || `Listing photo ${cardIndex + 1}`,
         sourceLabel: lead.sourceLabel || "Google listing photo",
         sourceUrl: lead.sourceUrl,
         authorAttributions: lead.authorAttributions,
         googleMapsUri: lead.googleMapsUri,
         flagContentUri: lead.flagContentUri,
-        alt: lead.alt || `${restaurantName} listing photo`,
+        alt: lead.alt || `${restaurantName} listing photo ${cardIndex + 1}`,
         src: lead.src,
-        photoRotation: readyPhotos,
+        photoRotation: cardPhotos,
       });
     }
 
@@ -968,14 +1050,24 @@ export default function ScanExperience({
       label: "Nearby same-cuisine restaurants",
       sourceLabel: `Google Maps discovery · ${cuisineLabel} · within 10 km`,
       sourceUrl: mapsUri,
-      alt: `Nearby ${cuisineLabel.toLowerCase()} restaurant discovery within 10 kilometres`,
+      alt: `Nearby ${cuisineLabel.toLowerCase()} restaurants on Google Maps`,
+      competitorMapSrc:
+        nearbyCompetitorMapSrc({
+          cuisine: cuisineLabel,
+          address,
+          latitude,
+          longitude,
+        }) ?? undefined,
     });
 
     return items;
   }, [
+    address,
     category,
     desktopScreenshot,
     isDecoded,
+    latitude,
+    longitude,
     mapsUri,
     mobileScreenshot,
     readyPhotos,

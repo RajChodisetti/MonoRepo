@@ -308,6 +308,30 @@
   animation: scan-photo-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+/* Each review slides in from the right as the wall advances. */
+@keyframes scan-review-slide {
+  0% {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.scan-review-slide {
+  animation: scan-review-slide 460ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scan-review-slide {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+
 /* Listing photos rest, then turn — one card showing many real photos. */
 .scan-photo-flip-stage {
   perspective: 1100px;
