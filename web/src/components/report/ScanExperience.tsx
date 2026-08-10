@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  EVIDENCE_BATCH_SIZE,
   EVIDENCE_CARD_ENTRY_MS,
   LISTING_CARD_COUNT,
   PHOTO_FLIP_MS,
+  REVIEW_PAGE_SIZE,
   REVIEW_WALL_HOLD_MS,
   REVIEW_WALL_LIMIT,
   TARGET_SCAN_SECONDS,
@@ -15,12 +15,14 @@ import {
   isScanCompletionReady,
   nextEvidenceBatchStart,
   nextPhotoFaceIndex,
-  nextReviewIndex,
   photoFlipCycleMs,
+  satellitePositions,
 } from "@/lib/scan-timeline";
 import type { AuthorAttribution, PlaceAttribution } from "@/lib/places";
 
-const STEP_INTERVAL_MS = 2_200;
+// A floor under a step's dwell so an empty step (nothing to show) still gets
+// a readable beat before the checklist moves on.
+const MIN_STEP_MS = 2_200;
 const FINISH_HOLD_MS = 320;
 const REVIEW_RELEVANCE_NOTICE =
   "Google Maps supplies up to five reviews ordered by relevance. Tuvi shows that relevance-ordered sample and may visually shorten long text in this scan.";
@@ -176,62 +178,6 @@ function reviewVisitLabel(visitDate?: ScanReview["visitDate"]): string | undefin
     timeZone: "UTC",
   }).format(value)}`;
 }
-
-/**
- * Nine anchors around the map: one hero in the middle and eight satellites —
- * enough for 6 listing cards + 2 website captures + 1 competitor card to all
- * be on stage at once, no rotation needed. The top-right corner stays clear
- * for the review wall, and nothing sits under the top-centre search chip.
- */
-const COLLAGE_SLOTS = [
-  {
-    position: "left-1/2 top-1/2 w-[min(250px,68vw)] -translate-x-1/2 -translate-y-1/2 sm:w-[320px]",
-    rotate: "-1.5deg",
-    zIndex: 50,
-  },
-  {
-    position: "left-0 top-[2%] w-[100px] sm:left-[3%] sm:w-[146px]",
-    rotate: "-6deg",
-    zIndex: 37,
-  },
-  {
-    position: "left-[16%] top-[9%] w-[88px] sm:left-[20%] sm:w-[126px]",
-    rotate: "-3deg",
-    zIndex: 36,
-  },
-  {
-    position: "left-0 top-[27%] w-[94px] sm:left-[1%] sm:w-[134px]",
-    rotate: "3deg",
-    zIndex: 35,
-  },
-  {
-    // Bottom-left, freed up now that the review wall lives top-right.
-    position: "bottom-[26%] left-[3%] w-[90px] sm:left-[6%] sm:w-[128px]",
-    rotate: "5deg",
-    zIndex: 34,
-  },
-  {
-    position: "bottom-[6%] left-[20%] w-[92px] sm:left-[24%] sm:w-[130px]",
-    rotate: "-2deg",
-    zIndex: 33,
-  },
-  {
-    position: "bottom-[4%] right-[3%] w-[96px] sm:right-[7%] sm:w-[138px]",
-    rotate: "4deg",
-    zIndex: 32,
-  },
-  {
-    // Right edge, low enough to clear the top-right review wall.
-    position: "right-[6%] top-[38%] w-[86px] sm:right-[10%] sm:w-[120px]",
-    rotate: "5deg",
-    zIndex: 31,
-  },
-  {
-    position: "right-[22%] top-[60%] w-[90px] sm:right-[26%] sm:w-[126px]",
-    rotate: "-4deg",
-    zIndex: 30,
-  },
-] as const;
 
 function BrowserBar({ viewport }: { viewport: "desktop" | "mobile" | "neutral" }) {
   return (
@@ -524,49 +470,64 @@ function EvidenceCard({
   );
 }
 
+const SATELLITE_WIDTH_CLASS = "w-[100px] sm:w-[140px]";
+
+/**
+ * Whatever a step needs to show — one lone competitor card, six listing
+ * photos — gets exactly that: a centred hero plus its satellites, positioned
+ * by `satellitePositions` rather than picked from a fixed table, so the
+ * count on stage always determines the spacing instead of squeezing into
+ * slots sized for a different composition.
+ */
 function EvidenceCollage({
   evidence,
-  activeIndex,
   onImageError,
 }: {
   evidence: ScanEvidence[];
-  activeIndex: number;
   onImageError: (src: string) => void;
 }) {
-  const safeIndex = activeIndex >= 0 && activeIndex < evidence.length ? activeIndex : 0;
-  const visible = evidence.slice(safeIndex, safeIndex + EVIDENCE_BATCH_SIZE);
-  const activeEvidence = visible[0];
-  if (visible.length === 0) return null;
+  const [hero, ...satellites] = evidence;
+  const positions = useMemo(() => satellitePositions(satellites.length), [satellites.length]);
+  if (!hero) return null;
 
   return (
     <div className="pointer-events-none absolute inset-x-3 bottom-40 top-20 z-30 sm:inset-x-5 sm:bottom-28 sm:top-24 lg:bottom-12">
       <p className="sr-only" role="status" aria-live="polite">
-        {activeEvidence ? `Reviewing ${activeEvidence.label}` : "Waiting for visual evidence"}
+        {`Reviewing ${hero.label}`}
       </p>
-      {visible.map((item, slotIndex) => {
-        const slot = COLLAGE_SLOTS[slotIndex];
-        const entryDelayMs = evidenceCardEntryDelayMs(slotIndex);
+
+      <div
+        className="absolute left-1/2 top-1/2 w-[min(250px,68vw)] -translate-x-1/2 -translate-y-1/2 sm:w-[320px]"
+        style={{ zIndex: 50 }}
+      >
+        <div
+          className="scan-evidence-card-enter"
+          style={{ animationDelay: "0ms", animationDuration: `${EVIDENCE_CARD_ENTRY_MS}ms` }}
+        >
+          <div style={{ transform: "rotate(-1.5deg)" }}>
+            <EvidenceCard evidence={hero} active onImageError={onImageError} />
+          </div>
+        </div>
+      </div>
+
+      {satellites.map((item, i) => {
+        const pos = positions[i];
+        const entryDelayMs = evidenceCardEntryDelayMs(i + 1);
         return (
           <div
             key={item.id}
-            className={`absolute transition-all duration-500 motion-reduce:transition-none ${slot.position}`}
-            style={{ zIndex: slot.zIndex }}
+            className={`absolute -translate-x-1/2 -translate-y-1/2 transition-[left,top] duration-500 motion-reduce:transition-none ${SATELLITE_WIDTH_CLASS}`}
+            style={{ left: `${pos.leftPercent}%`, top: `${pos.topPercent}%`, zIndex: 40 - i }}
           >
             <div
               className="scan-evidence-card-enter"
-              data-entry-delay-ms={entryDelayMs}
-              data-entry-duration-ms={EVIDENCE_CARD_ENTRY_MS}
               style={{
                 animationDelay: `${entryDelayMs}ms`,
                 animationDuration: `${EVIDENCE_CARD_ENTRY_MS}ms`,
               }}
             >
-              <div style={{ transform: `rotate(${slot.rotate})` }}>
-                <EvidenceCard
-                  evidence={item}
-                  active={slotIndex === 0}
-                  onImageError={onImageError}
-                />
+              <div style={{ transform: `rotate(${pos.rotateDeg}deg)` }}>
+                <EvidenceCard evidence={item} active={false} onImageError={onImageError} />
               </div>
             </div>
           </div>
@@ -576,9 +537,97 @@ function EvidenceCollage({
   );
 }
 
+function ReviewCard({ review, mapsUri }: { review: ScanReview; mapsUri?: string }) {
+  const sentiment = review.sentiment ? sentimentMeta(review.sentiment) : null;
+  const authorUri = safeHttpUrl(review.authorUri);
+  const authorPhotoUri = safeHttpUrl(review.authorPhotoUri);
+  const visitLabel = reviewVisitLabel(review.visitDate);
+  const sourceUri = safeHttpUrl(review.googleMapsUri) || safeHttpUrl(mapsUri);
+  const flagContentUri = safeHttpUrl(review.flagContentUri);
+
+  return (
+    <article className="scan-review-slide min-h-[88px] rounded-[18px] bg-[#dce6dd] px-3.5 py-3 sm:min-h-[100px] sm:px-4 sm:py-3.5">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex min-w-0 items-start gap-2">
+          {authorPhotoUri ? (
+            // Google reviewer avatar stays live from the supplied attribution URI.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={authorPhotoUri}
+              alt=""
+              className="h-7 w-7 shrink-0 rounded-full object-cover"
+              referrerPolicy="no-referrer"
+            />
+          ) : null}
+          <div className="min-w-0">
+            {authorUri ? (
+              <a
+                href={authorUri}
+                target="_blank"
+                rel="noreferrer"
+                className="block truncate text-[13px] font-semibold text-ink underline decoration-ink/25 underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              >
+                {review.author || "Google reviewer"}
+              </a>
+            ) : (
+              <p className="truncate text-[13px] font-semibold text-ink">
+                {review.author || "Google reviewer"}
+              </p>
+            )}
+            <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5">
+              {typeof review.rating === "number" ? <Stars rating={review.rating} /> : null}
+              {review.relativeTime ? (
+                <span className="truncate text-[11px] text-ink/60">{review.relativeTime}</span>
+              ) : null}
+              {visitLabel ? (
+                <span className="truncate text-[11px] text-ink/60">· {visitLabel}</span>
+              ) : null}
+            </div>
+          </div>
+        </div>
+        {sentiment ? (
+          <span
+            className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${sentiment.className}`}
+          >
+            {sentiment.label}
+          </span>
+        ) : null}
+      </div>
+      <p className="mt-2 line-clamp-2 text-[12px] font-medium leading-snug text-ink/80 sm:line-clamp-3">
+        {review.text ? `“${review.text}”` : "This reviewer left a rating without written feedback."}
+      </p>
+      {sourceUri || flagContentUri ? (
+        <div className="mt-1.5 flex items-center gap-2 text-[11px] font-semibold">
+          {sourceUri ? (
+            <a
+              href={sourceUri}
+              target="_blank"
+              rel="noreferrer"
+              className="text-primary underline decoration-primary/30 underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            >
+              Google Maps
+            </a>
+          ) : null}
+          {flagContentUri ? (
+            <a
+              href={flagContentUri}
+              target="_blank"
+              rel="noreferrer"
+              className="font-normal text-ink/50 underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary"
+            >
+              Report content
+            </a>
+          ) : null}
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
 /**
  * Recent Google reviews in the same rounded tile the marketing pages use, so
- * the scan reads as one product. Holds each review for the photo-card beat.
+ * the scan reads as one product. Two reviews share the wall at once, holding
+ * for the same beat as a photo card before sliding to the next pair.
  */
 function ReviewWall({
   reviews,
@@ -590,13 +639,13 @@ function ReviewWall({
   mapsUri?: string;
 }) {
   const shown = useMemo(() => reviews.slice(0, REVIEW_WALL_LIMIT), [reviews]);
-  const [index, setIndex] = useState(0);
+  const [pageStart, setPageStart] = useState(0);
   const [paused, setPaused] = useState(false);
 
   useEffect(() => {
-    if (paused || shown.length < 2) return;
+    if (paused || shown.length <= REVIEW_PAGE_SIZE) return;
     const id = window.setInterval(
-      () => setIndex((current) => nextReviewIndex(current, shown.length)),
+      () => setPageStart((current) => nextEvidenceBatchStart(current, shown.length, REVIEW_PAGE_SIZE)),
       REVIEW_WALL_HOLD_MS,
     );
     return () => window.clearInterval(id);
@@ -604,13 +653,10 @@ function ReviewWall({
 
   if (shown.length === 0) return null;
 
-  const review = shown[Math.min(index, shown.length - 1)];
-  const sentiment = review.sentiment ? sentimentMeta(review.sentiment) : null;
-  const authorUri = safeHttpUrl(review.authorUri);
-  const authorPhotoUri = safeHttpUrl(review.authorPhotoUri);
-  const flagContentUri = safeHttpUrl(review.flagContentUri);
-  const sourceUri = safeHttpUrl(review.googleMapsUri) || safeHttpUrl(mapsUri);
-  const visitLabel = reviewVisitLabel(review.visitDate);
+  const safePageStart = pageStart < shown.length ? pageStart : 0;
+  const page = shown.slice(safePageStart, safePageStart + REVIEW_PAGE_SIZE);
+  const pageCount = Math.ceil(shown.length / REVIEW_PAGE_SIZE);
+  const pageNumber = Math.floor(safePageStart / REVIEW_PAGE_SIZE) + 1;
 
   // Anchored top-right, below the centred search chip at every breakpoint —
   // on a narrow phone the chip spans nearly the full width, so "top right"
@@ -619,7 +665,7 @@ function ReviewWall({
   // chip to leave room beside it. A capped height keeps it off short screens.
   return (
     <section
-      className="pointer-events-auto absolute right-3 top-24 z-40 max-h-[46vh] w-[min(300px,calc(100%-1.5rem))] overflow-hidden rounded-[22px] border border-black/5 bg-white/95 p-3 shadow-[0_18px_50px_rgba(15,39,31,0.2)] backdrop-blur sm:right-4 sm:top-28 sm:w-[340px] sm:rounded-[24px] sm:p-3.5 lg:right-6 lg:w-[380px] lg:p-4"
+      className="pointer-events-auto absolute right-3 top-24 z-40 max-h-[52vh] w-[min(320px,calc(100%-1.5rem))] overflow-hidden rounded-[22px] border border-black/5 bg-white/95 p-3 shadow-[0_18px_50px_rgba(15,39,31,0.2)] backdrop-blur sm:right-4 sm:top-28 sm:w-[360px] sm:rounded-[24px] sm:p-3.5 lg:right-6 lg:w-[400px] lg:p-4"
       aria-label="Recent Google reviews"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
@@ -637,100 +683,33 @@ function ReviewWall({
             </span>
           ) : null}
           <span className="text-[11px] font-semibold tabular-nums text-muted">
-            {index + 1} / {shown.length}
+            {pageNumber} / {pageCount}
           </span>
         </div>
       </div>
 
-      <article
-        key={`review-${index}`}
-        className="scan-review-slide mt-2.5 min-h-[100px] rounded-[18px] bg-[#dce6dd] px-3.5 py-3 sm:mt-3 sm:min-h-[124px] sm:px-4 sm:py-3.5"
-      >
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex min-w-0 items-start gap-2">
-            {authorPhotoUri ? (
-              // Google reviewer avatar stays live from the supplied attribution URI.
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={authorPhotoUri}
-                alt=""
-                className="h-7 w-7 shrink-0 rounded-full object-cover"
-                referrerPolicy="no-referrer"
-              />
-            ) : null}
-            <div className="min-w-0">
-              {authorUri ? (
-                <a
-                  href={authorUri}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="block truncate text-[13px] font-semibold text-ink underline decoration-ink/25 underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-                >
-                  {review.author || "Google reviewer"}
-                </a>
-              ) : (
-                <p className="truncate text-[13px] font-semibold text-ink">
-                  {review.author || "Google reviewer"}
-                </p>
-              )}
-              <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5">
-                {typeof review.rating === "number" ? <Stars rating={review.rating} /> : null}
-                {review.relativeTime ? (
-                  <span className="truncate text-[11px] text-ink/60">{review.relativeTime}</span>
-                ) : null}
-                {visitLabel ? (
-                  <span className="truncate text-[11px] text-ink/60">· {visitLabel}</span>
-                ) : null}
-              </div>
-            </div>
-          </div>
-          {sentiment ? (
-            <span
-              className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${sentiment.className}`}
-            >
-              {sentiment.label}
-            </span>
-          ) : null}
-        </div>
-        <p className="mt-2.5 line-clamp-3 text-[12px] font-medium leading-snug text-ink/80 sm:line-clamp-4">
-          {review.text ? `“${review.text}”` : "This reviewer left a rating without written feedback."}
-        </p>
-      </article>
+      <div key={`review-page-${safePageStart}`} className="mt-2.5 flex flex-col gap-2 sm:mt-3">
+        {page.map((review, i) => (
+          <ReviewCard
+            key={`${safePageStart}-${i}-${review.author || "anon"}`}
+            review={review}
+            mapsUri={mapsUri}
+          />
+        ))}
+      </div>
 
-      <div className="mt-2.5 flex items-center justify-between gap-2 text-[11px] text-muted">
-        <div className="flex items-center gap-1" aria-hidden="true">
-          {shown.map((_, dot) => (
+      {pageCount > 1 ? (
+        <div className="mt-2.5 flex items-center gap-1" aria-hidden="true">
+          {Array.from({ length: pageCount }, (_, dot) => (
             <span
               key={`review-dot-${dot}`}
               className={`h-1.5 rounded-full transition-all duration-300 motion-reduce:transition-none ${
-                dot === index ? "w-4 bg-primary" : "w-1.5 bg-ink/15"
+                dot === pageNumber - 1 ? "w-4 bg-primary" : "w-1.5 bg-ink/15"
               }`}
             />
           ))}
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {sourceUri ? (
-            <a
-              href={sourceUri}
-              target="_blank"
-              rel="noreferrer"
-              className="font-semibold text-primary underline decoration-primary/30 underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-            >
-              Google Maps
-            </a>
-          ) : null}
-          {flagContentUri ? (
-            <a
-              href={flagContentUri}
-              target="_blank"
-              rel="noreferrer"
-              className="underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary"
-            >
-              Report content
-            </a>
-          ) : null}
-        </div>
-      </div>
+      ) : null}
     </section>
   );
 }
@@ -827,6 +806,29 @@ function mapEmbedSrc(opts: {
   return `https://www.google.com/maps?${params.toString()}`;
 }
 
+/**
+ * What the map shows follows the checklist step exactly, positionally
+ * matched to the `steps` array built below: the competitor card only while
+ * "& competitors" is active, listing photos only during "Photo quality and
+ * quantity", and so on. "Google business profile" has no evidence card of
+ * its own — the map and pin already speak for that step — so the collage
+ * simply goes empty for its beat. The review step is deliberately empty
+ * here too: reviews live in the separate `ReviewWall`, gated the same way.
+ */
+const STEP_EVIDENCE_KINDS: readonly (readonly ScanEvidence["kind"][])[] = [
+  ["competitor"],
+  [],
+  ["listing"],
+  [],
+  ["desktop", "website"],
+  ["mobile"],
+];
+const REVIEW_STEP_INDEX = 3;
+// Stable reference so an out-of-range step (e.g. once `finishing` pushes
+// activeIndex past the last real step) doesn't recreate an empty array — and
+// with it invalidate the memo below — on every render.
+const NO_EVIDENCE_KINDS: readonly ScanEvidence["kind"][] = [];
+
 export default function ScanExperience({
   restaurantName = "Your restaurant",
   address,
@@ -872,7 +874,6 @@ export default function ScanExperience({
   const [activeIndex, setActiveIndex] = useState(0);
   const [secondsLeft, setSecondsLeft] = useState(TARGET_SCAN_SECONDS);
   const [finishing, setFinishing] = useState(false);
-  const [activeEvidenceIndex, setActiveEvidenceIndex] = useState(0);
   const [imageLoadStates, setImageLoadStates] = useState<Map<string, ImageLoadStatus>>(
     () => new Map(),
   );
@@ -1089,16 +1090,6 @@ export default function ScanExperience({
     websiteUrl,
   ]);
 
-  const evidenceSignature = useMemo(
-    () =>
-      evidenceItems
-        .map((item) => {
-          const src = item.src || "";
-          return `${item.id}:${src.length}:${src.slice(-32)}:${item.photoRotation?.length ?? 0}`;
-        })
-        .join("|"),
-    [evidenceItems],
-  );
   const hasLoadedVisualEvidence = evidenceItems.some(
     (item) => Boolean(item.src) && imageLoadStates.get(item.src!) === "loaded",
   );
@@ -1108,28 +1099,24 @@ export default function ScanExperience({
     if (hasReviewEvidence) markEvidenceReady();
   }, [hasReviewEvidence, markEvidenceReady]);
 
-  useEffect(() => {
-    const resetId = window.setTimeout(() => setActiveEvidenceIndex(0), 0);
-    return () => window.clearTimeout(resetId);
-  }, [evidenceSignature]);
-
-  useEffect(() => {
-    if (evidenceItems.length <= EVIDENCE_BATCH_SIZE || finishing) return;
-    const safeBatchStart =
-      activeEvidenceIndex >= 0 && activeEvidenceIndex < evidenceItems.length
-        ? activeEvidenceIndex
-        : 0;
-    const visibleCardCount = Math.min(
-      EVIDENCE_BATCH_SIZE,
-      evidenceItems.length - safeBatchStart,
-    );
-    const id = window.setTimeout(() => {
-      setActiveEvidenceIndex((index) =>
-        nextEvidenceBatchStart(index, evidenceItems.length, EVIDENCE_BATCH_SIZE),
-      );
-    }, evidenceBatchPresentationMs(visibleCardCount));
-    return () => window.clearTimeout(id);
-  }, [activeEvidenceIndex, evidenceItems.length, evidenceSignature, finishing]);
+  // Only the cards relevant to the checklist's current step are on stage —
+  // the competitor card while "& competitors" is active, listing photos only
+  // during "Photo quality and quantity", and so on. Moving to the next step
+  // hides the previous step's cards outright, freeing the stage for the next
+  // ones rather than leaving a growing pile on screen for the whole scan.
+  const visibleKinds = STEP_EVIDENCE_KINDS[activeIndex] ?? NO_EVIDENCE_KINDS;
+  const visibleEvidence = useMemo(
+    () => evidenceItems.filter((item) => visibleKinds.includes(item.kind)),
+    [evidenceItems, visibleKinds],
+  );
+  const visibleSignature = useMemo(
+    () =>
+      visibleEvidence
+        .map((item) => `${item.id}:${item.photoRotation?.length ?? 0}`)
+        .join("|"),
+    [visibleEvidence],
+  );
+  const showReviewWall = activeIndex === REVIEW_STEP_INDEX && !finishing;
 
   const searchQuery = useMemo(() => {
     const cityish = (address || "").split(",").slice(-2).join(",").trim();
@@ -1154,7 +1141,18 @@ export default function ScanExperience({
       ? candidateEmbedSrc
       : initialEmbedSrc ?? candidateEmbedSrc;
 
-  const activeEvidence = evidenceItems[activeEvidenceIndex] ?? evidenceItems[0];
+  const activeEvidence = visibleEvidence[0];
+
+  // How many cards each step WOULD show, independent of which step is
+  // currently active — used only to size that step's own dwell time.
+  const stepItemCounts = useMemo(
+    () =>
+      STEP_EVIDENCE_KINDS.map(
+        (kinds) => evidenceItems.filter((item) => kinds.includes(item.kind)).length,
+      ),
+    [evidenceItems],
+  );
+  const reviewPageCount = Math.max(1, Math.ceil(reviewWallItems.length / REVIEW_PAGE_SIZE));
 
   // Countdown
   useEffect(() => {
@@ -1166,14 +1164,25 @@ export default function ScanExperience({
     return () => window.clearInterval(id);
   }, []);
 
-  // Advance the review checklist independently of the paced evidence batches.
+  // Each step dwells for as long as its own evidence needs, not a fixed
+  // interval: the photo step needs its six cards to finish entering (a
+  // second apart) and hold before it's fair to hide them, and the review
+  // step needs a few page-slides to actually show the "next two" behaviour,
+  // while an empty step (no card of its own, e.g. business profile) still
+  // gets a minimum readable beat rather than a zero-length flash.
   useEffect(() => {
-    if (finishing) return;
-    const id = window.setInterval(() => {
+    if (finishing || activeIndex >= steps.length - 1) return;
+    const durationMs =
+      activeIndex === REVIEW_STEP_INDEX
+        ? reviewWallItems.length === 0
+          ? MIN_STEP_MS
+          : Math.max(Math.min(reviewPageCount, 3) * REVIEW_WALL_HOLD_MS, MIN_STEP_MS)
+        : Math.max(evidenceBatchPresentationMs(stepItemCounts[activeIndex] ?? 0), MIN_STEP_MS);
+    const id = window.setTimeout(() => {
       setActiveIndex((i) => Math.min(i + 1, steps.length - 1));
-    }, STEP_INTERVAL_MS);
-    return () => window.clearInterval(id);
-  }, [finishing, steps.length]);
+    }, durationMs);
+    return () => window.clearTimeout(id);
+  }, [activeIndex, finishing, reviewPageCount, reviewWallItems.length, stepItemCounts, steps.length]);
 
   // Cached responses still receive the full 15-second review. Evidence arriving
   // late gets one complete staggered batch, including the final-card reading hold.
@@ -1335,16 +1344,17 @@ export default function ScanExperience({
             </div>
           </div>
 
-          {/* Decoded listing and website evidence enters in paced collage batches. */}
+          {/* Only the current checklist step's evidence is on stage. */}
           <EvidenceCollage
-            key={`evidence-collage-${activeEvidenceIndex}-${evidenceSignature}`}
-            evidence={evidenceItems}
-            activeIndex={activeEvidenceIndex}
+            key={`evidence-collage-${activeIndex}-${visibleSignature}`}
+            evidence={visibleEvidence}
             onImageError={(src) => setImageLoadStatus(src, "failed")}
           />
 
-          {/* Recent Google reviews hold the top-right corner of the stage. */}
-          <ReviewWall reviews={reviewWallItems} placeRating={rating} mapsUri={mapsUri} />
+          {/* Reviews take the top-right corner only during their own step. */}
+          {showReviewWall ? (
+            <ReviewWall reviews={reviewWallItems} placeRating={rating} mapsUri={mapsUri} />
+          ) : null}
 
           {/* Scan beam across map */}
           <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-full overflow-hidden" aria-hidden="true">

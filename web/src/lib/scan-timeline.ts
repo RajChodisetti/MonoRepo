@@ -1,11 +1,16 @@
 export const MIN_SCAN_MS = 20_000;
 export const MAX_SCAN_MS = 28_000;
 export const TARGET_SCAN_SECONDS = 20;
-/** 6 listing + 2 website + 1 competitor: every card mounts at once, no rotation. */
-export const EVIDENCE_BATCH_SIZE = 9;
+/**
+ * The richest single step (photo quality, up to 6 cards) sets how long the
+ * scan waits after evidence becomes ready before it's allowed to finish. Not
+ * a visual batch size — each step shows only its own relevant cards, but this
+ * is still the right "how much is there to see" figure for that wait.
+ */
+export const EVIDENCE_BATCH_SIZE = 6;
 /** Listing photos spread across this many cards before any card repeats. */
 export const LISTING_CARD_COUNT = 6;
-/** Gap between each card's entrance so the collage doesn't land all at once. */
+/** Gap between each card's entrance so a step's cards don't land all at once. */
 export const EVIDENCE_CARD_STAGGER_MS = 1_000;
 export const EVIDENCE_CARD_ENTRY_MS = 900;
 export const EVIDENCE_LAST_CARD_HOLD_MS = 3_000;
@@ -15,7 +20,9 @@ export const PHOTO_FLIP_HOLD_MS = 2_000;
 export const PHOTO_FLIP_MS = 900;
 /** Google Maps returns a relevance-ordered sample; the wall never shows more. */
 export const REVIEW_WALL_LIMIT = 10;
-/** Each review holds for the same beat as a photo before the wall advances. */
+/** Two reviews share the wall at once before it slides to the next pair. */
+export const REVIEW_PAGE_SIZE = 2;
+/** Each page holds for the same beat as a photo before the wall advances. */
 export const REVIEW_WALL_HOLD_MS = 3_000;
 
 export function evidenceCardEntryDelayMs(cardIndex: number): number {
@@ -87,13 +94,6 @@ export function nextPhotoFaceIndex(current: number, photoCount: number): number 
   return (safe + 1) % photoCount;
 }
 
-/** Advance through the review wall, wrapping at the relevance-ordered sample. */
-export function nextReviewIndex(current: number, reviewCount: number): number {
-  if (reviewCount <= 1) return 0;
-  const safe = Number.isFinite(current) && current > 0 ? Math.floor(current) : 0;
-  return (safe + 1) % reviewCount;
-}
-
 export function nextEvidenceBatchStart(
   currentIndex: number,
   evidenceCount: number,
@@ -102,4 +102,45 @@ export function nextEvidenceBatchStart(
   if (evidenceCount <= 0 || batchSize <= 0 || evidenceCount <= batchSize) return 0;
   const next = Math.max(0, currentIndex) + batchSize;
   return next >= evidenceCount ? 0 : next;
+}
+
+/**
+ * The wedge left clear at the top of the ring, in degrees either side of
+ * straight up, for the search chip that always sits there.
+ */
+export const SATELLITE_ARC_CLEARANCE_DEG = 50;
+export const SATELLITE_ARC_SWEEP_DEG = 360 - 2 * SATELLITE_ARC_CLEARANCE_DEG;
+export const SATELLITE_RADIUS_X_PERCENT = 40;
+export const SATELLITE_RADIUS_Y_PERCENT = 33;
+
+export type SatellitePosition = {
+  leftPercent: number;
+  topPercent: number;
+  rotateDeg: number;
+};
+
+/**
+ * Positions for the cards orbiting a centred hero card, spaced by construction
+ * rather than picked by hand — so however many a step has to show (a lone
+ * competitor card, six listing photos), none of them can land on top of each
+ * other. Angles run clockwise from straight up and skip the wedge reserved
+ * for the search chip; each satellite sits at the centre of its own equal
+ * slice of the remaining arc, which keeps small counts away from that
+ * cleared wedge too rather than pinning them to its edges.
+ */
+export function satellitePositions(satelliteCount: number): SatellitePosition[] {
+  const count = Math.max(0, Math.floor(satelliteCount));
+  if (count === 0) return [];
+  return Array.from({ length: count }, (_, i) => {
+    const sliceCenter = (i + 0.5) / count;
+    const deg = SATELLITE_ARC_CLEARANCE_DEG + SATELLITE_ARC_SWEEP_DEG * sliceCenter;
+    const rad = (deg * Math.PI) / 180;
+    return {
+      leftPercent: 50 + SATELLITE_RADIUS_X_PERCENT * Math.sin(rad),
+      topPercent: 50 - SATELLITE_RADIUS_Y_PERCENT * Math.cos(rad),
+      // Deterministic alternating wobble — no randomness, so server and
+      // client render the same markup on the first paint.
+      rotateDeg: i % 2 === 0 ? -(4 + (i % 3) * 2) : 4 + (i % 3) * 2,
+    };
+  });
 }
