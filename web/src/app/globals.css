@@ -308,6 +308,39 @@
   animation: scan-photo-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+/* Listing photos rest, then turn — one card showing many real photos. */
+.scan-photo-flip-stage {
+  perspective: 1100px;
+}
+
+.scan-photo-flip-inner {
+  position: relative;
+  height: 100%;
+  width: 100%;
+  transform-style: preserve-3d;
+  transition: transform var(--scan-photo-flip-ms, 900ms) cubic-bezier(0.5, 0.05, 0.2, 1);
+  will-change: transform;
+}
+
+.scan-photo-flip-face {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.scan-photo-flip-face-back {
+  transform: rotateY(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scan-photo-flip-inner {
+    transition: none;
+    will-change: auto;
+  }
+}
+
 .scan-map-pin {
   animation: scan-pin-bob 2.4s ease-in-out infinite;
 }

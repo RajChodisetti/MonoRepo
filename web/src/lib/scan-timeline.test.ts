@@ -8,10 +8,17 @@ import {
   EVIDENCE_LAST_CARD_HOLD_MS,
   MAX_SCAN_MS,
   MIN_SCAN_MS,
+  PHOTO_FLIP_HOLD_MS,
+  PHOTO_FLIP_MS,
+  REVIEW_WALL_HOLD_MS,
+  REVIEW_WALL_LIMIT,
   evidenceBatchPresentationMs,
   evidenceCardEntryDelayMs,
   isScanCompletionReady,
   nextEvidenceBatchStart,
+  nextPhotoFaceIndex,
+  nextReviewIndex,
+  photoFlipCycleMs,
 } from "./scan-timeline.ts";
 
 test("scan always presents for at least fifteen seconds", () => {
@@ -104,6 +111,35 @@ test("scan requires fetch, preserves the evidence dwell, and retains its cap", (
     }),
     true,
   );
+});
+
+test("a listing photo rests three seconds before the card turns", () => {
+  assert.equal(PHOTO_FLIP_HOLD_MS, 3_000);
+  assert.equal(PHOTO_FLIP_MS, 900);
+  assert.equal(photoFlipCycleMs(), 3_900);
+});
+
+test("the hidden face is always loaded one photo ahead and wraps", () => {
+  assert.equal(nextPhotoFaceIndex(0, 4), 1);
+  assert.equal(nextPhotoFaceIndex(1, 4), 2);
+  assert.equal(nextPhotoFaceIndex(3, 4), 0);
+  assert.equal(nextPhotoFaceIndex(7, 4), 0);
+  // A single photo never turns, so the card keeps its only face.
+  assert.equal(nextPhotoFaceIndex(0, 1), 0);
+  assert.equal(nextPhotoFaceIndex(3, 1), 0);
+  assert.equal(nextPhotoFaceIndex(0, 0), 0);
+  assert.equal(nextPhotoFaceIndex(-4, 5), 1);
+  assert.equal(nextPhotoFaceIndex(Number.NaN, 5), 1);
+});
+
+test("the review wall holds each review and wraps at the sample it was given", () => {
+  assert.equal(REVIEW_WALL_LIMIT, 10);
+  assert.equal(REVIEW_WALL_HOLD_MS, 3_000);
+  assert.equal(nextReviewIndex(0, 5), 1);
+  assert.equal(nextReviewIndex(4, 5), 0);
+  assert.equal(nextReviewIndex(0, 1), 0);
+  assert.equal(nextReviewIndex(0, 0), 0);
+  assert.equal(nextReviewIndex(Number.NaN, 3), 1);
 });
 
 test("evidence rotation advances whole batches and wraps after the remainder", () => {

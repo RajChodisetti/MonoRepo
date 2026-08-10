@@ -4,11 +4,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   EVIDENCE_BATCH_SIZE,
   EVIDENCE_CARD_ENTRY_MS,
+  PHOTO_FLIP_MS,
+  REVIEW_WALL_HOLD_MS,
+  REVIEW_WALL_LIMIT,
   TARGET_SCAN_SECONDS,
   evidenceBatchPresentationMs,
   evidenceCardEntryDelayMs,
   isScanCompletionReady,
   nextEvidenceBatchStart,
+  nextPhotoFaceIndex,
+  nextReviewIndex,
+  photoFlipCycleMs,
 } from "@/lib/scan-timeline";
 import type { AuthorAttribution, PlaceAttribution } from "@/lib/places";
 
@@ -121,7 +127,7 @@ function sentimentMeta(sentiment: string) {
 
 type ScanEvidence = {
   id: string;
-  kind: "listing" | "desktop" | "mobile" | "website" | "review" | "competitor";
+  kind: "listing" | "desktop" | "mobile" | "website" | "competitor";
   label: string;
   sourceLabel: string;
   alt: string;
@@ -130,8 +136,11 @@ type ScanEvidence = {
   authorAttributions?: AuthorAttribution[];
   googleMapsUri?: string;
   flagContentUri?: string;
-  unavailableMessage?: string;
-  review?: ScanReview;
+  /**
+   * Every decoded listing photo this one card turns through. Populated only for
+   * listing evidence; a single-entry rotation simply never flips.
+   */
+  photoRotation?: ScanPhoto[];
 };
 
 type ImageLoadStatus = "loaded" | "failed";
@@ -181,7 +190,8 @@ const COLLAGE_SLOTS = [
     zIndex: 31,
   },
   {
-    position: "bottom-[2%] left-[4%] w-[112px] sm:left-[10%] sm:w-[160px]",
+    // Bottom-left belongs to the review wall, so the fourth card sits opposite.
+    position: "bottom-[4%] right-[4%] w-[112px] sm:right-[10%] sm:w-[160px]",
     rotate: "4deg",
     zIndex: 30,
   },
@@ -206,39 +216,131 @@ function BrowserBar({ viewport }: { viewport: "desktop" | "mobile" | "neutral" }
   );
 }
 
+/**
+ * One card, many real photos. The face turning away keeps its photo until the
+ * rotation lands, so a flip never flashes the next image early.
+ */
+function PhotoFlipStage({
+  photos,
+  active,
+  onImageError,
+}: {
+  photos: ScanPhoto[];
+  active: boolean;
+  onImageError: (src: string) => void;
+}) {
+  const photoCount = photos.length;
+  const [flip, setFlip] = useState(0);
+  const [faces, setFaces] = useState<[number, number]>([0, photoCount > 1 ? 1 : 0]);
+
+  useEffect(() => {
+    if (photoCount < 2) return;
+    const id = window.setInterval(() => setFlip((current) => current + 1), photoFlipCycleMs());
+    return () => window.clearInterval(id);
+  }, [photoCount]);
+
+  // Refresh the face that just turned away, ready for the next flip.
+  useEffect(() => {
+    if (photoCount < 2) return;
+    const id = window.setTimeout(() => {
+      const upcoming = nextPhotoFaceIndex(flip, photoCount);
+      setFaces((current) =>
+        flip % 2 === 0 ? [current[0], upcoming] : [upcoming, current[1]],
+      );
+    }, PHOTO_FLIP_MS);
+    return () => window.clearTimeout(id);
+  }, [flip, photoCount]);
+
+  const front = photos[faces[0] % photoCount];
+  const back = photos[faces[1] % photoCount];
+  const showing = (flip % photoCount) + 1;
+
+  return (
+    <div className={`${active ? "h-44 sm:h-52" : "h-24 sm:h-28"} scan-photo-flip-stage relative bg-[#e9e4dc]`}>
+      <div
+        className="scan-photo-flip-inner"
+        style={
+          {
+            transform: `rotateY(${flip * 180}deg)`,
+            "--scan-photo-flip-ms": `${PHOTO_FLIP_MS}ms`,
+          } as React.CSSProperties
+        }
+      >
+        <div className="scan-photo-flip-face">
+          {/* Evidence is rendered only from URLs received in the report payload. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={front.src}
+            alt={front.alt || ""}
+            className="h-full w-full object-cover object-top"
+            onError={() => onImageError(front.src)}
+          />
+        </div>
+        <div className="scan-photo-flip-face scan-photo-flip-face-back">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={back.src}
+            alt=""
+            className="h-full w-full object-cover object-top"
+            onError={() => onImageError(back.src)}
+          />
+        </div>
+      </div>
+      {active && photoCount > 1 ? (
+        <span className="absolute bottom-2 right-2 z-10 rounded-full bg-ink/70 px-2 py-0.5 text-[10px] font-semibold tabular-nums text-bg">
+          {showing} / {photoCount}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+/** Desktop captures keep browser chrome; mobile captures sit in a phone shell. */
+function DeviceFrame({
+  kind,
+  active,
+  children,
+}: {
+  kind: "desktop" | "mobile" | "website";
+  active: boolean;
+  children: React.ReactNode;
+}) {
+  if (kind === "mobile") {
+    return (
+      <div className={`${active ? "h-44 sm:h-52" : "h-24 sm:h-28"} flex items-center justify-center bg-[#eae5dd] py-2`}>
+        <div className="relative h-full overflow-hidden rounded-[0.9rem] border-[3px] border-[#1a1a1a] bg-[#1a1a1a] shadow-[0_10px_24px_rgba(15,39,31,0.28)]">
+          <span
+            className="absolute left-1/2 top-1 z-10 h-[3px] w-6 -translate-x-1/2 rounded-full bg-white/40"
+            aria-hidden="true"
+          />
+          <div className="h-full overflow-hidden rounded-[0.7rem] bg-white">{children}</div>
+        </div>
+      </div>
+    );
+  }
+  return <div className={`${active ? "h-44 sm:h-52" : "h-24 sm:h-28"} bg-[#e9e4dc]`}>{children}</div>;
+}
+
 function EvidenceCard({
   evidence,
   active,
-  placeRating,
-  imageStatus,
-  onImageLoad,
   onImageError,
 }: {
   evidence: ScanEvidence;
   active: boolean;
-  placeRating?: number;
-  imageStatus?: ImageLoadStatus;
-  onImageLoad: (src: string) => void;
   onImageError: (src: string) => void;
 }) {
   const isWebsite =
     evidence.kind === "desktop" ||
     evidence.kind === "mobile" ||
     evidence.kind === "website";
-  const sentiment = evidence.review?.sentiment
-    ? sentimentMeta(evidence.review.sentiment)
-    : null;
   const sourceUrl = safeHttpUrl(evidence.sourceUrl);
   const googleMapsUri = safeHttpUrl(evidence.googleMapsUri);
   const flagContentUri = safeHttpUrl(evidence.flagContentUri);
-  const reviewAuthorUri = safeHttpUrl(evidence.review?.authorUri);
-  const reviewAuthorPhotoUri = safeHttpUrl(evidence.review?.authorPhotoUri);
-  const visitLabel = reviewVisitLabel(evidence.review?.visitDate);
   const sourceLinks = [googleMapsUri, sourceUrl].filter(
     (value, index, links): value is string => Boolean(value) && links.indexOf(value) === index,
   );
-  const imageFailed = Boolean(evidence.src) && imageStatus === "failed";
-  const imageLoaded = Boolean(evidence.src) && imageStatus === "loaded";
+  const rotation = evidence.photoRotation;
 
   return (
     <article
@@ -252,9 +354,6 @@ function EvidenceCard({
         <span className="truncate text-[9px] font-bold uppercase tracking-[0.1em] text-primary">
           {active ? "Scanning now" : evidence.kind}
         </span>
-        {evidence.kind === "review" && typeof placeRating === "number" ? (
-          <span className="text-[9px] font-semibold tabular-nums text-ink">{placeRating.toFixed(1)}★ listing</span>
-        ) : null}
       </div>
 
       {isWebsite ? (
@@ -269,57 +368,7 @@ function EvidenceCard({
         />
       ) : null}
 
-      {evidence.review ? (
-        <div className={`${active ? "min-h-36 p-4" : "min-h-24 p-2.5"} bg-[#fbfaf8]`}>
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex min-w-0 items-start gap-2">
-              {reviewAuthorPhotoUri ? (
-                // Google reviewer avatar stays live from the supplied attribution URI.
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={reviewAuthorPhotoUri}
-                  alt=""
-                  className={`${active ? "h-8 w-8" : "h-6 w-6"} shrink-0 rounded-full object-cover`}
-                  referrerPolicy="no-referrer"
-                />
-              ) : null}
-              <div className="min-w-0">
-                {reviewAuthorUri ? (
-                  <a
-                    href={reviewAuthorUri}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="pointer-events-auto block truncate text-[13px] font-semibold text-primary underline decoration-primary/30 underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-                  >
-                    {evidence.review.author || "Recent reviewer"}
-                  </a>
-                ) : (
-                  <p className="truncate text-[12px] font-semibold text-ink">
-                    {evidence.review.author || "Recent review"}
-                  </p>
-                )}
-                <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-                  {typeof evidence.review.rating === "number" ? <Stars rating={evidence.review.rating} /> : null}
-                  {evidence.review.relativeTime ? (
-                    <span className="truncate text-[12px] text-muted">{evidence.review.relativeTime}</span>
-                  ) : null}
-                  {visitLabel ? (
-                    <span className="truncate text-[12px] text-muted">· {visitLabel}</span>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-            {sentiment ? (
-              <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide ${sentiment.className}`}>
-                {sentiment.label}
-              </span>
-            ) : null}
-          </div>
-          <p className={`${active ? "mt-3 line-clamp-4 text-[12px]" : "mt-2 line-clamp-2 text-[9px]"} leading-relaxed text-ink/75`}>
-            {evidence.review.text ? `“${evidence.review.text}”` : "Review text was not provided."}
-          </p>
-        </div>
-      ) : evidence.kind === "competitor" ? (
+      {evidence.kind === "competitor" ? (
         <div className={`${active ? "min-h-44 p-4 sm:min-h-52" : "min-h-24 p-2.5"} flex items-center bg-[#f4f0ea]`}>
           <div>
             <p className={`${active ? "text-[10px]" : "text-[8px]"} font-bold uppercase tracking-[0.12em] text-primary`}>
@@ -335,43 +384,24 @@ function EvidenceCard({
             ) : null}
           </div>
         </div>
-      ) : evidence.src && !imageFailed ? (
-        <div className={`${active ? "h-44 sm:h-52" : "h-24 sm:h-28"} relative overflow-hidden bg-[#e9e4dc]`}>
-          {/* Evidence is rendered only from URLs/data received in the report payload. */}
+      ) : rotation && rotation.length > 0 ? (
+        <PhotoFlipStage photos={rotation} active={active} onImageError={onImageError} />
+      ) : (
+        <DeviceFrame
+          kind={evidence.kind === "listing" ? "website" : evidence.kind}
+          active={active}
+        >
+          {/* Every source here decoded before the card was allowed on stage. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={evidence.src}
             alt={evidence.alt}
-            className={`h-full w-full object-top transition-opacity duration-200 motion-reduce:transition-none ${
-              evidence.kind === "mobile" || evidence.kind === "website"
-                ? "object-contain"
-                : "object-cover"
-            } ${imageLoaded ? "opacity-100" : "opacity-0"}`}
-            onLoad={(event) => {
-              if (event.currentTarget.naturalWidth > 0) onImageLoad(evidence.src!);
-              else onImageError(evidence.src!);
-            }}
+            className={`h-full w-full object-top ${
+              evidence.kind === "listing" ? "object-cover" : "object-contain"
+            }`}
             onError={() => onImageError(evidence.src!)}
           />
-          {!imageLoaded ? (
-            <div className="absolute inset-0 flex items-center justify-center px-3 text-center text-[9px] font-medium text-muted">
-              Loading evidence…
-            </div>
-          ) : null}
-        </div>
-      ) : (
-        <div className={`${active ? "h-44 sm:h-52" : "h-24 sm:h-28"} flex items-center justify-center bg-[#eee9e2] px-3 text-center`}>
-          <div>
-            <p className={`${active ? "text-[9px]" : "text-[7px]"} font-bold uppercase tracking-[0.12em] text-muted/70`}>
-              Capture status
-            </p>
-            <p className={`${active ? "mt-2 text-[11px]" : "mt-1 text-[8px]"} font-medium leading-snug text-muted`}>
-              {imageFailed
-                ? `${evidence.label} could not be loaded from its source.`
-                : evidence.unavailableMessage}
-            </p>
-          </div>
-        </div>
+        </DeviceFrame>
       )}
 
       <div className={`${active ? "px-3 py-2.5" : "px-2 py-1.5"} flex items-end justify-between gap-2 bg-white`}>
@@ -449,21 +479,16 @@ function EvidenceCard({
 function EvidenceCollage({
   evidence,
   activeIndex,
-  placeRating,
-  imageLoadStates,
-  onImageLoad,
   onImageError,
 }: {
   evidence: ScanEvidence[];
   activeIndex: number;
-  placeRating?: number;
-  imageLoadStates: ReadonlyMap<string, ImageLoadStatus>;
-  onImageLoad: (src: string) => void;
   onImageError: (src: string) => void;
 }) {
   const safeIndex = activeIndex >= 0 && activeIndex < evidence.length ? activeIndex : 0;
   const visible = evidence.slice(safeIndex, safeIndex + EVIDENCE_BATCH_SIZE);
   const activeEvidence = visible[0];
+  if (visible.length === 0) return null;
 
   return (
     <div className="pointer-events-none absolute inset-x-3 bottom-40 top-20 z-30 sm:inset-x-5 sm:bottom-28 sm:top-24 lg:bottom-12">
@@ -492,9 +517,6 @@ function EvidenceCollage({
                 <EvidenceCard
                   evidence={item}
                   active={slotIndex === 0}
-                  placeRating={placeRating}
-                  imageStatus={item.src ? imageLoadStates.get(item.src) : undefined}
-                  onImageLoad={onImageLoad}
                   onImageError={onImageError}
                 />
               </div>
@@ -503,6 +525,160 @@ function EvidenceCollage({
         );
       })}
     </div>
+  );
+}
+
+/**
+ * Recent Google reviews in the same rounded tile the marketing pages use, so
+ * the scan reads as one product. Holds each review for the photo-card beat.
+ */
+function ReviewWall({
+  reviews,
+  placeRating,
+  mapsUri,
+}: {
+  reviews: ScanReview[];
+  placeRating?: number;
+  mapsUri?: string;
+}) {
+  const shown = useMemo(() => reviews.slice(0, REVIEW_WALL_LIMIT), [reviews]);
+  const [index, setIndex] = useState(0);
+  const [paused, setPaused] = useState(false);
+
+  useEffect(() => {
+    if (paused || shown.length < 2) return;
+    const id = window.setInterval(
+      () => setIndex((current) => nextReviewIndex(current, shown.length)),
+      REVIEW_WALL_HOLD_MS,
+    );
+    return () => window.clearInterval(id);
+  }, [paused, shown.length]);
+
+  if (shown.length === 0) return null;
+
+  const review = shown[Math.min(index, shown.length - 1)];
+  const sentiment = review.sentiment ? sentimentMeta(review.sentiment) : null;
+  const authorUri = safeHttpUrl(review.authorUri);
+  const authorPhotoUri = safeHttpUrl(review.authorPhotoUri);
+  const flagContentUri = safeHttpUrl(review.flagContentUri);
+  const sourceUri = safeHttpUrl(review.googleMapsUri) || safeHttpUrl(mapsUri);
+  const visitLabel = reviewVisitLabel(review.visitDate);
+
+  return (
+    <section
+      className="pointer-events-auto absolute bottom-28 left-3 z-40 w-[min(320px,calc(100%-1.5rem))] rounded-[22px] border border-black/5 bg-white/95 p-3.5 shadow-[0_18px_50px_rgba(15,39,31,0.2)] backdrop-blur sm:rounded-[24px] lg:bottom-16 lg:left-4"
+      aria-label="Recent Google reviews"
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      onFocusCapture={() => setPaused(true)}
+      onBlurCapture={() => setPaused(false)}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-primary">
+          Recent Google reviews
+        </p>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {typeof placeRating === "number" ? (
+            <span className="rounded-full bg-[#f4f0ea] px-2 py-0.5 text-[11px] font-semibold tabular-nums text-ink">
+              {placeRating.toFixed(1)}★
+            </span>
+          ) : null}
+          <span className="text-[11px] font-semibold tabular-nums text-muted">
+            {index + 1} / {shown.length}
+          </span>
+        </div>
+      </div>
+
+      <article
+        key={`review-${index}`}
+        className="scan-photo-float mt-3 min-h-[132px] rounded-[18px] bg-[#dce6dd] px-3.5 py-3"
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex min-w-0 items-start gap-2">
+            {authorPhotoUri ? (
+              // Google reviewer avatar stays live from the supplied attribution URI.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={authorPhotoUri}
+                alt=""
+                className="h-7 w-7 shrink-0 rounded-full object-cover"
+                referrerPolicy="no-referrer"
+              />
+            ) : null}
+            <div className="min-w-0">
+              {authorUri ? (
+                <a
+                  href={authorUri}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block truncate text-[13px] font-semibold text-ink underline decoration-ink/25 underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                >
+                  {review.author || "Google reviewer"}
+                </a>
+              ) : (
+                <p className="truncate text-[13px] font-semibold text-ink">
+                  {review.author || "Google reviewer"}
+                </p>
+              )}
+              <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5">
+                {typeof review.rating === "number" ? <Stars rating={review.rating} /> : null}
+                {review.relativeTime ? (
+                  <span className="truncate text-[11px] text-ink/60">{review.relativeTime}</span>
+                ) : null}
+                {visitLabel ? (
+                  <span className="truncate text-[11px] text-ink/60">· {visitLabel}</span>
+                ) : null}
+              </div>
+            </div>
+          </div>
+          {sentiment ? (
+            <span
+              className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${sentiment.className}`}
+            >
+              {sentiment.label}
+            </span>
+          ) : null}
+        </div>
+        <p className="mt-2.5 line-clamp-4 text-[12px] font-medium leading-snug text-ink/80">
+          {review.text ? `“${review.text}”` : "This reviewer left a rating without written feedback."}
+        </p>
+      </article>
+
+      <div className="mt-2.5 flex items-center justify-between gap-2 text-[11px] text-muted">
+        <div className="flex items-center gap-1" aria-hidden="true">
+          {shown.map((_, dot) => (
+            <span
+              key={`review-dot-${dot}`}
+              className={`h-1.5 rounded-full transition-all duration-300 motion-reduce:transition-none ${
+                dot === index ? "w-4 bg-primary" : "w-1.5 bg-ink/15"
+              }`}
+            />
+          ))}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {sourceUri ? (
+            <a
+              href={sourceUri}
+              target="_blank"
+              rel="noreferrer"
+              className="font-semibold text-primary underline decoration-primary/30 underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            >
+              Google Maps
+            </a>
+          ) : null}
+          {flagContentUri ? (
+            <a
+              href={flagContentUri}
+              target="_blank"
+              rel="noreferrer"
+              className="underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary"
+            >
+              Report content
+            </a>
+          ) : null}
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -607,6 +783,7 @@ export default function ScanExperience({
   );
   const startedAtRef = useRef<number>(0);
   const evidenceReadyAtElapsedRef = useRef<number | null>(null);
+  const requestedSrcRef = useRef<Set<string>>(new Set());
   const onReadyRef = useRef(onReady);
 
   useEffect(() => {
@@ -654,158 +831,155 @@ export default function ScanExperience({
     return out.slice(0, 12);
   }, [photoUrl, photos, restaurantName]);
 
-  const hasReviewEvidence = useMemo(
+  // Cards must never appear before their pixels exist. Every candidate source is
+  // decoded off-stage first, so the collage only ever shows real, loaded media.
+  useEffect(() => {
+    const candidates = [
+      ...gallery.map((photo) => photo.src),
+      desktopScreenshot,
+      mobileScreenshot,
+    ].filter((src): src is string => Boolean(src));
+    const pending = candidates.filter((src) => !requestedSrcRef.current.has(src));
+    if (pending.length === 0) return;
+
+    let cancelled = false;
+    const loaders: HTMLImageElement[] = [];
+    for (const src of pending) {
+      requestedSrcRef.current.add(src);
+      const loader = new window.Image();
+      loader.decoding = "async";
+      loader.referrerPolicy = "no-referrer";
+      loader.onload = () => {
+        if (cancelled) return;
+        setImageLoadStatus(src, loader.naturalWidth > 0 ? "loaded" : "failed");
+      };
+      loader.onerror = () => {
+        if (!cancelled) setImageLoadStatus(src, "failed");
+      };
+      loader.src = src;
+      loaders.push(loader);
+    }
+
+    return () => {
+      cancelled = true;
+      for (const loader of loaders) {
+        loader.onload = null;
+        loader.onerror = null;
+      }
+    };
+  }, [gallery, desktopScreenshot, mobileScreenshot, setImageLoadStatus]);
+
+  const isDecoded = useCallback(
+    (src?: string) => Boolean(src) && imageLoadStates.get(src!) === "loaded",
+    [imageLoadStates],
+  );
+
+  const readyPhotos = useMemo(
+    () => gallery.filter((photo) => isDecoded(photo.src)),
+    [gallery, isDecoded],
+  );
+
+  const reviewWallItems = useMemo(
     () =>
-      reviews.some(
-        (review) =>
-          Boolean(review.author?.trim()) ||
-          Boolean(review.text?.trim()) ||
-          typeof review.rating === "number",
-      ),
+      reviews
+        .filter(
+          (review) =>
+            Boolean(review.author?.trim()) ||
+            Boolean(review.text?.trim()) ||
+            typeof review.rating === "number",
+        )
+        .slice(0, REVIEW_WALL_LIMIT),
     [reviews],
   );
 
+  const hasReviewEvidence = reviewWallItems.length > 0;
+
   const evidenceItems = useMemo<ScanEvidence[]>(() => {
     const host = websiteLabel === "Website / listing signals" ? "Restaurant website" : websiteLabel;
-    const waiting = !fetchComplete;
-    const listingEvidence = gallery.map<ScanEvidence>((photo, index) => ({
-      id: `listing-${index}`,
-      kind: "listing",
-      label: photo.label || `Listing photo ${index + 1}`,
-      sourceLabel: photo.sourceLabel || "Google listing photo",
-      sourceUrl: photo.sourceUrl,
-      authorAttributions: photo.authorAttributions,
-      googleMapsUri: photo.googleMapsUri,
-      flagContentUri: photo.flagContentUri,
-      alt: photo.alt || `${restaurantName} listing photo ${index + 1}`,
-      src: photo.src,
-    }));
-    const reviewEvidence = reviews
-      .filter(
-        (review) =>
-          Boolean(review.author?.trim()) ||
-          Boolean(review.text?.trim()) ||
-          typeof review.rating === "number",
-      )
-      .slice(0, 4)
-      .map<ScanEvidence>((review, index) => ({
-      id: `review-${index}`,
-      kind: "review",
-      label: review.author ? `Review by ${review.author}` : `Recent review ${index + 1}`,
-      sourceLabel: review.author ? `Google review by ${review.author}` : "Google review evidence",
-      sourceUrl: review.googleMapsUri || mapsUri,
-      googleMapsUri: review.googleMapsUri,
-      flagContentUri: review.flagContentUri,
-      alt: review.author ? `Google review by ${review.author}` : `Recent Google review ${index + 1}`,
-      review,
-      }));
+    const items: ScanEvidence[] = [];
 
-    const firstListing = listingEvidence.shift() || {
-      id: "listing-unavailable",
-      kind: "listing" as const,
-      label: "Restaurant listing photos",
-      sourceLabel: "Google listing evidence",
-      alt: "Listing photo evidence unavailable",
-      unavailableMessage: waiting
-        ? "Waiting for listing photos…"
-        : "No listing photos were received for this scan.",
-    };
+    // One listing card turns through every decoded photo rather than filling the
+    // stage with placeholders for media that has not arrived.
+    if (readyPhotos.length > 0) {
+      const lead = readyPhotos[0];
+      items.push({
+        id: "listing-rotation",
+        kind: "listing",
+        label:
+          readyPhotos.length > 1
+            ? `Listing photos · ${readyPhotos.length}`
+            : lead.label || "Restaurant listing photo",
+        sourceLabel: lead.sourceLabel || "Google listing photo",
+        sourceUrl: lead.sourceUrl,
+        authorAttributions: lead.authorAttributions,
+        googleMapsUri: lead.googleMapsUri,
+        flagContentUri: lead.flagContentUri,
+        alt: lead.alt || `${restaurantName} listing photo`,
+        src: lead.src,
+        photoRotation: readyPhotos,
+      });
+    }
+
+    const desktopReady = isDecoded(desktopScreenshot);
+    const mobileReady = isDecoded(mobileScreenshot);
     const duplicateViewportCapture = Boolean(
-      desktopScreenshot &&
-      mobileScreenshot &&
-      desktopScreenshot === mobileScreenshot,
+      desktopReady && mobileReady && desktopScreenshot === mobileScreenshot,
     );
-    const websiteEvidence: ScanEvidence[] = duplicateViewportCapture
-      ? [
-          {
-            id: "website-neutral",
-            kind: "website",
-            label: "Website viewport capture",
-            sourceLabel: `Website capture · ${host}`,
-            alt: `${restaurantName} website screenshot; viewport could not be distinguished`,
-            src: desktopScreenshot,
-            sourceUrl: websiteUrl || website,
-          },
-          {
-            id: "website-distinct-unavailable",
-            kind: "website",
-            label: "Distinct second viewport",
-            sourceLabel: "Capture validation",
-            alt: "Distinct desktop and mobile evidence unavailable",
-            unavailableMessage:
-              "Desktop and mobile payloads were identical, so a distinct second viewport is unavailable.",
-          },
-        ]
-      : [
-          {
-            id: "website-desktop",
-            kind: "desktop",
-            label: "Desktop website view",
-            sourceLabel: `Website capture · ${host}`,
-            alt: `${restaurantName} website desktop screenshot`,
-            src: desktopScreenshot,
-            sourceUrl: websiteUrl || website,
-            unavailableMessage: waiting
-              ? "Waiting for the desktop website capture…"
-              : websiteUrl || website
-                ? "A desktop website capture was not available."
-                : "No website was found for a desktop capture.",
-          },
-          {
-            id: "website-mobile",
-            kind: "mobile",
-            label: "Mobile website view",
-            sourceLabel: `Website capture · ${host}`,
-            alt: `${restaurantName} website mobile screenshot`,
-            src: mobileScreenshot,
-            sourceUrl: websiteUrl || website,
-            unavailableMessage: waiting
-              ? "Waiting for the mobile website capture…"
-              : websiteUrl || website
-                ? "A mobile website capture was not available."
-                : "No website was found for a mobile capture.",
-          },
-        ];
-    const firstReview = reviewEvidence.shift() || {
-      id: "review-unavailable",
-      kind: "review" as const,
-      label: "Recent review evidence",
-      sourceLabel: "Google review evidence",
-      alt: "Recent review evidence unavailable",
-      unavailableMessage: waiting
-        ? "Waiting for recent review evidence…"
-        : "No recent review evidence was received for this scan.",
-    };
+
+    if (duplicateViewportCapture) {
+      items.push({
+        id: "website-neutral",
+        kind: "website",
+        label: "Website viewport capture",
+        sourceLabel: `Website capture · ${host}`,
+        alt: `${restaurantName} website screenshot; viewport could not be distinguished`,
+        src: desktopScreenshot,
+        sourceUrl: websiteUrl || website,
+      });
+    } else {
+      if (desktopReady) {
+        items.push({
+          id: "website-desktop",
+          kind: "desktop",
+          label: "Desktop website view",
+          sourceLabel: `Website capture · ${host}`,
+          alt: `${restaurantName} website desktop screenshot`,
+          src: desktopScreenshot,
+          sourceUrl: websiteUrl || website,
+        });
+      }
+      if (mobileReady) {
+        items.push({
+          id: "website-mobile",
+          kind: "mobile",
+          label: "Mobile website view",
+          sourceLabel: `Website capture · ${host}`,
+          alt: `${restaurantName} website mobile screenshot`,
+          src: mobileScreenshot,
+          sourceUrl: websiteUrl || website,
+        });
+      }
+    }
+
     const cuisineLabel = category.trim() || "Restaurant";
-    const competitorEvidence: ScanEvidence = {
+    items.push({
       id: "competitor-discovery",
       kind: "competitor",
       label: "Nearby same-cuisine restaurants",
       sourceLabel: `Google Maps discovery · ${cuisineLabel} · within 10 km`,
       sourceUrl: mapsUri,
       alt: `Nearby ${cuisineLabel.toLowerCase()} restaurant discovery within 10 kilometres`,
-    };
+    });
 
-    // The first rotation always includes listing, desktop, mobile and review evidence.
-    // Additional real evidence replaces cards only after the staggered batch has
-    // completed and its final card has remained fully visible for three seconds.
-    return [
-      firstListing,
-      ...websiteEvidence,
-      firstReview,
-      competitorEvidence,
-      ...listingEvidence,
-      ...reviewEvidence,
-    ];
+    return items;
   }, [
-    desktopScreenshot,
     category,
-    fetchComplete,
-    gallery,
+    desktopScreenshot,
+    isDecoded,
     mapsUri,
     mobileScreenshot,
+    readyPhotos,
     restaurantName,
-    reviews,
     website,
     websiteLabel,
     websiteUrl,
@@ -816,7 +990,7 @@ export default function ScanExperience({
       evidenceItems
         .map((item) => {
           const src = item.src || "";
-          return `${item.id}:${src.length}:${src.slice(-32)}:${Boolean(item.review)}`;
+          return `${item.id}:${src.length}:${src.slice(-32)}:${item.photoRotation?.length ?? 0}`;
         })
         .join("|"),
     [evidenceItems],
@@ -1057,16 +1231,16 @@ export default function ScanExperience({
             </div>
           </div>
 
-          {/* Real listing, review and website evidence enters sequentially in paced collage batches. */}
+          {/* Decoded listing and website evidence enters in paced collage batches. */}
           <EvidenceCollage
             key={`evidence-collage-${activeEvidenceIndex}-${evidenceSignature}`}
             evidence={evidenceItems}
             activeIndex={activeEvidenceIndex}
-            placeRating={rating}
-            imageLoadStates={imageLoadStates}
-            onImageLoad={(src) => setImageLoadStatus(src, "loaded")}
             onImageError={(src) => setImageLoadStatus(src, "failed")}
           />
+
+          {/* Recent Google reviews hold the bottom-left corner of the stage. */}
+          <ReviewWall reviews={reviewWallItems} placeRating={rating} mapsUri={mapsUri} />
 
           {/* Scan beam across map */}
           <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-full overflow-hidden" aria-hidden="true">
