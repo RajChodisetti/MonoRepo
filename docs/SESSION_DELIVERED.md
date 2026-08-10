@@ -2956,3 +2956,58 @@ Google reviews; adding ten unique reviews requires a separately licensed source.
 No billable report/provider smoke was invoked. No API, database, migration,
 Andre, voice, worker, template, admin, catalog, Redis, OCR, email, infrastructure,
 or provider-routing change was made. The VM has about 60 GB free after release.
+
+## 2026-08-09 — Owner-Inspired Sequential AI Review and Website-Only Production Release
+
+**Role:** Coordinating Product Design, Frontend, Test, and Release Agent
+
+**Delivered:** Reworked the map-scan from a persistent split evidence board into
+an Owner-grader-inspired sequence in which each evidence type owns the main
+canvas: unobstructed map/listing, six-card restaurant photo collage, vertically
+scrolling review stack, desktop-plus-mobile website review, and dedicated mobile
+capture. The scan uses the Tuvi design system rather than Owner branding, keeps
+the bottom status/progress tray visible, preloads every visual source, and never
+mounts empty or failed image cards. Up to six real photos are visible together;
+overflow photos flip through occupied slots with pause and Next controls.
+
+The review phase uses ten moving visual positions while truthfully labeling the
+genuine available Google set. Repeated positions are hidden from assistive
+technology, reduced-motion users get a static scrollable list with explicit Play,
+and no review text is invented. Late report evidence restarts the sequence at the
+photo phase and extends the dwell so photos, reviews, desktop, and mobile cannot
+be skipped by a fast or slow report response.
+
+**Production Deployment:** Committed as `8649051`, pushed non-force to
+`origin/fix/template-4-build`, packaged with archive SHA-256
+`674c959f50f7232381b9b6698ca09a589c64ca42ad21af64afc58de256f300b1`, and
+deployed as immutable source `/opt/tuvi/releases/monorepo-8649051`. Only
+`tuvi-website` was rebuilt and recreated with `--no-deps`. The running image is
+`sha256:3e39552fec09ed743174314556c439f77b38a6acff5a496fa5e2b736b3880e48`,
+restart count is zero, and all non-target Tuvi container identities remained
+unchanged. The previous source `/opt/tuvi/releases/monorepo-3ee29cf` and image
+tag `tuvi-tuvi-website:rollback-before-8649051` remain available for rollback.
+
+**Checks Run:** Ten focused Node tests, ESLint, TypeScript, the complete 59-page
+Next.js production build, and `git diff --check` passed. Browser QA at 390×844
+and desktop width exercised the full timed sequence, automatic late-evidence
+replay, photo rotation controls, reduced-motion review playback, genuine desktop
+and mobile captures, and a live map whose listing pin remains uncovered. A
+same-input visual comparison against the supplied Owner screenshots passed with
+no remaining P0/P1/P2 finding and no browser console errors. Deployment gates
+verified archive provenance, environment parity, compiled feature markers,
+internal and public website and consultation-BFF probes, exact image and Compose
+working directory, zero restarts, unchanged non-target containers, disabled
+email sending, and no OCR container.
+
+**Business Value / Plan Fit:** Prospects now see the same clear evidence-first
+storytelling pattern they recognize from leading graders, while Tuvi presents
+more live photos at once and remains honest about review-source limits. The map
+pin, restaurant visuals, reviews, and website captures are each legible instead
+of competing for space.
+
+**Risks / Follow-ups:** Google Places currently supplies at most five review
+texts, so ten cards are a visual stream rather than ten unique reviews. Ten
+unique reviews still require a separately licensed provider. No billable report
+smoke was invoked. No API, database, migration, Andre, voice, worker, template,
+admin, catalog, Redis, OCR, email, infrastructure, or provider-routing change was
+made. The VM retains about 59 GB free.
