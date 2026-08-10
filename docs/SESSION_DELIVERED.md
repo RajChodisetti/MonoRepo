@@ -2897,3 +2897,62 @@ Garlic Bread URL bypasses the former four-hour optimized-image cache immediately
 the scoped build. No unrelated releases, images, caches, or volumes were pruned
 without separate approval. No API, database, migration, voice, worker, template,
 admin, catalog, Redis, OCR, email, or provider-routing change was made.
+
+## 2026-08-09 — Persistent Map-Scan Evidence Board and Website-Only Production Release
+
+**Role:** Coordinating Frontend, UX, Test, and Release Agent
+
+**Delivered:** Replaced the scan's mutually exclusive single-photo/review phases
+with a persistent evidence board beside the map, leaving the map and location pin
+in their own unobstructed column. The board renders up to six successfully loaded
+photo cards in a 3×2 grid and distributes any remaining live photos across those
+slots for staggered flip transitions. Empty and failed media never become cards;
+automatic motion has pause/next controls, reduced-motion users get a manual Next
+control, and the scan holds genuine evidence on screen for at least 6.5 seconds
+before handing off to the report.
+
+The board also renders one or two genuine desktop/mobile website captures and a
+continuous ten-card review stream on the right. Because Google Places supplies at
+most five relevance-sorted review texts, the stream cycles the genuine available
+set to fill ten visual positions, labels the real available count, and hides
+repeated copies from assistive technology instead of inventing additional review
+content. The review stream supports pause/resume; reduced-motion users see a
+manually scrollable list and may explicitly opt into playback.
+
+**Production Deployment:** Committed as `3ee29cf`, pushed non-force to
+`origin/fix/template-4-build`, packaged archive SHA-256
+`7af9cdc2e59c24081b230cad965f70f1e1ffbc5e03a806a891a5237345063f21`, and
+deployed immutable source `/opt/tuvi/releases/monorepo-3ee29cf`. Only
+`tuvi-website` was recreated with `--no-deps`; the running image is
+`sha256:eaae103120db7d09b06abfb55fa75e101249c57aa52017fdd7efbed8a90801fc`
+with zero restarts, and the tracked non-target Tuvi container hash remained
+`875c5427b94163813722c17e53dc22857ddc082ed9383db31746a9bc07e8b6be`.
+The prior website source `/opt/tuvi/releases/monorepo-8fc04a5` and rollback image
+remain available. Two guarded cutover attempts rolled back cleanly because the
+release check initially expected the Compose working-directory label at the
+release root instead of its actual `infra/docker` directory; correcting that
+assertion allowed the final cutover to pass every gate.
+
+**Checks Run:** Ten focused Node tests, ESLint, TypeScript, the 59-page Next.js
+production build, and `git diff --check` passed. Responsive browser QA at
+1440×900 and 390×844 verified six photo cards, two website captures, a ten-card
+review loop, no horizontal overflow, a visible map pin, pause controls, and the
+manual overflow-photo transition. The host browser has reduced motion enabled,
+so auto-motion was correctly suppressed; a final local opt-in replay was blocked
+by the browser's localhost policy and was not bypassed. Production verification
+confirmed archive/commit provenance, compiled evidence-board markers, internal
+and public homepage/report routes, the exact release image and Compose working
+directory, zero restarts, disabled email sending, no OCR container, and removal
+of the temporary candidate container and deployment artifacts.
+
+**Business Value / Plan Fit:** Restaurant prospects can now watch real listing,
+website, and review evidence accumulate throughout the AI review instead of
+seeing an empty map-stage or a card for only a fraction of a second. The layout
+keeps the map readable while making the evidence feel like a live analysis board
+across desktop and mobile.
+
+**Risks / Follow-ups:** Ten review cards are a visual stream, not ten distinct
+Google reviews; adding ten unique reviews requires a separately licensed source.
+No billable report/provider smoke was invoked. No API, database, migration,
+Andre, voice, worker, template, admin, catalog, Redis, OCR, email, infrastructure,
+or provider-routing change was made. The VM has about 60 GB free after release.
