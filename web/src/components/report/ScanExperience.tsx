@@ -16,11 +16,11 @@ import type {
   WebsiteCaptureEvidence,
 } from "@/lib/report-scan";
 
-const MIN_SCAN_MS = 6_000;
-const MIN_EVIDENCE_PREVIEW_MS = 6_500;
-const STEP_INTERVAL_MS = 2_200;
+const MIN_SCAN_MS = 24_000;
+const MIN_EVIDENCE_PREVIEW_MS = 16_500;
+const STEP_INTERVAL_MS = 4_000;
 const FINISH_HOLD_MS = 320;
-const TARGET_SECONDS = 15;
+const TARGET_SECONDS = 24;
 const PHOTO_CARD_LIMIT = 6;
 const REVIEW_STREAM_CARD_COUNT = 10;
 
@@ -97,34 +97,24 @@ function sentimentMeta(sentiment?: string) {
   return { label: "Mixed", className: "bg-[#fff6e5] text-[#a15c00]" };
 }
 
-function PhotoBoard({
-  photos,
-  restaurantName,
-}: {
-  photos: ScanPhoto[];
-  restaurantName: string;
-}) {
+function useReadyEvidence<T extends { src: string }>(items: T[]) {
   const [readySources, setReadySources] = useState<Set<string>>(() => new Set());
   const [failedSources, setFailedSources] = useState<Set<string>>(() => new Set());
-  const [turn, setTurn] = useState(0);
-  const [paused, setPaused] = useState(false);
-  const [reducedMotion, setReducedMotion] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    const loaders = photos.map((photo) => {
+    const loaders = items.map((item) => {
       const image = new window.Image();
       image.onload = () => {
-        if (cancelled) return;
-        setReadySources((current) => new Set(current).add(photo.src));
+        if (!cancelled) setReadySources((current) => new Set(current).add(item.src));
       };
       image.onerror = () => {
-        if (cancelled) return;
-        setFailedSources((current) => new Set(current).add(photo.src));
+        if (!cancelled) setFailedSources((current) => new Set(current).add(item.src));
       };
-      image.src = photo.src;
+      image.src = item.src;
       return image;
     });
+
     return () => {
       cancelled = true;
       for (const image of loaders) {
@@ -132,17 +122,36 @@ function PhotoBoard({
         image.onerror = null;
       }
     };
-  }, [photos]);
+  }, [items]);
 
-  const availablePhotos = useMemo(
-    () => photos.filter(
-      (photo) => readySources.has(photo.src) && !failedSources.has(photo.src),
-    ),
-    [failedSources, photos, readySources],
+  const available = useMemo(
+    () => items.filter((item) => readySources.has(item.src) && !failedSources.has(item.src)),
+    [failedSources, items, readySources],
   );
+
+  return {
+    available,
+    markFailed: (src: string) => {
+      setFailedSources((current) => new Set(current).add(src));
+    },
+  };
+}
+
+function PhotoBoard({
+  photos,
+  restaurantName,
+  onImageError,
+}: {
+  photos: ScanPhoto[];
+  restaurantName: string;
+  onImageError: (src: string) => void;
+}) {
+  const [turn, setTurn] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(false);
   const photoSlots = useMemo(
-    () => buildScanPhotoSlots(availablePhotos, PHOTO_CARD_LIMIT),
-    [availablePhotos],
+    () => buildScanPhotoSlots(photos, PHOTO_CARD_LIMIT),
+    [photos],
   );
   const hasOverflow = photoSlots.some((slot) => slot.length > 1);
 
@@ -164,28 +173,27 @@ function PhotoBoard({
 
   if (photoSlots.length === 0) return null;
 
+  const rotations = [-2.4, 1.6, -1.2, 2.1, -1.8, 1.3];
+
   return (
     <section
-      className="scan-capture-in min-w-0 rounded-2xl border border-black/5 bg-white/90 p-2.5 shadow-[0_10px_26px_rgba(15,39,31,0.12)]"
-      aria-label={`${photoSlots.length} photo cards showing ${availablePhotos.length} available restaurant listing photos`}
+      className="scan-stage-in relative mx-auto flex h-full w-full max-w-[880px] flex-col items-center justify-center px-4 pb-28 pt-16 sm:px-7 sm:pt-20"
+      aria-label={`${photoSlots.length} photo cards showing ${photos.length} available restaurant listing photos`}
     >
-      <div className="mb-2 flex items-center justify-between gap-2 px-0.5">
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">Listing photos</p>
-          <p className="text-[11px] font-semibold text-ink">
-            {photoSlots.length} card{photoSlots.length === 1 ? "" : "s"} on the board
+      <div className="absolute inset-x-4 top-5 flex items-start justify-between gap-3 sm:inset-x-7 sm:top-7">
+        <div className="rounded-full border border-black/5 bg-white/92 px-3 py-2 shadow-sm backdrop-blur">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">Restaurant photos</p>
+          <p className="text-[12px] font-semibold text-ink">
+            {photoSlots.length} live card{photoSlots.length === 1 ? "" : "s"} · {photos.length} photo{photos.length === 1 ? "" : "s"} found
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-1">
-          <span className="rounded-full bg-[#edf4f0] px-2 py-1 text-[9px] font-semibold tabular-nums text-primary">
-            {availablePhotos.length} found
-          </span>
+        <div className="flex shrink-0 items-center gap-1.5">
           {hasOverflow && !reducedMotion ? (
             <button
               type="button"
               aria-pressed={paused}
               onClick={() => setPaused((current) => !current)}
-              className="min-h-7 rounded-full border border-black/10 bg-white px-2 text-[9px] font-semibold text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              className="min-h-9 rounded-full border border-black/10 bg-white/95 px-3 text-[10px] font-semibold text-primary shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
             >
               {paused ? "Play" : "Pause"}
             </button>
@@ -194,42 +202,43 @@ function PhotoBoard({
             <button
               type="button"
               onClick={() => setTurn((current) => current + 1)}
-              className="min-h-7 rounded-full border border-black/10 bg-white px-2 text-[9px] font-semibold text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              className="min-h-9 rounded-full border border-black/10 bg-white/95 px-3 text-[10px] font-semibold text-primary shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
             >
               Next
             </button>
           ) : null}
         </div>
       </div>
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid w-full grid-cols-2 items-center gap-2.5 sm:grid-cols-3 sm:gap-4">
         {photoSlots.map((slotPhotos, slotIndex) => {
           const photoIndex = turn % slotPhotos.length;
           const currentPhoto = slotPhotos[photoIndex];
-          const sourceIndex = availablePhotos.findIndex((photo) => photo.src === currentPhoto.src);
-          const style = { "--scan-photo-delay": `${slotIndex * 55}ms` } as CSSProperties;
+          const sourceIndex = photos.findIndex((photo) => photo.src === currentPhoto.src);
+          const style = {
+            "--scan-photo-delay": `${slotIndex * 65}ms`,
+            "--scan-photo-rotation": `${rotations[slotIndex] || 0}deg`,
+          } as CSSProperties;
           return (
             <figure
               key={`slot-${slotIndex}`}
-              className="min-w-0 overflow-hidden rounded-xl border border-black/5 bg-[#f1eee8] shadow-sm"
+              className="scan-photo-collage-card min-w-0 overflow-hidden rounded-[1.1rem] border-[5px] border-white bg-white shadow-[0_16px_38px_rgba(31,42,37,0.18)]"
+              style={style}
             >
               <div
                 key={currentPhoto.src}
                 className={slotPhotos.length > 1 ? "scan-photo-flip" : "scan-photo-in"}
-                style={style}
               >
                 {/* Dynamic Google media cannot use next/image's fixed remote allow-list. */}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={currentPhoto.src}
                   alt={currentPhoto.label || `${restaurantName} listing photo ${sourceIndex + 1}`}
-                  className="h-[68px] w-full object-cover sm:h-[76px] xl:h-[68px]"
-                  onError={() => {
-                    setFailedSources((current) => new Set(current).add(currentPhoto.src));
-                  }}
+                  className="h-[116px] w-full object-cover sm:h-[152px] lg:h-[168px] xl:h-[154px]"
+                  onError={() => onImageError(currentPhoto.src)}
                 />
-                <figcaption className="flex items-center justify-between gap-1 bg-white px-2 py-1.5 text-[9px] font-semibold text-ink">
+                <figcaption className="flex items-center justify-between gap-1 bg-white px-2.5 py-2 text-[9px] font-semibold text-ink sm:text-[10px]">
                   <span className="truncate">{currentPhoto.label || "Listing photo"}</span>
-                  <span className="shrink-0 tabular-nums text-muted">{sourceIndex + 1}/{availablePhotos.length}</span>
+                  <span className="shrink-0 tabular-nums text-muted">{sourceIndex + 1}/{photos.length}</span>
                 </figcaption>
               </div>
             </figure>
@@ -240,13 +249,13 @@ function PhotoBoard({
   );
 }
 
-function ReviewCard({ review, index }: { review: ScanReview; index: number }) {
+function ReviewCard({ review, index, compact = false }: { review: ScanReview; index: number; compact?: boolean }) {
   const meta = review.sentiment ? sentimentMeta(review.sentiment) : null;
   return (
-    <article className="rounded-xl border border-black/5 bg-white p-3 shadow-sm">
+    <article className={`rounded-xl border border-black/5 bg-white shadow-sm ${compact ? "p-2.5" : "p-3"}`}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="truncate text-[12px] font-semibold text-ink">
+          <p className={`truncate font-semibold text-ink ${compact ? "text-[11px]" : "text-[12px]"}`}>
             {review.author || `Google review ${index + 1}`}
           </p>
           {typeof review.rating === "number" || review.relativeTime ? (
@@ -265,7 +274,7 @@ function ReviewCard({ review, index }: { review: ScanReview; index: number }) {
         ) : null}
       </div>
       {review.text ? (
-        <p className="mt-2 line-clamp-3 text-[11px] leading-snug text-ink/80">&ldquo;{review.text}&rdquo;</p>
+        <p className={`${compact ? "mt-1.5 line-clamp-2 text-[10px]" : "mt-2 line-clamp-3 text-[11px]"} leading-snug text-ink/80`}>&ldquo;{review.text}&rdquo;</p>
       ) : null}
     </article>
   );
@@ -278,7 +287,7 @@ export function ReviewScroller({
 }: {
   reviews: ScanReview[];
   placeRating?: number;
-  variant?: "default" | "board";
+  variant?: "default" | "board" | "stage";
 }) {
   const [paused, setPaused] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
@@ -324,7 +333,9 @@ export function ReviewScroller({
   return (
     <section
       className={`scan-review-rail relative flex w-full flex-col overflow-hidden rounded-2xl border border-black/5 bg-white shadow-[0_10px_26px_rgba(15,39,31,0.12)] ${
-        variant === "board"
+        variant === "stage"
+          ? "scan-stage-in h-[470px] max-w-[560px] shrink-0 sm:h-[500px]"
+          : variant === "board"
           ? "min-h-[220px] flex-1"
           : "h-[174px] max-w-[560px] sm:h-[190px]"
       }`}
@@ -355,7 +366,7 @@ export function ReviewScroller({
       </header>
       <div
         className={`scan-review-viewport min-h-0 overflow-hidden px-2.5 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary ${
-          variant === "board" ? "flex-1" : "h-[126px] sm:h-[142px]"
+          variant === "board" || variant === "stage" ? "flex-1" : "h-[126px] sm:h-[142px]"
         } ${reducedMotion && motionOverride ? "scan-review-force-viewport" : ""}`}
         tabIndex={0}
         aria-label="Scrollable Google reviews"
@@ -369,14 +380,14 @@ export function ReviewScroller({
           <div className="space-y-2 py-2.5">
             {(canScroll ? stream : stream.slice(0, 1)).map((item, index) => (
               <div key={`review-${index}-${item.sourceIndex}`} aria-hidden={item.repeated || undefined}>
-                <ReviewCard review={item.review} index={item.sourceIndex} />
+                <ReviewCard review={item.review} index={item.sourceIndex} compact={variant === "stage"} />
               </div>
             ))}
           </div>
           {canScroll ? (
             <div className="scan-review-copy space-y-2 py-2.5" aria-hidden="true">
               {stream.map((item, index) => (
-                <ReviewCard key={`review-copy-${index}`} review={item.review} index={item.sourceIndex} />
+                <ReviewCard key={`review-copy-${index}`} review={item.review} index={item.sourceIndex} compact={variant === "stage"} />
               ))}
             </div>
           ) : null}
@@ -386,94 +397,79 @@ export function ReviewScroller({
   );
 }
 
-function WebsiteCaptureBoard({
+function WebsiteCaptureStage({
   captures,
   hostname,
+  mode,
+  onImageError,
 }: {
   captures: WebsiteCaptureEvidence[];
   hostname?: string;
+  mode: "desktop" | "mobile";
+  onImageError: (src: string) => void;
 }) {
-  const [readySources, setReadySources] = useState<Set<string>>(() => new Set());
-  const [failedSources, setFailedSources] = useState<Set<string>>(() => new Set());
-
-  useEffect(() => {
-    let cancelled = false;
-    const loaders = captures.map((capture) => {
-      const image = new window.Image();
-      image.onload = () => {
-        if (!cancelled) setReadySources((current) => new Set(current).add(capture.src));
-      };
-      image.onerror = () => {
-        if (!cancelled) setFailedSources((current) => new Set(current).add(capture.src));
-      };
-      image.src = capture.src;
-      return image;
-    });
-    return () => {
-      cancelled = true;
-      for (const image of loaders) {
-        image.onload = null;
-        image.onerror = null;
-      }
-    };
-  }, [captures]);
-
-  const available = captures.filter(
-    (capture) => readySources.has(capture.src) && !failedSources.has(capture.src),
-  );
-  if (available.length === 0) return null;
+  const desktop = captures.find((capture) => capture.kind === "desktop");
+  const mobile = captures.find((capture) => capture.kind === "mobile");
+  const primary = mode === "mobile" ? mobile || desktop : desktop || mobile;
+  if (!primary) return null;
 
   return (
-    <section className="scan-capture-in pointer-events-none relative w-full rounded-2xl border border-black/5 bg-white p-2.5 shadow-[0_10px_26px_rgba(15,39,31,0.12)]">
-      <div className="mb-2 flex items-center justify-between gap-3 px-1">
-        <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">Website captures</p>
-          {hostname ? <p className="truncate text-[11px] font-semibold text-ink">{hostname}</p> : null}
-        </div>
-        <span className="shrink-0 text-[10px] font-medium text-muted">
-          {available.length === 2 ? "Desktop + mobile" : `${available[0].kind} view`}
-        </span>
+    <section className="scan-stage-in relative mx-auto flex h-full w-full max-w-[780px] items-center justify-center px-5 pb-28 pt-16 sm:px-8 sm:pt-20">
+      <div className="absolute left-5 top-5 rounded-full border border-black/5 bg-white/92 px-3 py-2 shadow-sm backdrop-blur sm:left-8 sm:top-7">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
+          {mode === "mobile" ? "Mobile experience" : "Website review"}
+        </p>
+        <p className="max-w-[230px] truncate text-[12px] font-semibold text-ink">
+          {hostname || (primary.kind === "mobile" ? "Mobile website capture" : "Desktop website capture")}
+        </p>
       </div>
-      <div className="grid grid-cols-2 items-start gap-2">
-        {available.slice(0, 2).map((capture) => (
-          <figure
-            key={`${capture.kind}-${capture.src}`}
-            className={available.length === 1 ? "col-span-2 min-w-0" : "min-w-0"}
-          >
-            <div
-              className={
-                capture.kind === "desktop"
-                  ? "overflow-hidden rounded-lg border border-black/10 bg-[#efebe6]"
-                  : "mx-auto max-w-[92px] overflow-hidden rounded-[0.85rem] border-[3px] border-[#1a1a1a] bg-[#1a1a1a]"
-              }
-            >
-              {capture.kind === "desktop" ? (
-                <div className="flex h-3 items-center gap-1 border-b border-black/5 bg-white px-1.5" aria-hidden="true">
-                  <span className="h-1 w-1 rounded-full bg-[#ee6a5f]" />
-                  <span className="h-1 w-1 rounded-full bg-[#f3bd4f]" />
-                  <span className="h-1 w-1 rounded-full bg-[#61c454]" />
-                </div>
-              ) : null}
+
+      {mode === "desktop" && desktop ? (
+        <figure className="relative w-[92%] max-w-[590px]">
+          <div className="overflow-hidden rounded-xl border border-black/10 bg-white shadow-[0_24px_60px_rgba(31,42,37,0.2)]">
+            <div className="flex h-6 items-center gap-1.5 border-b border-black/5 bg-white px-3" aria-hidden="true">
+              <span className="h-2 w-2 rounded-full bg-[#ee6a5f]" />
+              <span className="h-2 w-2 rounded-full bg-[#f3bd4f]" />
+              <span className="h-2 w-2 rounded-full bg-[#61c454]" />
+            </div>
+            {/* Dynamic website captures can be data URLs and cannot use next/image. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={desktop.src}
+              alt="Desktop website capture"
+              className="aspect-[16/9] w-full object-cover object-top"
+              onError={() => onImageError(desktop.src)}
+            />
+          </div>
+          {mobile ? (
+            <div className="absolute -bottom-16 -left-3 w-[84px] overflow-hidden rounded-[1rem] border-[4px] border-[#202523] bg-[#202523] shadow-[0_18px_42px_rgba(31,42,37,0.28)] sm:-bottom-20 sm:-left-10 sm:w-[118px]">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={capture.src}
-                alt={`${capture.kind === "desktop" ? "Desktop" : "Mobile"} website capture`}
-                className={
-                  capture.kind === "desktop"
-                    ? "h-[76px] w-full object-cover object-top sm:h-[86px] xl:h-[78px]"
-                    : "h-[88px] w-full object-cover object-top sm:h-[96px] xl:h-[88px]"
-                }
-                onError={() => {
-                  setFailedSources((current) => new Set(current).add(capture.src));
-                }}
+                src={mobile.src}
+                alt="Mobile website capture"
+                className="aspect-[9/16] w-full object-cover object-top"
+                onError={() => onImageError(mobile.src)}
               />
             </div>
-            <figcaption className="mt-1 text-center text-[9px] font-semibold capitalize text-ink/75">
-              {capture.kind}
-            </figcaption>
-          </figure>
-        ))}
-      </div>
+          ) : null}
+          <figcaption className="mt-3 text-center text-[11px] font-semibold text-muted">Desktop website view</figcaption>
+        </figure>
+      ) : (
+        <figure className="w-[150px] sm:w-[190px]">
+          <div className="overflow-hidden rounded-[1.5rem] border-[6px] border-[#202523] bg-[#202523] shadow-[0_24px_60px_rgba(31,42,37,0.24)]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={primary.src}
+              alt={`${primary.kind === "mobile" ? "Mobile" : "Desktop fallback"} website capture`}
+              className="aspect-[9/16] w-full object-cover object-top"
+              onError={() => onImageError(primary.src)}
+            />
+          </div>
+          <figcaption className="mt-3 text-center text-[11px] font-semibold text-muted">
+            {primary.kind === "mobile" ? "Mobile website view" : "Desktop capture · mobile view unavailable"}
+          </figcaption>
+        </figure>
+      )}
     </section>
   );
 }
@@ -510,10 +506,10 @@ export default function ScanExperience({
       "Google business profile",
       "Photo quality and quantity",
       "Google review sentiment",
-      websiteLabel.startsWith("http") ? websiteLabel : website || websiteLabel,
+      websiteLabel,
       "Mobile experience",
     ],
-    [restaurantName, website, websiteLabel],
+    [restaurantName, websiteLabel],
   );
 
   const [activeIndex, setActiveIndex] = useState(0);
@@ -536,11 +532,14 @@ export default function ScanExperience({
     () => websiteCaptureEvidence(desktopScreenshot, mobileScreenshot),
     [desktopScreenshot, mobileScreenshot],
   );
-  const hasEvidence = gallery.length > 0 || availableReviews.length > 0 || websiteCaptures.length > 0;
+  const { available: readyGallery, markFailed: markPhotoFailed } = useReadyEvidence(gallery);
+  const { available: readyWebsiteCaptures, markFailed: markCaptureFailed } = useReadyEvidence(websiteCaptures);
+  const hasEvidence = readyGallery.length > 0 || availableReviews.length > 0 || readyWebsiteCaptures.length > 0;
 
   useEffect(() => {
     if (hasEvidence && evidenceReadyAtRef.current === null) {
       evidenceReadyAtRef.current = Date.now();
+      setActiveIndex((current) => current > 2 ? 2 : current);
     }
   }, [hasEvidence]);
 
@@ -579,14 +578,14 @@ export default function ScanExperience({
     return () => window.clearInterval(id);
   }, []);
 
-  // Advance the checklist while the evidence board stays visible throughout.
+  // Give every phase a full dwell. Resetting a phase restarts its full timeout.
   useEffect(() => {
     if (finishing) return;
-    const id = window.setInterval(() => {
+    const id = window.setTimeout(() => {
       setActiveIndex((i) => Math.min(i + 1, steps.length - 1));
     }, STEP_INTERVAL_MS);
-    return () => window.clearInterval(id);
-  }, [finishing, steps.length, gallery.length]);
+    return () => window.clearTimeout(id);
+  }, [activeIndex, finishing, steps.length]);
 
   // Once live evidence arrives, keep the board visible long enough for a photo
   // flip and a meaningful section of the review stream before handing off.
@@ -619,7 +618,7 @@ export default function ScanExperience({
       if (finishTimer) window.clearTimeout(finishTimer);
       if (pollTimer) window.clearInterval(pollTimer);
     };
-  }, [fetchComplete, steps.length, gallery.length, availableReviews.length, websiteCaptures.length]);
+  }, [fetchComplete, steps.length, readyGallery.length, availableReviews.length, readyWebsiteCaptures.length]);
 
   const progress = finishing
     ? 1
@@ -632,43 +631,134 @@ export default function ScanExperience({
       : fetchComplete
         ? "Finalizing scores…"
         : "Almost done…";
+  const stageIndex = Math.min(activeIndex, steps.length - 1);
+  const stageStatus = [
+    `Scanning ${restaurantName} listing`,
+    "Scanning Google business profile",
+    "Scanning restaurant photos",
+    "Scanning available Google reviews",
+    "Scanning desktop website",
+    "Scanning mobile experience",
+  ][stageIndex];
+
   const evidenceSummary = [
-    gallery.length > 0
-      ? `${Math.min(PHOTO_CARD_LIMIT, gallery.length)} photo card${Math.min(PHOTO_CARD_LIMIT, gallery.length) === 1 ? "" : "s"}`
+    readyGallery.length > 0
+      ? `${Math.min(PHOTO_CARD_LIMIT, readyGallery.length)} photo card${Math.min(PHOTO_CARD_LIMIT, readyGallery.length) === 1 ? "" : "s"}`
       : null,
-    websiteCaptures.length > 0
-      ? `${websiteCaptures.length} website view${websiteCaptures.length === 1 ? "" : "s"}`
+    readyWebsiteCaptures.length > 0
+      ? `${readyWebsiteCaptures.length} website view${readyWebsiteCaptures.length === 1 ? "" : "s"}`
       : null,
     availableReviews.length > 1
-      ? `${REVIEW_STREAM_CARD_COUNT}-card review stream`
+      ? `${REVIEW_STREAM_CARD_COUNT}-card review stream from ${availableReviews.length} available review${availableReviews.length === 1 ? "" : "s"}`
       : availableReviews.length === 1
         ? "1 available review"
         : null,
   ].filter(Boolean).join(" · ");
 
+  const waitingStage = (title: string, detail: string) => (
+    <div className="scan-stage-in flex h-full items-center justify-center px-6 pb-28 text-center">
+      <div className="rounded-2xl border border-black/5 bg-white/92 px-6 py-5 shadow-[0_16px_42px_rgba(31,42,37,0.12)]">
+        <div className="mx-auto flex w-fit items-center justify-center"><Spinner /></div>
+        <p className="mt-3 text-[13px] font-semibold text-ink">{title}</p>
+        <p className="mt-1 max-w-[320px] text-[11px] leading-relaxed text-muted">{detail}</p>
+      </div>
+    </div>
+  );
+
+  const stageContent = (() => {
+    if (stageIndex <= 1) {
+      return (
+        <div className="relative h-full min-h-0 overflow-hidden bg-[#e8e4dc]">
+          {embedSrc ? (
+            <iframe
+              title={`Map of ${restaurantName}`}
+              src={embedSrc}
+              className="absolute inset-0 h-full w-full border-0"
+              loading="eager"
+              referrerPolicy="no-referrer-when-downgrade"
+              allowFullScreen
+            />
+          ) : (
+            waitingStage("Locating on Google Maps", "The map appears as soon as a usable listing location is available.")
+          )}
+          <div className="absolute inset-x-4 top-4 z-20 sm:inset-x-6 sm:top-6">
+            <div className="mx-auto flex w-full max-w-xl items-center gap-3 rounded-full border border-black/5 bg-white/95 px-4 py-3 shadow-[0_10px_28px_rgba(31,42,37,0.12)] backdrop-blur">
+              <svg viewBox="0 0 20 20" className="h-4 w-4 shrink-0 text-muted" fill="none" aria-hidden="true">
+                <circle cx="9" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.8" />
+                <path d="M13.5 13.5 17 17" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+              <p className="truncate text-[14px] font-medium text-ink">{searchQuery}</p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (stageIndex === 2) {
+      return readyGallery.length > 0 ? (
+        <PhotoBoard photos={readyGallery} restaurantName={restaurantName} onImageError={markPhotoFailed} />
+      ) : waitingStage(
+        fetchComplete ? "No usable listing photos found" : "Loading restaurant photos",
+        "Photo cards appear only after a real image loads successfully.",
+      );
+    }
+
+    if (stageIndex === 3) {
+      return availableReviews.length > 0 ? (
+        <div className="flex h-full items-center justify-center px-4 pb-28 pt-16 sm:px-8 sm:pt-20">
+          <ReviewScroller reviews={availableReviews} placeRating={rating} variant="stage" />
+        </div>
+      ) : waitingStage(
+        fetchComplete ? "No Google review text returned" : "Loading Google review evidence",
+        "Tuvi shows only genuine review evidence returned for this listing.",
+      );
+    }
+
+    if (stageIndex === 4) {
+      return readyWebsiteCaptures.length > 0 ? (
+        <WebsiteCaptureStage
+          captures={readyWebsiteCaptures}
+          hostname={websiteLabel !== "Website / listing signals" ? websiteLabel : undefined}
+          mode="desktop"
+          onImageError={markCaptureFailed}
+        />
+      ) : waitingStage(
+        fetchComplete ? "Desktop website capture unavailable" : "Capturing the restaurant website",
+        "The website card appears only after a genuine browser capture succeeds.",
+      );
+    }
+
+    return readyWebsiteCaptures.length > 0 ? (
+      <WebsiteCaptureStage
+        captures={readyWebsiteCaptures}
+        hostname={websiteLabel !== "Website / listing signals" ? websiteLabel : undefined}
+        mode="mobile"
+        onImageError={markCaptureFailed}
+      />
+    ) : waitingStage(
+      fetchComplete ? "Mobile website capture unavailable" : "Capturing the mobile experience",
+      "Tuvi will not show a placeholder when a mobile capture is unavailable.",
+    );
+  })();
+
   return (
-    <div className={`relative min-h-[calc(100dvh-4.5rem)] overflow-hidden bg-[#f3f1ed] xl:h-[calc(100dvh-4.5rem)] xl:min-h-0 ${className}`}>
+    <div className={`relative min-h-[calc(100dvh-4.5rem)] overflow-hidden bg-[#fbf8f5] xl:h-[calc(100dvh-4.5rem)] xl:min-h-0 ${className}`}>
       <div className="relative grid min-h-[calc(100dvh-4.5rem)] w-full lg:grid-cols-[minmax(260px,320px)_minmax(0,1fr)] xl:h-full xl:min-h-0">
-        {/* Desktop — expanded checklist. Mobile keeps identity, map, media and progress above fold. */}
-        <aside className="relative z-20 order-2 hidden flex-col border-b border-black/5 bg-white/95 px-6 py-7 backdrop-blur-md sm:px-7 lg:order-1 lg:flex lg:border-b-0 lg:border-r lg:py-10 xl:h-full xl:min-h-0">
+        <aside className="relative z-20 hidden flex-col border-r border-black/5 bg-white/95 px-6 py-9 backdrop-blur-md sm:px-7 lg:flex xl:h-full xl:min-h-0">
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">Digital footprint scan</p>
-          <h1 className="mt-2 font-display text-[2rem] font-semibold leading-none tracking-[-0.04em] text-ink">
-            Scanning…
-          </h1>
+          <h1 className="mt-2 font-display text-[2rem] font-semibold leading-none tracking-[-0.04em] text-ink">Scanning…</h1>
           <p className="mt-3 text-[14px] leading-relaxed text-muted">
-            Checking Google listing, reviews, photos, website &amp; mobile signals — live.
+            Reviewing the listing, real photos, Google reviews, and desktop and mobile website captures.
           </p>
 
           <ul className="mt-8 flex-1 space-y-3.5">
             {steps.map((label, index) => {
               const done = finishing || index < activeIndex;
-              const active = !done && index === activeIndex;
+              const active = !done && index === stageIndex;
               return (
                 <li
                   key={`${index}-${label}`}
-                  className={`flex items-start gap-3 rounded-xl px-2 py-1.5 transition-colors duration-300 ${
-                    active ? "bg-[#f4f7f5]" : ""
-                  }`}
+                  className={`flex items-start gap-3 rounded-xl px-2 py-1.5 transition-colors duration-300 ${active ? "bg-[#f4f7f5]" : ""}`}
                 >
                   <span
                     className={`mt-0.5 flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full transition-all duration-300 ${
@@ -681,11 +771,7 @@ export default function ScanExperience({
                   >
                     {done ? <CheckIcon /> : active ? <Spinner /> : null}
                   </span>
-                  <span
-                    className={`pt-0.5 text-[14px] leading-snug transition-colors duration-300 ${
-                      done || active ? "font-medium text-ink" : "text-muted/55"
-                    }`}
-                  >
+                  <span className={`pt-0.5 text-[14px] leading-snug ${done || active ? "font-medium text-ink" : "text-muted/55"}`}>
                     {label}
                   </span>
                 </li>
@@ -693,112 +779,42 @@ export default function ScanExperience({
             })}
           </ul>
 
-          <div className="mt-8 border-t border-black/5 pt-5">
-            <div className="h-1.5 overflow-hidden rounded-full bg-[#ebe6de]">
-              <div
-                className="scan-progress-fill h-full rounded-full transition-[width] duration-700 ease-out"
-                style={{ width: `${Math.max(8, progress * 100)}%` }}
-              />
-            </div>
-            <div className="mt-3 flex items-center gap-2 text-[13px] text-muted">
-              <Spinner />
-              <span className="font-medium tabular-nums">{statusLine}</span>
-            </div>
-            {fetchComplete && !finishing ? (
-              <p className="mt-2 text-[12px] text-accent">Signals found — polishing your scorecard…</p>
-            ) : null}
+          <div className="mt-7 border-t border-black/5 pt-5">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">Evidence loaded</p>
+            <p className="mt-1 text-[12px] leading-relaxed text-ink/75">
+              {evidenceSummary || (hasExactPin ? "Listing pinned · visual evidence is loading" : "Gathering live listing signals")}
+            </p>
           </div>
         </aside>
 
-        {/* Map and evidence share the canvas without overlaying the listing pin. */}
-        <section className="relative order-1 grid min-h-[calc(100dvh-4.5rem)] w-full min-w-0 grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] overflow-hidden bg-[#e8e4dc] lg:order-2 lg:min-h-0 xl:h-full">
-          <header className="relative z-20 border-b border-black/5 bg-white/95 px-4 py-3 backdrop-blur sm:px-6">
-            <div className="mx-auto flex w-full max-w-xl items-center gap-3 rounded-full border border-black/5 bg-[#f7f4ef] px-4 py-2.5">
-              <svg viewBox="0 0 20 20" className="h-4 w-4 shrink-0 text-muted" fill="none" aria-hidden="true">
-                <circle cx="9" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.8" />
-                <path d="M13.5 13.5 17 17" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-              </svg>
-              <p className="truncate text-[14px] font-medium text-ink">{searchQuery}</p>
-            </div>
-          </header>
-
-          <div className="grid min-h-0 w-full min-w-0 grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_390px]">
-            <div className="relative min-h-[340px] min-w-0 overflow-hidden sm:min-h-[420px] xl:min-h-0">
-              {embedSrc ? (
-                <iframe
-                  title={`Map of ${restaurantName}`}
-                  src={embedSrc}
-                  className="absolute inset-0 h-full w-full border-0"
-                  loading="eager"
-                  referrerPolicy="no-referrer-when-downgrade"
-                  allowFullScreen
-                />
-              ) : (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="flex items-center gap-2 rounded-full bg-white/90 px-4 py-2 text-[13px] font-medium text-muted shadow-sm">
-                    <Spinner />
-                    Locating on Google Maps…
-                  </div>
-                </div>
-              )}
-              <div
-                className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/10 via-transparent to-white/10"
-                aria-hidden="true"
-              />
-              <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden" aria-hidden="true">
-                <div className="scan-beam absolute left-0 right-0 h-[2px] opacity-55" />
-              </div>
-            </div>
-
-            <aside className="relative z-20 flex min-h-0 min-w-0 flex-col gap-3 border-t border-black/5 bg-[#f7f4ef] px-3 py-3 xl:overflow-y-auto xl:border-l xl:border-t-0">
-              <div className="flex items-center justify-between gap-3 px-1" role="status" aria-live="polite">
-                <div className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">Live evidence board</p>
-                  <p className="truncate text-[12px] font-semibold text-ink">
-                    {evidenceSummary || (finishing
-                      ? "Building your scorecard"
-                      : hasExactPin
-                        ? "Pinned listing · evidence is loading"
-                        : "Gathering live listing signals")}
-                  </p>
-                </div>
-                <span className="shrink-0 text-[11px] font-semibold tabular-nums text-primary lg:hidden">
-                  <span className="sm:hidden">{secondsLeft > 0 ? `${secondsLeft}s` : finishing ? "Done" : "Finishing"}</span>
-                  <span className="hidden sm:inline">{statusLine}</span>
-                </span>
-              </div>
-
-              <div className="h-1 overflow-hidden rounded-full bg-[#e3ddd4] lg:hidden">
-                <div
-                  className="scan-progress-fill h-full rounded-full transition-[width] duration-500 ease-out"
-                  style={{ width: `${Math.max(8, progress * 100)}%` }}
-                />
-              </div>
-
-              {gallery.length > 0 ? <PhotoBoard photos={gallery} restaurantName={restaurantName} /> : null}
-              {websiteCaptures.length > 0 ? (
-                <WebsiteCaptureBoard
-                  captures={websiteCaptures}
-                  hostname={websiteLabel !== "Website / listing signals" ? websiteLabel : undefined}
-                />
-              ) : null}
-              {availableReviews.length > 0 ? (
-                <ReviewScroller reviews={availableReviews} placeRating={rating} variant="board" />
-              ) : null}
-              {!hasEvidence ? (
-                <div className="flex min-h-[180px] flex-1 items-center justify-center rounded-2xl border border-dashed border-black/10 bg-white/60 px-5 text-center">
-                  <div>
-                    <Spinner />
-                    <p className="mt-3 text-[12px] font-semibold text-ink">Verifying visual evidence</p>
-                    <p className="mt-1 text-[11px] leading-relaxed text-muted">
-                      Photo, website, and review cards appear only after their sources load.
-                    </p>
-                  </div>
-                </div>
-              ) : null}
-            </aside>
+        <main className="relative min-h-[calc(100dvh-4.5rem)] min-w-0 overflow-hidden bg-[#fbf8f5] lg:min-h-0 xl:h-full">
+          <div key={stageIndex} className="h-full min-h-[calc(100dvh-4.5rem)] lg:min-h-0">
+            {stageContent}
           </div>
-        </section>
+
+          <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden" aria-hidden="true">
+            <div className="scan-beam absolute left-0 right-0 h-[2px] opacity-60" />
+          </div>
+
+          <div className="absolute inset-x-3 bottom-3 z-30 overflow-hidden rounded-2xl border border-black/5 bg-white/96 shadow-[0_14px_36px_rgba(31,42,37,0.16)] backdrop-blur sm:inset-x-5 sm:bottom-5">
+            <div className="h-1 bg-[#e7e1d9]">
+              <div
+                className="scan-progress-fill h-full transition-[width] duration-700 ease-out"
+                style={{ width: `${Math.max(6, progress * 100)}%` }}
+              />
+            </div>
+            <div className="flex items-center gap-3 px-4 py-3.5 sm:px-5">
+              <Spinner />
+              <div className="min-w-0 flex-1" role="status" aria-live="polite">
+                <p className="truncate text-[13px] font-semibold text-ink">{stageStatus}</p>
+                <p className="mt-0.5 text-[11px] font-medium tabular-nums text-muted">{statusLine}</p>
+              </div>
+              <span className="shrink-0 rounded-full bg-[#edf4f0] px-2.5 py-1 text-[10px] font-semibold tabular-nums text-primary">
+                {finishing ? "Done" : `${stageIndex + 1}/${steps.length}`}
+              </span>
+            </div>
+          </div>
+        </main>
       </div>
     </div>
   );

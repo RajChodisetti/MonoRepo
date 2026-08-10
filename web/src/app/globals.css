@@ -319,6 +319,22 @@
   animation: scan-photo-in 0.32s ease-out both;
 }
 
+.scan-stage-in {
+  animation: scan-photo-in 0.48s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.scan-photo-collage-card {
+  transform: rotate(var(--scan-photo-rotation, 0deg));
+  transform-origin: center;
+  transition: transform 280ms ease, box-shadow 280ms ease;
+}
+
+.scan-photo-collage-card:hover,
+.scan-photo-collage-card:focus-within {
+  transform: rotate(0deg) translateY(-3px);
+  box-shadow: 0 20px 44px rgba(31, 42, 37, 0.22);
+}
+
 .scan-review-track {
   animation: scan-review-scroll var(--scan-review-duration, 24s) linear infinite;
   will-change: transform;
@@ -375,6 +391,7 @@
   .scan-photo-flip,
   .scan-photo-swap,
   .scan-capture-in,
+  .scan-stage-in,
   .scan-phone-mockup,
   .scan-map-pin,
   .scan-review-track {
