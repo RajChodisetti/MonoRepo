@@ -115,7 +115,9 @@ export default function LivePresenceEvidence({
           onUnlock={onUnlock}
         >
           <div className="rounded-xl bg-[#f7f4ef] p-3 text-[12px] leading-relaxed text-muted">
-            {social?.profiles?.length ? (
+            {locked ? (
+              <p>Verified social profile details unlock after email confirmation.</p>
+            ) : social?.profiles?.length ? (
               <ul className="space-y-2">
                 {social.profiles.map((profile) => (
                   <li key={`${profile.platform}-${profile.url}`}>

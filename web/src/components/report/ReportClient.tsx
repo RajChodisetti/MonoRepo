@@ -7,6 +7,7 @@ import { useSearchParams } from "next/navigation";
 import type { MediaCard, PlaceAttribution, RestaurantDetails } from "@/lib/places";
 import type { RestaurantReport } from "@/lib/report";
 import { parsePreviewCoordinates } from "@/lib/report-preview";
+import { hasWebsitePresentationEvidence } from "@/lib/report-presentation";
 import LiveCompetitorsCard from "@/components/report/LiveCompetitorsCard";
 import LiveHealthCard from "@/components/report/LiveHealthCard";
 import LiveIssuesCard from "@/components/report/LiveIssuesCard";
@@ -613,7 +614,7 @@ export default function ReportClient({ placeId }: { placeId: string }) {
               </ReportSection>
             ) : null}
 
-            {report.websiteScreenshot || report.websiteReview ? (
+            {hasWebsitePresentationEvidence(report) ? (
               <ReportSection
                 eyebrow="02 · Website"
                 title={aiAssisted ? "Screenshot & AI-assisted design review" : "Screenshot & design signals"}
