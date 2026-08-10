@@ -2793,3 +2793,66 @@ seeded `data/properties.json`, so it was intentionally not used to replace the
 separate healthy Andre deployment. No outbound call, email, booking, provider
 request, default-branch merge, force-push, schema change, or provider-routing
 change was performed.
+
+## 2026-08-09 — Evidence-Driven Restaurant Report and Production Release
+
+**Role:** Coordinating Product, Backend, Frontend, Test, Security, and Release
+Agent
+
+**Delivered:** Reworked the corporate site's digital-footprint scan and report
+on `fix/template-4-build` in commit `140b66c`. Scan evidence now lives outside
+the map so it cannot obscure the location pin. Only successfully loaded,
+deduplicated listing photos render; available photos rotate with restrained
+motion and respect reduced-motion preferences. All genuine returned Google
+review evidence scrolls with pause/resume controls and a reduced-motion
+fallback. The scan and final report independently show genuine desktop and
+mobile website captures, remove failed media, and restore validated coordinates,
+timeouts, the overview map, and a real listing photo.
+
+Replaced the compressed/floored score that clustered reports near 20 with a
+direct, transparent 100-point model: SEO 10, rating/reviews 30, website 20,
+ordering 10, menu 10, contact 10, and listing/photos/hours 10. Unknown evidence
+no longer receives invented midpoint points and is labeled `Not assessed` or
+`Partially assessed`; confirmed absence remains an assessed zero. The public
+contract distinguishes an observed website-quality zero from an unavailable
+audit. Fabricated competitors, unsupported revenue loss, semantic photo labels,
+and evidence-free ranking/freshness/reply claims were removed.
+
+**Production Deployment:** Pushed `140b66c` non-force to
+`origin/fix/template-4-build`, generated an immutable Git archive with SHA-256
+`7cad47fc098177bc620ab65e31c7e5d7408ba95ddfc3ccebacd617f3f2b7ba67`, and
+deployed `/opt/tuvi/releases/monorepo-140b66c`. Only `api` and
+`tuvi-website` were rebuilt and force-recreated with `--no-deps`; every tracked
+non-target container ID remained unchanged. Running images match immutable tags
+`tuvi-api:release-140b66c` and `tuvi-tuvi-website:release-140b66c`, both with
+zero restarts and the new release working directory. No migration ran; the live
+external database remained at schema `43`. The prior source release
+`/opt/tuvi/releases/monorepo-591ffd7` and rollback image tags
+`rollback-before-140b66c` were retained.
+
+**Checks Run:** Final code passed 271 Go backend tests across 45 packages, 41
+race-enabled SEO-report tests, backend vet and command builds, frontend ESLint,
+TypeScript, six focused Node tests, the 59-page Next production build, both
+Compose configuration checks, `git diff --check`, and a secret-pattern scan.
+Responsive browser QA covered 1440, 768, and 375-pixel viewports with no
+horizontal overflow or console errors. Production preflight and postflight
+verified archive provenance, resolved database/token parity, exact release
+image IDs, source and Compose working directories, schema invariance, zero
+restarts, disabled email sending, no OCR container, no fatal logs, and bounded
+internal/external home, database-backed consultation, and report-shell probes.
+
+**Business Value / Plan Fit:** Restaurant operators now see verifiable evidence
+and understandable weights instead of empty cards, obscured map context,
+fabricated comparisons, or artificially compressed scores. The release preserves
+truthfulness when evidence is partial and keeps the report usable across mobile
+and desktop.
+
+**Risks / Follow-ups:** Google Places v1 supplies at most five relevance-sorted
+reviews and ten photos, so the UI scrolls all genuine available reviews rather
+than claiming 10–15 distinct reviews. The report contract has no website-video
+artifact, so only real desktop/mobile still captures are shown. No billable live
+report/provider smoke was invoked. The VM filesystem is at 94% with about 11 GB
+free after the build; no unrelated image, cache, release, or volume pruning was
+performed without separate approval. Outreach remains disabled, and no voice,
+Andre, OCR, worker, template, admin, catalog, Redis, Postgres, schema, or
+provider-routing change was made.

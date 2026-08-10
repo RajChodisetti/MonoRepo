@@ -1,6 +1,6 @@
 # Session Summary
 
-`fix/template-4-build` now reconciles cleanly with the tested production lineage at release commit `9e89508`; active corporate and template asset trees were already byte-identical to production.
-The VM source symlink now targets immutable release `/opt/tuvi/releases/monorepo-9e89508`; runtime images remain the verified `ee553c4` set because there was no VM runtime, asset, Compose, backend, or migration delta.
-PostgreSQL remains at migration `000043`, outreach email remains disabled, no Tuvi OCR container exists, and production endpoint plus asset-checksum smokes passed with zero container restarts.
-The electrical OCR/Gemini POC remains source-only and disabled; the separate Andre deployment remains healthy and was intentionally not replaced by the incomplete monorepo Andre source.
+`fix/template-4-build` commit `140b66c` delivers unobstructed map scanning, verified rotating photos, scrolling genuine review evidence, desktop/mobile captures, and a transparent evidence-weighted 100-point score.
+Production now runs immutable release `/opt/tuvi/releases/monorepo-140b66c`; only API and corporate website containers changed, both match release image tags with zero restarts, and all non-target containers remained unchanged.
+The live external database remains at schema `43`, email sending remains disabled, no OCR container exists, and bounded internal/external database-backed smokes passed without a billable report invocation.
+Places currently provides at most five relevance-sorted reviews and ten photos; the UI shows only genuine available evidence, while website video remains unavailable because no video artifact exists.
