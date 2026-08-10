@@ -1,7 +1,7 @@
 # Session Summary
 
-The corporate scan stage now shows only real Google evidence: photos and website captures are decoded before a card appears, so the "Waiting for…" and "Capture status" placeholders are gone.
-Listing photos share one card that rests three seconds and flips to the next, and recent Google reviews moved into a rounded bottom-left review wall using the marketing pages' review tile styling.
-Desktop and mobile captures render in browser and phone frames; the fourth collage slot moved to bottom-right to clear that corner.
-Website-only release `9383f83` is live on `tuvisolutions.com` with only `tuvi-tuvi-website-1` recreated, rollback image `rollback-before-9383f83` retained, and no backend, migration, env or billing change.
-Lint, TypeScript, 19 Node tests and the 61-route build passed; the flip cadence and wall placement have not yet been confirmed visually in a browser.
+Fixed the real reason no photo cards ever appeared: a preload effect cancelled its own in-flight image loads on re-run while a dedupe ref blocked any retry, confirmed by reproducing it with local same-origin test images and a Playwright screenshot, then fixed by dropping the per-run cancellation.
+Listing cards increased to 6 with a 2s flip and 1s entrance stagger; the review wall moved from bottom-left to a top-right corner box; the homepage search dropdown no longer renders under the hero phone visual (`isolate z-10` on Hero's section).
+This round was verified with a temporary mock-data preview route and Playwright screenshots before shipping, not shipped blind — the harness was deleted before commit.
+Website-only release `5f87b00` is live on `tuvisolutions.com` with only `tuvi-tuvi-website-1` recreated, rollback image `rollback-before-5f87b00` retained, and no backend, migration, env or billing change.
+Lint, TypeScript, 20 Node tests and the 61-route build passed; the fix has not yet been confirmed against a real end-to-end scan with the Go API running.

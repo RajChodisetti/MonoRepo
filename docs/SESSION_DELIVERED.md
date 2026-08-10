@@ -2966,3 +2966,79 @@ ten-review capacity will normally show five until a richer review source exists.
 When a venue returns no photos, no captures and no reviews, the stage
 deliberately shows only the map, search chip and progress. No backend, schema,
 env, outreach, voice, DNS or billing change was made.
+
+## 2026-08-10 — Photo Preload Fix, Visual Verification, and Scan/Dropdown Tuning
+
+**Role:** Bug fix, visual verification, and follow-on tuning for the scan
+experience and homepage search, continuing the same-day real-evidence work.
+
+**Delivery:** Found and fixed the actual cause of "no photo cards ever appear,"
+which the prior two releases in this session had shipped without a browser
+check. The preload effect tied each run's `onload`/`onerror` callbacks to a
+`cancelled` flag set by that same run's cleanup, while a `requestedSrcRef` set
+permanently marked a URL as already requested. The moment the effect re-ran —
+guaranteed once under React Strict Mode in development, and again in
+production if a caller ever passes a new `photos` array identity before the
+first pass resolves — the earlier run's cleanup discarded every in-flight
+result while the ref blocked any retry, so no photo could ever reach "loaded."
+The fix removes the per-run cancellation and keeps only the ref-based dedupe,
+since a URL's decode outcome is a permanent fact independent of which render
+triggered the check.
+
+This time the fix was verified before shipping: a temporary local-only preview
+route rendered `ScanExperience` with mock same-origin data (`/people/*.jpg`,
+no backend, no Google referrer exposure), and Playwright screenshots at
+multiple viewports and time points confirmed real photos landing within ~2s,
+the review wall, and the homepage dropdown fix. The harness was deleted before
+commit.
+
+On top of the fix: listing cards increased from 5 to 6 (`LISTING_CARD_COUNT`),
+the flip hold dropped from 3s to 2s, and the entrance stagger increased from
+750ms to 1s so cards arrive one at a time. The collage grew from 8 to 9
+anchors (`EVIDENCE_BATCH_SIZE`) to hold 6 listing + 2 website + 1 competitor
+card at once with no rotation, and the right-side desktop/mobile/competitor
+cluster was spread apart after a screenshot showed their labels overlapping.
+The review wall moved from bottom-left to top-right as a genuine 300-380px
+corner box instead of a near-full-width bar, stacked below the search chip at
+every breakpoint.
+
+Separately, the homepage restaurant-search autocomplete dropdown was
+rendering underneath the `ReportMockup` phone visual in the section below it.
+Hero's own `<section>` now carries `isolate z-10`, so its entire subtree —
+including the dropdown, which is absolutely positioned and can extend past
+Hero's own padding — paints above the next section regardless of z-index
+values used internally by that section's components. Verified with
+Playwright on mobile and desktop.
+
+**Production Deployment:** User-approved website-only release `5f87b00` on
+`release/safe-ui-20260809`, extracted to `/opt/tuvi/releases/monorepo-5f87b00`,
+serving from image `tuvi-tuvi-website:release-5f87b00`
+(`sha256:a08d1698b6f9...`). Only `tuvi-tuvi-website-1` was recreated
+(`b10aca21f7c4` -> `29b0c3ed8c01`); a container-ID diff confirmed every other
+container was untouched. Restart count zero. Rollback image
+`tuvi-tuvi-website:rollback-before-5f87b00` and the prior releases remain
+available.
+
+**Checks Run:** ESLint (clean), non-incremental TypeScript (clean), 20 Node
+tests (10 in `scan-timeline.test.ts`, recomputed for the new constants), the
+61-route production build, and `git diff --check`. Post-deploy, public `/`,
+`/pricing`, `/book`, `/how-it-works`, `/resources`, and a live
+`/report/<placeId>` all returned 200 over HTTPS; the shipped Hero JS chunk
+contains the literal `isolate z-10` class string and the shipped report JS
+chunk contains the review wall's new `right-3 top-24` positioning.
+
+**Business Value / Plan Fit:** The scan experience's core value proposition —
+showing a prospect their own real Google evidence — was completely broken in
+the two prior releases despite passing every automated check; this release is
+the first to actually confirm it works, via screenshots rather than
+inference. The homepage's primary conversion action (searching a restaurant)
+no longer has its results hidden behind decorative page furniture.
+
+**Risks / Follow-ups:** The visual verification used mock local images and a
+homepage search failure state (backend was not running), not a real end-to-end
+scan against the live Go API — the specific 2s flip cadence and 1s stagger
+were visually confirmed to work as coded, but not against real Google Places
+photo latency. The desktop/mobile/competitor slot spacing was improved by one
+iteration and judged "clearly better" from a screenshot, not tuned to
+pixel-perfect spacing. No backend, schema, env, outreach, voice, DNS, or
+billing change was made.
