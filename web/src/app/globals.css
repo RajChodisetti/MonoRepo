@@ -196,6 +196,20 @@
   }
 }
 
+@keyframes scan-evidence-card-enter {
+  0% {
+    opacity: 0;
+    transform: perspective(720px) translateY(20px) rotateX(-12deg) scale(0.94);
+  }
+  45% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    transform: perspective(720px) translateY(0) rotateX(0) scale(1);
+  }
+}
+
 @keyframes scan-pin-bob {
   0%,
   100% {
@@ -281,6 +295,15 @@
   animation: scan-photo-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+.scan-evidence-card-enter {
+  opacity: 0;
+  transform-origin: 50% 80%;
+  animation-name: scan-evidence-card-enter;
+  animation-timing-function: cubic-bezier(0.2, 0.75, 0.25, 1);
+  animation-fill-mode: both;
+  will-change: opacity, transform;
+}
+
 .scan-phone-mockup {
   animation: scan-photo-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
@@ -323,9 +346,16 @@
   .scan-step-active,
   .scan-card-float,
   .scan-photo-float,
+  .scan-evidence-card-enter,
   .scan-phone-mockup,
   .scan-map-pin {
     animation: none;
+  }
+
+  .scan-evidence-card-enter {
+    opacity: 1;
+    transform: none;
+    will-change: auto;
   }
 
   .scan-progress-fill {

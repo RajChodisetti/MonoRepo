@@ -2,15 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  EVIDENCE_DWELL_MS,
+  EVIDENCE_BATCH_SIZE,
+  EVIDENCE_CARD_ENTRY_MS,
   TARGET_SCAN_SECONDS,
+  evidenceBatchPresentationMs,
+  evidenceCardEntryDelayMs,
   isScanCompletionReady,
   nextEvidenceBatchStart,
 } from "@/lib/scan-timeline";
 
 const STEP_INTERVAL_MS = 2_200;
 const FINISH_HOLD_MS = 320;
-const MAX_VISIBLE_EVIDENCE = 4;
 
 export type ScanPhoto = {
   src: string;
@@ -322,7 +324,7 @@ function EvidenceCollage({
   onImageError: (src: string) => void;
 }) {
   const safeIndex = activeIndex >= 0 && activeIndex < evidence.length ? activeIndex : 0;
-  const visible = evidence.slice(safeIndex, safeIndex + MAX_VISIBLE_EVIDENCE);
+  const visible = evidence.slice(safeIndex, safeIndex + EVIDENCE_BATCH_SIZE);
   const activeEvidence = visible[0];
 
   return (
@@ -332,21 +334,32 @@ function EvidenceCollage({
       </p>
       {visible.map((item, slotIndex) => {
         const slot = COLLAGE_SLOTS[slotIndex];
+        const entryDelayMs = evidenceCardEntryDelayMs(slotIndex);
         return (
           <div
             key={item.id}
             className={`absolute transition-all duration-500 motion-reduce:transition-none ${slot.position}`}
             style={{ zIndex: slot.zIndex }}
           >
-            <div style={{ transform: `rotate(${slot.rotate})` }}>
-              <EvidenceCard
-                evidence={item}
-                active={slotIndex === 0}
-                placeRating={placeRating}
-                imageStatus={item.src ? imageLoadStates.get(item.src) : undefined}
-                onImageLoad={onImageLoad}
-                onImageError={onImageError}
-              />
+            <div
+              className="scan-evidence-card-enter"
+              data-entry-delay-ms={entryDelayMs}
+              data-entry-duration-ms={EVIDENCE_CARD_ENTRY_MS}
+              style={{
+                animationDelay: `${entryDelayMs}ms`,
+                animationDuration: `${EVIDENCE_CARD_ENTRY_MS}ms`,
+              }}
+            >
+              <div style={{ transform: `rotate(${slot.rotate})` }}>
+                <EvidenceCard
+                  evidence={item}
+                  active={slotIndex === 0}
+                  placeRating={placeRating}
+                  imageStatus={item.src ? imageLoadStates.get(item.src) : undefined}
+                  onImageLoad={onImageLoad}
+                  onImageError={onImageError}
+                />
+              </div>
             </div>
           </div>
         );
@@ -497,7 +510,7 @@ export default function ScanExperience({
         alt: `${restaurantName} listing photo`,
       });
     }
-    // No stock-photo fallback. Keep enough real media for multiple four-second rotations.
+    // No stock-photo fallback. Keep enough real media for multiple paced rotations.
     return out.slice(0, 12);
   }, [photoUrl, photos, restaurantName]);
 
@@ -620,7 +633,8 @@ export default function ScanExperience({
     };
 
     // The first rotation always includes listing, desktop, mobile and review evidence.
-    // Additional real evidence replaces cards every four seconds.
+    // Additional real evidence replaces cards only after the staggered batch has
+    // completed and its final card has remained fully visible for three seconds.
     return [
       firstListing,
       ...websiteEvidence,
@@ -662,19 +676,26 @@ export default function ScanExperience({
 
   useEffect(() => {
     const resetId = window.setTimeout(() => setActiveEvidenceIndex(0), 0);
-    if (evidenceItems.length <= MAX_VISIBLE_EVIDENCE || finishing) {
-      return () => window.clearTimeout(resetId);
-    }
-    const id = window.setInterval(() => {
+    return () => window.clearTimeout(resetId);
+  }, [evidenceSignature]);
+
+  useEffect(() => {
+    if (evidenceItems.length <= EVIDENCE_BATCH_SIZE || finishing) return;
+    const safeBatchStart =
+      activeEvidenceIndex >= 0 && activeEvidenceIndex < evidenceItems.length
+        ? activeEvidenceIndex
+        : 0;
+    const visibleCardCount = Math.min(
+      EVIDENCE_BATCH_SIZE,
+      evidenceItems.length - safeBatchStart,
+    );
+    const id = window.setTimeout(() => {
       setActiveEvidenceIndex((index) =>
-        nextEvidenceBatchStart(index, evidenceItems.length, MAX_VISIBLE_EVIDENCE),
+        nextEvidenceBatchStart(index, evidenceItems.length, EVIDENCE_BATCH_SIZE),
       );
-    }, EVIDENCE_DWELL_MS);
-    return () => {
-      window.clearTimeout(resetId);
-      window.clearInterval(id);
-    };
-  }, [evidenceItems.length, evidenceSignature, finishing]);
+    }, evidenceBatchPresentationMs(visibleCardCount));
+    return () => window.clearTimeout(id);
+  }, [activeEvidenceIndex, evidenceItems.length, evidenceSignature, finishing]);
 
   const searchQuery = useMemo(() => {
     const cityish = (address || "").split(",").slice(-2).join(",").trim();
@@ -711,7 +732,7 @@ export default function ScanExperience({
     return () => window.clearInterval(id);
   }, []);
 
-  // Advance the review checklist independently of the four-second evidence frames.
+  // Advance the review checklist independently of the paced evidence batches.
   useEffect(() => {
     if (finishing) return;
     const id = window.setInterval(() => {
@@ -721,7 +742,7 @@ export default function ScanExperience({
   }, [finishing, steps.length]);
 
   // Cached responses still receive the full 15-second review. Evidence arriving
-  // late gets one complete four-second frame, bounded by a reasonable 23-second cap.
+  // late gets one complete staggered batch, including the final-card reading hold.
   useEffect(() => {
     let cancelled = false;
     let completing = false;
@@ -875,8 +896,9 @@ export default function ScanExperience({
             </div>
           </div>
 
-          {/* Real listing, review and website evidence rotates in four-second collage frames. */}
+          {/* Real listing, review and website evidence enters sequentially in paced collage batches. */}
           <EvidenceCollage
+            key={`evidence-collage-${activeEvidenceIndex}-${evidenceSignature}`}
             evidence={evidenceItems}
             activeIndex={activeEvidenceIndex}
             placeRating={rating}
