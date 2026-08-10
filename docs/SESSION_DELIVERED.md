@@ -2856,3 +2856,44 @@ free after the build; no unrelated image, cache, release, or volume pruning was
 performed without separate approval. Outreach remains disabled, and no voice,
 Andre, OCR, worker, template, admin, catalog, Redis, Postgres, schema, or
 provider-routing change was made.
+
+## 2026-08-09 — Correct Garlic Bread Asset and Website-Only Production Release
+
+**Role:** Coordinating Frontend, Visual Asset, Test, and Release Agent
+
+**Delivered:** Replaced the portrait mistakenly stored at
+`web/public/menu/garlic-bread.jpg` with a generated, photorealistic garlic-bread
+photo and added the cache-busted `garlic-bread-v2.jpg` path used by all Garlic
+Bread, Breadsticks, and generic bread visuals. Added a separate generated
+`churros.jpg` image and routed every Churros/Cinnamon Churros label to it, so all
+six prior callers now show imagery consistent with their menu text. The legacy
+garlic-bread path also contains the corrected image so direct or stale callers
+cannot return the portrait.
+
+**Production Deployment:** Committed the website change as `8fc04a5`, pushed it
+non-force to `origin/fix/template-4-build`, and deployed immutable source release
+`/opt/tuvi/releases/monorepo-8fc04a5`. Only `tuvi-website` was built and recreated
+with `--no-deps`; every non-target container ID remained unchanged. The running
+website image is
+`sha256:fa8b74707c4018c2bc5f081149e161d907d32b685199570e4940789423ad8b99`
+with restart count zero. The prior release
+`/opt/tuvi/releases/monorepo-140b66c` and rollback tag
+`tuvi-tuvi-website:rollback-before-8fc04a5` remain available.
+
+**Checks Run:** Added a regression test that validates the JPEG assets, rejects
+the original portrait digest, and enforces cache-busted dish-specific source
+references. Eight focused Node tests, ESLint, TypeScript, the 59-page Next
+production build, and `git diff --check` passed. Desktop and mobile browser QA
+confirmed the homepage Garlic Bread card and all affected product routes.
+Production verification confirmed exact direct and optimized asset hashes,
+compiled references, internal and public routes, release/image provenance, zero
+restarts, no fatal logs, disabled email sending, and no OCR container.
+
+**Business Value / Plan Fit:** Customers now see genuine food imagery instead
+of an unrelated person, Churros remains visually truthful, and the versioned
+Garlic Bread URL bypasses the former four-hour optimized-image cache immediately.
+
+**Risks / Follow-ups:** The VM filesystem is at 95% with about 8.9 GB free after
+the scoped build. No unrelated releases, images, caches, or volumes were pruned
+without separate approval. No API, database, migration, voice, worker, template,
+admin, catalog, Redis, OCR, email, or provider-routing change was made.

@@ -1,6 +1,7 @@
 # Session Summary
 
-`fix/template-4-build` commit `140b66c` delivers unobstructed map scanning, verified rotating photos, scrolling genuine review evidence, desktop/mobile captures, and a transparent evidence-weighted 100-point score.
-Production now runs immutable release `/opt/tuvi/releases/monorepo-140b66c`; only API and corporate website containers changed, both match release image tags with zero restarts, and all non-target containers remained unchanged.
-The live external database remains at schema `43`, email sending remains disabled, no OCR container exists, and bounded internal/external database-backed smokes passed without a billable report invocation.
-Places currently provides at most five relevance-sorted reviews and ten photos; the UI shows only genuine available evidence, while website video remains unavailable because no video artifact exists.
+`fix/template-4-build` commit `8fc04a5` replaces the portrait incorrectly used for Garlic Bread with generated, photorealistic garlic-bread imagery and adds a separate truthful Churros asset for every affected product visual.
+Production runs immutable release `/opt/tuvi/releases/monorepo-8fc04a5`; only `tuvi-website` was rebuilt and recreated, its release image has zero restarts, and all non-target container IDs remained unchanged.
+Both the cache-busted `/menu/garlic-bread-v2.jpg` URL and the legacy `/menu/garlic-bread.jpg` now serve the correct food, while Churros labels resolve to `/menu/churros.jpg`.
+Asset regression tests, ESLint, TypeScript, the 59-page Next build, responsive browser QA, direct/optimized production asset checks, and internal/external route probes passed.
+The previous source release and website rollback image remain available; email sending is disabled, no OCR container exists, and no API, database, migration, voice, worker, template, admin, catalog, Redis, or provider change occurred.
