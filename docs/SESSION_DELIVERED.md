@@ -2853,16 +2853,17 @@ a colored, bordered, Tuvi-branded two-page PDF. Google review/photo contributor
 and source links are preserved on every visible item; competitor identities are
 kept out of the durable PDF and remain live-only.
 
-**Production Deployment:** User-approved release `cce27cd` is active at
-`/opt/tuvi/releases/monorepo-cce27cd` on branch
+**Production Deployment:** User-approved source release `eb8947c` is active at
+`/opt/tuvi/releases/monorepo-eb8947c` on branch
 `release/safe-ui-20260809`. Migration 44 (`seo_unlock_contact_security`) is
 applied. Only `tuvi-api-1` and `tuvi-tuvi-website-1` were recreated; every
 non-target container ID remained unchanged. Current images are
 `tuvi-api:release-cce27cd` (`sha256:2234a46b...`) and
-`tuvi-tuvi-website:release-cce27cd` (`sha256:aa236eae...`), both running with
-restart count zero. The prior source `/opt/tuvi/releases/monorepo-04bdbc0` and
-rollback images tagged `rollback-before-cce27cd` remain available. The validated
-pre-migration PostgreSQL backup is
+`tuvi-tuvi-website:release-eb8947c` (`sha256:08511771...`), both running with
+restart count zero. The prior sources `/opt/tuvi/releases/monorepo-cce27cd` and
+`/opt/tuvi/releases/monorepo-04bdbc0`, plus rollback images tagged
+`rollback-before-eb8947c` and `rollback-before-cce27cd`, remain available. The
+validated pre-migration PostgreSQL backup is
 `/opt/tuvi/backups/monorepo-pre-04bdbc0.dump` (mode 600).
 
 **Checks Run:** All 442 backend tests across 45 packages, focused race tests,
@@ -2877,7 +2878,12 @@ Chrome QA observed the full scan-to-report transition with no console errors,
 the locked competitor/fix placeholders, and the required name/email/phone
 unlock dialog. A late production-only crash was traced to legacy `null` locked
 collections; hotfix `cce27cd` restores empty-array JSON contracts and defensively
-normalizes report collections in all scorecard consumers.
+normalizes report collections in all scorecard consumers. Follow-up `eb8947c`
+adds a regression-tested mobile-only evidence predicate, so the post-scan
+Website section remains visible when desktop capture is unavailable, and uses a
+truthful locked social-profile placeholder. The final website-only refresh kept
+the API and every non-target container unchanged; public home/report returned
+200 and locked PDF returned 401.
 
 **Business Value / Plan Fit:** Prospects now see the actual public evidence Tuvi
 reviewed, receive an auditable weighted score, and can unlock a prioritized
