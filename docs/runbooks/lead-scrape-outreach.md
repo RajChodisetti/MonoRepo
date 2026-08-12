@@ -13,16 +13,17 @@ lead-eligibility or outreach dependency.
 - `ensure_outreach_sequence_enrollment(uuid)` enrolls any restaurant with a
   non-empty name and valid email in the active approved sequence.
 - The Go worker sends only when the persisted outreach job is enabled.
-- Gmail mailbox quotas, suppression, idempotency, and delivery-attempt records
-  remain authoritative.
+- Gmail mailbox quotas, idempotency, and delivery-attempt records remain
+  authoritative.
 
 There is no OCR container, one-shot OCR job, host cron, or OCR provider key.
 
 ## Eligibility and lifecycle
 
 Eligible lifecycle states are `lead` and `emailed`. A restaurant is excluded
-or paused when it is suppressed, has expressed interest, or is in `lost`,
-`archived`, `client_onboarding`, or `active_client`.
+or paused when it has expressed interest or is in `lost`, `archived`,
+`client_onboarding`, or `active_client`. The application does not consult the
+legacy email-suppression table.
 
 Outreach does not require a generated profile, published demo, approved
 restaurant-specific campaign, or media review. Media remains a separate safety
@@ -33,8 +34,10 @@ need explicit admin approval before public use.
 
 - The active approved version may contain any positive number of steps.
 - Seed data contains three approved Tuvi Solutions messages.
-- Each step is plain text and must render exactly two URLs: the direct
-  `https://tuvisolutions.com` URL and the personalized unsubscribe URL.
+- Each step is plain text and is rendered from its saved PostgreSQL template.
+- Any unsubscribe copy or URL must be authored in that saved template. The
+  application does not append, require, validate, or render a specialized
+  unsubscribe merge tag.
 - Delay is measured from the previous confirmed delivery; seed delays are 0,
   3, and 3 days.
 - Due follow-ups are claimed before new recipients.

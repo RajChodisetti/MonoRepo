@@ -281,8 +281,6 @@ curl http://localhost:8080/readyz \
 | `PUT /api/public/v1/restaurants/{id}/reservations` | Public | Submit an idempotent reservation request in `pending` status |
 | `GET /t/click/{token}` | Public | Legacy tracked-campaign redirect (not used by plain-text sequences) |
 | `GET /t/open/{token}` | Public | Legacy tracked-campaign pixel (not used by plain-text sequences) |
-| `GET /t/unsubscribe/{token}` | Public | Show scanner-safe opt-out confirmation without changing state |
-| `POST /t/unsubscribe/{token}` | Public | Permanently suppress the immutable recipient address |
 | `GET /healthz` | Bearer + `developer` role | Process is running |
 | `GET /readyz` | Bearer + `developer` role | PostgreSQL is connected and ready |
 
@@ -341,7 +339,9 @@ approved plain-text sequence. Sending is controlled by the persisted email-job
 switch in the admin outreach portal; keep that switch disabled until sequence
 previews and recipient counts are reviewed. Redirected/dry-run deliveries remain
 at the same sequence step and are recorded as skipped instead of being marked
-emailed.
+emailed. The saved database template is the sole source of any unsubscribe copy
+or link; the application does not inject or validate an unsubscribe merge tag,
+serve an unsubscribe route, or consult the legacy suppression table.
 
 Key environment variables:
 

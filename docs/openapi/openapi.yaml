@@ -1553,7 +1553,7 @@ paths:
               $ref: '#/components/schemas/PreviewOutreachSequenceRequest'
       responses:
         '200':
-          description: Rendered steps with only the opt-out link in body copy
+          description: Rendered enabled steps from the saved database template
           content:
             application/json:
               schema:
@@ -1713,7 +1713,8 @@ paths:
         test-only subject prefix. This is a
         custom-recipient test path: it does not mutate lead/campaign delivery state,
         does not enroll recipients, and does not send to restaurant leads. Messages use
-        the shared Tuvi logo signature and retain the required opt-out link.
+        the shared Tuvi logo signature. Any unsubscribe copy is supplied by the
+        saved database template; this endpoint does not add or validate it.
       requestBody:
         required: true
         content:

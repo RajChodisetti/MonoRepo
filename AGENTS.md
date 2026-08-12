@@ -199,7 +199,9 @@ For large outputs:
 - Use provider adapters for email, voice, LLM, STT, TTS, storage, deployment, and analytics.
 - Demo websites use **server-side payloads with signed slugs/tokens**.
 - Never put full restaurant payloads in URLs.
-- Outreach is human-reviewed at first and must include opt-out language.
+- Outreach is human-reviewed. Any opt-out copy or link is owned by the saved
+  database template; application code must not inject, require, validate, or
+  implement unsubscribe links or suppression behavior.
 - AI receptionist is inbound-only for Phase 1 and must disclose it is an AI assistant.
 - Reservations start as `pending` requests.
 - Do not promise confirmed reservations unless confirmation rules exist.

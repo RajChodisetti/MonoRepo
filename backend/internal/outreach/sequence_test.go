@@ -34,6 +34,9 @@ func TestValidateAndRenderPlainText(t *testing.T) {
 	if !strings.HasPrefix(rendered.BodyText, "Hi Ava,") || strings.Contains(rendered.BodyText, "<") {
 		t.Fatalf("body = %q, want owner greeting and plain text", rendered.BodyText)
 	}
+	if strings.Contains(strings.ToLower(rendered.BodyText), "unsubscribe") {
+		t.Fatalf("body = %q, application must not append unsubscribe copy", rendered.BodyText)
+	}
 }
 
 func TestValidateSequenceTemplateAllowsAdminManagedLinks(t *testing.T) {
@@ -41,6 +44,20 @@ func TestValidateSequenceTemplateAllowsAdminManagedLinks(t *testing.T) {
 	step.BodyTextTemplate += "\n\nTuvi overview: {{website_url}}\nhttps://example.com"
 	if err := validateSequenceTemplate(step); err != nil {
 		t.Fatalf("validateSequenceTemplate() error = %v", err)
+	}
+}
+
+func TestRenderPreservesDatabaseManagedUnsubscribeCopy(t *testing.T) {
+	step := validTestStep()
+	const databaseCopy = "Unsubscribe: https://email-provider.example/preferences"
+	step.BodyTextTemplate += "\n\n" + databaseCopy
+
+	rendered, err := renderSequenceStep(step, "Harbour Cafe", "Ava")
+	if err != nil {
+		t.Fatalf("renderSequenceStep() error = %v", err)
+	}
+	if !strings.Contains(rendered.BodyText, databaseCopy) {
+		t.Fatalf("body = %q, want database-managed copy unchanged", rendered.BodyText)
 	}
 }
 

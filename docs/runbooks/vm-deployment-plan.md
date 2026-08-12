@@ -47,7 +47,8 @@ history, or logs.
 7. Recreate the services from the same release. Do not use a generic command
    that could start services not present in the reviewed Compose file.
 8. Verify health/readiness, public report partial-fallback behavior, admin
-   sequence endpoints, unsubscribe GET/POST, and aggregate enrollment counts.
+   sequence endpoints, the absence of application unsubscribe routes, and
+   aggregate enrollment counts.
 9. Confirm there is no OCR service/process/cron/config and no running legacy
    image-analysis claim.
 10. Confirm the production email job is still disabled. Enabling it is a
@@ -62,8 +63,10 @@ history, or logs.
   labeled partial result rather than holding the request
 - mobile report identity/map/photos visible above the fold
 - sequence draft/edit/reorder/approve workflow
-- plain-text preview has exactly the Tuvi site URL and unsubscribe URL
-- unsubscribe GET is non-mutating; POST suppresses idempotently
+- plain-text preview matches the saved database template; no unsubscribe copy
+  or URL is injected by application code
+- the retired application unsubscribe route returns 404 and the sender does not
+  consult or write the legacy suppression table
 - follow-up claim order precedes new-recipient claims
 - failed/unknown fake-provider attempt does not advance the step
 - confirmed fake-provider attempt advances once and schedules the configured

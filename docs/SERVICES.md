@@ -20,7 +20,7 @@ Run commands from the repository root unless noted otherwise.
 | Service | Start | Purpose |
 | --- | --- | --- |
 | PostgreSQL | `make db-up` | Source of truth for restaurants, sequence state, jobs, quotas, and consultations. |
-| API | `make api` | Private/admin APIs, public restaurant reports, unsubscribe confirmation, and delivery controls. |
+| API | `make api` | Private/admin APIs, public restaurant reports, and delivery controls. |
 | Worker | `make worker` | Durable jobs and quota-managed plain-text outreach. |
 | Scrape worker | Compose `scrape-worker` | Places-first discovery, targeted Apollo enrichment, and direct import. |
 | Admin | `cd apps/web && npm run dev` | Sequence editor, recipient progress, restaurants, scrape jobs, and controls. |
@@ -64,9 +64,11 @@ public AI review
 ```
 
 The outreach path does not require image analysis, a generated profile, a
-published demo, or a restaurant-specific approved campaign. Suppression and
-lifecycle gates still fail closed. Google listing media is resolved live with
-attribution; owner/licensed media requires explicit admin approval.
+published demo, a restaurant-specific approved campaign, or a suppression
+lookup. Lifecycle gates still fail closed. Any unsubscribe copy is owned by the
+saved database template rather than application behavior. Google listing media
+is resolved live with attribution; owner/licensed media requires explicit admin
+approval.
 
 See [lead-scrape-outreach.md](./runbooks/lead-scrape-outreach.md) for deployment
 and operational checks.
