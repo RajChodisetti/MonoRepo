@@ -213,8 +213,6 @@ func (handler *OutreachBulkHandler) writeAdHocError(w http.ResponseWriter, err e
 		handler.writeError(w, http.StatusServiceUnavailable, "outreach_not_configured", "No email provider is configured.")
 	case errors.Is(err, outreach.ErrNoContactEmail):
 		handler.writeError(w, http.StatusBadRequest, "no_contact_email", "This restaurant has no valid contact email.")
-	case errors.Is(err, outreach.ErrEmailSuppressed):
-		handler.writeError(w, http.StatusBadRequest, "email_suppressed", "This recipient has opted out of outreach email.")
 	case errors.Is(err, outreach.ErrNoCampaignDraft):
 		handler.writeError(w, http.StatusBadRequest, "no_campaign_draft", "No campaign draft exists yet for this restaurant. Create one from the Campaign tab first.")
 	default:

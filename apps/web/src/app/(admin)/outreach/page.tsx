@@ -40,7 +40,7 @@ export default function OutreachPage() {
     if (
       !confirm(
         enabled
-          ? "Enable the email job now? This starts real Gmail outreach to OCR-verified leads that also have approved profiles, published demos, approved campaigns, and valid unsuppressed email addresses."
+          ? "Enable the email job now? This starts real Gmail outreach to OCR-verified leads that also have approved profiles, published demos, approved campaigns, and valid email addresses."
           : "Disable the email job? No new Gmail delivery will begin after the current provider request finishes.",
       )
     ) {
@@ -222,7 +222,7 @@ export default function OutreachPage() {
           <li>Profile approved</li>
           <li>Demo published and unexpired</li>
           <li>Campaign approved</li>
-          <li>Contact email present and not suppressed</li>
+          <li>Contact email present</li>
           <li>No prior confirmed send (`email_sent = false`)</li>
         </ul>
         <p style={{ marginBottom: 0, marginTop: "0.85rem", color: "var(--muted)" }}>

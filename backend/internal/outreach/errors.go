@@ -23,7 +23,6 @@ var (
 	// Ad hoc send errors (single-lead / multi-select, outside the quota-managed
 	// bulk pipeline).
 	ErrNoContactEmail  = errors.New("restaurant has no valid contact email")
-	ErrEmailSuppressed = errors.New("recipient has opted out of outreach email")
 	ErrNoCampaignDraft = errors.New("no campaign draft exists yet for this restaurant")
 )
 

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -14,7 +13,6 @@ import (
 type Repository interface {
 	ListEligibleLeads(ctx context.Context, limit int) ([]EligibleLead, error)
 	CountEligibleLeads(ctx context.Context) (int, error)
-	IsEmailSuppressed(ctx context.Context, email string) (bool, error)
 	RecordAdHocEmailSent(ctx context.Context, restaurantID uuid.UUID, recipientEmail string) error
 }
 
@@ -185,19 +183,6 @@ func (repo *Postgres) CountEligibleLeads(ctx context.Context) (int, error) {
 		return 0, fmt.Errorf("count eligible leads: %w", err)
 	}
 	return count, nil
-}
-
-func (repo *Postgres) IsEmailSuppressed(ctx context.Context, email string) (bool, error) {
-	if repo.pool == nil {
-		return false, fmt.Errorf("database pool is not configured")
-	}
-
-	const query = `SELECT EXISTS (SELECT 1 FROM email_suppressions WHERE email = lower(trim($1)))`
-	var suppressed bool
-	if err := repo.pool.QueryRow(ctx, query, strings.ToLower(strings.TrimSpace(email))).Scan(&suppressed); err != nil {
-		return false, fmt.Errorf("check email suppression: %w", err)
-	}
-	return suppressed, nil
 }
 
 func (repo *Postgres) RecordAdHocEmailSent(ctx context.Context, restaurantID uuid.UUID, recipientEmail string) error {

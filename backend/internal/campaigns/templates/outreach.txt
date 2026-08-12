@@ -13,6 +13,8 @@ Open {{.RestaurantName}} demo: __CLICK_URL__
 
 Reply anytime — happy to walk you through it in 10 minutes.
 
-Prefer not to get these emails? Unsubscribe: {{.UnsubscribeURL}}
-
-— Tuvi Solutions
+--
+Thanks & Regards,
+Team Tuvi
+Tuvi Solutions
+{{.WebsiteURL}}

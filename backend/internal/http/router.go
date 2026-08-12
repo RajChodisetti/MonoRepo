@@ -213,7 +213,6 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 
 	mux.HandleFunc("GET /t/click/{token}", trackingHandler.Click)
 	mux.HandleFunc("GET /t/open/{token}", trackingHandler.Open)
-	mux.HandleFunc("GET /t/unsubscribe/{token}", trackingHandler.Unsubscribe)
 
 	mux.HandleFunc("GET /api/public/v1/demo/{slug}", demoPublicHandler.Get)
 	mux.HandleFunc("POST /api/public/v1/demo/{slug}/sessions", demoEngagementHandler.Start)

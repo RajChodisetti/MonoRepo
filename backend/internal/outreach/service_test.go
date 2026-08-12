@@ -2,6 +2,7 @@ package outreach_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -30,23 +31,25 @@ func (repo *mockRepo) CountEligibleLeads(ctx context.Context) (int, error) {
 	return repo.count, nil
 }
 
-func (repo *mockRepo) IsEmailSuppressed(ctx context.Context, email string) (bool, error) {
-	return false, nil
-}
-
 func (repo *mockRepo) RecordAdHocEmailSent(ctx context.Context, restaurantID uuid.UUID, recipientEmail string) error {
 	return nil
 }
 
-type mockEmailProvider struct{}
+type mockEmailProvider struct {
+	sent []emailprovider.SendRequest
+}
 
 func (provider *mockEmailProvider) Send(ctx context.Context, req emailprovider.SendRequest) (emailprovider.SendResult, error) {
+	provider.sent = append(provider.sent, req)
 	return emailprovider.SendResult{ProviderMessageID: "mock"}, nil
 }
 
-func testAccountPool(t *testing.T) *emailprovider.AccountPool {
+func testAccountPool(t *testing.T, providers ...emailprovider.Provider) *emailprovider.AccountPool {
 	t.Helper()
-	pool, err := emailprovider.NewAccountPool([]emailprovider.Provider{&mockEmailProvider{}}, 50, 150)
+	if len(providers) == 0 {
+		providers = []emailprovider.Provider{&mockEmailProvider{}}
+	}
+	pool, err := emailprovider.NewAccountPool(providers, 50, 150)
 	if err != nil {
 		t.Fatalf("NewAccountPool() error = %v", err)
 	}
@@ -105,6 +108,7 @@ func TestRunBulkSendUsesExistingApprovedCampaign(t *testing.T) {
 		PublicBaseURL: "https://api.example.com",
 		PublicWebURL:  "https://example.com",
 	})
+	provider := &mockEmailProvider{}
 	service := outreach.NewService(
 		&mockRepo{leads: []outreach.EligibleLead{{
 			CampaignID:   campaignID,
@@ -116,7 +120,7 @@ func TestRunBulkSendUsesExistingApprovedCampaign(t *testing.T) {
 		campaignService,
 		nil,
 		outreach.DemoTokenResolver{},
-		testAccountPool(t),
+		testAccountPool(t, provider),
 		nil,
 		config.EmailConfig{Provider: "zoho"},
 		config.OutreachConfig{
@@ -139,5 +143,17 @@ func TestRunBulkSendUsesExistingApprovedCampaign(t *testing.T) {
 	}
 	if got := campaignRepo.Campaigns[campaignID].Status; got != campaigns.StatusSent {
 		t.Fatalf("campaign status = %q, want %q", got, campaigns.StatusSent)
+	}
+	if len(provider.sent) != 1 {
+		t.Fatalf("provider sent count = %d, want 1", len(provider.sent))
+	}
+	if !strings.Contains(provider.sent[0].HTMLBody, "tuvi-solutions-logo.png") {
+		t.Fatal("bulk HTML body missing Tuvi logo signature")
+	}
+	if !strings.Contains(provider.sent[0].HTMLBody, "Team Tuvi") {
+		t.Fatal("bulk HTML body missing Tuvi signature")
+	}
+	if !strings.Contains(provider.sent[0].TextBody, "https://tuvisolutions.com") {
+		t.Fatal("bulk text body missing Tuvi website link")
 	}
 }

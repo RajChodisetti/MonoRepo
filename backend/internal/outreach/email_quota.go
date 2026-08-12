@@ -266,10 +266,15 @@ func (repo *Postgres) ClaimEmailDelivery(
 		return emailprovider.DeliveryClaim{}, fmt.Errorf("%w: outreach recipient changed before quota claim", campaigns.ErrNotEligible)
 	}
 	expectedArtifact := strings.TrimSpace(delivery.CampaignArtifactFingerprint)
+	currentContent := campaigns.EnsureOutreachSignature(campaigns.DraftContent{
+		Subject:  campaignSubject,
+		BodyHTML: campaignBodyHTML,
+		BodyText: campaignBodyText,
+	})
 	currentArtifact := emailprovider.CampaignArtifactFingerprint(
-		campaignSubject,
-		campaignBodyHTML,
-		campaignBodyText,
+		currentContent.Subject,
+		currentContent.BodyHTML,
+		currentContent.BodyText,
 		campaignDemoToken,
 	)
 	if expectedArtifact == "" || expectedArtifact != currentArtifact {
@@ -283,23 +288,6 @@ func (repo *Postgres) ClaimEmailDelivery(
 		return emailprovider.DeliveryClaim{}, fmt.Errorf("%w: restaurant already has a confirmed outreach send", campaigns.ErrNotEligible)
 	}
 
-	// Serialize the final suppression check with unsubscribe writes. The row may
-	// not exist yet, so a row lock alone cannot prevent an insertion phantom.
-	if _, err := tx.Exec(
-		ctx,
-		`SELECT pg_advisory_xact_lock(hashtextextended(lower(trim($1)), 0))`,
-		restaurantEmail,
-	); err != nil {
-		return emailprovider.DeliveryClaim{}, fmt.Errorf("lock outreach recipient suppression key: %w", err)
-	}
-	var suppressed bool
-	if err := tx.QueryRow(
-		ctx,
-		`SELECT EXISTS (SELECT 1 FROM email_suppressions WHERE email = lower(trim($1)))`,
-		restaurantEmail,
-	).Scan(&suppressed); err != nil {
-		return emailprovider.DeliveryClaim{}, fmt.Errorf("recheck outreach suppression: %w", err)
-	}
 	if err := campaigns.CheckEligibility(campaigns.EligibilityInput{
 		RestaurantEmail:         restaurantEmail,
 		OCRStatus:               ocrStatus,
@@ -310,7 +298,6 @@ func (repo *Postgres) ClaimEmailDelivery(
 		DemoExpired:             demoExpired,
 		CampaignStatus:          campaignStatus,
 		CampaignApprovalAudited: campaignApprovalAudited,
-		Suppressed:              suppressed,
 	}); err != nil {
 		return emailprovider.DeliveryClaim{}, err
 	}

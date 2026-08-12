@@ -28,14 +28,10 @@ func TestBuildDraftIncludesPlaceholders(t *testing.T) {
 		"{{TEMPLATE_1_URL}}",
 		"{{TEMPLATE_2_URL}}",
 		"{{TEMPLATE_3_URL}}",
-		"{{UNSUBSCRIBE_URL}}",
 	} {
 		if !strings.Contains(draft.BodyHTML, placeholder) {
 			t.Fatalf("body_html missing placeholder %s", placeholder)
 		}
-	}
-	if !strings.Contains(draft.BodyText, "{{UNSUBSCRIBE_URL}}") {
-		t.Fatal("body_text missing unsubscribe placeholder")
 	}
 	for _, name := range []string{"Cinematic personalized website", "Aurora personalized website", "Elysian personalized website", "Tuvi restaurant services presentation"} {
 		if !strings.Contains(draft.BodyHTML, name) {
@@ -62,12 +58,11 @@ func TestInjectTrackingReplacesPlaceholders(t *testing.T) {
 	result := campaigns.InjectTracking(
 		draft,
 		campaigns.TrackingURLs{
-			Click:       "http://localhost:8080/t/click/abc",
-			Template1:   "http://localhost:8080/t/click/one",
-			Template2:   "http://localhost:8080/t/click/two",
-			Template3:   "http://localhost:8080/t/click/three",
-			Unsubscribe: "http://localhost:8080/t/unsubscribe/xyz",
-			Open:        "http://localhost:8080/t/open/open.png",
+			Click:     "http://localhost:8080/t/click/abc",
+			Template1: "http://localhost:8080/t/click/one",
+			Template2: "http://localhost:8080/t/click/two",
+			Template3: "http://localhost:8080/t/click/three",
+			Open:      "http://localhost:8080/t/open/open.png",
 		},
 		true,
 	)

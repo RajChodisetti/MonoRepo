@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	unresolvedEmailPlaceholder = regexp.MustCompile(`(?:\{\{[^{}\r\n]+\}\}|__(?:CLICK_URL|UNSUBSCRIBE_URL|TEMPLATE_[123]_URL)__)`)
+	unresolvedEmailPlaceholder = regexp.MustCompile(`(?:\{\{[^{}\r\n]+\}\}|__(?:CLICK_URL|TEMPLATE_[123]_URL)__)`)
 	emailHTMLURLAttribute      = regexp.MustCompile(`(?i)(?:href|src)\s*=\s*["']([^"']+)["']`)
 	emailTextURL               = regexp.MustCompile(`(?i)https?://[^\s<>"']+`)
 )
@@ -75,7 +75,7 @@ func validateCanonicalTuviLink(parsed *url.URL) error {
 	path := parsed.EscapedPath()
 	switch host {
 	case "api.tuvisolutions.com":
-		for _, prefix := range []string{"/t/click/", "/t/open/", "/t/unsubscribe/"} {
+		for _, prefix := range []string{"/t/click/", "/t/open/"} {
 			if strings.HasPrefix(path, prefix) && parsed.RawQuery == "" && parsed.Fragment == "" {
 				return nil
 			}

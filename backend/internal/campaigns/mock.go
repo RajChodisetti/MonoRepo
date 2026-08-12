@@ -17,7 +17,6 @@ type Mock struct {
 	Campaigns          map[uuid.UUID]Campaign
 	Events             []Event
 	Tokens             map[string]TrackingToken
-	Suppressed         map[string]struct{}
 	SendContexts       map[uuid.UUID]SendContext
 	RestaurantContexts map[uuid.UUID]SendContext
 	SiteIndices        map[uuid.UUID]int
@@ -237,26 +236,6 @@ func (mock *Mock) GetTrackingToken(ctx context.Context, token string) (TrackingT
 		return TrackingToken{}, repository.ErrNotFound
 	}
 	return record, nil
-}
-
-func (mock *Mock) IsSuppressed(ctx context.Context, email string) (bool, error) {
-	mock.mu.Lock()
-	defer mock.mu.Unlock()
-	if mock.Suppressed == nil {
-		return false, nil
-	}
-	_, ok := mock.Suppressed[email]
-	return ok, nil
-}
-
-func (mock *Mock) AddSuppression(ctx context.Context, email, reason string) error {
-	mock.mu.Lock()
-	defer mock.mu.Unlock()
-	if mock.Suppressed == nil {
-		mock.Suppressed = make(map[string]struct{})
-	}
-	mock.Suppressed[email] = struct{}{}
-	return nil
 }
 
 func (mock *Mock) GetSendContext(ctx context.Context, campaignID uuid.UUID) (SendContext, error) {

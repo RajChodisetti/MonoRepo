@@ -357,10 +357,6 @@ func (service *Service) BuildTrackingURLs(ctx context.Context, campaign Campaign
 	if err != nil {
 		return TrackingURLs{}, err
 	}
-	unsubToken, err := newTrackingToken()
-	if err != nil {
-		return TrackingURLs{}, err
-	}
 
 	demoSiteID := campaign.DemoSiteID
 	recipientEmail := strings.ToLower(strings.TrimSpace(sendCtx.RestaurantEmail))
@@ -375,8 +371,6 @@ func (service *Service) BuildTrackingURLs(ctx context.Context, campaign Campaign
 	tokens := []TrackingToken{
 		{Token: clickToken, CampaignID: campaign.ID, RestaurantID: campaign.RestaurantID, DemoSiteID: &demoSiteID, TokenType: TokenClick, TargetURL: template1Target, RecipientEmail: recipientEmail, ExpiresAt: &expires},
 		{Token: openToken, CampaignID: campaign.ID, RestaurantID: campaign.RestaurantID, DemoSiteID: &demoSiteID, TokenType: TokenOpen, TargetURL: "", RecipientEmail: recipientEmail, ExpiresAt: &expires},
-		// Opt-out links must remain usable after the demo/click preview expires.
-		{Token: unsubToken, CampaignID: campaign.ID, RestaurantID: campaign.RestaurantID, DemoSiteID: &demoSiteID, TokenType: TokenUnsubscribe, TargetURL: "", RecipientEmail: recipientEmail, ExpiresAt: nil},
 	}
 
 	base := service.publicBase
@@ -384,10 +378,9 @@ func (service *Service) BuildTrackingURLs(ctx context.Context, campaign Campaign
 		base = "http://localhost:8080"
 	}
 	urls := TrackingURLs{
-		Click:       base + "/t/click/" + clickToken,
-		Template1:   base + "/t/click/" + clickToken,
-		Open:        base + "/t/open/" + openToken,
-		Unsubscribe: base + "/t/unsubscribe/" + unsubToken,
+		Click:     base + "/t/click/" + clickToken,
+		Template1: base + "/t/click/" + clickToken,
+		Open:      base + "/t/open/" + openToken,
 	}
 
 	content := campaign.BodyHTML + "\n" + campaign.BodyText

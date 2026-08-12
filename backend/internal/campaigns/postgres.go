@@ -652,50 +652,6 @@ func (repo *Postgres) GetTrackingToken(ctx context.Context, token string) (Track
 	return record, nil
 }
 
-func (repo *Postgres) IsSuppressed(ctx context.Context, email string) (bool, error) {
-	const query = `SELECT 1 FROM email_suppressions WHERE lower(email) = lower($1) LIMIT 1`
-	var exists int
-	err := repo.pool.QueryRow(ctx, query, strings.TrimSpace(email)).Scan(&exists)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return false, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("check suppression: %w", err)
-	}
-	return true, nil
-}
-
-func (repo *Postgres) AddSuppression(ctx context.Context, email, reason string) error {
-	email = strings.TrimSpace(email)
-	if email == "" {
-		return fmt.Errorf("add suppression: email is required")
-	}
-	tx, err := repo.pool.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin suppression: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err := tx.Exec(
-		ctx,
-		`SELECT pg_advisory_xact_lock(hashtextextended(lower(trim($1)), 0))`,
-		email,
-	); err != nil {
-		return fmt.Errorf("lock suppression recipient: %w", err)
-	}
-	const query = `
-		INSERT INTO email_suppressions (email, reason)
-		VALUES (lower($1), $2)
-		ON CONFLICT (email) DO NOTHING`
-	_, err = tx.Exec(ctx, query, email, reason)
-	if err != nil {
-		return fmt.Errorf("add suppression: %w", err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit suppression: %w", err)
-	}
-	return nil
-}
-
 func (repo *Postgres) GetSendContext(ctx context.Context, campaignID uuid.UUID) (SendContext, error) {
 	const query = `
 		SELECT

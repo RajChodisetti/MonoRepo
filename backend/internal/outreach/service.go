@@ -357,10 +357,6 @@ func (service *Service) sendLead(ctx context.Context, lead EligibleLead, bulkJob
 		return false, fmt.Errorf("load send context: %w", err)
 	}
 
-	suppressed, err := service.campaigns.IsSuppressed(ctx, sendCtx.RestaurantEmail)
-	if err != nil {
-		return false, fmt.Errorf("check suppression: %w", err)
-	}
 	if err := campaigns.CheckEligibility(campaigns.EligibilityInput{
 		RestaurantEmail:         sendCtx.RestaurantEmail,
 		OCRStatus:               sendCtx.OCRStatus,
@@ -371,7 +367,6 @@ func (service *Service) sendLead(ctx context.Context, lead EligibleLead, bulkJob
 		DemoExpired:             sendCtx.DemoExpired,
 		CampaignStatus:          campaign.Status,
 		CampaignApprovalAudited: campaign.ApprovedAt != nil && campaign.ApprovedBy != nil,
-		Suppressed:              suppressed,
 	}); err != nil {
 		return false, err
 	}
@@ -381,11 +376,12 @@ func (service *Service) sendLead(ctx context.Context, lead EligibleLead, bulkJob
 		return false, fmt.Errorf("build tracking urls: %w", err)
 	}
 
-	draft := campaigns.InjectTracking(campaigns.DraftContent{
+	canonicalContent := campaigns.EnsureOutreachSignature(campaigns.DraftContent{
 		Subject:  campaign.Subject,
 		BodyHTML: campaign.BodyHTML,
 		BodyText: campaign.BodyText,
-	}, trackingURLs, service.emailCfg.OpenTrackingEnabled)
+	})
+	draft := campaigns.InjectTracking(canonicalContent, trackingURLs, service.emailCfg.OpenTrackingEnabled)
 	if err := campaigns.ValidateRenderedEmail(draft, service.emailCfg.RequireHTTPSLinks, service.emailCfg.AllowedLinkHosts...); err != nil {
 		return false, fmt.Errorf("validate rendered outreach email: %w", err)
 	}
@@ -412,9 +408,9 @@ func (service *Service) sendLead(ctx context.Context, lead EligibleLead, bulkJob
 			BulkJobID:    bulkJobID,
 			Step:         0,
 			CampaignArtifactFingerprint: emailprovider.CampaignArtifactFingerprint(
-				campaign.Subject,
-				campaign.BodyHTML,
-				campaign.BodyText,
+				canonicalContent.Subject,
+				canonicalContent.BodyHTML,
+				canonicalContent.BodyText,
 				campaign.DemoToken,
 			),
 		},
@@ -535,13 +531,19 @@ func (service *Service) PreviewAdHoc(ctx context.Context, principal auth.Princip
 		return AdHocPreview{}, err
 	}
 
+	canonicalContent := campaigns.EnsureOutreachSignature(campaigns.DraftContent{
+		Subject:  campaign.Subject,
+		BodyHTML: campaign.BodyHTML,
+		BodyText: campaign.BodyText,
+	})
+
 	return AdHocPreview{
 		RestaurantID:   restaurantID,
 		RestaurantName: restaurant.Name,
 		RecipientEmail: restaurant.Email,
-		Subject:        campaign.Subject,
-		BodyHTML:       campaign.BodyHTML,
-		BodyText:       campaign.BodyText,
+		Subject:        canonicalContent.Subject,
+		BodyHTML:       canonicalContent.BodyHTML,
+		BodyText:       canonicalContent.BodyText,
 	}, nil
 }
 
@@ -569,24 +571,22 @@ func (service *Service) SendAdHoc(ctx context.Context, principal auth.Principal,
 		return AdHocSendResult{RestaurantID: restaurantID}, ErrNoContactEmail
 	}
 
-	suppressed, err := service.repo.IsEmailSuppressed(ctx, email)
-	if err != nil {
-		return AdHocSendResult{RestaurantID: restaurantID}, err
-	}
-	if suppressed {
-		return AdHocSendResult{RestaurantID: restaurantID}, ErrEmailSuppressed
-	}
-
 	campaign, err := service.latestCampaignContent(ctx, principal, restaurantID)
 	if err != nil {
 		return AdHocSendResult{RestaurantID: restaurantID}, err
 	}
 
+	canonicalContent := campaigns.EnsureOutreachSignature(campaigns.DraftContent{
+		Subject:  campaign.Subject,
+		BodyHTML: campaign.BodyHTML,
+		BodyText: campaign.BodyText,
+	})
+
 	_, err = service.emailProvider.Send(ctx, emailprovider.SendRequest{
 		To:       email,
-		Subject:  campaign.Subject,
-		HTMLBody: campaign.BodyHTML,
-		TextBody: campaign.BodyText,
+		Subject:  canonicalContent.Subject,
+		HTMLBody: canonicalContent.BodyHTML,
+		TextBody: canonicalContent.BodyText,
 		Metadata: map[string]string{
 			"restaurant_id": restaurantID.String(),
 			"campaign_id":   campaign.ID.String(),

@@ -3,6 +3,7 @@ package outreach_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -15,18 +16,13 @@ import (
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/restaurants"
 )
 
-type suppressibleMockRepo struct {
+type adhocMockRepo struct {
 	mockRepo
-	suppressed  map[string]bool
 	recorded    []uuid.UUID
 	recordError error
 }
 
-func (repo *suppressibleMockRepo) IsEmailSuppressed(ctx context.Context, email string) (bool, error) {
-	return repo.suppressed[email], nil
-}
-
-func (repo *suppressibleMockRepo) RecordAdHocEmailSent(ctx context.Context, restaurantID uuid.UUID, recipientEmail string) error {
+func (repo *adhocMockRepo) RecordAdHocEmailSent(ctx context.Context, restaurantID uuid.UUID, recipientEmail string) error {
 	if repo.recordError != nil {
 		return repo.recordError
 	}
@@ -47,7 +43,7 @@ func (provider *recordingEmailProvider) Send(ctx context.Context, req emailprovi
 	return emailprovider.SendResult{ProviderMessageID: "mock-adhoc"}, nil
 }
 
-func newAdHocTestService(t *testing.T, repo *suppressibleMockRepo, restaurantID uuid.UUID, email string, campaign *campaigns.Campaign, emailProvider emailprovider.Provider, disableSending bool) *outreach.Service {
+func newAdHocTestService(t *testing.T, repo *adhocMockRepo, restaurantID uuid.UUID, email string, campaign *campaigns.Campaign, emailProvider emailprovider.Provider, disableSending bool) *outreach.Service {
 	t.Helper()
 
 	restaurantsMock := &restaurants.Mock{Restaurants: map[uuid.UUID]restaurants.Restaurant{
@@ -86,7 +82,7 @@ func adminPrincipal() auth.Principal {
 
 func TestSendAdHocRejectsWhenSendingDisabled(t *testing.T) {
 	restaurantID := uuid.New()
-	repo := &suppressibleMockRepo{}
+	repo := &adhocMockRepo{}
 	provider := &recordingEmailProvider{}
 	service := newAdHocTestService(t, repo, restaurantID, "owner@example.com", nil, provider, true)
 
@@ -99,25 +95,9 @@ func TestSendAdHocRejectsWhenSendingDisabled(t *testing.T) {
 	}
 }
 
-func TestSendAdHocRejectsSuppressedEmail(t *testing.T) {
-	restaurantID := uuid.New()
-	repo := &suppressibleMockRepo{suppressed: map[string]bool{"owner@example.com": true}}
-	provider := &recordingEmailProvider{}
-	campaign := &campaigns.Campaign{ID: uuid.New(), RestaurantID: restaurantID, Subject: "Hi", BodyHTML: "<p>hi</p>", BodyText: "hi"}
-	service := newAdHocTestService(t, repo, restaurantID, "owner@example.com", campaign, provider, false)
-
-	_, err := service.SendAdHoc(context.Background(), adminPrincipal(), restaurantID)
-	if !errors.Is(err, outreach.ErrEmailSuppressed) {
-		t.Fatalf("SendAdHoc() error = %v, want ErrEmailSuppressed", err)
-	}
-	if len(provider.sent) != 0 {
-		t.Fatalf("expected no send attempt for suppressed recipient, got %d", len(provider.sent))
-	}
-}
-
 func TestSendAdHocRejectsWhenNoCampaignDraft(t *testing.T) {
 	restaurantID := uuid.New()
-	repo := &suppressibleMockRepo{}
+	repo := &adhocMockRepo{}
 	provider := &recordingEmailProvider{}
 	service := newAdHocTestService(t, repo, restaurantID, "owner@example.com", nil, provider, false)
 
@@ -129,7 +109,7 @@ func TestSendAdHocRejectsWhenNoCampaignDraft(t *testing.T) {
 
 func TestSendAdHocSendsAndRecords(t *testing.T) {
 	restaurantID := uuid.New()
-	repo := &suppressibleMockRepo{}
+	repo := &adhocMockRepo{}
 	provider := &recordingEmailProvider{}
 	campaign := &campaigns.Campaign{
 		ID: uuid.New(), RestaurantID: restaurantID,
@@ -147,6 +127,15 @@ func TestSendAdHocSendsAndRecords(t *testing.T) {
 	if len(provider.sent) != 1 || provider.sent[0].To != "owner@example.com" {
 		t.Fatalf("provider.sent = %+v, want one send to owner@example.com", provider.sent)
 	}
+	if !strings.Contains(provider.sent[0].HTMLBody, "tuvi-solutions-logo.png") {
+		t.Fatal("ad hoc HTML body missing Tuvi logo signature")
+	}
+	if !strings.Contains(provider.sent[0].HTMLBody, "Team Tuvi") {
+		t.Fatal("ad hoc HTML body missing Tuvi signature")
+	}
+	if !strings.Contains(provider.sent[0].TextBody, "https://tuvisolutions.com") {
+		t.Fatal("ad hoc text body missing Tuvi website link")
+	}
 	if len(repo.recorded) != 1 || repo.recorded[0] != restaurantID {
 		t.Fatalf("repo.recorded = %v, want [%v]", repo.recorded, restaurantID)
 	}
@@ -154,8 +143,11 @@ func TestSendAdHocSendsAndRecords(t *testing.T) {
 
 func TestSendAdHocBatchCollectsPerLeadResults(t *testing.T) {
 	sentID := uuid.New()
+	// blockedID intentionally gets no campaign entry below, so it fails with
+	// ErrNoCampaignDraft — the point of this test is that a batch reports
+	// mixed per-lead results rather than succeeding or failing as a whole.
 	blockedID := uuid.New()
-	repo := &suppressibleMockRepo{suppressed: map[string]bool{"blocked@example.com": true}}
+	repo := &adhocMockRepo{}
 	provider := &recordingEmailProvider{}
 
 	restaurantsMock := &restaurants.Mock{Restaurants: map[uuid.UUID]restaurants.Restaurant{

@@ -87,7 +87,7 @@ tags:
       Requires `internal_admin`. Sends are processed asynchronously by the worker (`make worker`).
   - name: Email Tracking
     description: |
-      Public click/open/unsubscribe endpoints (no JWT). Tokens are injected into sent emails.
+      Public click/open endpoints (no JWT). Tokens are injected into sent emails.
   - name: Public Demo
     description: Public demo payload (slug + token, no JWT)
   - name: Reservations
@@ -1368,6 +1368,41 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
 
+  /api/v1/outreach/test-send:
+    post:
+      tags: [Email Campaigns]
+      summary: Send all outreach templates to a custom recipient
+      operationId: sendOutreachTemplateTest
+      security:
+        - bearerAuth: []
+      description: |
+        Requires role `internal_admin`. Sends the conversational base outreach email plus
+        every enabled active programmed sequence step to `recipient_email`. This is a
+        custom-recipient test path: it does not mutate lead/campaign delivery state,
+        does not enroll recipients, and does not send to restaurant leads. Every sent
+        message is rendered through the shared Tuvi logo signature helper.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OutreachTemplateTestSendRequest'
+      responses:
+        '200':
+          description: Template test emails sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutreachTemplateTestSendResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          description: Email sending is disabled or outreach accounts are not configured
+
   /api/v1/outreach/email-accounts/health:
     get:
       tags: [Email Campaigns]
@@ -1474,39 +1509,6 @@ paths:
               schema:
                 type: string
                 format: binary
-
-  /t/unsubscribe/{token}:
-    parameters:
-      - $ref: '#/components/parameters/trackingToken'
-    get:
-      tags: [Email Tracking]
-      summary: Unsubscribe from outreach
-      operationId: trackEmailUnsubscribe
-      security: []
-      description: |
-        Public endpoint (no auth). Adds the normalized immutable recipient stored on
-        this tracking token to `email_suppressions`, records an `unsubscribed` event,
-        and returns a simple HTML confirmation page. New tokens never read the
-        restaurant's mutable current email address. For legacy tokens created before
-        migration `000021`, where immutable history is unavailable, it preserves the
-        previously supported opt-out by suppressing the restaurant's current normalized
-        address and records `recipient_snapshot=false` in the audit event.
-      responses:
-        '200':
-          description: HTML confirmation page
-          content:
-            text/html:
-              schema:
-                type: string
-                example: '<!DOCTYPE html><html><body><h1>Unsubscribed</h1>...</body></html>'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          description: The immutable recipient could not be proven, or suppression persistence failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
 
   /api/public/v1/site/restaurants/by-id/{id}:
     parameters:
@@ -2901,6 +2903,47 @@ components:
         pending_eligible_count:
           type: integer
 
+    OutreachTemplateTestSendRequest:
+      type: object
+      required: [recipient_email]
+      properties:
+        recipient_email:
+          type: string
+          format: email
+          description: Single custom recipient that receives every rendered outreach template.
+        restaurant_name:
+          type: string
+          description: Optional sample restaurant name used while rendering templates.
+          example: Tuvi Test Restaurant
+        owner_first_name:
+          type: string
+          description: Optional owner first name used in programmed sequence greetings.
+          example: Raj
+
+    OutreachTemplateTestSendResponse:
+      type: object
+      properties:
+        recipient_email:
+          type: string
+          format: email
+        restaurant_name:
+          type: string
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              template:
+                type: string
+                enum: [base, sequence]
+              step:
+                type: integer
+                description: Programmed sequence step number when `template=sequence`.
+              subject:
+                type: string
+              provider_message_id:
+                type: string
+
     EmailAccountHealthResponse:
       type: object
       properties:
@@ -3033,7 +3076,7 @@ components:
           type: string
         body_html:
           type: string
-          description: Draft HTML whose `{{CLICK_URL}}`, optional `{{TEMPLATE_1_URL}}`–`{{TEMPLATE_3_URL}}`, and `{{UNSUBSCRIBE_URL}}` placeholders are replaced at send time.
+          description: Draft HTML whose `{{CLICK_URL}}` and optional `{{TEMPLATE_1_URL}}`–`{{TEMPLATE_3_URL}}` placeholders are replaced at send time.
         body_text:
           type: string
         approved_at:
