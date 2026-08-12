@@ -258,7 +258,7 @@ func (repo *Postgres) ListEligibleLeads(ctx context.Context, limit int) ([]Eligi
 
 type sequenceDeliveryRepository interface {
 	GetSequenceDelivery(ctx context.Context, campaignID uuid.UUID, step int) (SequenceDelivery, error)
-	PrepareSequenceDelivery(ctx context.Context, campaignID uuid.UUID, step int, subject, bodyText string) error
+	PrepareSequenceDelivery(ctx context.Context, campaignID uuid.UUID, step int, subject, bodyHTML, bodyText string) error
 	FinalizeSequenceDelivery(ctx context.Context, finalization SequenceDeliveryFinalization) error
 	NextSequenceDueAt(ctx context.Context) (*time.Time, error)
 }
@@ -338,21 +338,21 @@ func (repo *Postgres) GetSequenceDelivery(ctx context.Context, campaignID uuid.U
 	return delivery, nil
 }
 
-func (repo *Postgres) PrepareSequenceDelivery(ctx context.Context, campaignID uuid.UUID, step int, subject, bodyText string) error {
+func (repo *Postgres) PrepareSequenceDelivery(ctx context.Context, campaignID uuid.UUID, step int, subject, bodyHTML, bodyText string) error {
 	if repo.pool == nil {
 		return fmt.Errorf("database pool is not configured")
 	}
 	result, err := repo.pool.Exec(ctx, `
 		UPDATE email_campaigns
 		SET subject = $3,
-		    body_html = '',
-		    body_text = $4,
+		    body_html = $4,
+		    body_text = $5,
 		    demo_token = '',
 		    updated_at = now()
 		WHERE id = $1
 		  AND next_step = $2
 		  AND status = 'approved'
-		  AND next_send_at <= now()`, campaignID, step, subject, bodyText)
+		  AND next_send_at <= now()`, campaignID, step, subject, bodyHTML, bodyText)
 	if err != nil {
 		return fmt.Errorf("prepare sequence delivery: %w", err)
 	}

@@ -10,8 +10,14 @@ func validTestStep() SequenceStep {
 	return SequenceStep{
 		Position: 1, Enabled: true, DelayHours: 0,
 		SubjectTemplate:  "A practical idea for {{restaurant_name}}",
-		BodyTextTemplate: "{{greeting}}\n\nLearn more: {{website_url}}\n\nOpt out: {{unsubscribe_url}}",
+		BodyTextTemplate: "{{greeting}}\n\nI had one practical idea for {{restaurant_name}}. Open to a quick note back?\n\nUnsubscribe: {{unsubscribe_url}}",
 	}
+}
+
+func noOptOutTestStep() SequenceStep {
+	step := validTestStep()
+	step.BodyTextTemplate = "{{greeting}}\n\nI had one practical idea for {{restaurant_name}}. Open to a quick note back?"
+	return step
 }
 
 func TestValidateSequenceStepsRequiresImmediateFirstEnabledStep(t *testing.T) {
@@ -22,7 +28,7 @@ func TestValidateSequenceStepsRequiresImmediateFirstEnabledStep(t *testing.T) {
 	}
 }
 
-func TestValidateAndRenderPlainTextWithExactlyTwoManagedLinks(t *testing.T) {
+func TestValidateAndRenderPlainTextWithOptOutLink(t *testing.T) {
 	step := validTestStep()
 	if err := validateSequenceSteps([]SequenceStep{step}); err != nil {
 		t.Fatalf("validateSequenceSteps() error = %v", err)
@@ -31,11 +37,31 @@ func TestValidateAndRenderPlainTextWithExactlyTwoManagedLinks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("renderSequenceStep() error = %v", err)
 	}
-	if rendered.URLCount != 2 || strings.Count(rendered.BodyText, "https://") != 2 {
-		t.Fatalf("rendered = %#v, want exactly two links", rendered)
+	if !strings.Contains(rendered.BodyText, "https://api.tuvisolutions.com/t/unsubscribe/token") {
+		t.Fatalf("rendered = %#v, want opt-out link", rendered)
 	}
 	if !strings.HasPrefix(rendered.BodyText, "Hi Ava,") || strings.Contains(rendered.BodyText, "<") {
 		t.Fatalf("body = %q, want owner greeting and plain text", rendered.BodyText)
+	}
+}
+
+func TestRenderAppendsOptOutWhenTemplateOmitsPlaceholder(t *testing.T) {
+	rendered, err := renderSequenceStep(
+		noOptOutTestStep(), "Harbour Cafe", "Ava", "https://api.tuvisolutions.com/t/unsubscribe/token",
+	)
+	if err != nil {
+		t.Fatalf("renderSequenceStep() error = %v", err)
+	}
+	if !strings.Contains(rendered.BodyText, "\n\nUnsubscribe: https://api.tuvisolutions.com/t/unsubscribe/token") {
+		t.Fatalf("body = %q, want appended opt-out footer", rendered.BodyText)
+	}
+}
+
+func TestValidateSequenceTemplateAllowsAdminManagedLinks(t *testing.T) {
+	step := validTestStep()
+	step.BodyTextTemplate += "\n\nTuvi overview: {{website_url}}\nhttps://example.com"
+	if err := validateSequenceTemplate(step); err != nil {
+		t.Fatalf("validateSequenceTemplate() error = %v", err)
 	}
 }
 
@@ -48,30 +74,6 @@ func TestRenderFallsBackToRestaurantGreeting(t *testing.T) {
 	}
 	if !strings.HasPrefix(rendered.BodyText, "Hi Harbour Cafe team,") {
 		t.Fatalf("body = %q, want restaurant fallback greeting", rendered.BodyText)
-	}
-}
-
-func TestValidateSequenceTemplateRejectsAdditionalURL(t *testing.T) {
-	step := validTestStep()
-	step.BodyTextTemplate += "\nhttps://example.com"
-	if err := validateSequenceTemplate(step); !errors.Is(err, ErrSequenceInvalid) {
-		t.Fatalf("validateSequenceTemplate() error = %v, want ErrSequenceInvalid", err)
-	}
-}
-
-func TestValidateSequenceTemplateRejectsBareAutolinkDomain(t *testing.T) {
-	step := validTestStep()
-	step.BodyTextTemplate += "\nLearn more at example.com"
-	if err := validateSequenceTemplate(step); !errors.Is(err, ErrSequenceInvalid) {
-		t.Fatalf("validateSequenceTemplate() error = %v, want ErrSequenceInvalid", err)
-	}
-}
-
-func TestValidateSequenceTemplateRejectsEmailAutolink(t *testing.T) {
-	step := validTestStep()
-	step.BodyTextTemplate += "\nReply to owner@example.com"
-	if err := validateSequenceTemplate(step); !errors.Is(err, ErrSequenceInvalid) {
-		t.Fatalf("validateSequenceTemplate() error = %v, want ErrSequenceInvalid", err)
 	}
 }
 

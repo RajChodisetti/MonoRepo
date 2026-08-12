@@ -120,6 +120,7 @@ func (provider *gmailProvider) Send(ctx context.Context, req SendRequest) (SendR
 	if err := ctx.Err(); err != nil {
 		return SendResult{}, err
 	}
+	req = EnsureTuviSignature(req)
 
 	to, originalTo := resolveRecipient(provider.email, req.To)
 	to, err := canonicalMailbox(to)

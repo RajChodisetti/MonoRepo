@@ -16,9 +16,10 @@ type BulkJobEnqueuer interface {
 }
 
 var (
-	ErrBulkJobActive   = errors.New("a bulk outreach job is already queued or running")
-	ErrNotConfigured   = errors.New("bulk outreach email accounts are not configured")
-	ErrSendingDisabled = errors.New("email sending is disabled")
+	ErrBulkJobActive         = errors.New("a bulk outreach job is already queued or running")
+	ErrNotConfigured         = errors.New("bulk outreach email accounts are not configured")
+	ErrSendingDisabled       = errors.New("email sending is disabled")
+	ErrInvalidRecipientEmail = errors.New("recipient email is invalid")
 )
 
 type BulkSendSummary struct {

@@ -239,6 +239,25 @@ func (handler *OutreachBulkHandler) ListRecipients(w http.ResponseWriter, r *htt
 	handler.writeJSON(w, http.StatusOK, result)
 }
 
+func (handler *OutreachBulkHandler) SendTemplateTest(w http.ResponseWriter, r *http.Request) {
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		handler.writeError(w, http.StatusUnauthorized, "unauthorized", "Authentication is required.")
+		return
+	}
+	var request outreach.TemplateTestSendInput
+	if err := decodeOutreachJSON(r, &request); err != nil {
+		handler.writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+	result, err := handler.service.SendTemplateTest(r.Context(), principal, request)
+	if err != nil {
+		handler.writeTemplateTestError(w, err)
+		return
+	}
+	handler.writeJSON(w, http.StatusOK, result)
+}
+
 func decodeOutreachJSON(r *http.Request, target any) error {
 	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 	if err != nil {
@@ -262,5 +281,22 @@ func (handler *OutreachBulkHandler) writeSequenceError(w http.ResponseWriter, er
 		handler.writeError(w, http.StatusBadRequest, "invalid_sequence", err.Error())
 	default:
 		handler.writeError(w, http.StatusInternalServerError, "sequence_request_failed", err.Error())
+	}
+}
+
+func (handler *OutreachBulkHandler) writeTemplateTestError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, restaurants.ErrForbidden):
+		handler.writeError(w, http.StatusForbidden, "forbidden", "Internal administrator access is required.")
+	case errors.Is(err, outreach.ErrSendingDisabled):
+		handler.writeError(w, http.StatusServiceUnavailable, "email_sending_disabled", "Email sending is disabled.")
+	case errors.Is(err, outreach.ErrNotConfigured):
+		handler.writeError(w, http.StatusServiceUnavailable, "outreach_not_configured", "Outreach email accounts are not configured.")
+	case errors.Is(err, outreach.ErrInvalidRecipientEmail):
+		handler.writeError(w, http.StatusBadRequest, "invalid_recipient_email", "recipient_email must be a single valid email address.")
+	case errors.Is(err, outreach.ErrSequenceInvalid):
+		handler.writeError(w, http.StatusBadRequest, "invalid_sequence", err.Error())
+	default:
+		handler.writeError(w, http.StatusInternalServerError, "template_test_send_failed", err.Error())
 	}
 }

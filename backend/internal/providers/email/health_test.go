@@ -2,6 +2,7 @@ package email
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -65,6 +66,10 @@ func TestHealthServiceSendsDueGmailCheck(t *testing.T) {
 	}
 	if len(provider.requests) != 1 || provider.requests[0].To != "rajchodisetti@gmail.com" {
 		t.Fatalf("requests = %+v, want one health check to configured recipient", provider.requests)
+	}
+	if !strings.Contains(provider.requests[0].HTMLBody, tuviLogoURL) ||
+		!strings.Contains(provider.requests[0].TextBody, "Team Tuvi") {
+		t.Fatalf("health message missing shared Tuvi signature: %+v", provider.requests[0])
 	}
 	if !store.recorded || !store.healthy || store.messageID != "gmail-health-message" {
 		t.Fatalf("recorded=%v healthy=%v messageID=%q", store.recorded, store.healthy, store.messageID)

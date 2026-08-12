@@ -61,6 +61,7 @@ func (provider *resendProvider) Send(ctx context.Context, req SendRequest) (Send
 	if err := ctx.Err(); err != nil {
 		return SendResult{}, err
 	}
+	req = EnsureTuviSignature(req)
 
 	to, originalTo := resolveRecipient(provider.cfg, req.To)
 	if to == "" {

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/mail"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -28,6 +30,7 @@ type Service struct {
 	emailProvider   emailprovider.Provider
 	emailCfg        config.EmailConfig
 	outreachCfg     config.OutreachConfig
+	appURLs         config.AppURLsConfig
 	enqueuer        BulkJobEnqueuer
 	log             *slog.Logger
 }
@@ -43,6 +46,7 @@ func NewService(
 	emailProvider emailprovider.Provider,
 	emailCfg config.EmailConfig,
 	outreachCfg config.OutreachConfig,
+	appURLs config.AppURLsConfig,
 	enqueuer BulkJobEnqueuer,
 	log *slog.Logger,
 ) *Service {
@@ -60,9 +64,121 @@ func NewService(
 		emailProvider:   emailProvider,
 		emailCfg:        emailCfg,
 		outreachCfg:     outreachCfg,
+		appURLs:         appURLs,
 		enqueuer:        enqueuer,
 		log:             log,
 	}
+}
+
+type TemplateTestSendInput struct {
+	RecipientEmail string `json:"recipient_email"`
+	RestaurantName string `json:"restaurant_name,omitempty"`
+	OwnerFirstName string `json:"owner_first_name,omitempty"`
+}
+
+type TemplateTestSendResult struct {
+	RecipientEmail string                    `json:"recipient_email"`
+	RestaurantName string                    `json:"restaurant_name"`
+	Items          []TemplateTestEmailResult `json:"items"`
+}
+
+type TemplateTestEmailResult struct {
+	Template          string `json:"template"`
+	Step              int    `json:"step,omitempty"`
+	Subject           string `json:"subject"`
+	ProviderMessageID string `json:"provider_message_id,omitempty"`
+}
+
+func (service *Service) SendTemplateTest(ctx context.Context, principal auth.Principal, input TemplateTestSendInput) (TemplateTestSendResult, error) {
+	if !auth.IsInternalAdmin(principal.Role) {
+		return TemplateTestSendResult{}, restaurants.ErrForbidden
+	}
+	if service.emailCfg.DisableSending {
+		return TemplateTestSendResult{}, ErrSendingDisabled
+	}
+	recipient, err := cleanTestRecipient(input.RecipientEmail)
+	if err != nil {
+		return TemplateTestSendResult{}, err
+	}
+	steps, err := service.activeSequenceSteps(ctx)
+	if err != nil {
+		return TemplateTestSendResult{}, err
+	}
+	if len(steps) == 0 {
+		return TemplateTestSendResult{}, fmt.Errorf("%w: active outreach sequence has no enabled steps", ErrSequenceInvalid)
+	}
+	var provider emailprovider.Provider
+	if service.emailPool != nil && !service.emailPool.Durable() {
+		provider = service.emailPool
+	} else {
+		builtProvider, providerErr := emailprovider.NewAccountPoolFromConfig(service.emailCfg, service.outreachCfg)
+		if providerErr != nil {
+			return TemplateTestSendResult{}, ErrNotConfigured
+		}
+		provider = builtProvider
+	}
+	name := cleanSingleLine(input.RestaurantName)
+	if name == "" {
+		name = "Tuvi Test Restaurant"
+	}
+	ownerFirstName := cleanFirstName(input.OwnerFirstName)
+	return service.sendTemplateTestEmails(ctx, provider, recipient, name, ownerFirstName, steps)
+}
+
+func (service *Service) sendTemplateTestEmails(
+	ctx context.Context,
+	provider emailprovider.Provider,
+	recipientEmail string,
+	restaurantName string,
+	ownerFirstName string,
+	steps []SequenceStep,
+) (TemplateTestSendResult, error) {
+	result := TemplateTestSendResult{
+		RecipientEmail: recipientEmail,
+		RestaurantName: restaurantName,
+		Items:          []TemplateTestEmailResult{},
+	}
+	unsubscribeURL := "https://api.tuvisolutions.com/t/unsubscribe/outreach-template-test"
+
+	for _, step := range steps {
+		rendered, err := renderSequenceStep(step, restaurantName, ownerFirstName, unsubscribeURL)
+		if err != nil {
+			return result, fmt.Errorf("render sequence step %d: %w", step.Position, err)
+		}
+		request := emailprovider.EnsureTuviSignature(emailprovider.SendRequest{
+			To:       recipientEmail,
+			Subject:  rendered.Subject,
+			TextBody: rendered.BodyText,
+			Metadata: map[string]string{
+				"purpose":       "outreach_template_test",
+				"template":      "sequence",
+				"sequence_step": fmt.Sprintf("%d", step.Position),
+			},
+		})
+		stepResult, err := provider.Send(ctx, request)
+		if err != nil {
+			return result, fmt.Errorf("send sequence step %d: %w", step.Position, err)
+		}
+		result.Items = append(result.Items, TemplateTestEmailResult{
+			Template:          "sequence",
+			Step:              step.Position,
+			Subject:           rendered.Subject,
+			ProviderMessageID: stepResult.ProviderMessageID,
+		})
+	}
+	return result, nil
+}
+
+func cleanTestRecipient(value string) (string, error) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return "", ErrInvalidRecipientEmail
+	}
+	address, err := mail.ParseAddress(trimmed)
+	if err != nil || address.Address != trimmed {
+		return "", ErrInvalidRecipientEmail
+	}
+	return strings.ToLower(address.Address), nil
 }
 
 func (service *Service) SetEmailJob(ctx context.Context, principal auth.Principal, enabled bool) (EmailJobActionResult, error) {
@@ -477,14 +593,9 @@ func (service *Service) sendLead(ctx context.Context, lead EligibleLead, bulkJob
 	if err != nil {
 		return false, fmt.Errorf("render outreach sequence step: %w", err)
 	}
-	if err := sequenceRepo.PrepareSequenceDelivery(ctx, delivery.CampaignID, delivery.Step.Position, rendered.Subject, rendered.BodyText); err != nil {
-		return false, err
-	}
-
-	result, err := service.emailPool.Send(ctx, emailprovider.SendRequest{
+	request := emailprovider.EnsureTuviSignature(emailprovider.SendRequest{
 		To:       delivery.RecipientEmail,
 		Subject:  rendered.Subject,
-		HTMLBody: "",
 		TextBody: rendered.BodyText,
 		Metadata: map[string]string{
 			"campaign_id":   delivery.CampaignID.String(),
@@ -497,14 +608,26 @@ func (service *Service) sendLead(ctx context.Context, lead EligibleLead, bulkJob
 			RestaurantID: delivery.RestaurantID,
 			BulkJobID:    bulkJobID,
 			Step:         delivery.Step.Position,
-			CampaignArtifactFingerprint: emailprovider.CampaignArtifactFingerprint(
-				rendered.Subject,
-				"",
-				rendered.BodyText,
-				"",
-			),
 		},
 	})
+	request.Delivery.CampaignArtifactFingerprint = emailprovider.CampaignArtifactFingerprint(
+		request.Subject,
+		request.HTMLBody,
+		request.TextBody,
+		"",
+	)
+	if err := sequenceRepo.PrepareSequenceDelivery(
+		ctx,
+		delivery.CampaignID,
+		delivery.Step.Position,
+		request.Subject,
+		request.HTMLBody,
+		request.TextBody,
+	); err != nil {
+		return false, err
+	}
+
+	result, err := service.emailPool.Send(ctx, request)
 	if err != nil {
 		if !result.QuotaManaged {
 			finalizeErr := sequenceRepo.FinalizeSequenceDelivery(ctx, SequenceDeliveryFinalization{

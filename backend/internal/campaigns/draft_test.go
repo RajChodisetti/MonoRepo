@@ -20,11 +20,10 @@ func TestBuildDraftIncludesPlaceholders(t *testing.T) {
 	if !strings.Contains(draft.Subject, "Aurora Cafe") {
 		t.Fatalf("subject = %q, want restaurant name", draft.Subject)
 	}
-	if !strings.Contains(draft.Subject, "live demo") {
-		t.Fatalf("subject = %q, want sales hook", draft.Subject)
+	if !strings.Contains(draft.Subject, "Quick idea") {
+		t.Fatalf("subject = %q, want conversational hook", draft.Subject)
 	}
 	for _, placeholder := range []string{
-		"{{CLICK_URL}}",
 		"{{UNSUBSCRIBE_URL}}",
 	} {
 		if !strings.Contains(draft.BodyHTML, placeholder) {
@@ -43,14 +42,9 @@ func TestBuildDraftIncludesPlaceholders(t *testing.T) {
 	if !strings.Contains(draft.BodyText, "{{UNSUBSCRIBE_URL}}") {
 		t.Fatal("body_text missing unsubscribe placeholder")
 	}
-	for _, name := range []string{"Personalized demo websites", "Services catalog"} {
-		if !strings.Contains(draft.BodyHTML, name) {
-			t.Fatalf("body_html missing service %q", name)
-		}
-	}
-	for _, name := range []string{"Cinematic personalized website", "Aurora personalized website", "Elysian personalized website", "Tuvi restaurant services presentation"} {
+	for _, name := range []string{"Personalized demo websites", "Services catalog", "Cinematic personalized website", "Aurora personalized website", "Elysian personalized website", "Tuvi restaurant services presentation"} {
 		if strings.Contains(draft.BodyHTML, name) {
-			t.Fatalf("body_html should not include old service %q", name)
+			t.Fatalf("body_html should not include service-list label %q", name)
 		}
 	}
 	for _, banned := range []string{"We already built"} {
@@ -58,17 +52,26 @@ func TestBuildDraftIncludesPlaceholders(t *testing.T) {
 			t.Fatalf("body_html should not contain %q", banned)
 		}
 	}
-	if !strings.Contains(draft.BodyHTML, "https://tuvisolutions.com/services/restaurants") {
-		t.Fatal("body_html missing Services catalog URL")
+	for _, banned := range []string{"{{CLICK_URL}}", "Preview:", "Tuvi overview", "No more emails"} {
+		if strings.Contains(draft.BodyHTML, banned) {
+			t.Fatalf("body_html should not contain %q", banned)
+		}
 	}
-	if count := strings.Count(draft.BodyHTML, "{{CLICK_URL}}"); count != 1 {
-		t.Fatalf("body_html has %d personalized demo links, want 1", count)
+	if count := strings.Count(draft.BodyHTML, "https://tuvisolutions.com"); count < 1 {
+		t.Fatalf("body_html has %d signature website links, want at least 1", count)
 	}
-	if count := strings.Count(draft.BodyHTML, "https://tuvisolutions.com/services/restaurants"); count != 1 {
-		t.Fatalf("body_html has %d Services catalog links, want 1", count)
+	if count := strings.Count(draft.BodyHTML, "href="); count != 2 {
+		t.Fatalf("body_html has %d links, want exactly 2", count)
 	}
-	if count := strings.Count(draft.BodyHTML, "href="); count != 3 {
-		t.Fatalf("body_html has %d links, want exactly 3", count)
+	for _, token := range []string{"tuvi-solutions-logo-transparent.png", "Team Tuvi", "Thanks &amp; Regards,", "tuvisolutions.com"} {
+		if !strings.Contains(draft.BodyHTML, token) {
+			t.Fatalf("body_html missing signature token %q", token)
+		}
+	}
+	for _, token := range []string{"Thanks & Regards,", "Team Tuvi", "Tuvi Solutions", "https://tuvisolutions.com"} {
+		if !strings.Contains(draft.BodyText, token) {
+			t.Fatalf("body_text missing signature token %q", token)
+		}
 	}
 }
 

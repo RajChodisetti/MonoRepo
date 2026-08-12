@@ -3,7 +3,7 @@ info:
   title: Restaurant Platform API
   description: |
     Phase 1 backend API — auth, restaurant leads, durable city scraping, human review,
-    demo sites, and **plain-text outreach sequences**.
+    demo sites, and plain-text-authored outreach sequences.
 
     This document covers the Phase 1 lead-to-outreach and reservation surface, the
     static-token company consultation API used by the corporate voice agent, and the
@@ -26,9 +26,11 @@ info:
        and lifecycle `lead` or `emailed` is enrolled unless suppressed or interested.
     4. Inspect the protected profile and demo review-preview endpoints; neither discloses
        the demo bearer token.
-    5. Create/edit/preview an outreach sequence, then approve an immutable version.
+    5. Create/edit/preview the outreach template, then make it active.
     6. `PATCH /api/v1/outreach/email-job` — enable quota-managed delivery.
-    7. Current emails are plain text and contain exactly two links: Tuvi Solutions and opt-out.
+    7. Current sequence emails use the saved plain-text body as the canonical copy.
+       The sender adds a multipart HTML alternative with the shared Tuvi logo signature;
+       templates do not store or duplicate signature markup.
        `GET /t/unsubscribe/{token}` confirms intent; `POST` records suppression.
 
     ## Bulk outreach (one-click)
@@ -1417,13 +1419,13 @@ paths:
   /api/v1/outreach/sequences:
     get:
       tags: [Email Campaigns]
-      summary: List outreach sequence versions
+      summary: List outreach templates
       operationId: listOutreachSequences
       security:
         - bearerAuth: []
       responses:
         '200':
-          description: Active sequence ID and all immutable/draft versions
+          description: Active template ID and stored template rows
           content:
             application/json:
               schema:
@@ -1434,7 +1436,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
     post:
       tags: [Email Campaigns]
-      summary: Create an editable sequence version
+      summary: Create an editable outreach template
       operationId: createOutreachSequence
       security:
         - bearerAuth: []
@@ -1446,7 +1448,7 @@ paths:
               $ref: '#/components/schemas/CreateOutreachSequenceRequest'
       responses:
         '201':
-          description: Draft sequence version
+          description: Editable outreach template
           content:
             application/json:
               schema:
@@ -1464,14 +1466,16 @@ paths:
           format: uuid
     put:
       tags: [Email Campaigns]
-      summary: Replace a draft sequence's name and steps
+      summary: Replace an editable outreach template's name and steps
       operationId: updateOutreachSequence
       security:
         - bearerAuth: []
       description: |
         Steps are contiguous and 1-based. The first enabled step must use `delay_hours=0`.
-        Every plain-text body must contain each managed placeholder exactly once:
-        `{{website_url}}` and `{{unsubscribe_url}}`; no raw URL or HTML is accepted.
+        Bodies are plain text. Supported merge tags are `{{greeting}}`,
+        `{{restaurant_name}}`, `{{website_url}}`, and `{{unsubscribe_url}}`.
+        If `{{unsubscribe_url}}` is omitted, the sender appends the delivery opt-out
+        footer automatically.
       requestBody:
         required: true
         content:
@@ -1502,14 +1506,14 @@ paths:
           format: uuid
     post:
       tags: [Email Campaigns]
-      summary: Approve and activate an immutable sequence version
+      summary: Make an outreach template active
       operationId: approveOutreachSequence
       security:
         - bearerAuth: []
       description: |
-        Approval archives the prior active version. Untouched recipients (`current_step=0`
+        Activation archives the prior active row. Untouched recipients (`current_step=0`
         with no delivery attempt/event) are atomically rebased to the new first enabled step;
-        any recipient with delivery history remains pinned to the original version.
+        any recipient with delivery history remains pinned to the original row.
       requestBody:
         required: true
         content:
@@ -1552,7 +1556,7 @@ paths:
               $ref: '#/components/schemas/PreviewOutreachSequenceRequest'
       responses:
         '200':
-          description: Rendered steps with exactly two links per body
+          description: Rendered steps with only the opt-out link in body copy
           content:
             application/json:
               schema:
@@ -1601,7 +1605,8 @@ paths:
         evidence, lifecycle `lead` or `emailed`, no expressed interest, and no suppression.
         Profile, demo, image-analysis, and legacy campaign readiness are not prerequisites.
 
-        Every current message is `text/plain` with no HTML body or open pixel. Rendering
+        Every current sequence body is authored as plain text and rendered with a small
+        HTML alternative only for line breaks and the Tuvi logo signature. Rendering
         permits exactly `https://tuvisolutions.com` and the personalized unsubscribe URL.
         The first enabled step is immediate; each later enabled step uses its configured
         delay (the approved default sequence uses 72 hours). All unfinished follow-ups,
@@ -1697,6 +1702,42 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+
+  /api/v1/outreach/test-send:
+    post:
+      tags: [Email Campaigns]
+      summary: Send outreach templates to a custom test recipient
+      operationId: sendOutreachTemplateTest
+      security:
+        - bearerAuth: []
+      description: |
+        Requires role `internal_admin`. Sends every enabled step from the same active saved
+        sequence used by live outreach to `recipient_email`, with no extra base message or
+        test-only subject prefix. This is a
+        custom-recipient test path: it does not mutate lead/campaign delivery state,
+        does not enroll recipients, and does not send to restaurant leads. Messages use
+        the shared Tuvi logo signature and retain the required opt-out link.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OutreachTemplateTestSendRequest'
+      responses:
+        '200':
+          description: Template test emails sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutreachTemplateTestSendResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          description: Email sending is disabled or outreach accounts are not configured
 
   /api/v1/outreach/email-accounts/health:
     get:
@@ -4256,7 +4297,7 @@ components:
         body_text_template:
           type: string
           maxLength: 10000
-          description: Plain text with exactly one website_url and one unsubscribe_url managed placeholder.
+          description: Plain text template body. The sender appends the delivery opt-out footer automatically when unsubscribe_url is omitted.
         created_at:
           type: string
           format: date-time
@@ -4370,7 +4411,7 @@ components:
           type: string
         url_count:
           type: integer
-          enum: [2]
+          description: Number of rendered URLs in the plain-text body.
 
     OutreachSequencePreview:
       type: object
@@ -4548,6 +4589,47 @@ components:
           type: integer
         pending_eligible_count:
           type: integer
+
+    OutreachTemplateTestSendRequest:
+      type: object
+      required: [recipient_email]
+      properties:
+        recipient_email:
+          type: string
+          format: email
+          description: Single custom recipient that receives every rendered outreach template.
+        restaurant_name:
+          type: string
+          description: Optional sample restaurant name used while rendering templates.
+          example: Tuvi Test Restaurant
+        owner_first_name:
+          type: string
+          description: Optional owner first name used in programmed sequence greetings.
+          example: Raj
+
+    OutreachTemplateTestSendResponse:
+      type: object
+      properties:
+        recipient_email:
+          type: string
+          format: email
+        restaurant_name:
+          type: string
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              template:
+                type: string
+                enum: [sequence]
+              step:
+                type: integer
+                description: Programmed sequence step number when `template=sequence`.
+              subject:
+                type: string
+              provider_message_id:
+                type: string
 
     EmailAccountHealthResponse:
       type: object

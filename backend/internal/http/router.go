@@ -109,6 +109,7 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 		emailProvider,
 		cfg.Email,
 		cfg.Outreach,
+		cfg.AppURLs,
 		&jobs.OutreachBulkEnqueuer{Queue: jobQueue},
 		log,
 	)
@@ -237,6 +238,7 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	mux.Handle("POST /api/v1/outreach/sequences/{id}/approve", protectInternalAdmin(http.HandlerFunc(outreachBulkHandler.ApproveSequence)))
 	mux.Handle("POST /api/v1/outreach/sequences/{id}/preview", protectInternalAdmin(http.HandlerFunc(outreachBulkHandler.PreviewSequence)))
 	mux.Handle("GET /api/v1/outreach/recipients", protectInternalAdmin(http.HandlerFunc(outreachBulkHandler.ListRecipients)))
+	mux.Handle("POST /api/v1/outreach/test-send", protectInternalAdmin(http.HandlerFunc(outreachBulkHandler.SendTemplateTest)))
 	mux.Handle("GET /api/v1/outreach/email-accounts/health", protectInternalAdmin(http.HandlerFunc(emailHealthHandler.Status)))
 	mux.Handle("GET /api/v1/developer/schema", protectInternalAdmin(http.HandlerFunc(developerHandler.Schema)))
 	mux.Handle("POST /api/v1/developer/sql", protectInternalAdmin(http.HandlerFunc(developerHandler.ExecuteSQL)))

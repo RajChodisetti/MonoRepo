@@ -11,21 +11,6 @@ export const ALLOWED_MERGE_TAGS = new Set([
 
 const MERGE_TAG_PATTERN = /{{\s*([a-z_]+)\s*}}/gi;
 const HTML_TAG_PATTERN = /<\s*\/?\s*[a-z][^>]*>/i;
-const RAW_LINK_PATTERN = /(?:https?:\/\/|www\.)[^\s<]+|\b(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/[^\s<]*)?/i;
-
-function occurrences(value: string, token: string): number {
-  return value.split(token).length - 1;
-}
-
-export function countTemplateLinks(step: OutreachSequenceStep): number {
-  const combined = `${step.subject_template}\n${step.body_text_template}`;
-  const mergeLinks =
-    occurrences(combined, WEBSITE_TOKEN) +
-    occurrences(combined, UNSUBSCRIBE_TOKEN);
-  const rawLinks =
-    combined.match(new RegExp(RAW_LINK_PATTERN.source, "gi"))?.length ?? 0;
-  return mergeLinks + rawLinks;
-}
 
 export function validateSequenceStep(
   step: OutreachSequenceStep,
@@ -49,22 +34,6 @@ export function validateSequenceStep(
     .filter((tag) => !ALLOWED_MERGE_TAGS.has(tag));
   if (unknownTags.length > 0) {
     issues.push(`Unknown merge tag: {{${Array.from(new Set(unknownTags)).join("}}, {{")}}}.`);
-  }
-
-  if (occurrences(body, WEBSITE_TOKEN) !== 1) {
-    issues.push(`Include ${WEBSITE_TOKEN} exactly once in the message.`);
-  }
-  if (occurrences(body, UNSUBSCRIBE_TOKEN) !== 1) {
-    issues.push(`Include ${UNSUBSCRIBE_TOKEN} exactly once in the message.`);
-  }
-  if (subject.includes(WEBSITE_TOKEN) || subject.includes(UNSUBSCRIBE_TOKEN)) {
-    issues.push("Keep both links in the message body, not the subject.");
-  }
-  if (RAW_LINK_PATTERN.test(`${subject}\n${body}`)) {
-    issues.push("Remove typed URLs; use only the website and unsubscribe merge tags.");
-  }
-  if (countTemplateLinks(step) !== 2) {
-    issues.push("Each enabled email must render exactly two links.");
   }
 
   if (!Number.isInteger(step.delay_hours) || step.delay_hours < 0) {
@@ -102,7 +71,7 @@ export function renderLocalTemplate(
   return value
     .replaceAll("{{greeting}}", greeting)
     .replaceAll("{{restaurant_name}}", restaurant)
-    .replaceAll(WEBSITE_TOKEN, "https://tuvisolutions.com")
+    .replaceAll(WEBSITE_TOKEN, "")
     .replaceAll(
       UNSUBSCRIBE_TOKEN,
       "https://tuvisolutions.com/unsubscribe/sample-token",
@@ -118,14 +87,6 @@ export function createBlankStep(position: number): OutreachSequenceStep {
     body_text_template: `{{greeting}}
 
 Write the next short message here.
-
-See how we help restaurants:
-{{website_url}}
-
-Best,
-The Tuvi Solutions team
-
-Business outreach from Tuvi Solutions
-Opt out: {{unsubscribe_url}}`,
+`,
   };
 }

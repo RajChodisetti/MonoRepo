@@ -3,80 +3,30 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Your live restaurant demo</title>
+<title>Quick idea for {{.RestaurantName}}</title>
 </head>
-<body style="margin:0;padding:0;background:#f4f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#111111;">
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f5f7;padding:28px 12px;">
-    <tr>
-      <td align="center">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#ffffff;border:1px solid #e6e8ec;border-radius:16px;overflow:hidden;">
-
-          <!-- Header -->
-          <tr>
-            <td style="background:#111111;padding:0;">
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-                <tr>
-                  <td style="height:4px;background:#d4a853;font-size:0;line-height:0;">&nbsp;</td>
-                </tr>
-                <tr>
-                  <td align="center" style="padding:22px 24px 18px;">
-                    <p style="margin:0;font-size:11px;letter-spacing:0.22em;font-weight:700;color:#d4a853;text-transform:uppercase;">Tuvi Solutions</p>
-                    <p style="margin:8px 0 0;font-size:11px;letter-spacing:0.14em;font-weight:600;color:#9ca3af;text-transform:uppercase;">Restaurant growth platform</p>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-
-          <!-- Greeting + who we are -->
-          <tr>
-            <td style="padding:28px 24px 8px;">
-              <p style="margin:0;font-size:15px;line-height:1.55;color:#5b6470;">
-                Hi there — missed calls and outdated websites can make it harder for guests to request a table.
-              </p>
-              <p style="margin:12px 0 0;font-size:15px;line-height:1.55;color:#374151;">
-                <strong style="color:#111111;">Tuvi Solutions</strong> builds restaurant tools to help with that — and we've already created a
-                live website preview for <strong style="color:#111111;">{{.RestaurantName}}</strong>, plus a reservation-request form and details on our AI receptionist.
-              </p>
-            </td>
-          </tr>
-
-          <!-- Clickable services -->
-          <tr>
-            <td style="padding:16px 24px 8px;">
-              <p style="margin:0 0 10px;font-size:11px;letter-spacing:0.14em;font-weight:700;color:#6b7280;text-transform:uppercase;">Links for {{.RestaurantName}}</p>
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #e6e8ec;border-radius:12px;overflow:hidden;">
-                {{range $i, $svc := .Services}}
-                <tr>
-                  <td style="padding:14px 16px;{{if ne $i 0}}border-top:1px solid #e6e8ec;{{end}}">
-                    <a href="{{.URL}}" style="color:#111111;text-decoration:none;font-size:14px;font-weight:700;line-height:1.3;">
-                      {{.Title}} →
-                    </a>
-                    <p style="margin:4px 0 0;font-size:12px;line-height:1.45;color:#6b7280;">{{.Description}}</p>
-                  </td>
-                </tr>
-                {{end}}
-              </table>
-            </td>
-          </tr>
-
-          <!-- Close + footer -->
-          <tr>
-            <td style="padding:20px 24px 28px;">
-              <p style="margin:0;font-size:13px;line-height:1.55;color:#5b6470;">
-                Reply anytime — happy to walk you through it in 10 minutes.
-              </p>
-              <p style="margin:14px 0 0;font-size:12px;line-height:1.5;color:#9ca3af;">
-                Prefer not to get these emails?
-                <a href="__UNSUBSCRIBE_URL__" style="color:#6b7280;text-decoration:underline;">Unsubscribe</a>.
-              </p>
-              <p style="margin:14px 0 0;font-size:13px;color:#111111;font-weight:600;">— Tuvi Solutions</p>
-            </td>
-          </tr>
-
-        </table>
-      </td>
-    </tr>
-  </table>
+<body style="margin:0;padding:0;background:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#111111;">
+  <div style="font-size:15px;line-height:1.55;color:#111111;max-width:620px;">
+    <p style="margin:0 0 14px;">Hi there,</p>
+    <p style="margin:0 0 14px;">
+      I was looking at {{.RestaurantName}} and put together a quick preview of how the restaurant could show up with a cleaner website and easier reservation flow.
+    </p>
+    <p style="margin:0 0 14px;">
+      This is not a long pitch. I mainly wanted to share the preview and see if it is worth a short conversation.
+    </p>
+    <p style="margin:0 0 14px;">Would it make sense to send over a couple of notes on what I saw?</p>
+    <p style="margin:18px 0 0;font-size:12px;line-height:1.5;color:#777777;">
+      Unsubscribe: <a href="__UNSUBSCRIBE_URL__" style="color:#777777;text-decoration:underline;">__UNSUBSCRIBE_URL__</a>
+    </p>
+  </div>
+  <div data-tuvi-outreach-signature="true" style="margin-top:24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+    <img src="{{.LogoURL}}" width="92" height="92" alt="Tuvi Solutions" style="display:block;width:92px;height:92px;border:0;margin:0 0 12px 0;background:transparent;" />
+    <p style="margin:0;font-size:15px;line-height:1.25;font-weight:700;color:#111111;">Thanks &amp; Regards,</p>
+    <p style="margin:2px 0 0;font-size:15px;line-height:1.25;font-weight:700;color:#111111;">Team Tuvi</p>
+    <p style="margin:4px 0 0;font-size:15px;line-height:1.25;font-weight:700;color:#d71920;">Tuvi Solutions</p>
+    <p style="margin:4px 0 0;font-size:14px;line-height:1.25;">
+      <a href="{{.WebsiteURL}}" style="color:#1a5fb4;text-decoration:underline;">www.tuvisolutions.com</a>
+    </p>
+  </div>
 </body>
 </html>

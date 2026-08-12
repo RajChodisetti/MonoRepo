@@ -46,7 +46,7 @@ func BuildDraft(input DraftInput) DraftContent {
 		if presentationURL == "" {
 			presentationURL = defaultPresentationURL
 		}
-		return DraftContent{
+		return EnsureOutreachSignature(DraftContent{
 			Subject: outreachSubject(name),
 			BodyHTML: fmt.Sprintf(
 				`<p>A live demo for %s.</p><ul><li><a href="{{CLICK_URL}}">Personalized demo websites</a></li><li><a href="%s">Services catalog</a></li></ul><p><a href="{{UNSUBSCRIBE_URL}}">Unsubscribe</a>.</p>`,
@@ -54,9 +54,9 @@ func BuildDraft(input DraftInput) DraftContent {
 				html.EscapeString(presentationURL),
 			),
 			BodyText: fmt.Sprintf("Personalized demo websites: {{CLICK_URL}}\nServices catalog: %s\nUnsubscribe: {{UNSUBSCRIBE_URL}}\n", presentationURL),
-		}
+		})
 	}
-	return draft
+	return EnsureOutreachSignature(draft)
 }
 
 func buildDemoURL(webBase, slug, demoToken string) string {

@@ -85,6 +85,7 @@ func NewWorker(ctx context.Context) (*WorkerApp, error) {
 		emailProvider,
 		cfg.Email,
 		cfg.Outreach,
+		cfg.AppURLs,
 		nil,
 		log,
 	)

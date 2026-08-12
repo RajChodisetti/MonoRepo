@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/auth"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/campaigns"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/outreach"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/config"
@@ -19,8 +20,10 @@ import (
 type mockRepo struct {
 	count         int
 	leads         []outreach.EligibleLead
+	activeSteps   []outreach.SequenceStep
 	delivery      outreach.SequenceDelivery
 	prepared      outreach.RenderedSequenceStep
+	preparedHTML  string
 	finalizations []outreach.SequenceDeliveryFinalization
 	nextDue       *time.Time
 }
@@ -31,12 +34,17 @@ func (repo *mockRepo) ListEligibleLeads(context.Context, int) ([]outreach.Eligib
 
 func (repo *mockRepo) CountEligibleLeads(context.Context) (int, error) { return repo.count, nil }
 
+func (repo *mockRepo) ListActiveSequenceSteps(context.Context) ([]outreach.SequenceStep, error) {
+	return repo.activeSteps, nil
+}
+
 func (repo *mockRepo) GetSequenceDelivery(context.Context, uuid.UUID, int) (outreach.SequenceDelivery, error) {
 	return repo.delivery, nil
 }
 
-func (repo *mockRepo) PrepareSequenceDelivery(_ context.Context, _ uuid.UUID, step int, subject, bodyText string) error {
+func (repo *mockRepo) PrepareSequenceDelivery(_ context.Context, _ uuid.UUID, step int, subject, bodyHTML, bodyText string) error {
 	repo.prepared = outreach.RenderedSequenceStep{Position: step, Subject: subject, BodyText: bodyText}
+	repo.preparedHTML = bodyHTML
 	return nil
 }
 
@@ -86,9 +94,17 @@ func newSequenceService(t *testing.T, repo *mockRepo, provider *mockEmailProvide
 		nil,
 		config.EmailConfig{Provider: "fake"},
 		config.OutreachConfig{BulkMax: 150},
+		config.AppURLsConfig{
+			PresentationSiteURL: "https://tuvisolutions.com/services/restaurants",
+			PublicMarketingURL:  "https://tuvisolutions.com",
+		},
 		nil,
 		nil,
 	)
+}
+
+func internalAdminPrincipal() auth.Principal {
+	return auth.Principal{UserID: uuid.New(), Role: auth.RoleInternalAdmin}
 }
 
 func eligibleSequenceRepo() *mockRepo {
@@ -98,10 +114,11 @@ func eligibleSequenceRepo() *mockRepo {
 	step := outreach.SequenceStep{
 		ID: uuid.New(), SequenceID: uuid.New(), Position: 1, Enabled: true,
 		SubjectTemplate:  "A practical idea for {{restaurant_name}}",
-		BodyTextTemplate: "{{greeting}}\n\nLearn more: {{website_url}}\n\nOpt out: {{unsubscribe_url}}",
+		BodyTextTemplate: "{{greeting}}\n\nI had one practical idea for {{restaurant_name}}. Open to a quick note back?\n\nUnsubscribe: {{unsubscribe_url}}",
 	}
 	return &mockRepo{
-		leads: []outreach.EligibleLead{{CampaignID: campaignID, RestaurantID: restaurantID, Step: 1}},
+		leads:       []outreach.EligibleLead{{CampaignID: campaignID, RestaurantID: restaurantID, Step: 1}},
+		activeSteps: []outreach.SequenceStep{step},
 		delivery: outreach.SequenceDelivery{
 			CampaignID: campaignID, RestaurantID: restaurantID,
 			RestaurantName: "Test Cafe", RecipientEmail: "owner@example.com",
@@ -113,7 +130,7 @@ func eligibleSequenceRepo() *mockRepo {
 	}
 }
 
-func TestRunBulkSendFinalizesAcceptedSequenceAndSendsPlainText(t *testing.T) {
+func TestRunBulkSendFinalizesAcceptedSequenceWithSharedSignature(t *testing.T) {
 	repo := eligibleSequenceRepo()
 	provider := &mockEmailProvider{result: emailprovider.SendResult{ProviderMessageID: "mock"}}
 	service := newSequenceService(t, repo, provider)
@@ -125,14 +142,27 @@ func TestRunBulkSendFinalizesAcceptedSequenceAndSendsPlainText(t *testing.T) {
 	if summary.Sent != 1 || summary.Attempted != 1 {
 		t.Fatalf("summary = %#v, want one sent attempt", summary)
 	}
-	if provider.request.HTMLBody != "" {
-		t.Fatalf("HTMLBody = %q, want empty", provider.request.HTMLBody)
+	if !strings.Contains(provider.request.HTMLBody, "tuvi-solutions-logo-transparent.png") ||
+		!strings.Contains(provider.request.HTMLBody, "Team Tuvi") {
+		t.Fatalf("HTMLBody missing shared logo signature: %q", provider.request.HTMLBody)
 	}
 	if got := len(strings.FieldsFunc(provider.request.TextBody, func(r rune) bool { return r == '\n' })); got == 0 {
 		t.Fatal("TextBody is empty")
 	}
-	if strings.Count(provider.request.TextBody, "https://") != 2 {
-		t.Fatalf("TextBody = %q, want exactly two links", provider.request.TextBody)
+	if !strings.Contains(provider.request.TextBody, "https://api.example.com/t/unsubscribe/") ||
+		!strings.Contains(provider.request.TextBody, "https://tuvisolutions.com") {
+		t.Fatalf("TextBody = %q, want opt-out and signature links", provider.request.TextBody)
+	}
+	for _, token := range []string{"Thanks & Regards,", "Team Tuvi", "Tuvi Solutions", "https://tuvisolutions.com"} {
+		if !strings.Contains(provider.request.TextBody, token) {
+			t.Fatalf("TextBody missing signature token %q", token)
+		}
+	}
+	if repo.prepared.BodyText != provider.request.TextBody {
+		t.Fatalf("prepared BodyText does not match sent TextBody")
+	}
+	if repo.preparedHTML != provider.request.HTMLBody {
+		t.Fatalf("prepared HTMLBody does not match sent HTMLBody")
 	}
 	if len(repo.finalizations) != 1 || repo.finalizations[0].Outcome != "sent" || repo.finalizations[0].Step != 1 {
 		t.Fatalf("finalizations = %#v, want confirmed step 1", repo.finalizations)
@@ -164,5 +194,37 @@ func TestRunBulkSendProviderFailureRetainsSequenceAsUnknown(t *testing.T) {
 	}
 	if len(repo.finalizations) != 1 || repo.finalizations[0].Outcome != "unknown" || repo.finalizations[0].Step != 1 {
 		t.Fatalf("finalizations = %#v, want unknown without advancement", repo.finalizations)
+	}
+}
+
+func TestSendTemplateTestEmailsSendsSavedSequenceExactlyWithSignature(t *testing.T) {
+	repo := eligibleSequenceRepo()
+	provider := &mockEmailProvider{result: emailprovider.SendResult{ProviderMessageID: "message-1"}}
+	service := newSequenceService(t, repo, provider)
+
+	result, err := service.SendTemplateTest(context.Background(), internalAdminPrincipal(), outreach.TemplateTestSendInput{
+		RecipientEmail: "test@example.com",
+		RestaurantName: "Signature Cafe",
+		OwnerFirstName: "Casey",
+	})
+	if err != nil {
+		t.Fatalf("SendTemplateTest() error = %v", err)
+	}
+	if result.RecipientEmail != "test@example.com" || len(result.Items) != 1 {
+		t.Fatalf("result = %#v, want the one enabled sequence item", result)
+	}
+	if provider.request.To != "test@example.com" {
+		t.Fatalf("last request To = %q", provider.request.To)
+	}
+	if provider.request.Subject != "A practical idea for Signature Cafe" {
+		t.Fatalf("Subject = %q, want the rendered saved subject without a test prefix", provider.request.Subject)
+	}
+	if !strings.Contains(provider.request.HTMLBody, "tuvi-solutions-logo-transparent.png") ||
+		!strings.Contains(provider.request.HTMLBody, "Team Tuvi") {
+		t.Fatalf("HTMLBody missing shared logo signature: %q", provider.request.HTMLBody)
+	}
+	if !strings.Contains(provider.request.TextBody, "Team Tuvi") ||
+		!strings.Contains(provider.request.TextBody, "https://tuvisolutions.com") {
+		t.Fatalf("last request missing text signature: %q", provider.request.TextBody)
 	}
 }

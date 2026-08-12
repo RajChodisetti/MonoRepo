@@ -344,6 +344,17 @@ export type OutreachSequencePreview = {
   steps: OutreachSequencePreviewStep[];
 };
 
+export type OutreachTemplateTestSendResponse = {
+  recipient_email: string;
+  restaurant_name: string;
+  items: {
+    template: "sequence";
+    step?: number;
+    subject: string;
+    provider_message_id?: string;
+  }[];
+};
+
 export type OutreachRecipient = {
   restaurant_id: string;
   restaurant_name: string;

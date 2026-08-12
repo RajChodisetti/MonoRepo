@@ -138,6 +138,10 @@ type SequenceDelivery struct {
 	Step              SequenceStep
 }
 
+type activeSequenceStepsRepository interface {
+	ListActiveSequenceSteps(ctx context.Context) ([]SequenceStep, error)
+}
+
 const rebaseUntouchedEnrollmentsQuery = `
 	WITH first_enabled AS (
 	  SELECT position
@@ -575,6 +579,44 @@ func (service *Service) listSequenceSteps(ctx context.Context, sequenceID uuid.U
 	return steps, nil
 }
 
+func (service *Service) activeSequenceSteps(ctx context.Context) ([]SequenceStep, error) {
+	if repo, ok := service.repo.(activeSequenceStepsRepository); ok {
+		return repo.ListActiveSequenceSteps(ctx)
+	}
+	if service.pool == nil {
+		return nil, fmt.Errorf("database pool is not configured")
+	}
+	rows, err := service.pool.Query(ctx, `
+		SELECT step.id, step.sequence_id, step.position, step.enabled, step.delay_hours,
+		       step.subject_template, step.body_text_template, step.created_at, step.updated_at
+		FROM outreach_email_sequences seq
+		JOIN outreach_email_sequence_steps step ON step.sequence_id = seq.id
+		WHERE seq.is_active = true
+		  AND seq.status = 'approved'
+		  AND step.enabled = true
+		ORDER BY step.position`)
+	if err != nil {
+		return nil, fmt.Errorf("list active outreach sequence steps: %w", err)
+	}
+	defer rows.Close()
+	steps := []SequenceStep{}
+	for rows.Next() {
+		var step SequenceStep
+		if err := rows.Scan(
+			&step.ID, &step.SequenceID, &step.Position, &step.Enabled,
+			&step.DelayHours, &step.SubjectTemplate, &step.BodyTextTemplate,
+			&step.CreatedAt, &step.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan active outreach sequence step: %w", err)
+		}
+		steps = append(steps, step)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate active outreach sequence steps: %w", err)
+	}
+	return steps, nil
+}
+
 func validateSequenceSteps(steps []SequenceStep) error {
 	if len(steps) == 0 {
 		return fmt.Errorf("%w: at least one step is required", ErrSequenceInvalid)
@@ -617,12 +659,6 @@ func validateSequenceTemplate(step SequenceStep) error {
 	if body == "" || len(body) > 10000 || htmlElementPattern.MatchString(body) {
 		return fmt.Errorf("%w: step %d body must be plain text", ErrSequenceInvalid, step.Position)
 	}
-	if containsUnmanagedLinkCandidate(subject) || containsUnmanagedLinkCandidate(body) {
-		return fmt.Errorf("%w: step %d must use the two managed URL placeholders", ErrSequenceInvalid, step.Position)
-	}
-	if strings.Count(body, "{{website_url}}") != 1 || strings.Count(body, "{{unsubscribe_url}}") != 1 {
-		return fmt.Errorf("%w: step %d must contain website_url and unsubscribe_url exactly once", ErrSequenceInvalid, step.Position)
-	}
 	allowed := map[string]bool{
 		"{{greeting}}": true, "{{restaurant_name}}": true,
 		"{{website_url}}": true, "{{unsubscribe_url}}": true,
@@ -656,14 +692,24 @@ func renderSequenceStep(step SequenceStep, restaurantName, ownerFirstName, unsub
 	if templatePlaceholderPattern.MatchString(subject + "\n" + body) {
 		return RenderedSequenceStep{}, fmt.Errorf("%w: rendered step contains an unresolved placeholder", ErrSequenceInvalid)
 	}
+	body = ensureSequenceOptOut(body, strings.TrimSpace(unsubscribeURL))
 	urls := rawURLPattern.FindAllString(body, -1)
-	if len(urls) != 2 || urls[0] != websiteURL || urls[1] != strings.TrimSpace(unsubscribeURL) {
-		return RenderedSequenceStep{}, fmt.Errorf("%w: rendered step must contain only the Tuvi website and unsubscribe URL", ErrSequenceInvalid)
-	}
 	return RenderedSequenceStep{
 		Position: step.Position, DelayHours: step.DelayHours,
 		Subject: subject, BodyText: body, URLCount: len(urls),
 	}, nil
+}
+
+func ensureSequenceOptOut(body, unsubscribeURL string) string {
+	body = strings.TrimSpace(body)
+	unsubscribeURL = strings.TrimSpace(unsubscribeURL)
+	if unsubscribeURL == "" || strings.Contains(body, unsubscribeURL) {
+		return body
+	}
+	if body == "" {
+		return "Unsubscribe: " + unsubscribeURL
+	}
+	return body + "\n\nUnsubscribe: " + unsubscribeURL
 }
 
 func checkSequenceDeliveryEligibility(delivery SequenceDelivery, suppressed bool) error {

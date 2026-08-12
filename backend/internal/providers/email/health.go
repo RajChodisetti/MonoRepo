@@ -123,7 +123,7 @@ func (service *HealthService) RunDue(ctx context.Context) error {
 			continue
 		}
 		checkedAt := time.Now().UTC()
-		result, sendErr := account.provider.Send(ctx, SendRequest{
+		request := EnsureTuviSignature(SendRequest{
 			To:      service.cfg.EmailHealthRecipient,
 			Subject: fmt.Sprintf("[Tuvi] Gmail sender health check — %s", account.from),
 			TextBody: fmt.Sprintf(
@@ -132,6 +132,7 @@ func (service *HealthService) RunDue(ctx context.Context) error {
 				checkedAt.Format(time.RFC3339),
 			),
 		})
+		result, sendErr := account.provider.Send(ctx, request)
 		if sendErr != nil {
 			if recordErr := service.store.RecordEmailHealthResult(ctx, key, false, "", sanitizeHealthError(sendErr)); recordErr != nil {
 				return fmt.Errorf("record Gmail health failure for %q: %w", key, recordErr)
