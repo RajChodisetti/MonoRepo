@@ -3063,3 +3063,44 @@ lint/type-check/build, corporate-web lint/type-check/build, and `git diff
 worker, admin web, and corporate website restarted cleanly; public routes and
 authenticated admin browser QA passed. Migration 46 remains current and the
 outreach email job remains disabled. No email was sent.
+
+## 2026-08-12 — Database-Owned Unsubscribe Release
+
+**Role:** Repository Integration, Backend, Frontend, Documentation, Test, and
+Production Release Agent
+
+**Delivered:** Created and pushed
+`release/remove-outreach-unsubscribe-latest-20260812`. Its ancestry contains
+every local and `origin/*` branch tip known at consolidation time while its
+tree preserves `agent/remove-outreach-unsubscribe-20260812` as authoritative.
+Application code no longer generates, validates, appends, persists, routes, or
+gates on unsubscribe/suppression behavior. Any unsubscribe content is owned by
+the approved PostgreSQL sequence template. ADR
+`2026-08-12-database-owned-outreach-unsubscribe-content.md`, active contracts,
+runbooks, OpenAPI descriptions, and regression coverage now enforce that
+boundary.
+
+**Checks Run:** Targeted outreach/campaign/HTTP tests passed 117 tests; the full
+backend suite passed 443 tests across 45 packages. Backend vet/build, OpenAPI
+validation, admin lint/type-check/build, corporate website lint/type-check,
+21 focused Node tests, both frontend production builds, both Compose renders,
+and `git diff --check` passed. The local Docker check was unavailable because
+Docker Desktop could not start; the exact reviewed archive built successfully
+on the production VM.
+
+**Production Deployment:** Commit `1f9ef2e` is active from
+`/opt/tuvi/releases/monorepo-remove-unsubscribe-20260812T093824Z` for API,
+worker, and admin web. Migration 46 remains current. All three containers are
+running with restart count zero and no post-deploy error log matches. The
+persisted email job remains disabled, no bulk job is active, and both GET and
+POST on the retired unsubscribe route return 404. The active database sequence
+has three enabled steps and none contains an unsubscribe placeholder or copy.
+Protected pre-deploy database/environment backups and rollback image tags were
+created on the VM.
+
+**Approved Test Send:** The admin-only custom-recipient endpoint sent the three
+enabled saved-template emails exactly once to `rajchodisetti@gmail.com`. Gmail
+received all three at 09:49 UTC; the delivered MIME bodies contain no
+unsubscribe/opt-out copy, retain the Team Tuvi text/HTML signature, and passed
+SPF, DKIM, and DMARC. This path did not enroll a lead, advance a campaign,
+enable the email job, or create a bulk job.

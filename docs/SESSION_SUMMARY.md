@@ -1,6 +1,6 @@
 # Session Summary
 
-Canonical branch `release/unified-outreach-20260812` combines the newest `origin/release/safe-ui-20260809` history, the deployed saved-template/default-signature implementation, and the full ancestry of `origin/agent/tuvi-oauth-homepage-verification` at `bb94779`.
-The supplied branch's stale migration-36 implementation and suppression removal are superseded by production migrations 36-46 and current suppression safeguards; its history is retained without reintroducing those incompatible behaviors.
-Template tests and live outreach use the same saved active sequence renderer. Gmail, Zoho, and Resend add the default Team Tuvi multipart signature, and the admin preview shows it separately from editable content.
-All 445 backend tests, vet/build, OpenAPI validation, and admin/corporate-web lint, type-check, and builds passed. The canonical release is deployed on the VM; migration 46 remains current and the outreach email job remains disabled.
+`release/remove-outreach-unsubscribe-latest-20260812` at `1f9ef2e` contains every known local and `origin/*` branch tip while preserving `agent/remove-outreach-unsubscribe-20260812` as the authoritative tree.
+Application code has no unsubscribe route/token/merge tag, suppression read/write, eligibility or quota gate, or admin status; any unsubscribe content is owned only by the approved PostgreSQL template.
+Production API, worker, and admin web run `1f9ef2e` with migration 46, zero restarts/errors, the persisted sender disabled, no active bulk job, and retired unsubscribe GET/POST returning 404.
+Exactly three enabled saved-template test emails reached `rajchodisetti@gmail.com` at 09:49 UTC with no unsubscribe/opt-out copy; Team Tuvi multipart signatures and SPF/DKIM/DMARC all verified.
