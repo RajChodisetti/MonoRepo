@@ -53,7 +53,7 @@ export function StatusBadge({ status }: { status?: string | null }) {
   } else if (["queued", "waiting", "paused", "draft", "pending"].includes(s)) {
     cls = "badge-warn";
   } else if (
-    ["failed", "rejected", "cancelled", "lost", "archived", "suppressed"].includes(s)
+    ["failed", "rejected", "cancelled", "lost", "archived"].includes(s)
   ) {
     cls = "badge-bad";
   }

@@ -28,11 +28,9 @@ func TestRenderOutreachEmail(t *testing.T) {
 		t.Fatalf("subject = %q", draft.Subject)
 	}
 	for _, token := range []string{
-		"{{UNSUBSCRIBE_URL}}",
 		"quick preview",
 		"not a long pitch",
 		"Would it make sense",
-		"Unsubscribe",
 	} {
 		if !strings.Contains(draft.BodyHTML, token) {
 			t.Fatalf("body_html missing %q", token)
@@ -42,6 +40,8 @@ func TestRenderOutreachEmail(t *testing.T) {
 		"{{TEMPLATE_1_URL}}",
 		"{{TEMPLATE_2_URL}}",
 		"{{TEMPLATE_3_URL}}",
+		"{{UNSUBSCRIBE_URL}}",
+		"Unsubscribe",
 		"http://localhost:5500",
 		"Personalized demo websites",
 		"Services catalog",
@@ -67,8 +67,8 @@ func TestRenderOutreachEmail(t *testing.T) {
 	if strings.Contains(draft.BodyHTML, "{{CLICK_URL}}") {
 		t.Fatal("body_html should not contain personalized demo placeholder")
 	}
-	if count := strings.Count(draft.BodyHTML, "href="); count != 2 {
-		t.Fatalf("body_html has %d links, want exactly 2", count)
+	if count := strings.Count(draft.BodyHTML, "href="); count != 1 {
+		t.Fatalf("body_html has %d links, want exactly 1", count)
 	}
 	for _, banned := range []string{"We already built a preview"} {
 		if strings.Contains(draft.BodyHTML, banned) {

@@ -24,7 +24,6 @@ func TestEligibleLeadQueryUsesStrictLifecycleAndFollowupPhaseGate(t *testing.T) 
 		"outreach_consent_basis = 'inferred_business'",
 		"outreach_consent_evidence <> '{}'::jsonb",
 		"shown_interest = false",
-		"email_suppressions",
 	} {
 		if !strings.Contains(eligibleLeadsBaseQuery, required) {
 			t.Fatalf("eligible query missing policy guard %q", required)

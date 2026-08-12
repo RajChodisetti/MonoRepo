@@ -1,12 +1,10 @@
 import type { OutreachSequenceStep } from "@/lib/types";
 
 export const WEBSITE_TOKEN = "{{website_url}}";
-export const UNSUBSCRIBE_TOKEN = "{{unsubscribe_url}}";
 export const ALLOWED_MERGE_TAGS = new Set([
   "greeting",
   "restaurant_name",
   "website_url",
-  "unsubscribe_url",
 ]);
 
 const MERGE_TAG_PATTERN = /{{\s*([a-z_]+)\s*}}/gi;
@@ -71,11 +69,7 @@ export function renderLocalTemplate(
   return value
     .replaceAll("{{greeting}}", greeting)
     .replaceAll("{{restaurant_name}}", restaurant)
-    .replaceAll(WEBSITE_TOKEN, "")
-    .replaceAll(
-      UNSUBSCRIBE_TOKEN,
-      "https://tuvisolutions.com/unsubscribe/sample-token",
-    );
+    .replaceAll(WEBSITE_TOKEN, "");
 }
 
 export function createBlankStep(position: number): OutreachSequenceStep {

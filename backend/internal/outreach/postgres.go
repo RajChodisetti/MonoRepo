@@ -181,10 +181,6 @@ const eligibleLeadsBaseQuery = `
 	  AND length(trim(restaurant.outreach_consent_source)) > 0
 	  AND jsonb_typeof(restaurant.outreach_consent_evidence) = 'object'
 	  AND restaurant.outreach_consent_evidence <> '{}'::jsonb
-	  AND NOT EXISTS (
-	    SELECT 1 FROM email_suppressions suppression
-	    WHERE suppression.email = lower(trim(restaurant.email))
-	  )
 	  AND (
 	    campaign.current_step > 0
 	    OR NOT EXISTS (
@@ -214,10 +210,6 @@ const eligibleLeadsBaseQuery = `
 	        AND length(trim(existing_restaurant.outreach_consent_source)) > 0
 	        AND jsonb_typeof(existing_restaurant.outreach_consent_evidence) = 'object'
 	        AND existing_restaurant.outreach_consent_evidence <> '{}'::jsonb
-	        AND NOT EXISTS (
-	          SELECT 1 FROM email_suppressions existing_suppression
-	          WHERE existing_suppression.email = lower(trim(existing_restaurant.email))
-	        )
 	    )
 	  )`
 
@@ -392,11 +384,7 @@ func (repo *Postgres) NextSequenceDueAt(ctx context.Context) (*time.Time, error)
 		  AND restaurant.outreach_consent_recorded_at IS NOT NULL
 		  AND length(trim(restaurant.outreach_consent_source)) > 0
 		  AND jsonb_typeof(restaurant.outreach_consent_evidence) = 'object'
-		  AND restaurant.outreach_consent_evidence <> '{}'::jsonb
-		  AND NOT EXISTS (
-		    SELECT 1 FROM email_suppressions suppression
-		    WHERE suppression.email = lower(trim(restaurant.email))
-		  )`).Scan(&next); err != nil {
+		  AND restaurant.outreach_consent_evidence <> '{}'::jsonb`).Scan(&next); err != nil {
 		return nil, fmt.Errorf("get next sequence due time: %w", err)
 	}
 	return next, nil
@@ -437,11 +425,7 @@ func (repo *Postgres) CountRecipientStatuses(ctx context.Context) (RecipientStat
 		           AND restaurant.outreach_consent_recorded_at IS NOT NULL
 		           AND length(trim(restaurant.outreach_consent_source)) > 0
 		           AND jsonb_typeof(restaurant.outreach_consent_evidence) = 'object'
-		           AND restaurant.outreach_consent_evidence <> '{}'::jsonb AS has_consent_evidence,
-		         NOT EXISTS (
-		           SELECT 1 FROM email_suppressions suppression
-		           WHERE suppression.email = lower(trim(restaurant.email))
-		         ) AS unsuppressed
+		           AND restaurant.outreach_consent_evidence <> '{}'::jsonb AS has_consent_evidence
 		  FROM email_campaigns campaign
 		  JOIN restaurants restaurant ON restaurant.id = campaign.restaurant_id
 		  JOIN outreach_email_sequences sequence ON sequence.id = campaign.sequence_id
@@ -461,7 +445,6 @@ func (repo *Postgres) CountRecipientStatuses(ctx context.Context) (RecipientStat
 		           AND lifecycle_eligible
 		           AND has_no_interest
 		           AND has_consent_evidence
-		           AND unsuppressed
 		           AND next_step IS NOT NULL
 		           AND next_send_at IS NOT NULL AS policy_eligible
 		  FROM recipient_state

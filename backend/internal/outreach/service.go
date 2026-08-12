@@ -138,10 +138,9 @@ func (service *Service) sendTemplateTestEmails(
 		RestaurantName: restaurantName,
 		Items:          []TemplateTestEmailResult{},
 	}
-	unsubscribeURL := "https://api.tuvisolutions.com/t/unsubscribe/outreach-template-test"
 
 	for _, step := range steps {
-		rendered, err := renderSequenceStep(step, restaurantName, ownerFirstName, unsubscribeURL)
+		rendered, err := renderSequenceStep(step, restaurantName, ownerFirstName)
 		if err != nil {
 			return result, fmt.Errorf("render sequence step %d: %w", step.Position, err)
 		}
@@ -574,21 +573,11 @@ func (service *Service) sendLead(ctx context.Context, lead EligibleLead, bulkJob
 	if delivery.RestaurantID != lead.RestaurantID {
 		return false, fmt.Errorf("sequence campaign does not match the eligible lead")
 	}
-	suppressed, err := service.campaigns.IsSuppressed(ctx, delivery.RecipientEmail)
-	if err != nil {
-		return false, fmt.Errorf("check suppression: %w", err)
-	}
-	if err := checkSequenceDeliveryEligibility(delivery, suppressed); err != nil {
+	if err := checkSequenceDeliveryEligibility(delivery); err != nil {
 		return false, err
 	}
-	unsubscribeURL, err := service.campaignService.BuildUnsubscribeURL(
-		ctx, delivery.CampaignID, delivery.RestaurantID, delivery.RecipientEmail,
-	)
-	if err != nil {
-		return false, fmt.Errorf("build unsubscribe url: %w", err)
-	}
 	rendered, err := renderSequenceStep(
-		delivery.Step, delivery.RestaurantName, delivery.OwnerFirstName, unsubscribeURL,
+		delivery.Step, delivery.RestaurantName, delivery.OwnerFirstName,
 	)
 	if err != nil {
 		return false, fmt.Errorf("render outreach sequence step: %w", err)

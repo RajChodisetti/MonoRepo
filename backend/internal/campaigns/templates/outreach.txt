@@ -6,8 +6,6 @@ This is not a long pitch. I mainly wanted to share the preview and see if it is 
 
 Would it make sense to send over a couple of notes on what I saw?
 
-Unsubscribe: {{.UnsubscribeURL}}
-
 --
 Thanks & Regards,
 Team Tuvi

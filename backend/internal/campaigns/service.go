@@ -403,10 +403,6 @@ func (service *Service) BuildTrackingURLs(ctx context.Context, campaign Campaign
 	if err != nil {
 		return TrackingURLs{}, err
 	}
-	unsubToken, err := newTrackingToken()
-	if err != nil {
-		return TrackingURLs{}, err
-	}
 
 	demoSiteID := campaign.DemoSiteID
 	recipientEmail := strings.ToLower(strings.TrimSpace(sendCtx.RestaurantEmail))
@@ -421,8 +417,6 @@ func (service *Service) BuildTrackingURLs(ctx context.Context, campaign Campaign
 	tokens := []TrackingToken{
 		{Token: clickToken, CampaignID: campaign.ID, RestaurantID: campaign.RestaurantID, DemoSiteID: &demoSiteID, TokenType: TokenClick, TargetURL: template1Target, RecipientEmail: recipientEmail, ExpiresAt: &expires},
 		{Token: openToken, CampaignID: campaign.ID, RestaurantID: campaign.RestaurantID, DemoSiteID: &demoSiteID, TokenType: TokenOpen, TargetURL: "", RecipientEmail: recipientEmail, ExpiresAt: &expires},
-		// Opt-out links must remain usable after the demo/click preview expires.
-		{Token: unsubToken, CampaignID: campaign.ID, RestaurantID: campaign.RestaurantID, DemoSiteID: &demoSiteID, TokenType: TokenUnsubscribe, TargetURL: "", RecipientEmail: recipientEmail, ExpiresAt: nil},
 	}
 
 	base := service.publicBase
@@ -430,10 +424,9 @@ func (service *Service) BuildTrackingURLs(ctx context.Context, campaign Campaign
 		base = "http://localhost:8080"
 	}
 	urls := TrackingURLs{
-		Click:       base + "/t/click/" + clickToken,
-		Template1:   base + "/t/click/" + clickToken,
-		Open:        base + "/t/open/" + openToken,
-		Unsubscribe: base + "/t/unsubscribe/" + unsubToken,
+		Click:     base + "/t/click/" + clickToken,
+		Template1: base + "/t/click/" + clickToken,
+		Open:      base + "/t/open/" + openToken,
 	}
 
 	for _, tokenRecord := range tokens {
@@ -443,38 +436,6 @@ func (service *Service) BuildTrackingURLs(ctx context.Context, campaign Campaign
 	}
 
 	return urls, nil
-}
-
-// BuildUnsubscribeURL creates the only personalized link used by the plain-text
-// sequence. It deliberately has no demo/click/open token or expiry.
-func (service *Service) BuildUnsubscribeURL(
-	ctx context.Context,
-	campaignID uuid.UUID,
-	restaurantID uuid.UUID,
-	recipientEmail string,
-) (string, error) {
-	recipient := strings.ToLower(strings.TrimSpace(recipientEmail))
-	if campaignID == uuid.Nil || restaurantID == uuid.Nil || recipient == "" {
-		return "", fmt.Errorf("%w: campaign, restaurant, and recipient are required", ErrNotEligible)
-	}
-	token, err := newTrackingToken()
-	if err != nil {
-		return "", err
-	}
-	if err := service.repo.CreateTrackingToken(ctx, TrackingToken{
-		Token:          token,
-		CampaignID:     campaignID,
-		RestaurantID:   restaurantID,
-		TokenType:      TokenUnsubscribe,
-		RecipientEmail: recipient,
-	}); err != nil {
-		return "", err
-	}
-	base := service.publicBase
-	if base == "" {
-		base = "http://localhost:8080"
-	}
-	return base + "/t/unsubscribe/" + token, nil
 }
 
 func (service *Service) validPublishedDemoTarget(ctx context.Context, campaign Campaign) (demos.Site, string, error) {

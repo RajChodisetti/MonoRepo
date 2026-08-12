@@ -496,7 +496,7 @@ function RestaurantDetailInner() {
           </div>
           <div className="alert alert-info" style={{ margin: 0 }}>
             Outreach eligibility uses restaurant name, valid email, recorded business-consent
-            evidence, lifecycle, and suppression state. Profile approval is managed separately.
+            evidence, and lifecycle. Profile approval is managed separately.
           </div>
         </form>
       ) : null}

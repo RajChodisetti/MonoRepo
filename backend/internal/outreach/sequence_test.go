@@ -10,14 +10,8 @@ func validTestStep() SequenceStep {
 	return SequenceStep{
 		Position: 1, Enabled: true, DelayHours: 0,
 		SubjectTemplate:  "A practical idea for {{restaurant_name}}",
-		BodyTextTemplate: "{{greeting}}\n\nI had one practical idea for {{restaurant_name}}. Open to a quick note back?\n\nUnsubscribe: {{unsubscribe_url}}",
+		BodyTextTemplate: "{{greeting}}\n\nI had one practical idea for {{restaurant_name}}. Open to a quick note back?",
 	}
-}
-
-func noOptOutTestStep() SequenceStep {
-	step := validTestStep()
-	step.BodyTextTemplate = "{{greeting}}\n\nI had one practical idea for {{restaurant_name}}. Open to a quick note back?"
-	return step
 }
 
 func TestValidateSequenceStepsRequiresImmediateFirstEnabledStep(t *testing.T) {
@@ -28,32 +22,17 @@ func TestValidateSequenceStepsRequiresImmediateFirstEnabledStep(t *testing.T) {
 	}
 }
 
-func TestValidateAndRenderPlainTextWithOptOutLink(t *testing.T) {
+func TestValidateAndRenderPlainText(t *testing.T) {
 	step := validTestStep()
 	if err := validateSequenceSteps([]SequenceStep{step}); err != nil {
 		t.Fatalf("validateSequenceSteps() error = %v", err)
 	}
-	rendered, err := renderSequenceStep(step, "Harbour Cafe", "Ava", "https://api.tuvisolutions.com/t/unsubscribe/token")
+	rendered, err := renderSequenceStep(step, "Harbour Cafe", "Ava")
 	if err != nil {
 		t.Fatalf("renderSequenceStep() error = %v", err)
-	}
-	if !strings.Contains(rendered.BodyText, "https://api.tuvisolutions.com/t/unsubscribe/token") {
-		t.Fatalf("rendered = %#v, want opt-out link", rendered)
 	}
 	if !strings.HasPrefix(rendered.BodyText, "Hi Ava,") || strings.Contains(rendered.BodyText, "<") {
 		t.Fatalf("body = %q, want owner greeting and plain text", rendered.BodyText)
-	}
-}
-
-func TestRenderAppendsOptOutWhenTemplateOmitsPlaceholder(t *testing.T) {
-	rendered, err := renderSequenceStep(
-		noOptOutTestStep(), "Harbour Cafe", "Ava", "https://api.tuvisolutions.com/t/unsubscribe/token",
-	)
-	if err != nil {
-		t.Fatalf("renderSequenceStep() error = %v", err)
-	}
-	if !strings.Contains(rendered.BodyText, "\n\nUnsubscribe: https://api.tuvisolutions.com/t/unsubscribe/token") {
-		t.Fatalf("body = %q, want appended opt-out footer", rendered.BodyText)
 	}
 }
 
@@ -67,7 +46,7 @@ func TestValidateSequenceTemplateAllowsAdminManagedLinks(t *testing.T) {
 
 func TestRenderFallsBackToRestaurantGreeting(t *testing.T) {
 	rendered, err := renderSequenceStep(
-		validTestStep(), "Harbour Cafe", "", "https://api.tuvisolutions.com/t/unsubscribe/token",
+		validTestStep(), "Harbour Cafe", "",
 	)
 	if err != nil {
 		t.Fatalf("renderSequenceStep() error = %v", err)

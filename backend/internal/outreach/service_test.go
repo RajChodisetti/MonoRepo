@@ -114,7 +114,7 @@ func eligibleSequenceRepo() *mockRepo {
 	step := outreach.SequenceStep{
 		ID: uuid.New(), SequenceID: uuid.New(), Position: 1, Enabled: true,
 		SubjectTemplate:  "A practical idea for {{restaurant_name}}",
-		BodyTextTemplate: "{{greeting}}\n\nI had one practical idea for {{restaurant_name}}. Open to a quick note back?\n\nUnsubscribe: {{unsubscribe_url}}",
+		BodyTextTemplate: "{{greeting}}\n\nI had one practical idea for {{restaurant_name}}. Open to a quick note back?",
 	}
 	return &mockRepo{
 		leads:       []outreach.EligibleLead{{CampaignID: campaignID, RestaurantID: restaurantID, Step: 1}},
@@ -148,10 +148,6 @@ func TestRunBulkSendFinalizesAcceptedSequenceWithSharedSignature(t *testing.T) {
 	}
 	if got := len(strings.FieldsFunc(provider.request.TextBody, func(r rune) bool { return r == '\n' })); got == 0 {
 		t.Fatal("TextBody is empty")
-	}
-	if !strings.Contains(provider.request.TextBody, "https://api.example.com/t/unsubscribe/") ||
-		!strings.Contains(provider.request.TextBody, "https://tuvisolutions.com") {
-		t.Fatalf("TextBody = %q, want opt-out and signature links", provider.request.TextBody)
 	}
 	for _, token := range []string{"Thanks & Regards,", "Team Tuvi", "Tuvi Solutions", "https://tuvisolutions.com"} {
 		if !strings.Contains(provider.request.TextBody, token) {

@@ -16,7 +16,6 @@ type EligibilityInput struct {
 	DemoExpired             bool
 	CampaignStatus          string
 	CampaignApprovalAudited bool
-	Suppressed              bool
 }
 
 type BulkEligibilityInput struct {
@@ -28,7 +27,6 @@ type BulkEligibilityInput struct {
 	DemoExpired             bool
 	CampaignStatus          string
 	CampaignApprovalAudited bool
-	Suppressed              bool
 }
 
 func CheckBulkEligibility(input BulkEligibilityInput) error {
@@ -41,16 +39,12 @@ func CheckBulkEligibility(input BulkEligibilityInput) error {
 		DemoExpired:             input.DemoExpired,
 		CampaignStatus:          input.CampaignStatus,
 		CampaignApprovalAudited: input.CampaignApprovalAudited,
-		Suppressed:              input.Suppressed,
 	})
 }
 
 func CheckEligibility(input EligibilityInput) error {
 	if strings.TrimSpace(input.RestaurantEmail) == "" {
 		return fmt.Errorf("%w: restaurant has no contact email", ErrNotEligible)
-	}
-	if input.Suppressed {
-		return fmt.Errorf("%w: recipient is suppressed", ErrNotEligible)
 	}
 	if input.DemoStatus != demos.StatusPublished {
 		return fmt.Errorf("%w: demo site is not published", ErrNotEligible)

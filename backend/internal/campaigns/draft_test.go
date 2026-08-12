@@ -24,23 +24,17 @@ func TestBuildDraftIncludesPlaceholders(t *testing.T) {
 		t.Fatalf("subject = %q, want conversational hook", draft.Subject)
 	}
 	for _, placeholder := range []string{
-		"{{UNSUBSCRIBE_URL}}",
-	} {
-		if !strings.Contains(draft.BodyHTML, placeholder) {
-			t.Fatalf("body_html missing placeholder %s", placeholder)
-		}
-	}
-	for _, placeholder := range []string{
 		"{{TEMPLATE_1_URL}}",
 		"{{TEMPLATE_2_URL}}",
 		"{{TEMPLATE_3_URL}}",
+		"{{UNSUBSCRIBE_URL}}",
 	} {
 		if strings.Contains(draft.BodyHTML, placeholder) {
 			t.Fatalf("body_html should not include legacy template placeholder %s", placeholder)
 		}
 	}
-	if !strings.Contains(draft.BodyText, "{{UNSUBSCRIBE_URL}}") {
-		t.Fatal("body_text missing unsubscribe placeholder")
+	if strings.Contains(draft.BodyText, "{{UNSUBSCRIBE_URL}}") {
+		t.Fatal("body_text should not include the removed unsubscribe placeholder")
 	}
 	for _, name := range []string{"Personalized demo websites", "Services catalog", "Cinematic personalized website", "Aurora personalized website", "Elysian personalized website", "Tuvi restaurant services presentation"} {
 		if strings.Contains(draft.BodyHTML, name) {
@@ -60,8 +54,8 @@ func TestBuildDraftIncludesPlaceholders(t *testing.T) {
 	if count := strings.Count(draft.BodyHTML, "https://tuvisolutions.com"); count < 1 {
 		t.Fatalf("body_html has %d signature website links, want at least 1", count)
 	}
-	if count := strings.Count(draft.BodyHTML, "href="); count != 2 {
-		t.Fatalf("body_html has %d links, want exactly 2", count)
+	if count := strings.Count(draft.BodyHTML, "href="); count != 1 {
+		t.Fatalf("body_html has %d links, want exactly 1", count)
 	}
 	for _, token := range []string{"tuvi-solutions-logo-transparent.png", "Team Tuvi", "Thanks &amp; Regards,", "tuvisolutions.com"} {
 		if !strings.Contains(draft.BodyHTML, token) {
@@ -85,12 +79,11 @@ func TestInjectTrackingReplacesPlaceholders(t *testing.T) {
 	result := campaigns.InjectTracking(
 		draft,
 		campaigns.TrackingURLs{
-			Click:       "http://localhost:8080/t/click/abc",
-			Template1:   "http://localhost:8080/t/click/one",
-			Template2:   "http://localhost:8080/t/click/two",
-			Template3:   "http://localhost:8080/t/click/three",
-			Unsubscribe: "http://localhost:8080/t/unsubscribe/xyz",
-			Open:        "http://localhost:8080/t/open/open.png",
+			Click:     "http://localhost:8080/t/click/abc",
+			Template1: "http://localhost:8080/t/click/one",
+			Template2: "http://localhost:8080/t/click/two",
+			Template3: "http://localhost:8080/t/click/three",
+			Open:      "http://localhost:8080/t/open/open.png",
 		},
 		true,
 	)

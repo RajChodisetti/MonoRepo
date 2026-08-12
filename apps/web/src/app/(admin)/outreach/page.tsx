@@ -89,7 +89,7 @@ export default function OutreachPage() {
     if (
       !confirm(
         enabled
-          ? `Enable real Gmail outreach using “${activeSequence?.name}”? Due follow-ups will be sent before new restaurants, subject to pacing, lifecycle, consent, and suppression checks.`
+          ? `Enable real Gmail outreach using “${activeSequence?.name}”? Due follow-ups will be sent before new restaurants, subject to pacing, lifecycle, and consent checks.`
           : "Disable the email job? No new Gmail delivery will begin after the current provider request finishes.",
       )
     ) {
@@ -401,13 +401,13 @@ export default function OutreachPage() {
           <div className="card">
             <h2 style={{ marginTop: 0, fontSize: "1.05rem" }}>Eligibility and stop rules</h2>
             <ul style={{ margin: 0, paddingLeft: "1.1rem", color: "var(--muted)", lineHeight: 1.65 }}>
-              <li>Restaurant name and a valid, unsuppressed email are present.</li>
+              <li>Restaurant name and a valid email are present.</li>
               <li>Imported business leads carry recorded <code>inferred_business</code> consent evidence.</li>
               <li>Lifecycle is <code>lead</code> or <code>emailed</code>.</li>
               <li>Interest pauses automation for human follow-up.</li>
               <li>Lost, archived, onboarding, and active-client restaurants are excluded.</li>
               <li>An approved active plain-text sequence is available.</li>
-              <li>Each email contains only the Tuvi Solutions site and personalized opt-out links.</li>
+              <li>Each email contains only the Tuvi Solutions site link.</li>
               <li>Due follow-ups are exhausted before new recipients are selected.</li>
             </ul>
             {status?.next_available_at ? (

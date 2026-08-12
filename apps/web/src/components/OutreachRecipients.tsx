@@ -17,7 +17,7 @@ type RecipientFilter = "all" | "followup" | "new" | "paused" | "completed";
 function matchesFilter(recipient: OutreachRecipient, filter: RecipientFilter) {
   if (filter === "completed") return Boolean(recipient.completed_at);
   if (filter === "paused") {
-    return !recipient.completed_at && (!recipient.eligible || recipient.suppressed);
+    return !recipient.completed_at && !recipient.eligible;
   }
   if (filter === "followup") {
     return !recipient.completed_at && recipient.current_step > 0 && recipient.next_step != null;
@@ -30,7 +30,6 @@ function matchesFilter(recipient: OutreachRecipient, filter: RecipientFilter) {
 
 function holdLabel(recipient: OutreachRecipient) {
   if (recipient.completed_at) return "Sequence complete";
-  if (recipient.suppressed) return "Opted out — permanently suppressed";
   if (recipient.hold_reason) return recipient.hold_reason;
   if (recipient.eligible) {
     return recipient.current_step > 0 ? "Due follow-up has priority" : "Eligible after due follow-ups";
@@ -188,11 +187,9 @@ export function OutreachRecipients() {
                       status={
                         recipient.completed_at
                           ? "completed"
-                          : recipient.suppressed
-                            ? "suppressed"
-                            : recipient.eligible
-                              ? "eligible"
-                              : "paused"
+                          : recipient.eligible
+                            ? "eligible"
+                            : "paused"
                       }
                     />
                     <div className="recipient-hold" style={{ marginTop: "0.3rem" }}>

@@ -368,7 +368,6 @@ export type OutreachRecipient = {
   completed_at?: string;
   campaign_status: string;
   email_send_count: number;
-  suppressed: boolean;
   eligible: boolean;
   hold_reason?: string;
 };

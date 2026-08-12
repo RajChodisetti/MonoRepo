@@ -13,11 +13,10 @@ import (
 var outreachTemplates embed.FS
 
 const (
-	placeholderClickURL       = "{{CLICK_URL}}"
-	placeholderTemplate1URL   = "{{TEMPLATE_1_URL}}"
-	placeholderTemplate2URL   = "{{TEMPLATE_2_URL}}"
-	placeholderTemplate3URL   = "{{TEMPLATE_3_URL}}"
-	placeholderUnsubscribeURL = "{{UNSUBSCRIBE_URL}}"
+	placeholderClickURL     = "{{CLICK_URL}}"
+	placeholderTemplate1URL = "{{TEMPLATE_1_URL}}"
+	placeholderTemplate2URL = "{{TEMPLATE_2_URL}}"
+	placeholderTemplate3URL = "{{TEMPLATE_3_URL}}"
 
 	defaultPresentationURL = "http://localhost:5500"
 	defaultWebsiteURL      = "https://tuvisolutions.com"
@@ -40,7 +39,6 @@ type OutreachLinkConfig struct {
 type OutreachEmailData struct {
 	RestaurantName string
 	ClickURL       string
-	UnsubscribeURL string
 	AccentFallback string
 	Services       []OutreachServiceLink
 	WebsiteURL     string
@@ -87,7 +85,6 @@ func buildOutreachEmailData(restaurantName string, links OutreachLinkConfig) Out
 	return OutreachEmailData{
 		RestaurantName: name,
 		ClickURL:       placeholderClickURL,
-		UnsubscribeURL: placeholderUnsubscribeURL,
 		AccentFallback: "#d4a853",
 		Services:       services,
 		WebsiteURL:     websiteURL,
@@ -133,7 +130,6 @@ func RenderOutreachEmailWithLinks(restaurantName string, links OutreachLinkConfi
 func injectOutreachPlaceholders(htmlBody string) string {
 	return strings.NewReplacer(
 		"__CLICK_URL__", placeholderClickURL,
-		"__UNSUBSCRIBE_URL__", placeholderUnsubscribeURL,
 		"__TEMPLATE_1_URL__", placeholderTemplate1URL,
 		"__TEMPLATE_2_URL__", placeholderTemplate2URL,
 		"__TEMPLATE_3_URL__", placeholderTemplate3URL,

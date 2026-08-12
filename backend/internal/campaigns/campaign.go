@@ -24,12 +24,10 @@ const (
 	EventOpened           = "opened"
 	EventClicked          = "clicked"
 	EventFailed           = "failed"
-	EventUnsubscribed     = "unsubscribed"
 	EventDraftRegenerated = "draft_regenerated"
 
-	TokenClick       = "click"
-	TokenOpen        = "open"
-	TokenUnsubscribe = "unsubscribe"
+	TokenClick = "click"
+	TokenOpen  = "open"
 )
 
 var (
@@ -118,8 +116,6 @@ type Repository interface {
 	InsertEvent(ctx context.Context, campaignID, restaurantID uuid.UUID, eventType string, metadata json.RawMessage) error
 	CreateTrackingToken(ctx context.Context, token TrackingToken) error
 	GetTrackingToken(ctx context.Context, token string) (TrackingToken, error)
-	IsSuppressed(ctx context.Context, email string) (bool, error)
-	AddSuppression(ctx context.Context, email, reason string) error
 	GetSendContext(ctx context.Context, campaignID uuid.UUID) (SendContext, error)
 	GetRestaurantContext(ctx context.Context, restaurantID uuid.UUID) (SendContext, error)
 	GetSiteIndexByRestaurantID(ctx context.Context, restaurantID uuid.UUID) (int, error)

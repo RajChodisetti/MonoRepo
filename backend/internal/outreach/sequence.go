@@ -112,7 +112,6 @@ type RecipientProgress struct {
 	CompletedAt     *time.Time `json:"completed_at,omitempty"`
 	EmailSendCount  int        `json:"email_send_count"`
 	CampaignStatus  string     `json:"campaign_status"`
-	Suppressed      bool       `json:"suppressed"`
 	Eligible        bool       `json:"eligible"`
 	HoldReason      string     `json:"hold_reason,omitempty"`
 }
@@ -449,7 +448,7 @@ func (service *Service) PreviewSequence(ctx context.Context, principal auth.Prin
 		if !step.Enabled {
 			continue
 		}
-		rendered, err := renderSequenceStep(step, name, input.OwnerFirstName, "https://api.tuvisolutions.com/t/unsubscribe/preview-token")
+		rendered, err := renderSequenceStep(step, name, input.OwnerFirstName)
 		if err != nil {
 			return SequencePreview{}, err
 		}
@@ -488,7 +487,6 @@ func (service *Service) ListRecipientProgress(ctx context.Context, principal aut
 		       c.completed_at,
 		       r.email_send_count,
 		       COALESCE(c.status, ''),
-		       EXISTS (SELECT 1 FROM email_suppressions s WHERE s.email = lower(trim(r.email))),
 		       CASE
 		         WHEN trim(r.name) = '' THEN 'missing_name'
 		         WHEN lower(trim(r.email)) !~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$' THEN 'invalid_email'
@@ -499,7 +497,6 @@ func (service *Service) ListRecipientProgress(ctx context.Context, principal aut
 		           OR jsonb_typeof(r.outreach_consent_evidence) <> 'object'
 		           OR r.outreach_consent_evidence = '{}'::jsonb
 		         THEN 'consent_evidence_missing'
-		         WHEN EXISTS (SELECT 1 FROM email_suppressions s WHERE s.email = lower(trim(r.email))) THEN 'suppressed'
 		         WHEN c.id IS NULL THEN 'not_enrolled'
 		         WHEN c.status = 'send_unknown' THEN 'delivery_unknown'
 		         WHEN c.completed_at IS NOT NULL THEN 'complete'
@@ -525,7 +522,7 @@ func (service *Service) ListRecipientProgress(ctx context.Context, principal aut
 			&record.LifecycleStatus, &record.ConsentBasis, &record.CurrentStep,
 			&record.NextStep, &record.NextSendAt, &record.LastSentAt,
 			&record.CompletedAt, &record.EmailSendCount, &record.CampaignStatus,
-			&record.Suppressed, &record.HoldReason,
+			&record.HoldReason,
 		); err != nil {
 			return RecipientProgressList{}, fmt.Errorf("scan outreach recipient: %w", err)
 		}
@@ -661,7 +658,7 @@ func validateSequenceTemplate(step SequenceStep) error {
 	}
 	allowed := map[string]bool{
 		"{{greeting}}": true, "{{restaurant_name}}": true,
-		"{{website_url}}": true, "{{unsubscribe_url}}": true,
+		"{{website_url}}": true,
 	}
 	for _, value := range append(templatePlaceholderPattern.FindAllString(subject, -1), templatePlaceholderPattern.FindAllString(body, -1)...) {
 		if !allowed[value] {
@@ -675,7 +672,7 @@ func containsUnmanagedLinkCandidate(value string) bool {
 	return rawURLPattern.MatchString(value) || bareDomainPattern.MatchString(value)
 }
 
-func renderSequenceStep(step SequenceStep, restaurantName, ownerFirstName, unsubscribeURL string) (RenderedSequenceStep, error) {
+func renderSequenceStep(step SequenceStep, restaurantName, ownerFirstName string) (RenderedSequenceStep, error) {
 	name := cleanSingleLine(restaurantName)
 	if name == "" {
 		return RenderedSequenceStep{}, fmt.Errorf("%w: restaurant name is required", campaigns.ErrNotEligible)
@@ -685,14 +682,12 @@ func renderSequenceStep(step SequenceStep, restaurantName, ownerFirstName, unsub
 		"{{greeting}}", greeting,
 		"{{restaurant_name}}", name,
 		"{{website_url}}", websiteURL,
-		"{{unsubscribe_url}}", strings.TrimSpace(unsubscribeURL),
 	)
 	subject := replacer.Replace(strings.TrimSpace(step.SubjectTemplate))
 	body := replacer.Replace(strings.TrimSpace(step.BodyTextTemplate))
 	if templatePlaceholderPattern.MatchString(subject + "\n" + body) {
 		return RenderedSequenceStep{}, fmt.Errorf("%w: rendered step contains an unresolved placeholder", ErrSequenceInvalid)
 	}
-	body = ensureSequenceOptOut(body, strings.TrimSpace(unsubscribeURL))
 	urls := rawURLPattern.FindAllString(body, -1)
 	return RenderedSequenceStep{
 		Position: step.Position, DelayHours: step.DelayHours,
@@ -700,27 +695,12 @@ func renderSequenceStep(step SequenceStep, restaurantName, ownerFirstName, unsub
 	}, nil
 }
 
-func ensureSequenceOptOut(body, unsubscribeURL string) string {
-	body = strings.TrimSpace(body)
-	unsubscribeURL = strings.TrimSpace(unsubscribeURL)
-	if unsubscribeURL == "" || strings.Contains(body, unsubscribeURL) {
-		return body
-	}
-	if body == "" {
-		return "Unsubscribe: " + unsubscribeURL
-	}
-	return body + "\n\nUnsubscribe: " + unsubscribeURL
-}
-
-func checkSequenceDeliveryEligibility(delivery SequenceDelivery, suppressed bool) error {
+func checkSequenceDeliveryEligibility(delivery SequenceDelivery) error {
 	if strings.TrimSpace(delivery.RestaurantName) == "" {
 		return fmt.Errorf("%w: restaurant has no name", campaigns.ErrNotEligible)
 	}
 	if !validLeadEmailPattern.MatchString(strings.ToLower(strings.TrimSpace(delivery.RecipientEmail))) {
 		return fmt.Errorf("%w: restaurant has no valid contact email", campaigns.ErrNotEligible)
-	}
-	if suppressed {
-		return fmt.Errorf("%w: recipient is suppressed", campaigns.ErrNotEligible)
 	}
 	if delivery.ShownInterest || delivery.LifecycleStatus == restaurants.StatusInterested {
 		return fmt.Errorf("%w: restaurant has expressed interest and automated outreach is paused", campaigns.ErrNotEligible)

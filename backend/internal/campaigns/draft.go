@@ -24,12 +24,11 @@ type DraftInput struct {
 }
 
 type TrackingURLs struct {
-	Click       string
-	Template1   string
-	Template2   string
-	Template3   string
-	Open        string
-	Unsubscribe string
+	Click     string
+	Template1 string
+	Template2 string
+	Template3 string
+	Open      string
 }
 
 func BuildDraft(input DraftInput) DraftContent {
@@ -49,11 +48,11 @@ func BuildDraft(input DraftInput) DraftContent {
 		return EnsureOutreachSignature(DraftContent{
 			Subject: outreachSubject(name),
 			BodyHTML: fmt.Sprintf(
-				`<p>A live demo for %s.</p><ul><li><a href="{{CLICK_URL}}">Personalized demo websites</a></li><li><a href="%s">Services catalog</a></li></ul><p><a href="{{UNSUBSCRIBE_URL}}">Unsubscribe</a>.</p>`,
+				`<p>A live demo for %s.</p><ul><li><a href="{{CLICK_URL}}">Personalized demo websites</a></li><li><a href="%s">Services catalog</a></li></ul>`,
 				html.EscapeString(name),
 				html.EscapeString(presentationURL),
 			),
-			BodyText: fmt.Sprintf("Personalized demo websites: {{CLICK_URL}}\nServices catalog: %s\nUnsubscribe: {{UNSUBSCRIBE_URL}}\n", presentationURL),
+			BodyText: fmt.Sprintf("Personalized demo websites: {{CLICK_URL}}\nServices catalog: %s\n", presentationURL),
 		})
 	}
 	return EnsureOutreachSignature(draft)
@@ -104,7 +103,6 @@ func InjectTracking(content DraftContent, urls TrackingURLs, openTracking bool) 
 		placeholderTemplate1URL, urls.Template1,
 		placeholderTemplate2URL, urls.Template2,
 		placeholderTemplate3URL, urls.Template3,
-		placeholderUnsubscribeURL, urls.Unsubscribe,
 	)
 	html := replacer.Replace(content.BodyHTML)
 	if openTracking && urls.Open != "" {
