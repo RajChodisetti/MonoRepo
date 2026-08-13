@@ -10,6 +10,7 @@ import type {
   DemoLink,
   DemoSession,
   DemoSite,
+  EmailMessage,
   GeneratedSite,
   Member,
   ProfileReviewPreview,
@@ -19,7 +20,7 @@ import { EmptyState, ErrorBanner, PageHeader, StatusBadge } from "@/components/u
 import { PhotoGallery } from "@/components/PhotoGallery";
 import { SendPreviewModal } from "@/components/SendPreviewModal";
 
-type Tab = "overview" | "photos" | "profile" | "demo" | "campaign" | "engagement" | "members";
+type Tab = "overview" | "photos" | "profile" | "demo" | "campaign" | "messages" | "engagement" | "members";
 
 function formatDuration(seconds: number) {
   const safe = Math.max(0, Math.round(seconds || 0));
@@ -88,6 +89,7 @@ function RestaurantDetailInner() {
   // campaigns
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
+  const [messages, setMessages] = useState<EmailMessage[]>([]);
 
   // demo engagement
   const [demoSessions, setDemoSessions] = useState<DemoSession[]>([]);
@@ -118,6 +120,13 @@ function RestaurantDetailInner() {
       `restaurants/${id}/campaigns`,
     );
     setCampaigns(data.items || []);
+  }, [id]);
+
+  const loadMessages = useCallback(async () => {
+    const data = await adminFetch<{ messages: EmailMessage[] }>(
+      `restaurants/${id}/messages`,
+    );
+    setMessages(data.messages || []);
   }, [id]);
 
   const loadEngagement = useCallback(async () => {
@@ -186,6 +195,7 @@ function RestaurantDetailInner() {
       try {
         if (tab === "profile") await loadProfile();
         if (tab === "campaign") await loadCampaigns();
+        if (tab === "messages") await loadMessages();
         if (tab === "engagement") await loadEngagement();
         if (tab === "members") await loadMembers();
         if (tab === "demo") {
@@ -200,6 +210,7 @@ function RestaurantDetailInner() {
     tab,
     loadProfile,
     loadCampaigns,
+    loadMessages,
     loadEngagement,
     loadMembers,
     loadDemoLinks,
@@ -516,6 +527,7 @@ function RestaurantDetailInner() {
     { id: "profile", label: "Profile review" },
     { id: "demo", label: "Demo" },
     { id: "campaign", label: "Campaign" },
+    { id: "messages", label: "Messages" },
     { id: "engagement", label: "Engagement" },
     { id: "members", label: "Members" },
   ];
@@ -635,7 +647,7 @@ function RestaurantDetailInner() {
             Shown interest
           </label>
           <div style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
-            Contacted is set after Gmail confirms a send. Shown interest is set after a tracked email link is clicked.
+            Contacted is set after Gmail confirms a send. Replies appear in Messages and pause that campaign automatically. Shown interest is set after a tracked email link is clicked.
           </div>
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
             <button className="btn btn-primary" type="submit" disabled={busy}>
@@ -997,6 +1009,52 @@ function RestaurantDetailInner() {
               </div>
             </div>
           ) : null}
+        </div>
+      ) : null}
+
+      {tab === "messages" ? (
+        <div style={{ display: "grid", gap: "0.85rem" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "center" }}>
+            <p style={{ color: "var(--muted)", margin: 0 }}>
+              Outbound snapshots are stored when Gmail accepts a send. Inbound replies are captured from the dedicated outreach mailbox.
+            </p>
+            <button className="btn btn-secondary" type="button" onClick={loadMessages}>
+              Refresh
+            </button>
+          </div>
+          {messages.length === 0 ? (
+            <EmptyState message="No captured emails for this restaurant yet." />
+          ) : (
+            messages.map((message) => (
+              <div
+                key={message.id}
+                className="card"
+                style={{
+                  borderLeft: message.direction === "inbound" ? "4px solid var(--primary, #2563eb)" : "4px solid var(--line)",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap" }}>
+                  <StatusBadge status={message.direction} />
+                  <span style={{ color: "var(--muted)", fontSize: "0.85rem" }}>{formatDate(message.created_at)}</span>
+                </div>
+                <div style={{ marginTop: "0.45rem", fontWeight: 600 }}>{message.subject || "(no subject)"}</div>
+                <div style={{ color: "var(--muted)", fontSize: "0.85rem", marginTop: "0.2rem" }}>
+                  From {message.from_email || "—"} → {message.to_email || "—"}
+                </div>
+                <pre
+                  style={{
+                    margin: "0.75rem 0 0",
+                    whiteSpace: "pre-wrap",
+                    fontFamily: "inherit",
+                    fontSize: "0.9rem",
+                    lineHeight: 1.45,
+                  }}
+                >
+                  {message.body_text || "—"}
+                </pre>
+              </div>
+            ))
+          )}
         </div>
       ) : null}
 

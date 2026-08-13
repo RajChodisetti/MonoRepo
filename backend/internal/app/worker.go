@@ -28,6 +28,7 @@ type WorkerApp struct {
 	queue       *jobs.PostgresQueue
 	worker      *jobs.Worker
 	emailHealth *emailprovider.HealthService
+	inbound     *outreach.InboundService
 }
 
 func NewWorker(ctx context.Context) (*WorkerApp, error) {
@@ -110,6 +111,16 @@ func NewWorker(ctx context.Context) (*WorkerApp, error) {
 		return nil, err
 	}
 
+	var inbound *outreach.InboundService
+	if cfg.Outreach.InboundEnabled && cfg.Outreach.InboundMailbox != nil {
+		reader, inboxErr := emailprovider.NewGmailInbox(cfg.Email, *cfg.Outreach.InboundMailbox)
+		if inboxErr != nil {
+			log.WarnContext(ctx, "outreach_inbound_mailbox_unavailable", "error", inboxErr)
+		} else {
+			inbound = outreach.NewInboundService(outreachRepo, dataStore.Campaigns, reader, cfg.Outreach, log)
+		}
+	}
+
 	return &WorkerApp{
 		cfg:         cfg,
 		log:         log,
@@ -118,6 +129,7 @@ func NewWorker(ctx context.Context) (*WorkerApp, error) {
 		queue:       queue,
 		worker:      worker,
 		emailHealth: emailHealth,
+		inbound:     inbound,
 	}, nil
 }
 
@@ -127,6 +139,7 @@ func (w *WorkerApp) Run(ctx context.Context) error {
 
 	w.queue.StartPoller(ctx)
 	go w.runEmailHealthChecks(ctx)
+	go w.runInboundPoll(ctx)
 
 	sample, err := jobs.NewSampleJob("worker booted")
 	if err != nil {
@@ -159,6 +172,34 @@ func (w *WorkerApp) runEmailHealthChecks(ctx context.Context) {
 	}
 	run()
 	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			run()
+		}
+	}
+}
+
+func (w *WorkerApp) runInboundPoll(ctx context.Context) {
+	if w.inbound == nil {
+		return
+	}
+	interval := w.cfg.Outreach.InboundPollInterval
+	if interval <= 0 {
+		interval = time.Minute
+	}
+	run := func() {
+		checkCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+		defer cancel()
+		if err := w.inbound.Poll(checkCtx); err != nil {
+			w.log.ErrorContext(ctx, "outreach_inbound_poll_failed", "error", err)
+		}
+	}
+	run()
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
 		select {

@@ -81,3 +81,38 @@ func TestLoadOutreachGoogleWorkspaceAccountsRejectsInvalidMailbox(t *testing.T) 
 		t.Fatalf("Load() error = %v, want mailbox_email validation error", err)
 	}
 }
+
+func TestLoadOutreachInboundMailboxJSON(t *testing.T) {
+	t.Setenv("OUTREACH_INBOUND_ENABLED", "true")
+	t.Setenv("OUTREACH_INBOUND_MAILBOX_JSON", `{
+		"key":"inbound",
+		"mailbox_email":"outreach@tuvisolutions.com",
+		"client_id":"client-id",
+		"client_secret":"client-secret",
+		"refresh_token":"refresh-token"
+	}`)
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !cfg.Outreach.InboundEnabled {
+		t.Fatal("InboundEnabled = false")
+	}
+	if cfg.Outreach.InboundLocalPart != "outreach" || cfg.Outreach.InboundDomain != "tuvisolutions.com" {
+		t.Fatalf("inbound address = %s@%s", cfg.Outreach.InboundLocalPart, cfg.Outreach.InboundDomain)
+	}
+	if cfg.Outreach.InboundMailbox == nil || cfg.Outreach.InboundMailbox.MailboxEmail != "outreach@tuvisolutions.com" {
+		t.Fatalf("InboundMailbox = %#v", cfg.Outreach.InboundMailbox)
+	}
+}
+
+func TestLoadOutreachInboundRequiresMailboxWhenEnabled(t *testing.T) {
+	t.Setenv("OUTREACH_INBOUND_ENABLED", "true")
+	t.Setenv("OUTREACH_INBOUND_MAILBOX_JSON", "")
+
+	_, err := config.Load()
+	if err == nil || !strings.Contains(err.Error(), "OUTREACH_INBOUND_MAILBOX_JSON") {
+		t.Fatalf("Load() error = %v, want inbound mailbox required", err)
+	}
+}

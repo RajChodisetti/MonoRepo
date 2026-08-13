@@ -20,12 +20,12 @@ export const metadata: Metadata = {
 
 const cards = [
   {
-    title: "One narrow permission",
-    body: "tuvi requests only gmail.send so it can submit an individually reviewed outbound message to Gmail over HTTPS.",
+    title: "Narrow send permission",
+    body: "Sending mailboxes request gmail.send so tuvi can submit an individually reviewed outbound message to Gmail over HTTPS.",
   },
   {
-    title: "No mailbox reading",
-    body: "It does not request access to read inbox messages, contacts, attachments, message history, or Google Drive files.",
+    title: "Inbound replies stay separate",
+    body: "A dedicated inbound mailbox may use gmail.readonly only to capture replies to unique outreach plus-addresses. Sending mailboxes do not read inbox mail, contacts, attachments, message history, or Google Drive files.",
   },
   {
     title: "Controlled access",
@@ -78,8 +78,10 @@ export default function GoogleWorkspacePage() {
             <ol className="mt-5 grid gap-5 text-sm leading-7 text-muted md:grid-cols-3">
               <li>
                 <span className="block font-display text-2xl font-bold text-primary">01</span>
-                An authorized mailbox owner or administrator connects their mailbox to
-                tuvi and grants the Gmail send permission through Google OAuth.
+                An authorized mailbox owner or administrator connects a sending
+                mailbox to tuvi and grants the Gmail send permission through Google
+                OAuth. A separate inbound mailbox may grant read access only to
+                capture outreach replies.
               </li>
               <li>
                 <span className="block font-display text-2xl font-bold text-primary">02</span>

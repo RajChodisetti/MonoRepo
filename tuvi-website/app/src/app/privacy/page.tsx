@@ -77,11 +77,18 @@ export default function PrivacyPage() {
         <p>
           Our Google Workspace email application, <strong className="text-ink">tuvi</strong>,
           uses the Google Gmail API only after an authorized Google Workspace mailbox
-          owner or administrator grants access. tuvi requests the narrow Gmail send permission (
+          owner or administrator grants access. Sending mailboxes request the narrow Gmail send permission (
           <code className="rounded bg-surface px-1.5 py-0.5 text-sm text-ink">
             gmail.send
           </code>
-          ) so it can send approved messages from that mailbox over Google&apos;s HTTPS API.
+          ) so tuvi can send approved messages from that mailbox over Google&apos;s HTTPS API.
+          A separate inbound mailbox may also grant
+          {" "}
+          <code className="rounded bg-surface px-1.5 py-0.5 text-sm text-ink">
+            gmail.readonly
+          </code>
+          {" "}
+          so tuvi can capture replies sent to unique outreach Reply-To addresses.
         </p>
         <LegalList>
           <li>
@@ -90,8 +97,13 @@ export default function PrivacyPage() {
             needed to perform the send.
           </li>
           <li>
-            tuvi does not request permission to read or download inbox
+            Sending mailboxes do not receive permission to read or download inbox
             messages, contacts, Google Drive files, or other Google account content.
+          </li>
+          <li>
+            The dedicated inbound mailbox is used only to capture replies to
+            outreach plus-addresses and store them for internal admin follow-up.
+            It is not used to browse unrelated inbox mail from sending accounts.
           </li>
           <li>
             Refresh tokens are kept in protected server configuration. Short-lived

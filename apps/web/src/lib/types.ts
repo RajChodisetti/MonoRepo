@@ -354,3 +354,41 @@ export type Member = {
   full_name?: string;
   created_at?: string;
 };
+
+export type EmailMessage = {
+  id: string;
+  restaurant_id?: string;
+  campaign_id?: string;
+  delivery_attempt_id?: string;
+  reply_token?: string;
+  direction: "outbound" | "inbound";
+  from_email: string;
+  to_email: string;
+  reply_to?: string;
+  subject: string;
+  body_text: string;
+  gmail_message_id?: string;
+  gmail_thread_id?: string;
+  rfc_message_id?: string;
+  mailbox_key?: string;
+  unmatched?: boolean;
+  read_at?: string;
+  created_at: string;
+};
+
+export type InboxThread = {
+  restaurant_id?: string;
+  restaurant_name?: string;
+  email?: string;
+  unmatched: boolean;
+  unread_count: number;
+  last_direction: string;
+  last_snippet: string;
+  last_at: string;
+  last_message_id: string;
+};
+
+export type InboxListResponse = {
+  threads: InboxThread[];
+  total: number;
+};

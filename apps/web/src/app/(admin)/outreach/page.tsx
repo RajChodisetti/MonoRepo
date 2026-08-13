@@ -1,12 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { OutreachInbox } from "@/components/OutreachInbox";
 import { adminFetch } from "@/lib/client-api";
 import { formatDate } from "@/lib/constants";
 import type { BulkSendStatus, EmailAccountHealthResponse } from "@/lib/types";
 import { EmptyState, ErrorBanner, PageHeader, StatusBadge } from "@/components/ui";
 
+type View = "operations" | "inbox";
+
 export default function OutreachPage() {
+  const [view, setView] = useState<View>("operations");
   const [status, setStatus] = useState<BulkSendStatus | null>(null);
   const [emailHealth, setEmailHealth] = useState<EmailAccountHealthResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -100,9 +104,29 @@ export default function OutreachPage() {
         </div>
       ) : null}
 
-      {loading && !status ? <EmptyState message="Loading outreach status…" /> : null}
+      <div className="tabs" style={{ marginBottom: "1rem" }}>
+        {([
+          { id: "operations" as const, label: "Sending & health" },
+          { id: "inbox" as const, label: "Inbox" },
+        ]).map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            className="tab"
+            data-active={view === tab.id}
+            onClick={() => setView(tab.id)}
+            style={{ background: "transparent", border: "none", cursor: "pointer" }}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
 
-      {status ? (
+      {view === "inbox" ? <OutreachInbox /> : null}
+
+      {view === "operations" && loading && !status ? <EmptyState message="Loading outreach status…" /> : null}
+
+      {view === "operations" && status ? (
         <div
           style={{
             display: "grid",
@@ -178,6 +202,8 @@ export default function OutreachPage() {
         </div>
       ) : null}
 
+      {view === "operations" ? (
+        <>
       <div className="card" style={{ marginBottom: "1rem" }}>
         <h2 style={{ marginTop: 0, fontSize: "1.05rem" }}>Gmail sender health</h2>
         <p style={{ color: "var(--muted)", marginTop: 0 }}>
@@ -236,6 +262,8 @@ export default function OutreachPage() {
           </p>
         ) : null}
       </div>
+        </>
+      ) : null}
     </div>
   );
 }

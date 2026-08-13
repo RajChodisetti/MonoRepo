@@ -12,7 +12,7 @@ export const siteContent = {
     description:
       "tuvi is a private, company-operated application from Tuvi Solutions. Authorized Tuvi team members use it to send individually reviewed business email from their Google Workspace mailboxes through the Gmail API over HTTPS.",
     dataUse:
-      "tuvi requests only the gmail.send permission. It cannot read inbox messages, contacts, attachments, message history, or Google Drive files.",
+      "tuvi requests gmail.send on authorized sending mailboxes. A separate inbound mailbox may use gmail.readonly only to capture replies to outreach plus-addresses. Sending mailboxes cannot read inbox messages, contacts, attachments, message history, or Google Drive files.",
     access:
       "Mailbox access is limited to authorized Tuvi Solutions owners and administrators. There is no public signup.",
     metadataDescription:

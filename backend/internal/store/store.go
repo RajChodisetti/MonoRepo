@@ -115,7 +115,10 @@ func (store *Store) VerifyEmailCampaigns(ctx context.Context) error {
 	if err := store.verifyTableExists(ctx, "email_campaigns", "email campaigns migration not applied: run make migrate-up"); err != nil {
 		return err
 	}
-	return store.verifyTableExists(ctx, "email_delivery_attempts", "outreach email quota migration not applied: run make migrate-up")
+	if err := store.verifyTableExists(ctx, "email_delivery_attempts", "outreach email quota migration not applied: run make migrate-up"); err != nil {
+		return err
+	}
+	return store.verifyTableExists(ctx, "email_messages", "email messages migration not applied: run make migrate-up")
 }
 
 func (store *Store) VerifyLeadWorkflow(ctx context.Context) error {

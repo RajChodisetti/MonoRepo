@@ -13,6 +13,7 @@ import (
 
 type preflightQuotaStore struct {
 	claims        int
+	attemptID     uuid.UUID
 	registrations []QuotaAccountConfig
 }
 
@@ -27,7 +28,10 @@ func (store *preflightQuotaStore) ReconcileStaleEmailDeliveries(context.Context)
 
 func (store *preflightQuotaStore) ClaimEmailDelivery(context.Context, []string, DeliveryContext, time.Duration) (DeliveryClaim, error) {
 	store.claims++
-	return DeliveryClaim{AttemptID: uuid.New(), AccountKey: "account-1"}, nil
+	if store.attemptID == uuid.Nil {
+		store.attemptID = uuid.New()
+	}
+	return DeliveryClaim{AttemptID: store.attemptID, AccountKey: "account-1"}, nil
 }
 
 func (store *preflightQuotaStore) CompleteEmailDelivery(context.Context, DeliveryClaim, string) error {
@@ -48,11 +52,13 @@ func (store *preflightQuotaStore) NextEmailAccountAvailableAt(context.Context, [
 
 type preflightProvider struct {
 	sends int
+	last  SendRequest
 }
 
-func (provider *preflightProvider) Send(context.Context, SendRequest) (SendResult, error) {
+func (provider *preflightProvider) Send(_ context.Context, req SendRequest) (SendResult, error) {
 	provider.sends++
-	return SendResult{ProviderMessageID: "message-1"}, nil
+	provider.last = req
+	return SendResult{ProviderMessageID: "message-1", ReplyTo: req.ReplyTo}, nil
 }
 
 func TestDurableAccountPoolValidatesBeforeClaim(t *testing.T) {
@@ -161,5 +167,46 @@ func TestPersistentAccountPoolRegistersDurablePacingPolicy(t *testing.T) {
 	registration := quota.registrations[0]
 	if registration.SendLimit != 40 || registration.SendWindow != 8*time.Hour || registration.SendJitterMin != 2*time.Minute || registration.SendJitterMax != 5*time.Minute {
 		t.Fatalf("registration pacing = %#v", registration)
+	}
+}
+
+func TestDurableAccountPoolSetsPlusAddressReplyToAfterClaim(t *testing.T) {
+	quota := &preflightQuotaStore{attemptID: uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")}
+	provider := &preflightProvider{}
+	pool, err := newPersistentAccountPool(
+		[]accountProvider{{key: "account-1", provider: provider}},
+		40,
+		40,
+		24*time.Hour,
+		quota,
+	)
+	if err != nil {
+		t.Fatalf("newPersistentAccountPool() error = %v", err)
+	}
+	pool.replyToForAttempt = func(id uuid.UUID) string {
+		return ReplyToAddress("outreach", "tuvisolutions.com", id)
+	}
+
+	result, err := pool.Send(context.Background(), SendRequest{
+		To:       "owner@example.com",
+		Subject:  "Your restaurant demo",
+		TextBody: "hello",
+		Delivery: &DeliveryContext{
+			CampaignID:   uuid.New(),
+			RestaurantID: uuid.New(),
+		},
+	})
+	if err != nil {
+		t.Fatalf("Send() error = %v", err)
+	}
+	want := "outreach+aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa@tuvisolutions.com"
+	if provider.last.ReplyTo != want {
+		t.Fatalf("provider ReplyTo = %q, want %q", provider.last.ReplyTo, want)
+	}
+	if result.ReplyTo != want {
+		t.Fatalf("result ReplyTo = %q, want %q", result.ReplyTo, want)
+	}
+	if result.DeliveryAttemptID != quota.attemptID {
+		t.Fatalf("DeliveryAttemptID = %s, want %s", result.DeliveryAttemptID, quota.attemptID)
 	}
 }

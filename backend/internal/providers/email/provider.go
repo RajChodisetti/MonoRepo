@@ -27,6 +27,10 @@ type SendRequest struct {
 
 type SendResult struct {
 	ProviderMessageID string
+	ProviderThreadID  string
+	RFCMessageID      string
+	FromEmail         string
+	ReplyTo           string
 	RedirectedTo      string
 	Skipped           bool
 	QuotaManaged      bool

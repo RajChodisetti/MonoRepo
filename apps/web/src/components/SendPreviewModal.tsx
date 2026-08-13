@@ -28,19 +28,26 @@ export function SendPreviewModal({
   const [sending, setSending] = useState(false);
   const [results, setResults] = useState<AdHocSendResult[] | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
+  const idsKey = restaurantIds.join(",");
 
   useEffect(() => {
-    if (!open || restaurantIds.length === 0) return;
+    if (!open) {
+      setResults(null);
+      setSendError(null);
+      setPreviews([]);
+      setSending(false);
+      return;
+    }
+    if (!idsKey) return;
+    const ids = idsKey.split(",").filter(Boolean);
     setResults(null);
     setSendError(null);
-    setPreviews(
-      restaurantIds.map((id) => ({ restaurantId: id, preview: null, error: null, loading: true })),
-    );
+    setPreviews(ids.map((id) => ({ restaurantId: id, preview: null, error: null, loading: true })));
 
     let cancelled = false;
     (async () => {
       const loaded = await Promise.all(
-        restaurantIds.map(async (id) => {
+        ids.map(async (id) => {
           try {
             const preview = await adminFetch<AdHocPreview>(`restaurants/${id}/outreach/adhoc-preview`);
             return { restaurantId: id, preview, error: null, loading: false };
@@ -61,7 +68,7 @@ export function SendPreviewModal({
     return () => {
       cancelled = true;
     };
-  }, [open, restaurantIds]);
+  }, [open, idsKey]);
 
   const sendableIds = previews.filter((p) => p.preview && !p.error).map((p) => p.restaurantId);
 
