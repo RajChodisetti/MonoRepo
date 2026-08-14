@@ -3442,7 +3442,7 @@ are all zero. The persisted email job remains disabled, no bulk job is active,
 and the scraper, data services, websites, voice services, and sequence activation
 state were not changed.
 
-## 2026-08-14 — Database-first Gmail credential overrides (unreleased)
+## 2026-08-14 — Database-first Gmail credential overrides deployed
 
 **Role / Delivery:** Changed the account registry so every listed Gmail account,
 including an environment-provided identity, can have its complete OAuth
@@ -3461,6 +3461,26 @@ and the 14-route production build passed. OpenAPI validation passed with the sam
 11 unrelated existing warnings, and `git diff --check` passed. All provider calls
 remained mocked.
 
+User-approved release `7e72df6` was built from the exact pushed commit and
+deployed from
+`/opt/tuvi/releases/monorepo-7e72df6-db-precedence-20260814T200818Z`. The
+isolated QA API was canaried and replaced first; QA PostgreSQL, Redis, and
+website retained their original start times. Production API, worker, and admin
+were then recreated from the same release. The first QA canary attempt failed
+closed before any swap because the historical container injects its Redis URL
+separately from the protected env file; the live QA API was untouched, the
+missing non-secret network value was restored, and the second canary passed.
+
+Production site, API read route, and admin login returned HTTP 200; protected
+mailbox access returned 401 without authentication. An existing signed-in admin
+browser session loaded all three environment accounts, displayed **Replace
+credentials** for each, showed database-precedence guidance, and reported no
+console errors. QA loopback health and protected-route checks passed; its public
+API retained the expected allowlisted 404 and the QA website returned 200. The
+stale bootstrap `ADMIN_PASSWORD` environment value no longer authenticates the
+live admin database user, so verification used the existing signed-in session
+without resetting any credential.
+
 **Business Value / Plan Fit:** Administrators can repair or rotate credentials
 for the three existing environment accounts without exposing old secrets or
 performing a deployment-config edit. A deliberate database update is always the
@@ -3469,7 +3489,19 @@ preserving mailbox identity, quota history, and inbox continuity.
 
 **Risks / Approval State:** This is a fail-closed precedence change: disabling a
 database override also disables that identity until it is re-enabled or its
-credentials are replaced. No migration is required. The change is committed for
-review only; QA and production remain on the prior release, the production email
-job remains disabled, and no provider email, scrape, deployment, credential, or
-production-data mutation was performed.
+credentials are replaced. No migration ran; QA and production remain at schema
+52 with zero database-managed credential rows. Both persisted email jobs remain
+disabled, and post-deployment counts show zero new delivery attempts, outbound
+message snapshots, or health checks. No provider email was sent. PostgreSQL,
+Redis, scraper, website, template, voice, and sequence state were not restarted
+or changed.
+
+Fresh verified custom-format production and QA backups are retained at
+`/opt/tuvi/backups/postgres/monorepo-pre-7e72df6-20260814T200818Z.dump` and
+`/opt/tuvi/backups/qa-postgres/qa-pre-7e72df6-20260814T200818Z.dump`; the
+protected mode-`0600` config archive is
+`/opt/tuvi/backups/config/env-pre-7e72df6-20260814T200818Z.tar.gz`. Rollback is
+the prior release
+`/opt/tuvi/releases/monorepo-6f1a4da-mailbox-ui-20260814T165047Z`, explicit
+`rollback-6f1a4da-20260814T200818Z` API/worker/admin images, and the retained
+stopped QA API container.

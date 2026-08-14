@@ -1,7 +1,7 @@
 # Session Summary
 
-Branch `codex/reconcile-outbound-inboxes-ramp-20260813` contains an unreleased admin credential-override update on top of deployed release `6f1a4da`.
-Every existing account can replace credentials from the UI; exact database identities take precedence over environment values across sending, health, replies, and inbox polling.
-Disabled or unreadable database overrides fail closed, partial environment collisions are rejected, and old secrets remain write-only and undisclosed.
-Full backend tests/vet/build, admin lint/type-check/build, migration discovery, OpenAPI validation, and diff checks pass with providers mocked.
-QA and production remain at schema 52 on the prior release; the production email job remains disabled and no deployment or provider email occurred.
+Branch `codex/reconcile-outbound-inboxes-ramp-20260813` deploys credential overrides at commit `7e72df6` from `/opt/tuvi/releases/monorepo-7e72df6-db-precedence-20260814T200818Z`.
+QA API and production API/worker/admin use the new release; all other QA and production services retained their prior start times and zero restart counts.
+Every existing account can replace credentials from the UI, and exact database identities take precedence over environment values across sending, health, replies, and inbox polling.
+QA and production remain at schema 52 with zero database credentials; both email jobs remain disabled and the deployment created no delivery attempts, outbound snapshots, health checks, or provider email.
+Verified database/config backups and explicit `6f1a4da` rollback images are retained; authenticated production browser QA showed all three replace actions with no console errors.
