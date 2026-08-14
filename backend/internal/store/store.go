@@ -151,6 +151,12 @@ func (store *Store) VerifyEmailCampaigns(ctx context.Context) error {
 	if err := store.verifyTableExists(ctx, "email_messages", "email messages migration not applied: run make migrate-up"); err != nil {
 		return err
 	}
+	if err := store.verifyColumnExists(ctx, "email_messages", "received_at"); err != nil {
+		return err
+	}
+	if err := store.verifyColumnExists(ctx, "outreach_inbound_sync", "last_success_at"); err != nil {
+		return err
+	}
 	return store.verifyColumnExists(ctx, "outreach_email_accounts", "ramp_day")
 }
 

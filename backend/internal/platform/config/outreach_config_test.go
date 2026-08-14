@@ -106,6 +106,12 @@ func TestLoadOutreachInboundUsesSelectedSendingAccount(t *testing.T) {
 	if cfg.Outreach.InboundMailbox.AccountKey != "outreach" {
 		t.Fatalf("inbound AccountKey = %q, want outreach", cfg.Outreach.InboundMailbox.AccountKey)
 	}
+	if len(cfg.Outreach.InboundMailboxes) != 2 {
+		t.Fatalf("InboundMailboxes len = %d, want every configured mailbox", len(cfg.Outreach.InboundMailboxes))
+	}
+	if cfg.Outreach.InboundMailboxes[0].AccountKey != "sales" || cfg.Outreach.InboundMailboxes[1].AccountKey != "outreach" {
+		t.Fatalf("InboundMailboxes = %#v, want configured order", cfg.Outreach.InboundMailboxes)
+	}
 }
 
 func TestLoadOutreachInboundRequiresSendingAccountWhenEnabled(t *testing.T) {

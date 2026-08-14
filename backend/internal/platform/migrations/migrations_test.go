@@ -292,6 +292,21 @@ func TestRepositoryMigrationsIncludeLatestOutreachChanges(t *testing.T) {
 				"FROM email_suppressions suppression",
 			},
 		},
+		51: {
+			name: "unified_outreach_inbox",
+			upFragments: []string{
+				"email_messages_mailbox_provider_id_unique",
+				"ADD COLUMN IF NOT EXISTS received_at",
+				"last_attempt_at",
+				"last_success_at",
+				"last_error",
+			},
+			downFragments: []string{
+				"provider message ids overlap across mailboxes",
+				"email_messages_gmail_message_id_unique",
+				"DROP COLUMN IF EXISTS received_at",
+			},
+		},
 	}
 
 	for _, migration := range migrations {

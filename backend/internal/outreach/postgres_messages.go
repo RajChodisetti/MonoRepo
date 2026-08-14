@@ -14,7 +14,7 @@ const messageSelectColumns = `
 	id, restaurant_id, campaign_id, delivery_attempt_id, reply_token,
 	direction, from_email, to_email, reply_to, subject, body_text,
 	gmail_message_id, gmail_thread_id, rfc_message_id, mailbox_key,
-	unmatched, read_at, created_at`
+	unmatched, read_at, received_at, created_at`
 
 func (repo *Postgres) InsertMessage(ctx context.Context, message Message) (Message, error) {
 	if repo.pool == nil {
@@ -29,10 +29,14 @@ func (repo *Postgres) InsertMessage(ctx context.Context, message Message) (Messa
 			restaurant_id, campaign_id, delivery_attempt_id, reply_token,
 			direction, from_email, to_email, reply_to, subject, body_text,
 			gmail_message_id, gmail_thread_id, rfc_message_id, mailbox_key,
-			unmatched, read_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+			unmatched, read_at, received_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, COALESCE($17, now()))
 		ON CONFLICT DO NOTHING
 		RETURNING` + messageSelectColumns
+	var receivedAt any
+	if !message.ReceivedAt.IsZero() {
+		receivedAt = message.ReceivedAt
+	}
 	record, err := scanMessage(repo.pool.QueryRow(
 		ctx,
 		query,
@@ -52,10 +56,11 @@ func (repo *Postgres) InsertMessage(ctx context.Context, message Message) (Messa
 		strings.TrimSpace(message.MailboxKey),
 		message.Unmatched,
 		message.ReadAt,
+		receivedAt,
 	))
 	if errors.Is(err, pgx.ErrNoRows) {
 		if strings.TrimSpace(message.GmailMessageID) != "" {
-			existing, lookupErr := repo.GetMessageByGmailID(ctx, message.GmailMessageID)
+			existing, lookupErr := repo.GetMessageByGmailID(ctx, message.MailboxKey, message.GmailMessageID)
 			if lookupErr == nil {
 				return existing, nil
 			}
@@ -89,14 +94,16 @@ func (repo *Postgres) GetMessageByID(ctx context.Context, id uuid.UUID) (Message
 	return scanMessage(repo.pool.QueryRow(ctx, `SELECT`+messageSelectColumns+` FROM email_messages WHERE id = $1`, id))
 }
 
-func (repo *Postgres) GetMessageByGmailID(ctx context.Context, gmailMessageID string) (Message, error) {
+func (repo *Postgres) GetMessageByGmailID(ctx context.Context, mailboxKey, gmailMessageID string) (Message, error) {
+	mailboxKey = strings.TrimSpace(mailboxKey)
 	gmailMessageID = strings.TrimSpace(gmailMessageID)
-	if gmailMessageID == "" {
+	if mailboxKey == "" || gmailMessageID == "" {
 		return Message{}, pgx.ErrNoRows
 	}
 	return scanMessage(repo.pool.QueryRow(
 		ctx,
-		`SELECT`+messageSelectColumns+` FROM email_messages WHERE gmail_message_id = $1`,
+		`SELECT`+messageSelectColumns+` FROM email_messages WHERE mailbox_key = $1 AND gmail_message_id = $2`,
+		mailboxKey,
 		gmailMessageID,
 	))
 }
@@ -173,59 +180,64 @@ func (repo *Postgres) FindRestaurantIDByEmail(ctx context.Context, email string)
 	return id, nil
 }
 
-func (repo *Postgres) ListInbox(ctx context.Context, unreadOnly bool, limit, offset int) (InboxList, error) {
+const inboxThreadsCTE = `
+	WITH messages AS (
+	  SELECT m.id, m.restaurant_id, m.direction, m.from_email, m.to_email,
+	         m.body_text, m.read_at, m.received_at, m.created_at, m.mailbox_key,
+	         COALESCE(NULLIF(m.gmail_thread_id, ''), COALESCE(m.restaurant_id::text, m.id::text)) AS conversation_key,
+	         r.name AS restaurant_name,
+	         CASE WHEN m.direction = 'inbound' THEN m.from_email ELSE m.to_email END AS email
+	  FROM email_messages m
+	  LEFT JOIN restaurants r ON r.id = m.restaurant_id
+	  WHERE m.received_at >= now() - interval '10 days'
+	), threads AS (
+	  SELECT mailbox_key,
+	         conversation_key,
+	         ((array_agg(restaurant_id ORDER BY received_at DESC, created_at DESC)
+	           FILTER (WHERE restaurant_id IS NOT NULL))[1]) AS restaurant_id,
+	         COALESCE(max(restaurant_name), '') AS restaurant_name,
+	         COALESCE((array_agg(email ORDER BY received_at DESC, created_at DESC))[1], '') AS email,
+	         COALESCE((array_agg(to_email ORDER BY received_at DESC, created_at DESC)
+	           FILTER (WHERE direction = 'inbound'))[1], '') AS mailbox_email,
+	         bool_and(restaurant_id IS NULL) AS unmatched,
+	         count(*) FILTER (WHERE direction = 'inbound' AND read_at IS NULL)::int AS unread_count,
+	         (array_agg(direction ORDER BY received_at DESC, created_at DESC))[1] AS last_direction,
+	         (array_agg(left(btrim(regexp_replace(body_text, '\s+', ' ', 'g')), 180)
+	           ORDER BY received_at DESC, created_at DESC))[1] AS last_snippet,
+	         max(received_at) AS last_at,
+	         (array_agg(id ORDER BY received_at DESC, created_at DESC))[1] AS last_message_id
+	  FROM messages
+	  GROUP BY mailbox_key, conversation_key
+	  HAVING bool_or(direction = 'inbound')
+	)`
+
+func (repo *Postgres) ListInbox(ctx context.Context, unreadOnly bool, mailboxKey string, limit, offset int) (InboxList, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
 	if offset < 0 {
 		offset = 0
 	}
-	unreadClause := ""
-	if unreadOnly {
-		unreadClause = `WHERE unread_count > 0`
-	}
-	countQuery := `
+	mailboxKey = strings.TrimSpace(mailboxKey)
+	countQuery := inboxThreadsCTE + `
 		SELECT count(*)
-		FROM (
-		  SELECT COALESCE(restaurant_id::text, id::text) AS thread_key,
-		         count(*) FILTER (WHERE direction = 'inbound' AND read_at IS NULL) AS unread_count
-		  FROM email_messages
-		  GROUP BY COALESCE(restaurant_id::text, id::text)
-		) threads ` + unreadClause
+		FROM threads
+		WHERE ($1 = '' OR mailbox_key = $1)
+		  AND (NOT $2 OR unread_count > 0)`
 	var total int
-	if err := repo.pool.QueryRow(ctx, countQuery).Scan(&total); err != nil {
+	if err := repo.pool.QueryRow(ctx, countQuery, mailboxKey, unreadOnly).Scan(&total); err != nil {
 		return InboxList{}, fmt.Errorf("count inbox threads: %w", err)
 	}
 
-	query := `
-		SELECT restaurant_id, restaurant_name, email, unmatched, unread_count,
+	query := inboxThreadsCTE + `
+		SELECT restaurant_id, restaurant_name, email, mailbox_key, mailbox_email, unmatched, unread_count,
 		       last_direction, last_snippet, last_at, last_message_id
-		FROM (
-		  SELECT restaurant_id,
-		         max(restaurant_name) AS restaurant_name,
-		         max(email) AS email,
-		         bool_or(unmatched AND restaurant_id IS NULL) AS unmatched,
-		         count(*) FILTER (WHERE direction = 'inbound' AND read_at IS NULL)::int AS unread_count,
-		         (array_agg(direction ORDER BY created_at DESC))[1] AS last_direction,
-		         (array_agg(left(btrim(regexp_replace(body_text, '\s+', ' ', 'g')), 180) ORDER BY created_at DESC))[1] AS last_snippet,
-		         max(created_at) AS last_at,
-		         (array_agg(id ORDER BY created_at DESC))[1] AS last_message_id
-		  FROM (
-		    SELECT m.id, m.restaurant_id, m.direction, m.body_text, m.unmatched, m.read_at, m.created_at,
-	           r.name AS restaurant_name,
-	           COALESCE(
-	             r.email,
-	             CASE WHEN m.direction = 'inbound' THEN m.from_email ELSE m.to_email END
-	           ) AS email,
-		           COALESCE(m.restaurant_id::text, m.id::text) AS thread_key
-		    FROM email_messages m
-		    LEFT JOIN restaurants r ON r.id = m.restaurant_id
-		  ) messages
-		  GROUP BY thread_key, restaurant_id
-		) threads ` + unreadClause + `
+		FROM threads
+		WHERE ($1 = '' OR mailbox_key = $1)
+		  AND (NOT $2 OR unread_count > 0)
 		ORDER BY unread_count DESC, last_at DESC
-		LIMIT $1 OFFSET $2`
-	rows, err := repo.pool.Query(ctx, query, limit, offset)
+		LIMIT $3 OFFSET $4`
+	rows, err := repo.pool.Query(ctx, query, mailboxKey, unreadOnly, limit, offset)
 	if err != nil {
 		return InboxList{}, fmt.Errorf("list inbox threads: %w", err)
 	}
@@ -233,23 +245,66 @@ func (repo *Postgres) ListInbox(ctx context.Context, unreadOnly bool, limit, off
 
 	threads := make([]InboxThread, 0)
 	for rows.Next() {
-		var thread InboxThread
-		if err := rows.Scan(
-			&thread.RestaurantID,
-			&thread.RestaurantName,
-			&thread.Email,
-			&thread.Unmatched,
-			&thread.UnreadCount,
-			&thread.LastDirection,
-			&thread.LastSnippet,
-			&thread.LastAt,
-			&thread.LastMessageID,
-		); err != nil {
+		thread, err := scanInboxThread(rows)
+		if err != nil {
 			return InboxList{}, fmt.Errorf("scan inbox thread: %w", err)
 		}
 		threads = append(threads, thread)
 	}
-	return InboxList{Threads: threads, Total: total}, rows.Err()
+	if err := rows.Err(); err != nil {
+		return InboxList{}, err
+	}
+	mailboxes, err := repo.ListInboundMailboxStatuses(ctx)
+	if err != nil {
+		return InboxList{}, err
+	}
+	return InboxList{Threads: threads, Mailboxes: mailboxes, Total: total}, nil
+}
+
+func scanInboxThread(row messageScanner) (InboxThread, error) {
+	var thread InboxThread
+	var restaurantName *string
+	if err := row.Scan(
+		&thread.RestaurantID,
+		&restaurantName,
+		&thread.Email,
+		&thread.MailboxKey,
+		&thread.MailboxEmail,
+		&thread.Unmatched,
+		&thread.UnreadCount,
+		&thread.LastDirection,
+		&thread.LastSnippet,
+		&thread.LastAt,
+		&thread.LastMessageID,
+	); err != nil {
+		return InboxThread{}, err
+	}
+	if restaurantName != nil {
+		thread.RestaurantName = *restaurantName
+	}
+	return thread, nil
+}
+
+func (repo *Postgres) ListInboundMailboxStatuses(ctx context.Context) ([]InboxMailboxStatus, error) {
+	rows, err := repo.pool.Query(
+		ctx,
+		`SELECT mailbox_key, last_attempt_at, last_success_at, last_error
+		 FROM outreach_inbound_sync
+		 ORDER BY mailbox_key`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list inbound mailbox statuses: %w", err)
+	}
+	defer rows.Close()
+	statuses := make([]InboxMailboxStatus, 0)
+	for rows.Next() {
+		var status InboxMailboxStatus
+		if err := rows.Scan(&status.MailboxKey, &status.LastAttemptAt, &status.LastSuccessAt, &status.LastError); err != nil {
+			return nil, fmt.Errorf("scan inbound mailbox status: %w", err)
+		}
+		statuses = append(statuses, status)
+	}
+	return statuses, rows.Err()
 }
 
 func (repo *Postgres) ListRestaurantMessages(ctx context.Context, restaurantID uuid.UUID) ([]Message, error) {
@@ -341,6 +396,44 @@ func (repo *Postgres) SetInboundSync(ctx context.Context, mailboxKey, historyID 
 	return nil
 }
 
+func (repo *Postgres) MarkInboundPollAttempt(ctx context.Context, mailboxKey string) error {
+	_, err := repo.pool.Exec(
+		ctx,
+		`INSERT INTO outreach_inbound_sync (mailbox_key, history_id, last_attempt_at, updated_at)
+		 VALUES ($1, '', now(), now())
+		 ON CONFLICT (mailbox_key) DO UPDATE
+		 SET last_attempt_at = now(), updated_at = now()`,
+		strings.TrimSpace(mailboxKey),
+	)
+	if err != nil {
+		return fmt.Errorf("mark inbound mailbox poll attempt: %w", err)
+	}
+	return nil
+}
+
+func (repo *Postgres) RecordInboundPollResult(ctx context.Context, mailboxKey string, pollErr error) error {
+	lastError := ""
+	if pollErr != nil {
+		lastError = snippet(pollErr.Error(), 500)
+	}
+	_, err := repo.pool.Exec(
+		ctx,
+		`INSERT INTO outreach_inbound_sync (
+		   mailbox_key, history_id, last_attempt_at, last_success_at, last_error, updated_at
+		 ) VALUES ($1, '', now(), CASE WHEN $2 = '' THEN now() ELSE NULL END, $2, now())
+		 ON CONFLICT (mailbox_key) DO UPDATE
+		 SET last_success_at = CASE WHEN EXCLUDED.last_error = '' THEN now() ELSE outreach_inbound_sync.last_success_at END,
+		     last_error = EXCLUDED.last_error,
+		     updated_at = now()`,
+		strings.TrimSpace(mailboxKey),
+		lastError,
+	)
+	if err != nil {
+		return fmt.Errorf("record inbound mailbox poll result: %w", err)
+	}
+	return nil
+}
+
 type messageScanner interface {
 	Scan(dest ...any) error
 }
@@ -365,6 +458,7 @@ func scanMessage(row messageScanner) (Message, error) {
 		&record.MailboxKey,
 		&record.Unmatched,
 		&record.ReadAt,
+		&record.ReceivedAt,
 		&record.CreatedAt,
 	)
 	if err != nil {

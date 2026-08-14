@@ -27,7 +27,7 @@ type WorkerApp struct {
 	queue       *jobs.PostgresQueue
 	worker      *jobs.Worker
 	emailHealth *emailprovider.HealthService
-	inbound     *outreach.InboundService
+	inbound     []*outreach.InboundService
 }
 
 func NewWorker(ctx context.Context) (*WorkerApp, error) {
@@ -96,13 +96,22 @@ func NewWorker(ctx context.Context) (*WorkerApp, error) {
 		return nil, err
 	}
 
-	var inbound *outreach.InboundService
-	if cfg.Outreach.InboundEnabled && cfg.Outreach.InboundMailbox != nil {
-		reader, inboxErr := emailprovider.NewGmailInbox(cfg.Email, *cfg.Outreach.InboundMailbox)
-		if inboxErr != nil {
-			log.WarnContext(ctx, "outreach_inbound_mailbox_unavailable", "error", inboxErr)
-		} else {
-			inbound = outreach.NewInboundService(outreachRepo, dataStore.Campaigns, reader, cfg.Outreach, log)
+	inbound := make([]*outreach.InboundService, 0, len(cfg.Outreach.InboundMailboxes))
+	if cfg.Outreach.InboundEnabled {
+		for _, mailbox := range cfg.Outreach.InboundMailboxes {
+			reader, inboxErr := emailprovider.NewGmailInbox(cfg.Email, mailbox)
+			if inboxErr != nil {
+				log.WarnContext(ctx, "outreach_inbound_mailbox_unavailable", "mailbox_key", mailbox.AccountKey, "error", inboxErr)
+				continue
+			}
+			inbound = append(inbound, outreach.NewInboundService(
+				outreachRepo,
+				dataStore.Campaigns,
+				reader,
+				mailbox.AccountKey,
+				cfg.Outreach,
+				log.With("mailbox_key", mailbox.AccountKey),
+			))
 		}
 	}
 
@@ -124,7 +133,9 @@ func (w *WorkerApp) Run(ctx context.Context) error {
 
 	w.queue.StartPoller(ctx)
 	go w.runEmailHealthChecks(ctx)
-	go w.runInboundPoll(ctx)
+	for _, inbox := range w.inbound {
+		go w.runInboundPoll(ctx, inbox)
+	}
 
 	sample, err := jobs.NewSampleJob("worker booted")
 	if err != nil {
@@ -168,8 +179,8 @@ func (w *WorkerApp) runEmailHealthChecks(ctx context.Context) {
 	}
 }
 
-func (w *WorkerApp) runInboundPoll(ctx context.Context) {
-	if w.inbound == nil {
+func (w *WorkerApp) runInboundPoll(ctx context.Context, inbound *outreach.InboundService) {
+	if inbound == nil {
 		return
 	}
 	interval := w.cfg.Outreach.InboundPollInterval
@@ -179,7 +190,7 @@ func (w *WorkerApp) runInboundPoll(ctx context.Context) {
 	run := func() {
 		checkCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 		defer cancel()
-		if err := w.inbound.Poll(checkCtx); err != nil {
+		if err := inbound.Poll(checkCtx); err != nil {
 			w.log.ErrorContext(ctx, "outreach_inbound_poll_failed", "error", err)
 		}
 	}

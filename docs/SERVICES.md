@@ -58,6 +58,12 @@ worker (only when persisted email job is enabled)
   -> confirmed send advances integer sequence step and next-due timestamp
   -> failure/unknown leaves the step unchanged
 
+worker unified inbox (independent of the persisted bulk-email control)
+  -> one Gmail history poller per configured Google Workspace account
+  -> every INBOX message from the last 10 days, including unmatched mail
+  -> confident reply matches pause only the associated campaign
+  -> internal-admin replies use the receiving mailbox and original thread
+
 public AI review
   -> Places details/reviews/media
   -> concurrent website capture and low-latency vision review

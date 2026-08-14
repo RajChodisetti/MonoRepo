@@ -872,6 +872,7 @@ func (service *Service) ListInbox(
 	ctx context.Context,
 	principal auth.Principal,
 	unreadOnly bool,
+	mailboxKey string,
 	limit int,
 	offset int,
 ) (InboxList, error) {
@@ -880,9 +881,9 @@ func (service *Service) ListInbox(
 	}
 	store, ok := service.repo.(*Postgres)
 	if !ok || store == nil {
-		return InboxList{Threads: []InboxThread{}}, nil
+		return InboxList{Threads: []InboxThread{}, Mailboxes: []InboxMailboxStatus{}}, nil
 	}
-	return store.ListInbox(ctx, unreadOnly, limit, offset)
+	return store.ListInbox(ctx, unreadOnly, mailboxKey, limit, offset)
 }
 
 func (service *Service) ListRestaurantMessages(

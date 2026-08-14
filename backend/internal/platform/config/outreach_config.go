@@ -202,6 +202,7 @@ func loadOutreachInboundAccount(parser *envParser, cfg *OutreachConfig) {
 	cfg.InboundDomain = strings.ToLower(selected.MailboxEmail[at+1:])
 	account := selected
 	cfg.InboundMailbox = &account
+	cfg.InboundMailboxes = append([]GmailMailConfig(nil), cfg.GoogleWorkspaceAccounts...)
 }
 
 func canonicalOutreachMailbox(value string) (string, error) {

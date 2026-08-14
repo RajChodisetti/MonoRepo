@@ -50,6 +50,13 @@ func TestOutreachInboxHandlersValidateAuthAndIdentifiersBeforeService(t *testing
 			wantStatus: http.StatusBadRequest,
 		},
 		{
+			name:       "inbox rejects a multiline mailbox key",
+			request:    httptest.NewRequest(http.MethodGet, "/api/v1/outreach/inbox?mailbox=sales%0Aother", nil),
+			serve:      handler.ListInbox,
+			principal:  &admin,
+			wantStatus: http.StatusBadRequest,
+		},
+		{
 			name:       "shared emails rejects a negative offset",
 			request:    httptest.NewRequest(http.MethodGet, "/api/v1/restaurants/shared-emails?offset=-1", nil),
 			serve:      handler.ListSharedEmailGroups,

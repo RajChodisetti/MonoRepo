@@ -88,13 +88,21 @@ Migration `000050_reconcile_outreach_enrollment` replaces the stale
 suppression-gated enrollment function, backfills missing eligible enrollments,
 and leaves the email job disabled. Applying it never activates sending.
 
-## One mailbox for sending, replies, and inbox capture
+## Unified inbox across configured sending mailboxes
 
 Set `OUTREACH_INBOUND_ENABLED=true` and optionally
 `OUTREACH_INBOUND_ACCOUNT_KEY`. The key must select an entry already present in
-`OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON`; when omitted, the first entry is used.
-That selected refresh token needs both `gmail.send` and `gmail.readonly`.
-Other configured senders need only `gmail.send`.
+`OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON`; when omitted, the first entry defines
+the canonical plus-address Reply-To. Every configured Google Workspace account
+is polled independently and every refresh token needs both `gmail.send` and
+`gmail.readonly`.
+
+The initial and fallback sync uses `in:inbox newer_than:10d`; the API also
+filters on Gmail's provider-received timestamp, so only the last 10 days are
+shown. Older stored snapshots are retained. Each mailbox has its own history
+cursor and last-attempt/success/error state. The admin Inbox can combine all
+mailboxes or filter by stable account key, and unmatched messages remain
+replyable without pausing a restaurant campaign.
 
 The admin Inbox reply action sends plain text from the mailbox that captured the
 message, preserves the Gmail thread and RFC reply headers, and stores the

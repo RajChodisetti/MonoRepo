@@ -460,6 +460,7 @@ export type EmailMessage = {
   mailbox_key?: string;
   unmatched?: boolean;
   read_at?: string;
+  received_at: string;
   created_at: string;
 };
 
@@ -467,6 +468,8 @@ export type InboxThread = {
   restaurant_id?: string;
   restaurant_name?: string;
   email?: string;
+  mailbox_key: string;
+  mailbox_email: string;
   unmatched: boolean;
   unread_count: number;
   last_direction: string;
@@ -475,7 +478,15 @@ export type InboxThread = {
   last_message_id: string;
 };
 
+export type InboxMailboxStatus = {
+  mailbox_key: string;
+  last_attempt_at?: string;
+  last_success_at?: string;
+  last_error?: string;
+};
+
 export type InboxListResponse = {
   threads: InboxThread[];
+  mailboxes: InboxMailboxStatus[];
   total: number;
 };

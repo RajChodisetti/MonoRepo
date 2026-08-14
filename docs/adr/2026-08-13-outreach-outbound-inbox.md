@@ -1,7 +1,7 @@
 # ADR: Outreach outbound inbox and plus-address reply capture
 
 Date: 2026-08-13
-Status: Accepted (local/unreleased)
+Status: Superseded in part by `2026-08-14-unified-multi-mailbox-inbox.md`
 
 ## Context
 
@@ -51,3 +51,8 @@ privacy pages promised that tuvi does not read those inboxes.
   include send and readonly scopes; other configured accounts remain send-only.
 - Historical sends before this change have no body snapshot unless they are
   re-sent.
+
+The later unified-inbox decision supersedes only the single-read-mailbox scope,
+retention window, and grouping portions of this ADR. Snapshotting, deterministic
+reply matching, campaign pausing, internal-admin authorization, and same-mailbox
+reply behavior remain active.

@@ -9,7 +9,9 @@ import (
 	"net/http"
 	"net/mail"
 	"net/url"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/config"
 )
@@ -24,6 +26,8 @@ type InboxReader interface {
 type InboxMessage struct {
 	ID           string
 	ThreadID     string
+	Inbox        bool
+	ReceivedAt   time.Time
 	From         string
 	To           string
 	DeliveredTo  string
@@ -48,15 +52,16 @@ func NewGmailInbox(emailCfg config.EmailConfig, gmailCfg config.GmailMailConfig)
 
 func (provider *gmailProvider) ProfileHistoryID(ctx context.Context) (string, error) {
 	var parsed struct {
-		HistoryID uint64 `json:"historyId"`
+		HistoryID string `json:"historyId"`
 	}
 	if err := provider.gmailGet(ctx, "/users/me/profile", nil, &parsed); err != nil {
 		return "", err
 	}
-	if parsed.HistoryID == 0 {
+	parsed.HistoryID = strings.TrimSpace(parsed.HistoryID)
+	if parsed.HistoryID == "" {
 		return "", fmt.Errorf("gmail profile history id is missing")
 	}
-	return fmt.Sprintf("%d", parsed.HistoryID), nil
+	return parsed.HistoryID, nil
 }
 
 func (provider *gmailProvider) ListHistoryMessageIDs(ctx context.Context, startHistoryID string) ([]string, string, error) {
@@ -64,27 +69,85 @@ func (provider *gmailProvider) ListHistoryMessageIDs(ctx context.Context, startH
 	if startHistoryID == "" {
 		return nil, "", fmt.Errorf("gmail history start id is required")
 	}
-	query := url.Values{}
-	query.Set("startHistoryId", startHistoryID)
-	query.Set("historyTypes", "messageAdded")
-	var parsed struct {
-		History []struct {
-			MessagesAdded []struct {
-				Message struct {
-					ID string `json:"id"`
-				} `json:"message"`
-			} `json:"messagesAdded"`
-		} `json:"history"`
-		HistoryID uint64 `json:"historyId"`
-	}
-	if err := provider.gmailGet(ctx, "/users/me/history", query, &parsed); err != nil {
-		return nil, "", err
-	}
 	seen := make(map[string]struct{})
 	ids := make([]string, 0)
-	for _, history := range parsed.History {
-		for _, added := range history.MessagesAdded {
-			id := strings.TrimSpace(added.Message.ID)
+	newHistoryID := startHistoryID
+	pageToken := ""
+	for {
+		query := url.Values{}
+		query.Set("startHistoryId", startHistoryID)
+		query.Set("historyTypes", "messageAdded")
+		query.Set("maxResults", "500")
+		if pageToken != "" {
+			query.Set("pageToken", pageToken)
+		}
+		var parsed struct {
+			History []struct {
+				MessagesAdded []struct {
+					Message struct {
+						ID string `json:"id"`
+					} `json:"message"`
+				} `json:"messagesAdded"`
+			} `json:"history"`
+			HistoryID     string `json:"historyId"`
+			NextPageToken string `json:"nextPageToken"`
+		}
+		if err := provider.gmailGet(ctx, "/users/me/history", query, &parsed); err != nil {
+			return nil, "", err
+		}
+		for _, history := range parsed.History {
+			for _, added := range history.MessagesAdded {
+				id := strings.TrimSpace(added.Message.ID)
+				if id == "" {
+					continue
+				}
+				if _, exists := seen[id]; exists {
+					continue
+				}
+				seen[id] = struct{}{}
+				ids = append(ids, id)
+			}
+		}
+		if historyID := strings.TrimSpace(parsed.HistoryID); historyID != "" {
+			newHistoryID = historyID
+		}
+		nextPageToken := strings.TrimSpace(parsed.NextPageToken)
+		if nextPageToken == "" {
+			break
+		}
+		if nextPageToken == pageToken {
+			return nil, "", fmt.Errorf("gmail history returned a repeated page token")
+		}
+		pageToken = nextPageToken
+	}
+	return ids, newHistoryID, nil
+}
+
+func (provider *gmailProvider) ListRecentMessageIDs(ctx context.Context, queryText string) ([]string, error) {
+	seen := make(map[string]struct{})
+	ids := make([]string, 0)
+	pageToken := ""
+	for {
+		query := url.Values{}
+		query.Set("maxResults", "500")
+		query.Add("labelIds", "INBOX")
+		if strings.TrimSpace(queryText) != "" {
+			query.Set("q", strings.TrimSpace(queryText))
+		}
+		if pageToken != "" {
+			query.Set("pageToken", pageToken)
+		}
+		var parsed struct {
+			Messages []struct {
+				ID string `json:"id"`
+			} `json:"messages"`
+			NextPageToken string `json:"nextPageToken"`
+		}
+		if err := provider.gmailGet(ctx, "/users/me/messages", query, &parsed); err != nil {
+			return nil, err
+		}
+		for _, message := range parsed.Messages {
+			id := strings.TrimSpace(message.ID)
 			if id == "" {
 				continue
 			}
@@ -94,34 +157,14 @@ func (provider *gmailProvider) ListHistoryMessageIDs(ctx context.Context, startH
 			seen[id] = struct{}{}
 			ids = append(ids, id)
 		}
-	}
-	newHistoryID := startHistoryID
-	if parsed.HistoryID > 0 {
-		newHistoryID = fmt.Sprintf("%d", parsed.HistoryID)
-	}
-	return ids, newHistoryID, nil
-}
-
-func (provider *gmailProvider) ListRecentMessageIDs(ctx context.Context, queryText string) ([]string, error) {
-	query := url.Values{}
-	query.Set("maxResults", "50")
-	if strings.TrimSpace(queryText) != "" {
-		query.Set("q", strings.TrimSpace(queryText))
-	}
-	var parsed struct {
-		Messages []struct {
-			ID string `json:"id"`
-		} `json:"messages"`
-	}
-	if err := provider.gmailGet(ctx, "/users/me/messages", query, &parsed); err != nil {
-		return nil, err
-	}
-	ids := make([]string, 0, len(parsed.Messages))
-	for _, message := range parsed.Messages {
-		id := strings.TrimSpace(message.ID)
-		if id != "" {
-			ids = append(ids, id)
+		nextPageToken := strings.TrimSpace(parsed.NextPageToken)
+		if nextPageToken == "" {
+			break
 		}
+		if nextPageToken == pageToken {
+			return nil, fmt.Errorf("gmail messages returned a repeated page token")
+		}
+		pageToken = nextPageToken
 	}
 	return ids, nil
 }
@@ -141,6 +184,8 @@ func (provider *gmailProvider) GetMessage(ctx context.Context, id string) (Inbox
 	return InboxMessage{
 		ID:           strings.TrimSpace(parsed.ID),
 		ThreadID:     strings.TrimSpace(parsed.ThreadID),
+		Inbox:        parsed.hasLabel("INBOX"),
+		ReceivedAt:   parsed.receivedAt(),
 		From:         headerAddress(headers["from"]),
 		To:           headers["to"],
 		DeliveredTo:  headers["delivered-to"],
@@ -153,9 +198,28 @@ func (provider *gmailProvider) GetMessage(ctx context.Context, id string) (Inbox
 }
 
 type gmailMessagePayload struct {
-	ID       string        `json:"id"`
-	ThreadID string        `json:"threadId"`
-	Payload  gmailMIMEPart `json:"payload"`
+	ID           string        `json:"id"`
+	ThreadID     string        `json:"threadId"`
+	LabelIDs     []string      `json:"labelIds"`
+	InternalDate string        `json:"internalDate"`
+	Payload      gmailMIMEPart `json:"payload"`
+}
+
+func (payload gmailMessagePayload) receivedAt() time.Time {
+	milliseconds, err := strconv.ParseInt(strings.TrimSpace(payload.InternalDate), 10, 64)
+	if err != nil || milliseconds <= 0 {
+		return time.Time{}
+	}
+	return time.UnixMilli(milliseconds).UTC()
+}
+
+func (payload gmailMessagePayload) hasLabel(want string) bool {
+	for _, label := range payload.LabelIDs {
+		if strings.EqualFold(strings.TrimSpace(label), want) {
+			return true
+		}
+	}
+	return false
 }
 
 type gmailMIMEPart struct {

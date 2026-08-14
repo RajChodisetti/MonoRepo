@@ -7,8 +7,12 @@ import { formatDate } from "@/lib/constants";
 import type { InboxListResponse, InboxThread } from "@/lib/types";
 import { EmptyState, ErrorBanner, StatusBadge } from "@/components/ui";
 
+const pageSize = 50;
+
 export function OutreachInbox() {
   const [unreadOnly, setUnreadOnly] = useState(false);
+  const [mailboxKey, setMailboxKey] = useState("");
+  const [offset, setOffset] = useState(0);
   const [data, setData] = useState<InboxListResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -17,7 +21,12 @@ export function OutreachInbox() {
     setError(null);
     try {
       const result = await adminFetch<InboxListResponse>("outreach/inbox", {
-        query: { unread: unreadOnly ? true : undefined, limit: 50 },
+        query: {
+          unread: unreadOnly ? true : undefined,
+          mailbox: mailboxKey || undefined,
+          limit: pageSize,
+          offset,
+        },
       });
       setData(result);
     } catch (err) {
@@ -25,7 +34,7 @@ export function OutreachInbox() {
     } finally {
       setLoading(false);
     }
-  }, [unreadOnly]);
+  }, [mailboxKey, offset, unreadOnly]);
 
   useEffect(() => {
     setLoading(true);
@@ -53,19 +62,49 @@ export function OutreachInbox() {
             Sent snapshots and captured owner replies. A reply pauses that restaurant&apos;s campaign.
           </p>
         </div>
-        <label style={{ display: "flex", gap: "0.4rem", alignItems: "center", fontSize: "0.9rem" }}>
-          <input
-            type="checkbox"
-            checked={unreadOnly}
-            onChange={(event) => setUnreadOnly(event.target.checked)}
-          />
-          Unread only
-        </label>
+        <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
+          <label style={{ display: "grid", gap: "0.25rem", fontSize: "0.85rem" }}>
+            <span>Receiving mailbox</span>
+            <select
+              className="input"
+              value={mailboxKey}
+              onChange={(event) => {
+                setMailboxKey(event.target.value);
+                setOffset(0);
+              }}
+            >
+              <option value="">All mailboxes</option>
+              {(data?.mailboxes || []).map((mailbox) => (
+                <option key={mailbox.mailbox_key} value={mailbox.mailbox_key}>
+                  {mailbox.mailbox_key}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label style={{ display: "flex", gap: "0.4rem", alignItems: "center", fontSize: "0.9rem" }}>
+            <input
+              type="checkbox"
+              checked={unreadOnly}
+              onChange={(event) => {
+                setUnreadOnly(event.target.checked);
+                setOffset(0);
+              }}
+            />
+            Unread only
+          </label>
+        </div>
       </div>
       <ErrorBanner message={error} />
+      {(data?.mailboxes || []).map((mailbox) =>
+        mailbox.last_error ? (
+          <div className="alert alert-error" key={mailbox.mailbox_key} style={{ marginBottom: "0.75rem" }}>
+            <strong>{mailbox.mailbox_key}</strong>: inbox access is unavailable. {mailbox.last_error}
+          </div>
+        ) : null,
+      )}
       {loading && !data ? <EmptyState message="Loading inbox…" /> : null}
-      {!loading && (data?.threads || []).length === 0 ? (
-        <EmptyState message="No captured outreach mail yet." />
+      {!loading && !error && (data?.threads || []).length === 0 ? (
+        <EmptyState message="No inbox mail received in the last 10 days." />
       ) : null}
       {(data?.threads || []).length > 0 ? (
         <div className="table-wrap">
@@ -87,6 +126,40 @@ export function OutreachInbox() {
           </table>
         </div>
       ) : null}
+      {data && data.total > 0 ? (
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: "0.75rem",
+            marginTop: "0.75rem",
+            flexWrap: "wrap",
+          }}
+        >
+          <span style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
+            Showing {Math.min(offset + 1, data.total)}–{Math.min(offset + data.threads.length, data.total)} of {data.total}
+          </span>
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            <button
+              className="btn btn-secondary"
+              type="button"
+              disabled={offset === 0 || loading}
+              onClick={() => setOffset((value) => Math.max(0, value - pageSize))}
+            >
+              Previous
+            </button>
+            <button
+              className="btn btn-secondary"
+              type="button"
+              disabled={offset + pageSize >= data.total || loading}
+              onClick={() => setOffset((value) => value + pageSize)}
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -97,7 +170,7 @@ function InboxRow({ thread, onReplied }: { thread: InboxThread; onReplied: () =>
   const [bodyText, setBodyText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const name = thread.restaurant_name || (thread.unmatched ? "Unmatched reply" : "Unknown restaurant");
+  const name = thread.restaurant_name || (thread.unmatched ? "Unmatched email" : "Unknown restaurant");
   const title = thread.restaurant_id ? (
     <Link href={`/restaurants/${thread.restaurant_id}?tab=messages`}>{name}</Link>
   ) : (
@@ -131,6 +204,9 @@ function InboxRow({ thread, onReplied }: { thread: InboxThread; onReplied: () =>
       <td>
         {title}
         <div style={{ color: "var(--muted)", fontSize: "0.8rem" }}>{thread.email || "—"}</div>
+        <div style={{ color: "var(--muted)", fontSize: "0.8rem" }}>
+          Received by {thread.mailbox_email || thread.mailbox_key}
+        </div>
       </td>
       <td>
         <StatusBadge status={thread.last_direction} />

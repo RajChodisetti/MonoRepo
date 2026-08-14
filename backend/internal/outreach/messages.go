@@ -36,6 +36,7 @@ type Message struct {
 	MailboxKey        string     `json:"mailbox_key,omitempty"`
 	Unmatched         bool       `json:"unmatched"`
 	ReadAt            *time.Time `json:"read_at,omitempty"`
+	ReceivedAt        time.Time  `json:"received_at"`
 	CreatedAt         time.Time  `json:"created_at"`
 	RestaurantName    string     `json:"restaurant_name,omitempty"`
 }
@@ -44,6 +45,8 @@ type InboxThread struct {
 	RestaurantID   *uuid.UUID `json:"restaurant_id,omitempty"`
 	RestaurantName string     `json:"restaurant_name,omitempty"`
 	Email          string     `json:"email,omitempty"`
+	MailboxKey     string     `json:"mailbox_key"`
+	MailboxEmail   string     `json:"mailbox_email"`
 	Unmatched      bool       `json:"unmatched"`
 	UnreadCount    int        `json:"unread_count"`
 	LastDirection  string     `json:"last_direction"`
@@ -52,9 +55,17 @@ type InboxThread struct {
 	LastMessageID  uuid.UUID  `json:"last_message_id"`
 }
 
+type InboxMailboxStatus struct {
+	MailboxKey    string     `json:"mailbox_key"`
+	LastAttemptAt *time.Time `json:"last_attempt_at,omitempty"`
+	LastSuccessAt *time.Time `json:"last_success_at,omitempty"`
+	LastError     string     `json:"last_error,omitempty"`
+}
+
 type InboxList struct {
-	Threads []InboxThread `json:"threads"`
-	Total   int           `json:"total"`
+	Threads   []InboxThread        `json:"threads"`
+	Mailboxes []InboxMailboxStatus `json:"mailboxes"`
+	Total     int                  `json:"total"`
 }
 
 type MessageList struct {

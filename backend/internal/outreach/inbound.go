@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -16,17 +17,32 @@ import (
 )
 
 type InboundService struct {
-	store     *Postgres
-	campaigns campaigns.Repository
-	reader    emailprovider.InboxReader
-	cfg       config.OutreachConfig
-	log       *slog.Logger
+	store      inboundStore
+	campaigns  campaigns.Repository
+	reader     emailprovider.InboxReader
+	mailboxKey string
+	cfg        config.OutreachConfig
+	log        *slog.Logger
+}
+
+type inboundStore interface {
+	GetInboundSync(context.Context, string) (string, error)
+	SetInboundSync(context.Context, string, string) error
+	MarkInboundPollAttempt(context.Context, string) error
+	RecordInboundPollResult(context.Context, string, error) error
+	GetMessageByGmailID(context.Context, string, string) (Message, error)
+	GetOutboundByReplyToken(context.Context, uuid.UUID) (Message, error)
+	GetOutboundByRFCMessageID(context.Context, string) (Message, error)
+	GetOutboundByThreadID(context.Context, string) (Message, error)
+	FindRestaurantIDByEmail(context.Context, string) (uuid.UUID, error)
+	InsertMessage(context.Context, Message) (Message, error)
 }
 
 func NewInboundService(
-	store *Postgres,
+	store inboundStore,
 	campaignsRepo campaigns.Repository,
 	reader emailprovider.InboxReader,
+	mailboxKey string,
 	cfg config.OutreachConfig,
 	log *slog.Logger,
 ) *InboundService {
@@ -34,11 +50,12 @@ func NewInboundService(
 		log = slog.Default()
 	}
 	return &InboundService{
-		store:     store,
-		campaigns: campaignsRepo,
-		reader:    reader,
-		cfg:       cfg,
-		log:       log,
+		store:      store,
+		campaigns:  campaignsRepo,
+		reader:     reader,
+		mailboxKey: strings.TrimSpace(mailboxKey),
+		cfg:        cfg,
+		log:        log,
 	}
 }
 
@@ -49,11 +66,21 @@ func (service *InboundService) Poll(ctx context.Context) error {
 	if !service.cfg.InboundEnabled {
 		return nil
 	}
-	mailboxKey := MailboxKeyInbound
-	if service.cfg.InboundMailbox != nil && strings.TrimSpace(service.cfg.InboundMailbox.AccountKey) != "" {
-		mailboxKey = strings.TrimSpace(service.cfg.InboundMailbox.AccountKey)
+	mailboxKey := strings.TrimSpace(service.mailboxKey)
+	if mailboxKey == "" {
+		return fmt.Errorf("inbound mailbox key is required")
 	}
+	if err := service.store.MarkInboundPollAttempt(ctx, mailboxKey); err != nil {
+		return err
+	}
+	pollErr := service.pollMailbox(ctx, mailboxKey)
+	statusCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	statusErr := service.store.RecordInboundPollResult(statusCtx, mailboxKey, pollErr)
+	return errors.Join(pollErr, statusErr)
+}
 
+func (service *InboundService) pollMailbox(ctx context.Context, mailboxKey string) error {
 	startHistoryID, err := service.store.GetInboundSync(ctx, mailboxKey)
 	if err != nil {
 		return err
@@ -65,22 +92,13 @@ func (service *InboundService) Poll(ctx context.Context) error {
 		messageIDs, newHistoryID, err = service.reader.ListHistoryMessageIDs(ctx, startHistoryID)
 		if err != nil {
 			service.log.WarnContext(ctx, "outreach_inbound_history_unavailable", "error", err)
-			messageIDs, err = service.reader.ListRecentMessageIDs(ctx, service.recentMailQuery())
-			if err != nil {
-				return err
-			}
-			if profileID, profileErr := service.reader.ProfileHistoryID(ctx); profileErr == nil {
-				newHistoryID = profileID
-			}
+			messageIDs, newHistoryID, err = service.fullInboxSync(ctx)
 		}
 	} else {
-		messageIDs, err = service.reader.ListRecentMessageIDs(ctx, service.recentMailQuery())
-		if err != nil {
-			return err
-		}
-		if profileID, profileErr := service.reader.ProfileHistoryID(ctx); profileErr == nil {
-			newHistoryID = profileID
-		}
+		messageIDs, newHistoryID, err = service.fullInboxSync(ctx)
+	}
+	if err != nil {
+		return err
 	}
 
 	var captureErr error
@@ -99,8 +117,22 @@ func (service *InboundService) Poll(ctx context.Context) error {
 	return nil
 }
 
+func (service *InboundService) fullInboxSync(ctx context.Context) ([]string, string, error) {
+	// Read the history cursor before listing. Messages arriving during the list
+	// are therefore present either in the list or in the next history delta.
+	historyID, err := service.reader.ProfileHistoryID(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+	messageIDs, err := service.reader.ListRecentMessageIDs(ctx, service.recentMailQuery())
+	if err != nil {
+		return nil, "", err
+	}
+	return messageIDs, historyID, nil
+}
+
 func (service *InboundService) capture(ctx context.Context, mailboxKey, gmailMessageID string) error {
-	if existing, err := service.store.GetMessageByGmailID(ctx, gmailMessageID); err == nil {
+	if existing, err := service.store.GetMessageByGmailID(ctx, mailboxKey, gmailMessageID); err == nil {
 		if existing.Direction == MessageDirectionInbound &&
 			!existing.Unmatched &&
 			existing.CampaignID != nil &&
@@ -119,6 +151,9 @@ func (service *InboundService) capture(ctx context.Context, mailboxKey, gmailMes
 	if inbound.ID == "" {
 		inbound.ID = gmailMessageID
 	}
+	if !inbound.Inbox || inbound.ReceivedAt.IsZero() || inbound.ReceivedAt.Before(time.Now().UTC().Add(-10*24*time.Hour)) {
+		return nil
+	}
 
 	match := service.matchInbound(ctx, inbound)
 	record := Message{
@@ -132,6 +167,7 @@ func (service *InboundService) capture(ctx context.Context, mailboxKey, gmailMes
 		RFCMessageID:   inbound.RFCMessageID,
 		MailboxKey:     mailboxKey,
 		Unmatched:      match.outbound == nil && match.restaurantID == uuid.Nil,
+		ReceivedAt:     inbound.ReceivedAt,
 	}
 	if match.outbound != nil {
 		record.RestaurantID = match.outbound.RestaurantID
@@ -144,10 +180,6 @@ func (service *InboundService) capture(ctx context.Context, mailboxKey, gmailMes
 	} else if match.restaurantID != uuid.Nil {
 		id := match.restaurantID
 		record.RestaurantID = &id
-	}
-
-	if match.outbound == nil && match.restaurantID == uuid.Nil && !service.addressedToInboundMailbox(inbound) {
-		return nil
 	}
 
 	if _, err := service.store.InsertMessage(ctx, record); err != nil {
@@ -202,23 +234,7 @@ func (service *InboundService) stopCampaignOnReply(ctx context.Context, campaign
 }
 
 func (service *InboundService) recentMailQuery() string {
-	// Gmail history IDs can expire after roughly a week. The configured mailbox
-	// is selected for outreach replies, so a bounded Inbox rescan is both safer
-	// and more complete than relying on recipient or subject search matching.
-	return "in:inbox newer_than:7d"
-}
-
-func (service *InboundService) addressedToInboundMailbox(inbound emailprovider.InboxMessage) bool {
-	localPart := strings.ToLower(strings.TrimSpace(service.cfg.InboundLocalPart))
-	domain := strings.ToLower(strings.TrimSpace(service.cfg.InboundDomain))
-	if localPart == "" || domain == "" {
-		return false
-	}
-	addresses := strings.ToLower(strings.Join([]string{inbound.To, inbound.DeliveredTo}, ","))
-	if _, ok := emailprovider.ParseReplyToken(addresses, localPart, domain); ok {
-		return true
-	}
-	return strings.Contains(addresses, localPart+"+")
+	return "in:inbox newer_than:10d"
 }
 
 func rfcMessageIDs(values ...string) []string {

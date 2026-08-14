@@ -1754,15 +1754,21 @@ paths:
       security:
         - bearerAuth: []
       description: |
-        Requires role `internal_admin`. Groups accepted outbound snapshots and captured
-        replies by restaurant. Replies that cannot be matched are retained as separate
-        unmatched threads.
+        Requires role `internal_admin`. Lists conversations received during the last
+        10 days across every configured Google Workspace outreach mailbox. Messages
+        that cannot be matched to a restaurant are retained as unmatched threads.
       parameters:
         - name: unread
           in: query
           schema:
             type: boolean
             default: false
+        - name: mailbox
+          in: query
+          description: Optional stable mailbox account key. Omit to combine all configured mailboxes.
+          schema:
+            type: string
+            maxLength: 200
         - name: limit
           in: query
           schema:
@@ -4772,7 +4778,7 @@ components:
 
     EmailMessage:
       type: object
-      required: [id, direction, from_email, to_email, subject, body_text, unmatched, created_at]
+      required: [id, direction, from_email, to_email, subject, body_text, unmatched, received_at, created_at]
       properties:
         id:
           type: string
@@ -4820,6 +4826,9 @@ components:
           type: string
           format: date-time
           nullable: true
+        received_at:
+          type: string
+          format: date-time
         created_at:
           type: string
           format: date-time
@@ -4890,7 +4899,7 @@ components:
 
     OutreachInboxThread:
       type: object
-      required: [unmatched, unread_count, last_direction, last_snippet, last_at, last_message_id]
+      required: [mailbox_key, mailbox_email, unmatched, unread_count, last_direction, last_snippet, last_at, last_message_id]
       properties:
         restaurant_id:
           type: string
@@ -4899,6 +4908,10 @@ components:
         restaurant_name:
           type: string
         email:
+          type: string
+        mailbox_key:
+          type: string
+        mailbox_email:
           type: string
         unmatched:
           type: boolean
@@ -4917,14 +4930,35 @@ components:
           type: string
           format: uuid
 
+    OutreachInboxMailboxStatus:
+      type: object
+      required: [mailbox_key]
+      properties:
+        mailbox_key:
+          type: string
+        last_attempt_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_success_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_error:
+          type: string
+
     OutreachInboxList:
       type: object
-      required: [threads, total]
+      required: [threads, mailboxes, total]
       properties:
         threads:
           type: array
           items:
             $ref: '#/components/schemas/OutreachInboxThread'
+        mailboxes:
+          type: array
+          items:
+            $ref: '#/components/schemas/OutreachInboxMailboxStatus'
         total:
           type: integer
           minimum: 0
