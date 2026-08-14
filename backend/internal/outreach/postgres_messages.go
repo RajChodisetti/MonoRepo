@@ -212,7 +212,11 @@ func (repo *Postgres) ListInbox(ctx context.Context, unreadOnly bool, limit, off
 		         (array_agg(id ORDER BY created_at DESC))[1] AS last_message_id
 		  FROM (
 		    SELECT m.id, m.restaurant_id, m.direction, m.body_text, m.unmatched, m.read_at, m.created_at,
-		           r.name AS restaurant_name, COALESCE(r.email, m.to_email) AS email,
+	           r.name AS restaurant_name,
+	           COALESCE(
+	             r.email,
+	             CASE WHEN m.direction = 'inbound' THEN m.from_email ELSE m.to_email END
+	           ) AS email,
 		           COALESCE(m.restaurant_id::text, m.id::text) AS thread_key
 		    FROM email_messages m
 		    LEFT JOIN restaurants r ON r.id = m.restaurant_id

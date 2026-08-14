@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import { adminFetch } from "@/lib/client-api";
 import { formatDate } from "@/lib/constants";
 import type { InboxListResponse, InboxThread } from "@/lib/types";
@@ -76,11 +76,12 @@ export function OutreachInbox() {
                 <th>Latest</th>
                 <th>When</th>
                 <th>Unread</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {(data?.threads || []).map((thread) => (
-                <InboxRow key={thread.last_message_id} thread={thread} />
+                <InboxRow key={thread.last_message_id} thread={thread} onReplied={load} />
               ))}
             </tbody>
           </table>
@@ -90,14 +91,42 @@ export function OutreachInbox() {
   );
 }
 
-function InboxRow({ thread }: { thread: InboxThread }) {
+function InboxRow({ thread, onReplied }: { thread: InboxThread; onReplied: () => Promise<void> }) {
+  const [replying, setReplying] = useState(false);
+  const [subject, setSubject] = useState("");
+  const [bodyText, setBodyText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const name = thread.restaurant_name || (thread.unmatched ? "Unmatched reply" : "Unknown restaurant");
   const title = thread.restaurant_id ? (
     <Link href={`/restaurants/${thread.restaurant_id}?tab=messages`}>{name}</Link>
   ) : (
     name
   );
+  async function sendReply(event: FormEvent) {
+    event.preventDefault();
+    if (!bodyText.trim()) return;
+    if (!window.confirm(`Send this reply to ${thread.email || "the inbound sender"}?`)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await adminFetch(`outreach/messages/${thread.last_message_id}/reply`, {
+        method: "POST",
+        body: { subject: subject.trim() || undefined, body_text: bodyText },
+      });
+      setReplying(false);
+      setSubject("");
+      setBodyText("");
+      await onReplied();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Reply failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
+    <>
     <tr>
       <td>
         {title}
@@ -111,6 +140,52 @@ function InboxRow({ thread }: { thread: InboxThread }) {
       </td>
       <td>{formatDate(thread.last_at)}</td>
       <td>{thread.unread_count}</td>
+      <td>
+        {thread.last_direction === "inbound" ? (
+          <button className="btn btn-secondary" type="button" onClick={() => setReplying((value) => !value)}>
+            {replying ? "Cancel" : "Reply"}
+          </button>
+        ) : (
+          <span style={{ color: "var(--muted)" }}>Waiting for reply</span>
+        )}
+      </td>
     </tr>
+    {replying ? (
+      <tr>
+        <td colSpan={5}>
+          <form onSubmit={sendReply} className="card" style={{ display: "grid", gap: "0.65rem", margin: "0.5rem 0" }}>
+            <strong>Reply from the same outreach mailbox</strong>
+            <label style={{ display: "grid", gap: "0.3rem" }}>
+              <span>Subject / title (optional)</span>
+              <input
+                className="input"
+                value={subject}
+                onChange={(event) => setSubject(event.target.value)}
+                maxLength={200}
+                placeholder="Defaults to Re: original subject"
+              />
+            </label>
+            <label style={{ display: "grid", gap: "0.3rem" }}>
+              <span>Plain-text reply</span>
+              <textarea
+                className="textarea"
+                rows={5}
+                value={bodyText}
+                onChange={(event) => setBodyText(event.target.value)}
+                maxLength={10000}
+                required
+              />
+            </label>
+            {error ? <div className="alert alert-error">{error}</div> : null}
+            <div>
+              <button className="btn btn-primary" type="submit" disabled={busy || !bodyText.trim()}>
+                {busy ? "Sending…" : "Review and send reply"}
+              </button>
+            </div>
+          </form>
+        </td>
+      </tr>
+    ) : null}
+    </>
   );
 }

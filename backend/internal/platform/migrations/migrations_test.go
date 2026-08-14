@@ -225,7 +225,7 @@ func TestPlainTextOutreachMigrationFailsClosedBeforeEnrollment(t *testing.T) {
 	}
 }
 
-func TestRepositoryMigrationsIncludeDeterministicGreetingInboxAndEmailRamp(t *testing.T) {
+func TestRepositoryMigrationsIncludeLatestOutreachChanges(t *testing.T) {
 	_, currentFile, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("runtime.Caller() did not return this test file")
@@ -275,6 +275,21 @@ func TestRepositoryMigrationsIncludeDeterministicGreetingInboxAndEmailRamp(t *te
 			},
 			downFragments: []string{"DROP COLUMN IF EXISTS ramp_day"},
 		},
+		50: {
+			name: "reconcile_outreach_enrollment",
+			upFragments: []string{
+				"VALUES ('email_job', false, NULL, NULL, now())",
+				"CREATE INDEX IF NOT EXISTS restaurants_normalized_email",
+				"CREATE OR REPLACE FUNCTION ensure_outreach_sequence_enrollment",
+				"outreach_consent_evidence",
+				"SELECT ensure_outreach_sequence_enrollment(id)",
+			},
+			downFragments: []string{
+				"VALUES ('email_job', false, NULL, NULL, now())",
+				"DROP INDEX IF EXISTS restaurants_normalized_email",
+				"FROM email_suppressions suppression",
+			},
+		},
 	}
 
 	for _, migration := range migrations {
@@ -290,6 +305,9 @@ func TestRepositoryMigrationsIncludeDeterministicGreetingInboxAndEmailRamp(t *te
 			if !strings.Contains(string(upSQL), fragment) {
 				t.Fatalf("migration %d up missing %q", migration.Version, fragment)
 			}
+		}
+		if migration.Version == 50 && strings.Contains(string(upSQL), "email_suppressions") {
+			t.Fatal("migration 50 up must not retain the legacy suppression enrollment gate")
 		}
 		downSQL, readErr := os.ReadFile(migration.DownPath)
 		if readErr != nil {

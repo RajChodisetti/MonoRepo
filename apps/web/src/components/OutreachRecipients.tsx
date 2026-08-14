@@ -94,7 +94,8 @@ export function OutreachRecipients() {
         </h2>
         <p style={{ color: "var(--muted)", margin: "0.3rem 0 0", lineHeight: 1.5 }}>
           Confirmed sends advance the integer step. Failed or unknown provider outcomes do not.
-          Due follow-ups are selected before any new restaurant.
+          Due follow-ups are selected before new restaurants. Future follow-ups do not idle the
+          queue, and addresses shared by more than three restaurant records are blocked.
         </p>
       </div>
 
@@ -160,6 +161,9 @@ export function OutreachRecipients() {
                       </Link>
                       <div style={{ color: "var(--muted)", fontSize: "0.8rem", marginTop: "0.15rem" }}>
                         {recipient.email}
+                        {recipient.email_record_count > 1
+                          ? ` · ${recipient.email_record_count} restaurant records`
+                          : ""}
                       </div>
                     </div>
                   </td>

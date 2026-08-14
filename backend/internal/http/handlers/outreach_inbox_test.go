@@ -50,6 +50,13 @@ func TestOutreachInboxHandlersValidateAuthAndIdentifiersBeforeService(t *testing
 			wantStatus: http.StatusBadRequest,
 		},
 		{
+			name:       "shared emails rejects a negative offset",
+			request:    httptest.NewRequest(http.MethodGet, "/api/v1/restaurants/shared-emails?offset=-1", nil),
+			serve:      handler.ListSharedEmailGroups,
+			principal:  &admin,
+			wantStatus: http.StatusBadRequest,
+		},
+		{
 			name:       "restaurant messages reject invalid restaurant id",
 			request:    requestWithPathValue(http.MethodGet, "/api/v1/restaurants/not-a-uuid/messages", "id", "not-a-uuid"),
 			serve:      handler.ListRestaurantMessages,
@@ -57,9 +64,23 @@ func TestOutreachInboxHandlersValidateAuthAndIdentifiersBeforeService(t *testing
 			wantStatus: http.StatusBadRequest,
 		},
 		{
+			name:       "restaurant greeting rejects invalid restaurant id",
+			request:    requestWithPathValue(http.MethodGet, "/api/v1/restaurants/not-a-uuid/outreach-greeting", "id", "not-a-uuid"),
+			serve:      handler.PreviewRestaurantGreeting,
+			principal:  &admin,
+			wantStatus: http.StatusBadRequest,
+		},
+		{
 			name:       "mark read rejects invalid message id",
 			request:    requestWithPathValue(http.MethodPost, "/api/v1/outreach/messages/not-a-uuid/read", "id", "not-a-uuid"),
 			serve:      handler.MarkMessageRead,
+			principal:  &admin,
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "reply rejects invalid message id",
+			request:    requestWithPathValue(http.MethodPost, "/api/v1/outreach/messages/not-a-uuid/reply", "id", "not-a-uuid"),
+			serve:      handler.ReplyToInboxMessage,
 			principal:  &admin,
 			wantStatus: http.StatusBadRequest,
 		},

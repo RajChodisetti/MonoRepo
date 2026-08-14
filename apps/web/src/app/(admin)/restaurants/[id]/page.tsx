@@ -14,6 +14,7 @@ import type {
   Member,
   ProfileReviewPreview,
   Restaurant,
+  RestaurantGreetingPreview,
 } from "@/lib/types";
 import { EmptyState, ErrorBanner, PageHeader, StatusBadge } from "@/components/ui";
 import { PhotoGallery } from "@/components/PhotoGallery";
@@ -85,6 +86,7 @@ function RestaurantDetailInner() {
 
   // outreach inbox
   const [messages, setMessages] = useState<EmailMessage[]>([]);
+  const [greetingPreview, setGreetingPreview] = useState<RestaurantGreetingPreview | null>(null);
 
   // members
   const [members, setMembers] = useState<Member[]>([]);
@@ -119,6 +121,13 @@ function RestaurantDetailInner() {
       `restaurants/${id}/messages`,
     );
     setMessages(data.messages || []);
+  }, [id]);
+
+  const loadGreetingPreview = useCallback(async () => {
+    const data = await adminFetch<RestaurantGreetingPreview>(
+      `restaurants/${id}/outreach-greeting`,
+    );
+    setGreetingPreview(data);
   }, [id]);
 
   const loadDemoLinks = useCallback(async () => {
@@ -156,6 +165,7 @@ function RestaurantDetailInner() {
       setError(null);
       try {
         await loadRestaurant();
+        await loadGreetingPreview();
         try {
           await loadProfile();
         } catch {
@@ -171,7 +181,7 @@ function RestaurantDetailInner() {
     return () => {
       cancelled = true;
     };
-  }, [loadRestaurant, loadProfile]);
+  }, [loadRestaurant, loadProfile, loadGreetingPreview]);
 
   useEffect(() => {
     setMessage(null);
@@ -219,7 +229,7 @@ function RestaurantDetailInner() {
           body: { status },
         });
       }
-      await loadRestaurant();
+      await Promise.all([loadRestaurant(), loadGreetingPreview()]);
       setMessage("Restaurant updated.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Update failed");
@@ -451,7 +461,8 @@ function RestaurantDetailInner() {
       </div>
 
       {tab === "overview" && restaurant ? (
-        <form onSubmit={saveOverview} className="card" style={{ display: "grid", gap: "0.85rem", maxWidth: 640 }}>
+        <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))" }}>
+        <form onSubmit={saveOverview} className="card" style={{ display: "grid", gap: "0.85rem" }}>
           <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
             <StatusBadge status={restaurant.status} />
             <span style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
@@ -514,6 +525,39 @@ function RestaurantDetailInner() {
             evidence, and lifecycle. Profile approval is managed separately.
           </div>
         </form>
+        <div className="card" style={{ display: "grid", gap: "0.75rem", alignContent: "start" }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: "1rem" }}>Restaurant-specific greetings</h3>
+            <p style={{ color: "var(--muted)", margin: "0.35rem 0 0", fontSize: "0.86rem" }}>
+              Deterministic values rendered from this restaurant&apos;s authoritative listing facts.
+            </p>
+          </div>
+          {greetingPreview ? (
+            <>
+              <div>
+                <strong>{"{{greeting}}"}</strong>
+                <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", margin: "0.35rem 0 0" }}>
+                  {greetingPreview.greeting}
+                </pre>
+              </div>
+              <div>
+                <strong>{"{{greeting01}}"}</strong>
+                <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", margin: "0.35rem 0 0" }}>
+                  {greetingPreview.greeting01}
+                </pre>
+              </div>
+              <div style={{ color: "var(--muted)", fontSize: "0.82rem" }}>
+                Facts used: {greetingPreview.facts_used.length > 0 ? greetingPreview.facts_used.join(", ") : "fallback only"}
+              </div>
+            </>
+          ) : (
+            <p style={{ color: "var(--muted)", margin: 0 }}>Greeting preview is unavailable.</p>
+          )}
+          <button className="btn btn-secondary" type="button" onClick={loadGreetingPreview}>
+            Refresh greeting
+          </button>
+        </div>
+        </div>
       ) : null}
 
       {tab === "photos" ? (
@@ -715,7 +759,7 @@ function RestaurantDetailInner() {
           <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "center" }}>
             <p style={{ color: "var(--muted)", margin: 0 }}>
               Outbound snapshots are stored after Gmail accepts a send. Inbound replies are captured
-              from the dedicated outreach mailbox.
+              from the selected outreach sending mailbox.
             </p>
             <button className="btn btn-secondary" type="button" onClick={loadMessages}>
               Refresh

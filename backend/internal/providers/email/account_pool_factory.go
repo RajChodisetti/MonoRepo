@@ -48,7 +48,6 @@ func buildAccountPool(
 		return nil, fmt.Errorf("OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON must contain at least one Gmail outreach account")
 	}
 
-	providers := make([]Provider, 0, accountCount)
 	keyedProviders := make([]accountProvider, 0, accountCount)
 	registrations := make([]QuotaAccountConfig, 0, accountCount)
 	seenKeys := make(map[string]struct{}, accountCount)
@@ -88,7 +87,6 @@ func buildAccountPool(
 			return nil, fmt.Errorf("outreach Google Workspace account %d duplicates mailbox %q", index+1, mailboxEmail)
 		}
 		seenIdentities[identity] = struct{}{}
-		providers = append(providers, provider)
 		keyedProviders = append(keyedProviders, accountProvider{key: accountKey, provider: provider})
 		registrations = append(registrations, QuotaAccountConfig{
 			Key:              accountKey,
@@ -108,7 +106,7 @@ func buildAccountPool(
 		maxTotal = accountCount * outreachCfg.EmailsPerAccount
 	}
 	if quota == nil {
-		pool, err := NewAccountPool(providers, outreachCfg.EmailsPerAccount, maxTotal)
+		pool, err := newAccountPoolProviders(keyedProviders, outreachCfg.EmailsPerAccount, maxTotal)
 		if err != nil {
 			return nil, err
 		}

@@ -82,15 +82,13 @@ func TestLoadOutreachGoogleWorkspaceAccountsRejectsInvalidMailbox(t *testing.T) 
 	}
 }
 
-func TestLoadOutreachInboundMailboxJSON(t *testing.T) {
+func TestLoadOutreachInboundUsesSelectedSendingAccount(t *testing.T) {
 	t.Setenv("OUTREACH_INBOUND_ENABLED", "true")
-	t.Setenv("OUTREACH_INBOUND_MAILBOX_JSON", `{
-		"key":"inbound",
-		"mailbox_email":"outreach@tuvisolutions.com",
-		"client_id":"client-id",
-		"client_secret":"client-secret",
-		"refresh_token":"refresh-token"
-	}`)
+	t.Setenv("OUTREACH_INBOUND_ACCOUNT_KEY", "outreach")
+	t.Setenv("OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON", `[
+		{"key":"sales","mailbox_email":"sales@tuvisolutions.com","client_id":"client-id","client_secret":"client-secret","refresh_token":"refresh-token"},
+		{"key":"outreach","mailbox_email":"outreach@tuvisolutions.com","client_id":"client-id","client_secret":"client-secret","refresh_token":"refresh-token"}
+	]`)
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -105,14 +103,34 @@ func TestLoadOutreachInboundMailboxJSON(t *testing.T) {
 	if cfg.Outreach.InboundMailbox == nil || cfg.Outreach.InboundMailbox.MailboxEmail != "outreach@tuvisolutions.com" {
 		t.Fatalf("InboundMailbox = %#v", cfg.Outreach.InboundMailbox)
 	}
+	if cfg.Outreach.InboundMailbox.AccountKey != "outreach" {
+		t.Fatalf("inbound AccountKey = %q, want outreach", cfg.Outreach.InboundMailbox.AccountKey)
+	}
 }
 
-func TestLoadOutreachInboundRequiresMailboxWhenEnabled(t *testing.T) {
+func TestLoadOutreachInboundRequiresSendingAccountWhenEnabled(t *testing.T) {
 	t.Setenv("OUTREACH_INBOUND_ENABLED", "true")
-	t.Setenv("OUTREACH_INBOUND_MAILBOX_JSON", "")
+	t.Setenv("OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON", "")
 
 	_, err := config.Load()
-	if err == nil || !strings.Contains(err.Error(), "OUTREACH_INBOUND_MAILBOX_JSON") {
+	if err == nil || !strings.Contains(err.Error(), "OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON") {
 		t.Fatalf("Load() error = %v, want inbound mailbox required", err)
+	}
+}
+
+func TestLoadOutreachInboundRejectsUnknownAccountKey(t *testing.T) {
+	t.Setenv("OUTREACH_INBOUND_ENABLED", "true")
+	t.Setenv("OUTREACH_INBOUND_ACCOUNT_KEY", "missing")
+	t.Setenv("OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON", `[{
+		"key":"outreach",
+		"mailbox_email":"outreach@tuvisolutions.com",
+		"client_id":"client-id",
+		"client_secret":"client-secret",
+		"refresh_token":"refresh-token"
+	}]`)
+
+	_, err := config.Load()
+	if err == nil || !strings.Contains(err.Error(), "OUTREACH_INBOUND_ACCOUNT_KEY") {
+		t.Fatalf("Load() error = %v, want unknown inbound account error", err)
 	}
 }

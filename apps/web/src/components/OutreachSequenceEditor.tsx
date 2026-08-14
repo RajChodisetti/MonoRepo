@@ -457,7 +457,7 @@ export function OutreachSequenceEditor({
                   </label>
 
                   <label className="field-label" htmlFor={`step-${index}-subject`}>
-                    Subject
+                    Email subject / title
                     <input
                       id={`step-${index}-subject`}
                       className="input"
@@ -466,6 +466,10 @@ export function OutreachSequenceEditor({
                       maxLength={200}
                       spellCheck
                     />
+                    <span className="field-help">
+                      This is the subject recipients see for this email. Template variables such as{" "}
+                      <code>{"{{restaurant_name}}"}</code> are supported.
+                    </span>
                   </label>
 
                   <label className="field-label" htmlFor={`step-${index}-body`}>
@@ -614,7 +618,7 @@ export function OutreachSequenceEditor({
           {selectedPreviewStep ? (
             <div className="email-preview" aria-live="polite">
               <div className="email-preview-subject">
-                <span>Subject</span>
+                <span>Email subject / title</span>
                 <strong>
                   {serverPreviewStep?.subject ||
                     renderLocalTemplate(

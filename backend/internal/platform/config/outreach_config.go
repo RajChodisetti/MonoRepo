@@ -42,26 +42,17 @@ func loadOutreachConfig(parser *envParser) OutreachConfig {
 		ZohoAccountsJSON:            parser.string("OUTREACH_ZOHO_ACCOUNTS_JSON", ""),
 		GoogleWorkspaceAccountsJSON: parser.string("OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON", ""),
 		InboundEnabled:              parser.bool("OUTREACH_INBOUND_ENABLED", false),
-		InboundDomain:               strings.ToLower(strings.TrimSpace(parser.string("OUTREACH_INBOUND_DOMAIN", "tuvisolutions.com"))),
-		InboundLocalPart:            strings.ToLower(strings.TrimSpace(parser.string("OUTREACH_INBOUND_LOCAL_PART", "outreach"))),
-		InboundMailboxJSON:          parser.string("OUTREACH_INBOUND_MAILBOX_JSON", ""),
+		InboundAccountKey:           strings.TrimSpace(parser.string("OUTREACH_INBOUND_ACCOUNT_KEY", "")),
 		InboundPollInterval:         time.Duration(parser.int("OUTREACH_INBOUND_POLL_SECONDS", 60)) * time.Second,
 	}
 
 	if cfg.InboundPollInterval < 15*time.Second {
 		cfg.InboundPollInterval = 15 * time.Second
 	}
-	if strings.ContainsAny(cfg.InboundLocalPart, "+@") || cfg.InboundLocalPart == "" {
-		parser.addError(fmt.Errorf("OUTREACH_INBOUND_LOCAL_PART must be a mailbox local-part without + or @"))
-	}
-	if cfg.InboundDomain == "" {
-		parser.addError(fmt.Errorf("OUTREACH_INBOUND_DOMAIN is required"))
-	}
-
 	keys := make(map[string]struct{})
 	loadOutreachZohoAccounts(parser, &cfg, keys)
 	loadOutreachGoogleWorkspaceAccounts(parser, &cfg, keys)
-	loadOutreachInboundMailbox(parser, &cfg)
+	loadOutreachInboundAccount(parser, &cfg)
 	return cfg
 }
 
@@ -178,49 +169,38 @@ func loadOutreachGoogleWorkspaceAccounts(parser *envParser, cfg *OutreachConfig,
 	}
 }
 
-func loadOutreachInboundMailbox(parser *envParser, cfg *OutreachConfig) {
-	raw := strings.TrimSpace(cfg.InboundMailboxJSON)
-	if raw == "" {
-		if cfg.InboundEnabled {
-			parser.addError(fmt.Errorf("OUTREACH_INBOUND_MAILBOX_JSON is required when OUTREACH_INBOUND_ENABLED is true"))
+func loadOutreachInboundAccount(parser *envParser, cfg *OutreachConfig) {
+	if !cfg.InboundEnabled {
+		return
+	}
+	if len(cfg.GoogleWorkspaceAccounts) == 0 {
+		parser.addError(fmt.Errorf("OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON must contain the inbox account when OUTREACH_INBOUND_ENABLED is true"))
+		return
+	}
+	selected := cfg.GoogleWorkspaceAccounts[0]
+	if cfg.InboundAccountKey != "" {
+		found := false
+		for _, account := range cfg.GoogleWorkspaceAccounts {
+			if account.AccountKey == cfg.InboundAccountKey {
+				selected = account
+				found = true
+				break
+			}
 		}
-		return
-	}
-
-	var entry outreachGoogleWorkspaceAccountJSON
-	if err := json.Unmarshal([]byte(raw), &entry); err != nil {
-		parser.addError(fmt.Errorf("OUTREACH_INBOUND_MAILBOX_JSON must be a valid JSON object: %w", err))
-		return
-	}
-	mailboxEmail, err := canonicalOutreachMailbox(entry.MailboxEmail)
-	if err != nil {
-		parser.addError(fmt.Errorf("OUTREACH_INBOUND_MAILBOX_JSON mailbox_email: %w", err))
-		return
-	}
-	fromEmail := mailboxEmail
-	if strings.TrimSpace(entry.FromEmail) != "" {
-		fromEmail, err = canonicalOutreachMailbox(entry.FromEmail)
-		if err != nil {
-			parser.addError(fmt.Errorf("OUTREACH_INBOUND_MAILBOX_JSON from_email: %w", err))
+		if !found {
+			parser.addError(fmt.Errorf("OUTREACH_INBOUND_ACCOUNT_KEY %q does not match a configured Google Workspace account", cfg.InboundAccountKey))
 			return
 		}
 	}
-	accountKey := strings.TrimSpace(entry.Key)
-	if accountKey == "" {
-		accountKey = "inbound"
-	}
-	account := GmailMailConfig{
-		AccountKey:   accountKey,
-		MailboxEmail: mailboxEmail,
-		FromEmail:    fromEmail,
-		ClientID:     strings.TrimSpace(entry.ClientID),
-		ClientSecret: strings.TrimSpace(entry.ClientSecret),
-		RefreshToken: strings.TrimSpace(entry.RefreshToken),
-	}
-	if account.MailboxEmail == "" || account.ClientID == "" || account.ClientSecret == "" || account.RefreshToken == "" {
-		parser.addError(fmt.Errorf("OUTREACH_INBOUND_MAILBOX_JSON is missing required Google Workspace fields"))
+	at := strings.LastIndex(selected.MailboxEmail, "@")
+	if at <= 0 || at == len(selected.MailboxEmail)-1 {
+		parser.addError(fmt.Errorf("selected outreach inbox mailbox_email is invalid"))
 		return
 	}
+	cfg.InboundAccountKey = selected.AccountKey
+	cfg.InboundLocalPart = strings.ToLower(selected.MailboxEmail[:at])
+	cfg.InboundDomain = strings.ToLower(selected.MailboxEmail[at+1:])
+	account := selected
 	cfg.InboundMailbox = &account
 }
 

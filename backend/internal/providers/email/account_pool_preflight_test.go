@@ -131,6 +131,37 @@ func TestDurableAccountPoolSendDirectSkipsQuotaClaim(t *testing.T) {
 	}
 }
 
+func TestAccountPoolSendDirectFromUsesRequestedMailbox(t *testing.T) {
+	first := &preflightProvider{}
+	second := &preflightProvider{}
+	pool, err := newAccountPoolProviders(
+		[]accountProvider{
+			{key: "first", provider: first},
+			{key: "reply-mailbox", provider: second},
+		},
+		40,
+		80,
+	)
+	if err != nil {
+		t.Fatalf("newAccountPoolProviders() error = %v", err)
+	}
+
+	result, err := pool.SendDirectFrom(context.Background(), "reply-mailbox", SendRequest{
+		To:       "owner@example.com",
+		Subject:  "Re: hello",
+		TextBody: "Thanks",
+	})
+	if err != nil {
+		t.Fatalf("SendDirectFrom() error = %v", err)
+	}
+	if first.sends != 0 || second.sends != 1 {
+		t.Fatalf("provider sends = %d/%d, want 0/1", first.sends, second.sends)
+	}
+	if result.AccountKey != "reply-mailbox" {
+		t.Fatalf("AccountKey = %q, want reply-mailbox", result.AccountKey)
+	}
+}
+
 func TestPersistentAccountPoolRegistersDurablePacingPolicy(t *testing.T) {
 	t.Parallel()
 

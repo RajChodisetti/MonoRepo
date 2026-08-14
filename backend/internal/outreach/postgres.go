@@ -182,6 +182,11 @@ const eligibleLeadsBaseQuery = `
 	  AND step.enabled = true
 	  AND length(trim(restaurant.name)) > 0
 	  AND lower(trim(restaurant.email)) ~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$'
+	  AND (
+	    SELECT count(*)
+	    FROM restaurants shared_restaurant
+	    WHERE lower(trim(shared_restaurant.email)) = lower(trim(restaurant.email))
+	  ) <= 3
 	  AND restaurant.status IN ('lead', 'emailed')
 	  AND restaurant.shown_interest = false
 	  AND restaurant.outreach_consent_basis = 'inferred_business'
@@ -206,11 +211,18 @@ const eligibleLeadsBaseQuery = `
 	        AND existing_campaign.status = 'approved'
 	        AND existing_campaign.current_step > 0
 	        AND existing_campaign.next_step IS NOT NULL
+	        AND existing_campaign.next_send_at IS NOT NULL
+	        AND existing_campaign.next_send_at <= now()
 	        AND existing_sequence.status IN ('approved', 'archived')
 	        AND existing_sequence.approved_at IS NOT NULL
 	        AND existing_step.enabled = true
 	        AND length(trim(existing_restaurant.name)) > 0
 	        AND lower(trim(existing_restaurant.email)) ~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$'
+	        AND (
+	          SELECT count(*)
+	          FROM restaurants shared_restaurant
+	          WHERE lower(trim(shared_restaurant.email)) = lower(trim(existing_restaurant.email))
+	        ) <= 3
 	        AND existing_restaurant.status IN ('lead', 'emailed')
 	        AND existing_restaurant.shown_interest = false
 	        AND existing_restaurant.outreach_consent_basis = 'inferred_business'
@@ -382,7 +394,12 @@ func (repo *Postgres) GetSequenceDelivery(ctx context.Context, campaignID uuid.U
 		  AND campaign.sequence_id IS NOT NULL
 		  AND campaign.status = 'approved'
 		  AND campaign.next_step = $2
-		  AND campaign.next_send_at <= now()`
+		  AND campaign.next_send_at <= now()
+		  AND (
+		    SELECT count(*)
+		    FROM restaurants shared_restaurant
+		    WHERE lower(trim(shared_restaurant.email)) = lower(trim(restaurant.email))
+		  ) <= 3`
 	var delivery SequenceDelivery
 	if err := repo.pool.QueryRow(ctx, query, campaignID, position).Scan(
 		&delivery.CampaignID,
@@ -427,16 +444,23 @@ func (repo *Postgres) PrepareSequenceDelivery(ctx context.Context, campaignID uu
 		return fmt.Errorf("database pool is not configured")
 	}
 	result, err := repo.pool.Exec(ctx, `
-		UPDATE email_campaigns
+		UPDATE email_campaigns campaign
 		SET subject = $3,
 		    body_html = $4,
 		    body_text = $5,
 		    demo_token = '',
 		    updated_at = now()
-		WHERE id = $1
-		  AND next_step = $2
-		  AND status = 'approved'
-		  AND next_send_at <= now()`, campaignID, step, subject, bodyHTML, bodyText)
+		FROM restaurants restaurant
+		WHERE campaign.id = $1
+		  AND restaurant.id = campaign.restaurant_id
+		  AND campaign.next_step = $2
+		  AND campaign.status = 'approved'
+		  AND campaign.next_send_at <= now()
+		  AND (
+		    SELECT count(*)
+		    FROM restaurants shared_restaurant
+		    WHERE lower(trim(shared_restaurant.email)) = lower(trim(restaurant.email))
+		  ) <= 3`, campaignID, step, subject, bodyHTML, bodyText)
 	if err != nil {
 		return fmt.Errorf("prepare sequence delivery: %w", err)
 	}
@@ -470,6 +494,11 @@ func (repo *Postgres) NextSequenceDueAt(ctx context.Context) (*time.Time, error)
 		  AND step.enabled = true
 		  AND length(trim(restaurant.name)) > 0
 		  AND lower(trim(restaurant.email)) ~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$'
+		  AND (
+		    SELECT count(*)
+		    FROM restaurants shared_restaurant
+		    WHERE lower(trim(shared_restaurant.email)) = lower(trim(restaurant.email))
+		  ) <= 3
 		  AND restaurant.status IN ('lead', 'emailed')
 		  AND restaurant.shown_interest = false
 		  AND restaurant.outreach_consent_basis = 'inferred_business'
@@ -511,6 +540,11 @@ func (repo *Postgres) CountRecipientStatuses(ctx context.Context) (RecipientStat
 		         COALESCE(step.enabled, false) AS step_enabled,
 		         length(trim(restaurant.name)) > 0 AS has_name,
 		         lower(trim(restaurant.email)) ~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$' AS has_email,
+		         (
+		           SELECT count(*)
+		           FROM restaurants shared_restaurant
+		           WHERE lower(trim(shared_restaurant.email)) = lower(trim(restaurant.email))
+		         ) <= 3 AS shared_email_eligible,
 		         restaurant.status IN ('lead', 'emailed') AS lifecycle_eligible,
 		         restaurant.shown_interest = false AS has_no_interest,
 		         restaurant.outreach_consent_basis = 'inferred_business'
@@ -534,6 +568,7 @@ func (repo *Postgres) CountRecipientStatuses(ctx context.Context) (RecipientStat
 		           AND step_enabled
 		           AND has_name
 		           AND has_email
+		           AND shared_email_eligible
 		           AND lifecycle_eligible
 		           AND has_no_interest
 		           AND has_consent_evidence
@@ -543,15 +578,15 @@ func (repo *Postgres) CountRecipientStatuses(ctx context.Context) (RecipientStat
 		), phase AS (
 		  SELECT EXISTS (
 		    SELECT 1 FROM policy_state
-		    WHERE policy_eligible AND current_step > 0
-		  ) AS unfinished_followups
+		    WHERE policy_eligible AND current_step > 0 AND next_send_at <= now()
+		  ) AS due_followups
 		)
 		SELECT count(*) FILTER (
 		         WHERE policy_eligible AND current_step > 0 AND next_send_at <= now()
 		       ),
 		       count(*) FILTER (
 		         WHERE policy_eligible AND current_step = 0 AND next_send_at <= now()
-		           AND NOT (SELECT unfinished_followups FROM phase)
+		           AND NOT (SELECT due_followups FROM phase)
 		       ),
 		       count(*) FILTER (
 		         WHERE completed_at IS NULL AND NOT policy_eligible

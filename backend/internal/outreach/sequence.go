@@ -104,21 +104,30 @@ type SequencePreview struct {
 	Steps          []RenderedSequenceStep `json:"steps"`
 }
 
+type RestaurantGreetingPreview struct {
+	RestaurantID   uuid.UUID `json:"restaurant_id"`
+	RestaurantName string    `json:"restaurant_name"`
+	Greeting       string    `json:"greeting"`
+	Greeting01     string    `json:"greeting01"`
+	FactsUsed      []string  `json:"facts_used"`
+}
+
 type RecipientProgress struct {
-	RestaurantID    uuid.UUID  `json:"restaurant_id"`
-	RestaurantName  string     `json:"restaurant_name"`
-	Email           string     `json:"email"`
-	LifecycleStatus string     `json:"lifecycle_status"`
-	ConsentBasis    string     `json:"consent_basis"`
-	CurrentStep     int        `json:"current_step"`
-	NextStep        *int       `json:"next_step,omitempty"`
-	NextSendAt      *time.Time `json:"next_send_at,omitempty"`
-	LastSentAt      *time.Time `json:"last_sent_at,omitempty"`
-	CompletedAt     *time.Time `json:"completed_at,omitempty"`
-	EmailSendCount  int        `json:"email_send_count"`
-	CampaignStatus  string     `json:"campaign_status"`
-	Eligible        bool       `json:"eligible"`
-	HoldReason      string     `json:"hold_reason,omitempty"`
+	RestaurantID     uuid.UUID  `json:"restaurant_id"`
+	RestaurantName   string     `json:"restaurant_name"`
+	Email            string     `json:"email"`
+	EmailRecordCount int        `json:"email_record_count"`
+	LifecycleStatus  string     `json:"lifecycle_status"`
+	ConsentBasis     string     `json:"consent_basis"`
+	CurrentStep      int        `json:"current_step"`
+	NextStep         *int       `json:"next_step,omitempty"`
+	NextSendAt       *time.Time `json:"next_send_at,omitempty"`
+	LastSentAt       *time.Time `json:"last_sent_at,omitempty"`
+	CompletedAt      *time.Time `json:"completed_at,omitempty"`
+	EmailSendCount   int        `json:"email_send_count"`
+	CampaignStatus   string     `json:"campaign_status"`
+	Eligible         bool       `json:"eligible"`
+	HoldReason       string     `json:"hold_reason,omitempty"`
 }
 
 type RecipientProgressList struct {
@@ -479,6 +488,32 @@ func (service *Service) PreviewSequence(ctx context.Context, principal auth.Prin
 	return preview, nil
 }
 
+func (service *Service) PreviewRestaurantGreeting(
+	ctx context.Context,
+	principal auth.Principal,
+	restaurantID uuid.UUID,
+) (RestaurantGreetingPreview, error) {
+	if !auth.IsInternalAdmin(principal.Role) {
+		return RestaurantGreetingPreview{}, restaurants.ErrForbidden
+	}
+	facts, resolvedID, err := service.resolveGreetingFacts(ctx, &restaurantID, "", "", "")
+	if err != nil {
+		return RestaurantGreetingPreview{}, err
+	}
+	if resolvedID == nil {
+		return RestaurantGreetingPreview{}, ErrGreetingRestaurantNotFound
+	}
+	name := cleanSingleLine(facts.RestaurantName)
+	greeting01 := RenderGreeting01(facts)
+	return RestaurantGreetingPreview{
+		RestaurantID:   *resolvedID,
+		RestaurantName: name,
+		Greeting:       outreachGreeting(facts.OwnerFirstName, name),
+		Greeting01:     greeting01.Greeting01,
+		FactsUsed:      greeting01.FactsUsed,
+	}, nil
+}
+
 func (service *Service) ListRecipientProgress(ctx context.Context, principal auth.Principal, limit, offset int) (RecipientProgressList, error) {
 	if !auth.IsInternalAdmin(principal.Role) {
 		return RecipientProgressList{}, restaurants.ErrForbidden
@@ -500,6 +535,7 @@ func (service *Service) ListRecipientProgress(ctx context.Context, principal aut
 		SELECT r.id,
 		       r.name,
 		       r.email,
+		       count(*) OVER (PARTITION BY lower(trim(r.email))) AS email_record_count,
 		       r.status,
 		       r.outreach_consent_basis,
 		       COALESCE(c.current_step, 0),
@@ -512,6 +548,7 @@ func (service *Service) ListRecipientProgress(ctx context.Context, principal aut
 		       CASE
 		         WHEN trim(r.name) = '' THEN 'missing_name'
 		         WHEN lower(trim(r.email)) !~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$' THEN 'invalid_email'
+		         WHEN count(*) OVER (PARTITION BY lower(trim(r.email))) > 3 THEN 'shared_email_limit'
 		         WHEN r.status NOT IN ('lead', 'emailed') OR r.shown_interest THEN 'lifecycle_paused'
 		         WHEN r.outreach_consent_basis <> 'inferred_business'
 		           OR r.outreach_consent_recorded_at IS NULL
@@ -540,7 +577,7 @@ func (service *Service) ListRecipientProgress(ctx context.Context, principal aut
 	for rows.Next() {
 		var record RecipientProgress
 		if err := rows.Scan(
-			&record.RestaurantID, &record.RestaurantName, &record.Email,
+			&record.RestaurantID, &record.RestaurantName, &record.Email, &record.EmailRecordCount,
 			&record.LifecycleStatus, &record.ConsentBasis, &record.CurrentStep,
 			&record.NextStep, &record.NextSendAt, &record.LastSentAt,
 			&record.CompletedAt, &record.EmailSendCount, &record.CampaignStatus,

@@ -54,6 +54,24 @@ export type Restaurant = {
   updated_at?: string;
 };
 
+export type SharedEmailRestaurant = {
+  id: string;
+  name: string;
+  status: string;
+};
+
+export type SharedEmailGroup = {
+  email: string;
+  restaurant_count: number;
+  blocked_for_outreach: boolean;
+  restaurants: SharedEmailRestaurant[];
+};
+
+export type SharedEmailGroupListResponse = {
+  groups: SharedEmailGroup[];
+  total: number;
+};
+
 export type BulkSendStatus = {
   pending_eligible_count: number;
   due_followup_count?: number;
@@ -347,6 +365,14 @@ export type OutreachSequencePreview = {
   steps: OutreachSequencePreviewStep[];
 };
 
+export type RestaurantGreetingPreview = {
+  restaurant_id: string;
+  restaurant_name: string;
+  greeting: string;
+  greeting01: string;
+  facts_used: string[];
+};
+
 export type OutreachTemplateTestSendResponse = {
   recipient_email: string;
   restaurant_id?: string;
@@ -365,6 +391,7 @@ export type OutreachRecipient = {
   restaurant_id: string;
   restaurant_name: string;
   email: string;
+  email_record_count: number;
   lifecycle_status: string;
   consent_basis: string;
   current_step: number;

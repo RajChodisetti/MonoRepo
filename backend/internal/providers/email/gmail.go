@@ -137,6 +137,8 @@ func (provider *gmailProvider) Send(ctx context.Context, req SendRequest) (SendR
 		req.Subject,
 		req.TextBody,
 		req.HTMLBody,
+		req.InReplyTo,
+		req.References,
 	)
 	if err != nil {
 		return SendResult{}, err
@@ -147,9 +149,13 @@ func (provider *gmailProvider) Send(ctx context.Context, req SendRequest) (SendR
 		return SendResult{}, err
 	}
 
-	payload, err := json.Marshal(map[string]string{
+	payloadFields := map[string]string{
 		"raw": base64.RawURLEncoding.EncodeToString(rawMessage),
-	})
+	}
+	if threadID := strings.TrimSpace(req.ThreadID); threadID != "" {
+		payloadFields["threadId"] = threadID
+	}
+	payload, err := json.Marshal(payloadFields)
 	if err != nil {
 		return SendResult{}, fmt.Errorf("gmail marshal request: %w", err)
 	}
@@ -293,6 +299,8 @@ func buildGmailMessage(
 	subject string,
 	textBody string,
 	htmlBody string,
+	inReplyTo string,
+	references string,
 ) ([]byte, string, error) {
 	fromEmail, err := canonicalMailbox(fromEmail)
 	if err != nil {
@@ -307,6 +315,14 @@ func buildGmailMessage(
 		return nil, "", err
 	}
 	subject, err = cleanHeaderValue(subject, "subject")
+	if err != nil {
+		return nil, "", err
+	}
+	inReplyTo, err = cleanHeaderValue(inReplyTo, "in-reply-to")
+	if err != nil {
+		return nil, "", err
+	}
+	references, err = cleanHeaderValue(references, "references")
 	if err != nil {
 		return nil, "", err
 	}
@@ -337,6 +353,12 @@ func buildGmailMessage(
 	fmt.Fprintf(&body, "Subject: %s\r\n", mime.QEncoding.Encode("UTF-8", subject))
 	fmt.Fprintf(&body, "Date: %s\r\n", time.Now().UTC().Format(time.RFC1123Z))
 	fmt.Fprintf(&body, "Message-ID: %s\r\n", rfcMessageID)
+	if inReplyTo != "" {
+		fmt.Fprintf(&body, "In-Reply-To: %s\r\n", inReplyTo)
+	}
+	if references != "" {
+		fmt.Fprintf(&body, "References: %s\r\n", references)
+	}
 	if replyTo != "" {
 		fmt.Fprintf(&body, "Reply-To: %s\r\n", (&mail.Address{Address: replyTo}).String())
 	}

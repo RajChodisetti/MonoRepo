@@ -927,3 +927,69 @@ func (service *Service) MarkMessageRead(
 	}
 	return record, err
 }
+
+func (service *Service) ReplyToInboxMessage(
+	ctx context.Context,
+	principal auth.Principal,
+	messageID uuid.UUID,
+	input ReplyMessageInput,
+) (Message, error) {
+	if !auth.IsInternalAdmin(principal.Role) {
+		return Message{}, restaurants.ErrForbidden
+	}
+	if service.emailCfg.DisableSending {
+		return Message{}, ErrSendingDisabled
+	}
+	store, ok := service.repo.(*Postgres)
+	if !ok || store == nil {
+		return Message{}, repository.ErrNotFound
+	}
+	target, err := store.GetMessageByID(ctx, messageID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Message{}, repository.ErrNotFound
+	}
+	if err != nil {
+		return Message{}, fmt.Errorf("load inbox message for reply: %w", err)
+	}
+	request, err := prepareInboxReply(target, input)
+	if err != nil {
+		return Message{}, err
+	}
+	mailboxKey := strings.TrimSpace(target.MailboxKey)
+	if service.emailPool == nil || mailboxKey == "" {
+		return Message{}, ErrInboxReplyUnavailable
+	}
+
+	request = emailprovider.EnsureTuviSignature(request)
+	result, err := service.emailPool.SendDirectFrom(ctx, mailboxKey, request)
+	if err != nil {
+		if errors.Is(err, emailprovider.ErrAccountsExhausted) || strings.Contains(err.Error(), "is not configured") {
+			return Message{}, ErrInboxReplyUnavailable
+		}
+		return Message{}, fmt.Errorf("send inbox reply: %w", err)
+	}
+
+	now := time.Now().UTC()
+	reply, err := store.InsertMessage(ctx, Message{
+		RestaurantID:   target.RestaurantID,
+		CampaignID:     target.CampaignID,
+		ReplyToken:     target.ReplyToken,
+		Direction:      MessageDirectionOutbound,
+		FromEmail:      result.FromEmail,
+		ToEmail:        request.To,
+		Subject:        request.Subject,
+		BodyText:       request.TextBody,
+		GmailMessageID: result.ProviderMessageID,
+		GmailThreadID:  firstNonEmpty(result.ProviderThreadID, target.GmailThreadID),
+		RFCMessageID:   result.RFCMessageID,
+		MailboxKey:     firstNonEmpty(result.AccountKey, mailboxKey),
+		ReadAt:         &now,
+	})
+	if err != nil {
+		return Message{}, fmt.Errorf("record accepted inbox reply: %w", err)
+	}
+	if _, err := store.MarkMessageRead(ctx, target.ID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		service.log.WarnContext(ctx, "outreach_inbox_reply_mark_read_failed", "message_id", target.ID, "error", err)
+	}
+	return reply, nil
+}

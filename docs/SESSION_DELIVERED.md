@@ -3247,3 +3247,36 @@ cause real provider requests after a worker claims the job. No job was resumed,
 no real provider was called, and no production state, migration, deployment,
 sender control, email, or branch remote was changed. Production use remains an
 explicit administrator action.
+
+## 2026-08-14 — Outreach recipient reconciliation and unified inbox replies
+
+**Role / Delivery:** Reconciled outreach enrollment and selection so due
+follow-ups no longer prevent unrelated eligible restaurants from entering the
+queue, consent-evidence changes refresh enrollment, and normalized email
+addresses shared by more than three restaurant records fail closed before both
+selection and delivery preparation. Added internal-admin shared-email groups,
+restaurant-specific deterministic greeting previews, editable email subject
+labels in the sequence editor, and manual plain-text replies to captured inbox
+messages using the same configured Google Workspace account and thread.
+
+**Checks Run:** Targeted backend tests passed 184 tests; the complete backend
+suite passed 528 tests across 45 packages, with full vet and command builds also
+passing. Admin and public web lint, TypeScript checks, and production builds
+passed. OpenAPI validation passed with 11 pre-existing unrelated warnings;
+Docker Compose configuration, migration discovery/contract tests, and
+`git diff --check` passed. A full disposable migration run could not be completed
+because the available local server is PostgreSQL 14 and fails on an older
+PostgreSQL 16 migration before reaching `000050`; the existing local server did
+not accept development credentials.
+
+**Business Value / Plan Fit:** Operators can see why duplicate-contact leads are
+held, inspect all restaurants sharing an address, preview the exact greeting for
+a restaurant, edit message subjects with their templates, and answer an inbound
+thread without switching mailbox identities. Eligible restaurants are no longer
+starved by future follow-ups or stale enrollment trigger behavior.
+
+**Risks / Approval State:** Migration `000050` deliberately leaves the email job
+disabled and cancels only queued outreach work so the repaired population can be
+reviewed before any administrator re-enables delivery. No migration was applied
+to production, no provider was called, no message was sent, and nothing was
+deployed, pushed, activated, or enabled.

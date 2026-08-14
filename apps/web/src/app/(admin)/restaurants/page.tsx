@@ -5,7 +5,11 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { adminFetch } from "@/lib/client-api";
 import { RESTAURANT_STATUSES, formatDate } from "@/lib/constants";
-import type { Restaurant } from "@/lib/types";
+import type {
+  Restaurant,
+  SharedEmailGroup,
+  SharedEmailGroupListResponse,
+} from "@/lib/types";
 import { EmptyState, ErrorBanner, PageHeader, StatusBadge } from "@/components/ui";
 
 export default function RestaurantsPage() {
@@ -16,6 +20,8 @@ export default function RestaurantsPage() {
   const [isContacted, setIsContacted] = useState("");
   const [shownInterest, setShownInterest] = useState("");
   const [includeArchived, setIncludeArchived] = useState(false);
+  const [showSharedEmails, setShowSharedEmails] = useState(false);
+  const [sharedEmailGroups, setSharedEmailGroups] = useState<SharedEmailGroup[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -40,10 +46,26 @@ export default function RestaurantsPage() {
     }
   }, [name, status, isContacted, shownInterest, includeArchived]);
 
+  const loadSharedEmails = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await adminFetch<SharedEmailGroupListResponse>(
+        "restaurants/shared-emails",
+        { query: { limit: 100 } },
+      );
+      setSharedEmailGroups(data.groups || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load shared emails");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
-    const t = setTimeout(load, 200);
+    const t = setTimeout(showSharedEmails ? loadSharedEmails : load, 200);
     return () => clearTimeout(t);
-  }, [load]);
+  }, [load, loadSharedEmails, showSharedEmails]);
 
   return (
     <div>
@@ -53,7 +75,16 @@ export default function RestaurantsPage() {
       />
       <ErrorBanner message={error} />
 
-      <div
+      <div className="tabs" style={{ marginBottom: "1rem" }}>
+        <button type="button" className="tab" data-active={!showSharedEmails} onClick={() => setShowSharedEmails(false)}>
+          All restaurants
+        </button>
+        <button type="button" className="tab" data-active={showSharedEmails} onClick={() => setShowSharedEmails(true)}>
+          Shared emails
+        </button>
+      </div>
+
+      {!showSharedEmails ? <div
         className="card"
         style={{
           display: "grid",
@@ -129,14 +160,25 @@ export default function RestaurantsPage() {
         <button className="btn btn-secondary" type="button" onClick={load}>
           Refresh
         </button>
-      </div>
+      </div> : (
+        <div className="card" style={{ marginBottom: "1rem" }}>
+          <strong>Multi-restaurant contacts</strong>
+          <p style={{ color: "var(--muted)", margin: "0.35rem 0 0" }}>
+            Grouped by normalized email. Outreach is blocked when one address belongs to more than
+            three restaurant records.
+          </p>
+        </div>
+      )}
 
       {loading ? <EmptyState message="Loading restaurants…" /> : null}
-      {!loading && items.length === 0 ? (
+      {!loading && !showSharedEmails && items.length === 0 ? (
         <EmptyState message="No restaurants match these filters." />
       ) : null}
+      {!loading && showSharedEmails && sharedEmailGroups.length === 0 ? (
+        <EmptyState message="No email address is shared by multiple restaurants." />
+      ) : null}
 
-      {items.length > 0 ? (
+      {!showSharedEmails && items.length > 0 ? (
         <div className="table-wrap">
           <table className="data">
             <thead>
@@ -171,6 +213,41 @@ export default function RestaurantsPage() {
                   <td>{formatDate(r.updated_at)}</td>
                   <td onClick={(e) => e.stopPropagation()}>
                     <Link href={`/restaurants/${r.id}`}>Open</Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+
+      {showSharedEmails && sharedEmailGroups.length > 0 ? (
+        <div className="table-wrap">
+          <table className="data">
+            <thead>
+              <tr>
+                <th>Email</th>
+                <th>Count</th>
+                <th>Outreach</th>
+                <th>Restaurants</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sharedEmailGroups.map((group) => (
+                <tr key={group.email}>
+                  <td>{group.email}</td>
+                  <td>{group.restaurant_count}</td>
+                  <td>
+                    <StatusBadge status={group.blocked_for_outreach ? "blocked" : "allowed"} />
+                  </td>
+                  <td>
+                    <div style={{ display: "grid", gap: "0.3rem" }}>
+                      {group.restaurants.map((restaurant) => (
+                        <Link key={restaurant.id} href={`/restaurants/${restaurant.id}`}>
+                          {restaurant.name} · {restaurant.status}
+                        </Link>
+                      ))}
+                    </div>
                   </td>
                 </tr>
               ))}

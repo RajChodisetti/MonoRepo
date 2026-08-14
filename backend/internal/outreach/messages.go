@@ -1,10 +1,14 @@
 package outreach
 
 import (
+	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
+
+	emailprovider "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/email"
 )
 
 const (
@@ -55,6 +59,50 @@ type InboxList struct {
 
 type MessageList struct {
 	Messages []Message `json:"messages"`
+}
+
+type ReplyMessageInput struct {
+	Subject  string `json:"subject,omitempty"`
+	BodyText string `json:"body_text"`
+}
+
+func prepareInboxReply(target Message, input ReplyMessageInput) (emailprovider.SendRequest, error) {
+	if target.Direction != MessageDirectionInbound {
+		return emailprovider.SendRequest{}, fmt.Errorf("%w: only inbound messages can be replied to", ErrInvalidInboxReply)
+	}
+	body := strings.TrimSpace(input.BodyText)
+	if body == "" || len(body) > 10000 || !utf8.ValidString(body) || strings.ContainsRune(body, '\x00') {
+		return emailprovider.SendRequest{}, fmt.Errorf("%w: body_text must be valid plain text between 1 and 10000 bytes", ErrInvalidInboxReply)
+	}
+	subject := strings.TrimSpace(input.Subject)
+	if subject == "" {
+		subject = strings.TrimSpace(target.Subject)
+		if subject == "" {
+			subject = "(no subject)"
+		}
+		if !strings.HasPrefix(strings.ToLower(subject), "re:") {
+			subject = "Re: " + subject
+		}
+	}
+	if len(subject) > 200 || strings.ContainsAny(subject, "\r\n") {
+		return emailprovider.SendRequest{}, fmt.Errorf("%w: subject must be a single line between 1 and 200 bytes", ErrInvalidInboxReply)
+	}
+	recipient, err := cleanTestRecipient(target.FromEmail)
+	if err != nil {
+		return emailprovider.SendRequest{}, fmt.Errorf("%w: inbound sender address is invalid", ErrInvalidInboxReply)
+	}
+	return emailprovider.SendRequest{
+		To:         recipient,
+		Subject:    subject,
+		TextBody:   body,
+		ThreadID:   strings.TrimSpace(target.GmailThreadID),
+		InReplyTo:  strings.TrimSpace(target.RFCMessageID),
+		References: strings.TrimSpace(target.RFCMessageID),
+		Metadata: map[string]string{
+			"purpose":             "outreach_inbox_reply",
+			"in_reply_to_message": target.ID.String(),
+		},
+	}, nil
 }
 
 func snapshotBody(textBody, htmlBody string) string {

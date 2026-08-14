@@ -217,6 +217,7 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	mux.Handle("GET /api/v1/restaurants", protectAuthenticated(RequireAnyRole(auth.RoleInternalAdmin, auth.RoleRestaurantOwner)(
 		http.HandlerFunc(restaurantHandler.List),
 	)))
+	mux.Handle("GET /api/v1/restaurants/shared-emails", protectInternalAdmin(http.HandlerFunc(outreachBulkHandler.ListSharedEmailGroups)))
 	mux.Handle("POST /api/v1/restaurants", protectInternalAdmin(http.HandlerFunc(restaurantHandler.Create)))
 	mux.Handle("GET /api/v1/restaurants/{id}", protectRestaurantScoped(http.HandlerFunc(restaurantHandler.Get)))
 	mux.Handle("PATCH /api/v1/restaurants/{id}", protectRestaurantAdmin(http.HandlerFunc(restaurantHandler.Update)))
@@ -242,7 +243,9 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	mux.Handle("GET /api/v1/outreach/email-accounts/health", protectInternalAdmin(http.HandlerFunc(emailHealthHandler.Status)))
 	mux.Handle("GET /api/v1/outreach/inbox", protectInternalAdmin(http.HandlerFunc(outreachBulkHandler.ListInbox)))
 	mux.Handle("POST /api/v1/outreach/messages/{id}/read", protectInternalAdmin(http.HandlerFunc(outreachBulkHandler.MarkMessageRead)))
+	mux.Handle("POST /api/v1/outreach/messages/{id}/reply", protectInternalAdmin(http.HandlerFunc(outreachBulkHandler.ReplyToInboxMessage)))
 	mux.Handle("GET /api/v1/restaurants/{id}/messages", protectInternalAdmin(http.HandlerFunc(outreachBulkHandler.ListRestaurantMessages)))
+	mux.Handle("GET /api/v1/restaurants/{id}/outreach-greeting", protectInternalAdmin(http.HandlerFunc(outreachBulkHandler.PreviewRestaurantGreeting)))
 	mux.Handle("GET /api/v1/developer/schema", protectInternalAdmin(http.HandlerFunc(developerHandler.Schema)))
 	mux.Handle("POST /api/v1/developer/sql", protectInternalAdmin(http.HandlerFunc(developerHandler.ExecuteSQL)))
 	mux.Handle("POST /api/v1/scrape-jobs", protectInternalAdmin(http.HandlerFunc(scrapeJobHandler.Trigger)))

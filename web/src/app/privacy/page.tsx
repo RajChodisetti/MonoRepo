@@ -79,9 +79,10 @@ export default function PrivacyPage() {
           owner or administrator grants access. Sending mailboxes request the narrow Gmail send permission (
           <code className="rounded bg-surface px-1.5 py-0.5 text-sm text-ink">gmail.send</code>
           ) so tuvi can send approved messages from that mailbox over Google&apos;s HTTPS API.
-          A separate inbound mailbox may also grant{" "}
+          One selected outreach mailbox may also grant{" "}
           <code className="rounded bg-surface px-1.5 py-0.5 text-sm text-ink">gmail.readonly</code>{" "}
-          so tuvi can capture replies sent to unique outreach Reply-To addresses.
+          so tuvi can capture replies sent to unique outreach Reply-To addresses and use
+          that same mailbox for administrator-written responses.
         </p>
         <LegalList>
           <li>
@@ -90,14 +91,15 @@ export default function PrivacyPage() {
             needed to perform the send.
           </li>
           <li>
-            Sending mailboxes do not receive permission to read or download inbox
-            messages, contacts, attachments, message history, Google Drive files, or
-            other Google account content.
+            Other sending mailboxes do not receive permission to read inbox messages.
+            The selected reply mailbox does not grant access to contacts, Google Drive
+            files, or other Google account products.
           </li>
           <li>
-            The dedicated inbound mailbox is used only to capture replies to outreach
-            plus-addresses and store them for internal admin follow-up. It is not used
-            to browse unrelated inbox mail from sending accounts.
+            The selected mailbox is polled over a bounded recent-inbox window to capture
+            outreach replies. Matched replies and administrator-written responses are
+            stored for internal follow-up; the application does not provide a general
+            mailbox browser.
           </li>
           <li>
             Refresh tokens are kept in protected server configuration. Short-lived

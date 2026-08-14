@@ -16,13 +16,16 @@ const ProviderDisabled = "disabled"
 var ErrSendingDisabled = errors.New("email sending is disabled")
 
 type SendRequest struct {
-	To       string
-	Subject  string
-	HTMLBody string
-	TextBody string
-	ReplyTo  string
-	Metadata map[string]string
-	Delivery *DeliveryContext
+	To         string
+	Subject    string
+	HTMLBody   string
+	TextBody   string
+	ReplyTo    string
+	ThreadID   string
+	InReplyTo  string
+	References string
+	Metadata   map[string]string
+	Delivery   *DeliveryContext
 }
 
 type SendResult struct {

@@ -20,6 +20,8 @@ var (
 	ErrNotConfigured         = errors.New("bulk outreach email accounts are not configured")
 	ErrSendingDisabled       = errors.New("email sending is disabled")
 	ErrInvalidRecipientEmail = errors.New("recipient email is invalid")
+	ErrInvalidInboxReply     = errors.New("inbox reply is invalid")
+	ErrInboxReplyUnavailable = errors.New("inbox reply mailbox is not configured for sending")
 )
 
 type BulkSendSummary struct {

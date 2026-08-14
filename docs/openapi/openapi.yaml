@@ -615,6 +615,45 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
 
+  /api/v1/restaurants/shared-emails:
+    get:
+      tags: [Restaurants, Email Campaigns]
+      summary: List email addresses shared by multiple restaurants
+      operationId: listSharedRestaurantEmails
+      security:
+        - bearerAuth: []
+      description: |
+        Requires role internal_admin. Groups valid normalized email addresses used by at
+        least two restaurant records. Groups with more than three records are blocked from
+        automated outreach.
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Shared email groups
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SharedEmailGroupList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
   /api/v1/restaurants/{id}:
     parameters:
       - $ref: '#/components/parameters/restaurantId'
@@ -811,6 +850,35 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EmailMessageList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/restaurants/{id}/outreach-greeting:
+    parameters:
+      - $ref: '#/components/parameters/restaurantId'
+    get:
+      tags: [Email Campaigns, Restaurants]
+      summary: Preview deterministic outreach greetings for one restaurant
+      operationId: previewRestaurantOutreachGreeting
+      security:
+        - bearerAuth: []
+      description: |
+        Requires role internal_admin. Loads authoritative restaurant and verified Google
+        listing facts server-side and returns both legacy greeting and deterministic
+        greeting01 output plus non-sensitive fact categories used.
+      responses:
+        '200':
+          description: Restaurant-specific greeting preview
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RestaurantGreetingPreview'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -1753,6 +1821,52 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/outreach/messages/{id}/reply:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Email Campaigns]
+      summary: Send a custom plain-text reply to an inbound outreach message
+      operationId: replyToOutreachMessage
+      security:
+        - bearerAuth: []
+      description: |
+        Requires role internal_admin. Sends from the same configured Gmail mailbox and
+        Gmail thread that captured the inbound message, then stores the accepted outbound
+        snapshot. It does not restart a campaign paused by the inbound reply.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OutreachReplyRequest'
+      responses:
+        '201':
+          description: Accepted and stored reply
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailMessage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          description: Sending is disabled or the captured mailbox is not configured for sending
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /api/v1/outreach/bulk-send:
     post:
       tags: [Email Campaigns]
@@ -1772,8 +1886,9 @@ paths:
         HTML alternative only for line breaks and the Tuvi logo signature. Rendering
         permits exactly `https://tuvisolutions.com`.
         The first enabled step is immediate; each later enabled step uses its configured
-        delay (the approved default sequence uses 72 hours). All unfinished follow-ups,
-        including future-due follow-ups, are completed before any new recipient begins.
+        delay (the approved default sequence uses 72 hours). Due follow-ups are selected
+        before new recipients; future-due follow-ups do not idle the queue. Addresses used
+        by more than three restaurant records are excluded and rechecked before delivery.
 
         Confirmed provider acceptance alone advances `current_step`, records the send time,
         and schedules the next enabled step. Skipped or failed/ambiguous outcomes never
@@ -4572,9 +4687,30 @@ components:
           items:
             $ref: '#/components/schemas/RenderedOutreachSequenceStep'
 
+    RestaurantGreetingPreview:
+      type: object
+      required: [restaurant_id, restaurant_name, greeting, greeting01, facts_used]
+      properties:
+        restaurant_id:
+          type: string
+          format: uuid
+        restaurant_name:
+          type: string
+        greeting:
+          type: string
+          description: Legacy salutation for the greeting placeholder.
+        greeting01:
+          type: string
+          description: Deterministic salutation, blank separator, and exactly two greeting lines.
+        facts_used:
+          type: array
+          items:
+            type: string
+            enum: [owner_first_name, restaurant_name, cuisine, city, rating, review_count]
+
     OutreachRecipient:
       type: object
-      required: [restaurant_id, restaurant_name, email, lifecycle_status, consent_basis, current_step, email_send_count, campaign_status, eligible]
+      required: [restaurant_id, restaurant_name, email, email_record_count, lifecycle_status, consent_basis, current_step, email_send_count, campaign_status, eligible]
       properties:
         restaurant_id:
           type: string
@@ -4584,6 +4720,10 @@ components:
         email:
           type: string
           format: email
+        email_record_count:
+          type: integer
+          minimum: 1
+          description: Number of restaurant records using this normalized email.
         lifecycle_status:
           type: string
           enum: [lead, emailed]
@@ -4617,6 +4757,7 @@ components:
           type: boolean
         hold_reason:
           type: string
+          description: Includes shared_email_limit when more than three restaurant records use the address.
 
     OutreachRecipientList:
       type: object
@@ -4691,6 +4832,61 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/EmailMessage'
+
+    OutreachReplyRequest:
+      type: object
+      required: [body_text]
+      properties:
+        subject:
+          type: string
+          maxLength: 200
+          description: Optional single-line subject; defaults to Re followed by the inbound subject.
+        body_text:
+          type: string
+          minLength: 1
+          maxLength: 10000
+          description: Plain-text reply body.
+
+    SharedEmailRestaurant:
+      type: object
+      required: [id, name, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        status:
+          type: string
+
+    SharedEmailGroup:
+      type: object
+      required: [email, restaurant_count, blocked_for_outreach, restaurants]
+      properties:
+        email:
+          type: string
+          format: email
+        restaurant_count:
+          type: integer
+          minimum: 2
+        blocked_for_outreach:
+          type: boolean
+        restaurants:
+          type: array
+          items:
+            $ref: '#/components/schemas/SharedEmailRestaurant'
+
+    SharedEmailGroupList:
+      type: object
+      required: [groups, total]
+      properties:
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/SharedEmailGroup'
+        total:
+          type: integer
+          minimum: 0
 
     OutreachInboxThread:
       type: object

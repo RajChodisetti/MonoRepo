@@ -260,6 +260,7 @@ curl http://localhost:8080/readyz \
 | `POST /api/v1/auth/login` | Public | Verify credentials and receive JWT |
 | `GET /api/v1/admin/me` | Bearer + `internal_admin` | Current internal admin profile |
 | `GET /api/v1/restaurants` | Bearer + `internal_admin` or `restaurant_owner` | List restaurants (supports query filters) |
+| `GET /api/v1/restaurants/shared-emails` | Bearer + `internal_admin` | Group shared emails, counts, and restaurant records |
 | `POST /api/v1/restaurants` | Bearer + `internal_admin` | Create restaurant lead |
 | `GET /api/v1/restaurants/{id}` | Bearer + membership | Get restaurant (owner or internal admin) |
 | `PATCH /api/v1/restaurants/{id}` | Bearer + `internal_admin` | Update name, email, `is_contacted`, `shown_interest` |
@@ -268,6 +269,7 @@ curl http://localhost:8080/readyz \
 | `GET /api/v1/restaurants/{id}/members` | Bearer + `internal_admin` | List restaurant members |
 | `POST /api/v1/restaurants/{id}/members` | Bearer + `internal_admin` | Assign owner to restaurant |
 | `GET /api/v1/restaurants/{id}/messages` | Bearer + `internal_admin` | List captured outbound snapshots and inbound replies |
+| `GET /api/v1/restaurants/{id}/outreach-greeting` | Bearer + `internal_admin` | Preview restaurant-specific greeting placeholders |
 | `POST /api/v1/restaurants/{id}/demo-sites` | Bearer + `internal_admin` | Create a draft demo site (returns one-time token) |
 | `GET /api/v1/restaurants/{id}/profile/review-preview` | Bearer + `internal_admin` | Inspect profile/contact and capture review versions without bearer secrets |
 | `PATCH /api/v1/restaurants/{id}/profile/review` | Bearer + `internal_admin` | Audit profile approval/rejection for demo/public content |
@@ -284,6 +286,7 @@ curl http://localhost:8080/readyz \
 | `GET /api/v1/outreach/recipients` | Bearer + `internal_admin` | Inspect integer sequence progress and next-due state |
 | `GET /api/v1/outreach/inbox` | Bearer + `internal_admin` | List restaurant and unmatched reply threads |
 | `POST /api/v1/outreach/messages/{id}/read` | Bearer + `internal_admin` | Mark one captured message read |
+| `POST /api/v1/outreach/messages/{id}/reply` | Bearer + `internal_admin` | Send and snapshot a custom same-mailbox reply |
 | `GET /api/public/v1/demo/{slug}?token=...` | Public | Public demo payload only (no internal fields) |
 | `GET /api/public/v1/restaurants/{id}/table-availability` | Public | Return available RFC3339 reservation-request slots |
 | `PUT /api/public/v1/restaurants/{id}/reservations` | Public | Submit an idempotent reservation request in `pending` status |

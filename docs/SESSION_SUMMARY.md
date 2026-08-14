@@ -1,6 +1,6 @@
 # Session Summary
 
-Local branch `codex/reconcile-outbound-inboxes-ramp-20260813` now treats Apollo as best-effort enrichment: missing credentials and provider failures continue verified Google Places imports, while the shared request ceiling still pauses safely.
-Failed scrape jobs have a confirmed admin **Resume** action backed by `POST /api/v1/scrape-jobs/{id}/resume`; durable completed work and imported candidates are preserved, and the older retry route remains compatible.
-The deterministic greeting, inbox/reply capture, and 5-to-40 mailbox ramp remain reconciled locally with unreleased migrations `000047`–`000049` unchanged.
-Python 3.12 tests, full backend tests/vet/build, OpenAPI validation, and admin lint/type-check/build pass. Nothing was pushed, deployed, migrated, resumed, activated, enabled, or sent.
+Local branch `codex/reconcile-outbound-inboxes-ramp-20260813` now repairs outreach enrollment and queue selection, while holding normalized email addresses shared by more than three restaurant records at both selection and delivery boundaries.
+The admin UI exposes editable subject/title fields, shared-email client groups, restaurant-specific deterministic greeting previews, and manual inbox replies sent through the same configured Google Workspace account and thread.
+Migration `000050` backfills enrollment and deliberately leaves the email job disabled for administrator review; prior Apollo-optional scraping, resumable jobs, deterministic greetings, inbox capture, and the 5-to-40 ramp remain intact.
+Full backend tests/vet/build, admin and public-web lint/type-check/build, OpenAPI, Compose, migration discovery, and diff checks pass. Nothing was pushed, deployed, migrated, resumed, activated, enabled, or sent.

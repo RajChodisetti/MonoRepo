@@ -203,7 +203,7 @@ func (service *InboundService) stopCampaignOnReply(ctx context.Context, campaign
 
 func (service *InboundService) recentMailQuery() string {
 	// Gmail history IDs can expire after roughly a week. The configured mailbox
-	// is dedicated to outreach replies, so a bounded Inbox rescan is both safer
+	// is selected for outreach replies, so a bounded Inbox rescan is both safer
 	// and more complete than relying on recipient or subject search matching.
 	return "in:inbox newer_than:7d"
 }

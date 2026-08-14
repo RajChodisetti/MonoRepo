@@ -71,6 +71,12 @@ saved database template rather than application behavior. Google listing media
 is resolved live with attribution; owner/licensed media requires explicit admin
 approval.
 
+Automated outreach excludes normalized email addresses used by more than three
+restaurant records, with the same check repeated at delivery preparation. Due
+follow-ups retain priority, but future-due follow-ups no longer idle new-recipient
+work. Migration `000050` reconciles missing sequence enrollments while keeping
+the email job disabled for explicit administrator review.
+
 `{{greeting01}}` does not read listing media, menus, descriptions, or review
 text. It uses only a successful Google profile's safe city/cuisine and a
 4.0–5.0 rating with at least 10 reviews; all missing or rejected facts fall back

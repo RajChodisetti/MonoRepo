@@ -168,7 +168,32 @@ func (pool *AccountPool) SendDirect(ctx context.Context, req SendRequest) (SendR
 	}
 	account := pool.accounts[pool.currentIndex]
 	pool.currentIndex = (pool.currentIndex + 1) % len(pool.accounts)
-	return account.provider.Send(ctx, req)
+	result, err := account.provider.Send(ctx, req)
+	if result.AccountKey == "" {
+		result.AccountKey = account.key
+	}
+	return result, err
+}
+
+// SendDirectFrom sends a bounded manual message through one explicitly selected
+// configured account. Inbox replies remain in the mailbox that captured the
+// thread instead of rotating to another outreach identity.
+func (pool *AccountPool) SendDirectFrom(ctx context.Context, accountKey string, req SendRequest) (SendResult, error) {
+	if pool == nil {
+		return SendResult{}, ErrAccountsExhausted
+	}
+	accountKey = strings.TrimSpace(accountKey)
+	for _, account := range pool.accounts {
+		if account.key != accountKey {
+			continue
+		}
+		result, err := account.provider.Send(ctx, req)
+		if result.AccountKey == "" {
+			result.AccountKey = account.key
+		}
+		return result, err
+	}
+	return SendResult{}, fmt.Errorf("outreach email account %q is not configured", accountKey)
 }
 
 func (pool *AccountPool) sendInMemory(ctx context.Context, req SendRequest) (SendResult, error) {

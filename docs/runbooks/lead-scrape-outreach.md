@@ -14,7 +14,8 @@ lead-eligibility or outreach dependency.
 - `import_to_db.py` upserts the restaurant/profile and records the lead as
   `inferred_business` with source evidence.
 - `ensure_outreach_sequence_enrollment(uuid)` enrolls any restaurant with a
-  non-empty name and valid email in the active approved sequence.
+  non-empty name, valid email, eligible lifecycle, and recorded inferred-business
+  consent in the active approved sequence. It does not consult legacy suppressions.
 - The Go worker sends only when the persisted outreach job is enabled.
 - Gmail mailbox quotas, idempotency, and delivery-attempt records remain
   authoritative.
@@ -54,6 +55,11 @@ need explicit admin approval before public use.
 - Delay is measured from the previous confirmed delivery; seed delays are 0,
   3, and 3 days.
 - Due follow-ups are claimed before new recipients.
+- A future-due follow-up does not block new recipients while the worker has
+  current capacity.
+- A normalized email used by more than three restaurant records is excluded at
+  selection and rechecked immediately before delivery. The Restaurants admin
+  page lists every shared-email group and its restaurant records.
 - A failure or unknown provider result never advances the integer step.
 - A confirmed send advances the step and records sent/next-due timestamps.
 - Future-due work is deferred; it does not disable the email job.
@@ -78,6 +84,22 @@ cloned from the active sequence. Review and explicitly approve that draft in a
 separate administrator action; applying the migration alone does not change the
 active version or enable sending. Its down migration refuses to remove a draft
 that has been edited or activated.
+
+Migration `000050_reconcile_outreach_enrollment` replaces the stale
+suppression-gated enrollment function, backfills missing eligible enrollments,
+and leaves the email job disabled. Applying it never activates sending.
+
+## One mailbox for sending, replies, and inbox capture
+
+Set `OUTREACH_INBOUND_ENABLED=true` and optionally
+`OUTREACH_INBOUND_ACCOUNT_KEY`. The key must select an entry already present in
+`OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON`; when omitted, the first entry is used.
+That selected refresh token needs both `gmail.send` and `gmail.readonly`.
+Other configured senders need only `gmail.send`.
+
+The admin Inbox reply action sends plain text from the mailbox that captured the
+message, preserves the Gmail thread and RFC reply headers, and stores the
+accepted outbound snapshot. It does not resume the stopped sequence.
 
 ## Resume a failed scrape job
 
