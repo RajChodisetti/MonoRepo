@@ -43,46 +43,24 @@ func (service *Service) List(ctx context.Context, principal auth.Principal) (Lis
 	if err != nil {
 		return ListResult{}, err
 	}
-	accounts := service.environmentViews()
-	envByKey := make(map[string]int, len(accounts))
-	envByMailbox := make(map[string]int, len(accounts))
-	for index, account := range accounts {
-		envByKey[account.AccountKey] = index
-		envByMailbox[account.MailboxEmail] = index
-	}
-	for _, record := range stored {
-		if index, exists := envByMailbox[record.MailboxEmail]; exists {
-			accounts[index].DatabaseFallback = true
+	resolved := service.resolveStored(ctx, stored)
+	accounts := make([]Account, 0, len(service.environmentAccounts())+len(stored))
+	used := make(map[uuid.UUID]struct{}, len(stored))
+	for _, environment := range service.environmentAccounts() {
+		if record, found := findStoredConflict(stored, environment); found {
+			used[record.ID] = struct{}{}
+			_, effective := resolved[record.ID]
+			accounts = append(accounts, storedAccountView(record, effective, true))
 			continue
 		}
-		shadowed := false
-		if _, exists := envByKey[record.AccountKey]; exists {
-			shadowed = true
+		accounts = append(accounts, environmentAccountView(environment))
+	}
+	for _, record := range stored {
+		if _, exists := used[record.ID]; exists {
+			continue
 		}
-		effective := record.Enabled && !shadowed && service.vault != nil
-		if effective {
-			if _, decryptErr := service.vault.decrypt(record.AccountKey, record.MailboxEmail, record.CredentialCiphertext); decryptErr != nil {
-				effective = false
-				service.log.ErrorContext(ctx, "database_outreach_credential_unavailable", "account_key", record.AccountKey, "error", decryptErr)
-			}
-		}
-		id := record.ID
-		createdAt := record.CreatedAt
-		updatedAt := record.UpdatedAt
-		accounts = append(accounts, Account{
-			ID:                    &id,
-			AccountKey:            record.AccountKey,
-			MailboxEmail:          record.MailboxEmail,
-			FromEmail:             record.FromEmail,
-			Source:                "database",
-			Enabled:               record.Enabled,
-			Effective:             effective,
-			Editable:              true,
-			CredentialsStored:     len(record.CredentialCiphertext) > 0,
-			ShadowedByEnvironment: shadowed,
-			CreatedAt:             &createdAt,
-			UpdatedAt:             &updatedAt,
-		})
+		_, effective := resolved[record.ID]
+		accounts = append(accounts, storedAccountView(record, effective, false))
 	}
 	return ListResult{Accounts: accounts, EncryptionReady: service.vault != nil}, nil
 }
@@ -116,8 +94,9 @@ func (service *Service) Create(ctx context.Context, principal auth.Principal, in
 	if err := validateCredentialPayload(payload); err != nil {
 		return Account{}, err
 	}
-	if service.conflictsWithEnvironment(accountKey, mailbox) {
-		return Account{}, fmt.Errorf("%w: mailbox or account key is already provided by protected environment configuration", ErrDuplicate)
+	overridesEnvironment, err := service.validateEnvironmentIdentity(accountKey, mailbox)
+	if err != nil {
+		return Account{}, err
 	}
 	ciphertext, err := service.vault.encrypt(accountKey, mailbox, payload)
 	if err != nil {
@@ -136,7 +115,7 @@ func (service *Service) Create(ctx context.Context, principal auth.Principal, in
 	if err != nil {
 		return Account{}, err
 	}
-	return storedAccountView(created, service.vault != nil, false), nil
+	return storedAccountView(created, created.Enabled, overridesEnvironment), nil
 }
 
 func (service *Service) Update(ctx context.Context, principal auth.Principal, id uuid.UUID, input UpdateInput) (Account, error) {
@@ -180,56 +159,68 @@ func (service *Service) Update(ctx context.Context, principal auth.Principal, id
 	if err != nil {
 		return Account{}, err
 	}
-	return storedAccountView(updated, service.vault != nil, false), nil
+	_, effective := service.resolveStored(ctx, []StoredAccount{updated})[updated.ID]
+	return storedAccountView(updated, effective, service.exactEnvironmentIdentity(updated.AccountKey, updated.MailboxEmail)), nil
 }
 
-// Load returns the effective runtime configuration. Environment accounts win
-// by stable key or normalized mailbox identity, so the same mailbox is never
-// registered twice when it exists in both sources.
+// Load returns the effective runtime configuration. Database records replace an
+// environment account with the same stable key and normalized mailbox. A
+// disabled or unreadable database override fails closed instead of falling back
+// to the environment secret.
 func (service *Service) Load(ctx context.Context) (config.OutreachConfig, error) {
 	stored, err := service.listStored(ctx)
 	if err != nil {
 		return config.OutreachConfig{}, err
 	}
-	effective := append([]config.GmailMailConfig(nil), service.base.GoogleWorkspaceAccounts...)
-	seenKeys, seenMailboxes := accountIdentitySets(service.environmentAccounts())
+	resolved := service.resolveStored(ctx, stored)
+	effective, senderOverrides := mergeEnvironmentAccounts(service.base.GoogleWorkspaceAccounts, stored, resolved)
+
+	// A dedicated environment inbox is not a bulk sender. Its database override
+	// must retain that role instead of being appended to the sender rotation.
+	dedicatedOverrides := make(map[uuid.UUID]struct{})
+	if inbound := service.base.InboundMailbox; inbound != nil && !containsAccount(service.base.GoogleWorkspaceAccounts, *inbound) {
+		if record, found := findStoredConflict(stored, *inbound); found {
+			dedicatedOverrides[record.ID] = struct{}{}
+		}
+	}
+	seenKeys, seenMailboxes := accountIdentitySets(effective)
 	for _, record := range stored {
-		if !record.Enabled || service.vault == nil {
+		if _, used := senderOverrides[record.ID]; used {
 			continue
 		}
-		if _, exists := seenKeys[record.AccountKey]; exists {
+		if _, dedicated := dedicatedOverrides[record.ID]; dedicated {
 			continue
 		}
-		if _, exists := seenMailboxes[record.MailboxEmail]; exists {
+		account, active := resolved[record.ID]
+		if !active || accountIdentitySeen(seenKeys, seenMailboxes, account) {
 			continue
 		}
-		payload, decryptErr := service.vault.decrypt(record.AccountKey, record.MailboxEmail, record.CredentialCiphertext)
-		if decryptErr != nil {
-			service.log.ErrorContext(ctx, "database_outreach_credential_unavailable", "account_key", record.AccountKey, "error", decryptErr)
-			continue
-		}
-		effective = append(effective, config.GmailMailConfig{
-			AccountKey: record.AccountKey, MailboxEmail: record.MailboxEmail, FromEmail: record.FromEmail,
-			ClientID: payload.ClientID, ClientSecret: payload.ClientSecret, RefreshToken: payload.RefreshToken,
-		})
-		seenKeys[record.AccountKey] = struct{}{}
-		seenMailboxes[record.MailboxEmail] = struct{}{}
+		effective = append(effective, account)
+		addAccountIdentity(seenKeys, seenMailboxes, account)
 	}
 	result := service.base
 	result.GoogleWorkspaceAccounts = effective
 	if result.InboundEnabled {
-		result.InboundMailboxes = append([]config.GmailMailConfig(nil), service.base.InboundMailboxes...)
+		result.InboundMailboxes, _ = mergeEnvironmentAccounts(service.base.InboundMailboxes, stored, resolved)
 		pollKeys, pollMailboxes := accountIdentitySets(result.InboundMailboxes)
 		for _, account := range effective {
-			if _, exists := pollKeys[account.AccountKey]; exists {
-				continue
-			}
-			if _, exists := pollMailboxes[account.MailboxEmail]; exists {
+			if accountIdentitySeen(pollKeys, pollMailboxes, account) {
 				continue
 			}
 			result.InboundMailboxes = append(result.InboundMailboxes, account)
-			pollKeys[account.AccountKey] = struct{}{}
-			pollMailboxes[account.MailboxEmail] = struct{}{}
+			addAccountIdentity(pollKeys, pollMailboxes, account)
+		}
+		if inbound := service.base.InboundMailbox; inbound != nil {
+			if record, found := findStoredConflict(stored, *inbound); found {
+				if account, active := resolved[record.ID]; active {
+					result.InboundMailbox = &account
+				} else {
+					result.InboundMailbox = nil
+				}
+			} else {
+				copy := *inbound
+				result.InboundMailbox = &copy
+			}
 		}
 	}
 	return result, nil
@@ -246,8 +237,8 @@ func (service *Service) environmentAccounts() []config.GmailMailConfig {
 	accounts := append([]config.GmailMailConfig(nil), service.base.GoogleWorkspaceAccounts...)
 	seenKeys, seenMailboxes := accountIdentitySets(accounts)
 	if inbound := service.base.InboundMailbox; inbound != nil {
-		if _, keyExists := seenKeys[inbound.AccountKey]; !keyExists {
-			if _, mailboxExists := seenMailboxes[inbound.MailboxEmail]; !mailboxExists {
+		if _, keyExists := seenKeys[normalizedAccountKey(inbound.AccountKey)]; !keyExists {
+			if _, mailboxExists := seenMailboxes[normalizedMailbox(inbound.MailboxEmail)]; !mailboxExists {
 				accounts = append(accounts, *inbound)
 			}
 		}
@@ -255,45 +246,138 @@ func (service *Service) environmentAccounts() []config.GmailMailConfig {
 	return accounts
 }
 
-func (service *Service) environmentViews() []Account {
-	configured := service.environmentAccounts()
-	views := make([]Account, 0, len(configured))
-	for _, account := range configured {
-		views = append(views, Account{
-			AccountKey: account.AccountKey, MailboxEmail: account.MailboxEmail, FromEmail: account.FromEmail,
-			Source: "environment", Enabled: true, Effective: true, Editable: false, CredentialsStored: true,
-		})
+func (service *Service) validateEnvironmentIdentity(key, mailbox string) (bool, error) {
+	partial := false
+	for _, account := range service.environmentAccounts() {
+		keyMatch := normalizedAccountKey(account.AccountKey) == normalizedAccountKey(key)
+		mailboxMatch := normalizedMailbox(account.MailboxEmail) == normalizedMailbox(mailbox)
+		if keyMatch && mailboxMatch {
+			return true, nil
+		}
+		partial = partial || keyMatch || mailboxMatch
 	}
-	return views
+	if partial {
+		return false, fmt.Errorf("%w: replacing an environment account must keep its existing account_key and mailbox_email together", ErrInvalid)
+	}
+	return false, nil
 }
 
-func (service *Service) conflictsWithEnvironment(key, mailbox string) bool {
-	keys, mailboxes := accountIdentitySets(service.environmentAccounts())
-	_, keyExists := keys[key]
-	_, mailboxExists := mailboxes[mailbox]
-	return keyExists || mailboxExists
+func (service *Service) exactEnvironmentIdentity(key, mailbox string) bool {
+	for _, account := range service.environmentAccounts() {
+		if sameAccountIdentity(account, config.GmailMailConfig{AccountKey: key, MailboxEmail: mailbox}) {
+			return true
+		}
+	}
+	return false
 }
 
 func accountIdentitySets(accounts []config.GmailMailConfig) (map[string]struct{}, map[string]struct{}) {
 	keys := make(map[string]struct{}, len(accounts))
 	mailboxes := make(map[string]struct{}, len(accounts))
 	for _, account := range accounts {
-		keys[strings.TrimSpace(account.AccountKey)] = struct{}{}
-		mailboxes[strings.ToLower(strings.TrimSpace(account.MailboxEmail))] = struct{}{}
+		addAccountIdentity(keys, mailboxes, account)
 	}
 	return keys, mailboxes
 }
 
-func storedAccountView(record StoredAccount, encryptionReady, shadowed bool) Account {
+func storedAccountView(record StoredAccount, effective, overridesEnvironment bool) Account {
 	id := record.ID
 	createdAt := record.CreatedAt
 	updatedAt := record.UpdatedAt
 	return Account{
 		ID: &id, AccountKey: record.AccountKey, MailboxEmail: record.MailboxEmail, FromEmail: record.FromEmail,
-		Source: "database", Enabled: record.Enabled, Effective: record.Enabled && encryptionReady && !shadowed,
+		Source: "database", Enabled: record.Enabled, Effective: effective,
 		Editable: true, CredentialsStored: len(record.CredentialCiphertext) > 0,
-		ShadowedByEnvironment: shadowed, CreatedAt: &createdAt, UpdatedAt: &updatedAt,
+		OverridesEnvironment: overridesEnvironment, CreatedAt: &createdAt, UpdatedAt: &updatedAt,
 	}
+}
+
+func environmentAccountView(account config.GmailMailConfig) Account {
+	return Account{
+		AccountKey: account.AccountKey, MailboxEmail: account.MailboxEmail, FromEmail: account.FromEmail,
+		Source: "environment", Enabled: true, Effective: true, Editable: false, CredentialsStored: true,
+	}
+}
+
+func (service *Service) resolveStored(ctx context.Context, stored []StoredAccount) map[uuid.UUID]config.GmailMailConfig {
+	resolved := make(map[uuid.UUID]config.GmailMailConfig, len(stored))
+	if service.vault == nil {
+		return resolved
+	}
+	for _, record := range stored {
+		if !record.Enabled {
+			continue
+		}
+		payload, err := service.vault.decrypt(record.AccountKey, record.MailboxEmail, record.CredentialCiphertext)
+		if err != nil {
+			service.log.ErrorContext(ctx, "database_outreach_credential_unavailable", "account_key", record.AccountKey, "error", err)
+			continue
+		}
+		resolved[record.ID] = config.GmailMailConfig{
+			AccountKey: record.AccountKey, MailboxEmail: record.MailboxEmail, FromEmail: record.FromEmail,
+			ClientID: payload.ClientID, ClientSecret: payload.ClientSecret, RefreshToken: payload.RefreshToken,
+		}
+	}
+	return resolved
+}
+
+func mergeEnvironmentAccounts(environment []config.GmailMailConfig, stored []StoredAccount, resolved map[uuid.UUID]config.GmailMailConfig) ([]config.GmailMailConfig, map[uuid.UUID]struct{}) {
+	accounts := make([]config.GmailMailConfig, 0, len(environment))
+	used := make(map[uuid.UUID]struct{})
+	for _, account := range environment {
+		if record, found := findStoredConflict(stored, account); found {
+			used[record.ID] = struct{}{}
+			if replacement, active := resolved[record.ID]; active {
+				accounts = append(accounts, replacement)
+			}
+			continue
+		}
+		accounts = append(accounts, account)
+	}
+	return accounts, used
+}
+
+func findStoredConflict(stored []StoredAccount, account config.GmailMailConfig) (StoredAccount, bool) {
+	for _, record := range stored {
+		if normalizedAccountKey(record.AccountKey) == normalizedAccountKey(account.AccountKey) ||
+			normalizedMailbox(record.MailboxEmail) == normalizedMailbox(account.MailboxEmail) {
+			return record, true
+		}
+	}
+	return StoredAccount{}, false
+}
+
+func containsAccount(accounts []config.GmailMailConfig, target config.GmailMailConfig) bool {
+	for _, account := range accounts {
+		if sameAccountIdentity(account, target) {
+			return true
+		}
+	}
+	return false
+}
+
+func sameAccountIdentity(left, right config.GmailMailConfig) bool {
+	return normalizedAccountKey(left.AccountKey) == normalizedAccountKey(right.AccountKey) &&
+		normalizedMailbox(left.MailboxEmail) == normalizedMailbox(right.MailboxEmail)
+}
+
+func accountIdentitySeen(keys, mailboxes map[string]struct{}, account config.GmailMailConfig) bool {
+	_, keyExists := keys[normalizedAccountKey(account.AccountKey)]
+	_, mailboxExists := mailboxes[normalizedMailbox(account.MailboxEmail)]
+	return keyExists || mailboxExists
+}
+
+func addAccountIdentity(keys, mailboxes map[string]struct{}, account config.GmailMailConfig) {
+	keys[normalizedAccountKey(account.AccountKey)] = struct{}{}
+	mailboxes[normalizedMailbox(account.MailboxEmail)] = struct{}{}
+}
+
+func normalizedAccountKey(value string) string {
+	return strings.ToLower(strings.TrimSpace(value))
+}
+
+func normalizedMailbox(value string) string {
+	return strings.ToLower(strings.TrimSpace(value))
 }
 
 func canonicalMailbox(value string) (string, error) {

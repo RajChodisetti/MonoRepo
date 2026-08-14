@@ -103,14 +103,22 @@ storage and never returns it. Database accounts can be enabled, disabled, or
 have their complete credential set replaced; account key and mailbox identity
 remain immutable for audit and conversation continuity.
 
+Every listed account has a **Replace credentials** action. For an existing
+environment account, that action saves a database row with the exact same
+account key and mailbox. The database row immediately becomes authoritative;
+partial conflicts (matching only the key or only the mailbox) are rejected.
+Existing environment secrets are never read into the browser or copied into the
+database.
+
 The effective runtime list is the union of
 `OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON`, an optional dedicated inbound mailbox,
-and enabled database accounts. Environment configuration wins any duplicate
-account key or normalized mailbox. Sending, health registration, and each inbox
-poll reload this effective list, so a UI change does not require a restart.
-Disabling an account preserves its messages, quota history, and sync history but
-excludes it from new sends and polls. Adding an account does not enable the bulk
-email job.
+and enabled database accounts. A database identity always takes precedence over
+the same environment identity. A disabled or unreadable database override fails
+closed: the environment secret is not used as a fallback. Sending, health
+registration, and each inbox poll reload this effective list, so a UI change
+does not require a restart. Disabling an account preserves its messages, quota
+history, and sync history but excludes it from new sends and polls. Adding or
+replacing an account does not enable the bulk email job.
 
 ## Unified inbox across configured sending mailboxes
 

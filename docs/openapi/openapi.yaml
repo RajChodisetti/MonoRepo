@@ -2041,8 +2041,9 @@ paths:
         - bearerAuth: []
       description: |
         Requires role `internal_admin`. Returns mailbox identity and effective status only;
-        OAuth credentials are never returned. Environment configuration wins when an
-        account key or normalized mailbox also exists in the database.
+        OAuth credentials are never returned. A database row with the same account key and
+        normalized mailbox replaces the environment account. A disabled or unreadable database
+        override fails closed and does not fall back to environment credentials.
       responses:
         '200':
           description: Deduplicated outreach email account registry
@@ -2063,7 +2064,9 @@ paths:
       description: |
         Requires role `internal_admin`. The complete Gmail OAuth credential set is encrypted
         before storage. The account participates in outreach sending and unified inbox polling
-        without a process restart. Duplicate keys or normalized mailboxes are rejected.
+        without a process restart. Supplying both the exact account key and mailbox of an
+        environment account creates a database override; partial key or mailbox collisions and
+        duplicate database identities are rejected.
       requestBody:
         required: true
         content:
@@ -2105,7 +2108,8 @@ paths:
       description: |
         Requires role `internal_admin`. Account key and mailbox identity are immutable.
         Disabling retains history but immediately excludes the account from new sending and polls.
-        Credential replacement requires the complete new OAuth credential set.
+        Credential replacement requires the complete new OAuth credential set. When the row
+        overrides an environment account, disabling it does not restore the environment secret.
       requestBody:
         required: true
         content:
@@ -5287,11 +5291,17 @@ components:
           type: boolean
         credentials_stored:
           type: boolean
+        overrides_environment:
+          type: boolean
+          description: This database row replaces an environment account with the same immutable identity.
         database_fallback:
           type: boolean
-          description: An environment account currently wins over the same database mailbox.
+          deprecated: true
+          description: Deprecated legacy field; database rows now take precedence.
         shadowed_by_environment:
           type: boolean
+          deprecated: true
+          description: Deprecated legacy field; database rows now take precedence.
         created_at:
           type: string
           format: date-time

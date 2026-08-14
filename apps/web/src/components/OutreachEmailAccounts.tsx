@@ -30,7 +30,7 @@ const emptyForm: AccountForm = {
 export function OutreachEmailAccounts() {
   const [data, setData] = useState<OutreachEmailAccountListResponse | null>(null);
   const [form, setForm] = useState<AccountForm>(emptyForm);
-  const [editingID, setEditingID] = useState<string | null>(null);
+  const [editingAccount, setEditingAccount] = useState<OutreachEmailAccount | null>(null);
   const [replacement, setReplacement] = useState<AccountForm>(emptyForm);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -85,7 +85,14 @@ export function OutreachEmailAccounts() {
 
   async function toggleAccount(account: OutreachEmailAccount) {
     if (!account.id || !account.editable) return;
-    setBusyID(account.id);
+    if (account.enabled) {
+      const warning = account.overrides_environment
+        ? `Disable ${account.mailbox_email}? The database override takes precedence, so its environment credentials will not be used as a fallback.`
+        : `Disable ${account.mailbox_email}? It will stop participating in outreach sending and inbox polling.`;
+      if (!window.confirm(warning)) return;
+    }
+    const busyKey = accountBusyKey(account);
+    setBusyID(busyKey);
     setError(null);
     setMessage(null);
     try {
@@ -103,7 +110,7 @@ export function OutreachEmailAccounts() {
   }
 
   function beginReplacement(account: OutreachEmailAccount) {
-    setEditingID(account.id || null);
+    setEditingAccount(account);
     setReplacement({ ...emptyForm, fromEmail: account.from_email });
     setError(null);
     setMessage(null);
@@ -111,25 +118,46 @@ export function OutreachEmailAccounts() {
 
   async function replaceCredentials(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!editingID) return;
-    setBusyID(editingID);
+    if (!editingAccount) return;
+    const createsOverride = !editingAccount.id;
+    const warning = createsOverride
+      ? `Replace credentials for ${editingAccount.mailbox_email}? This creates a database override. Database values will take precedence over environment values.`
+      : `Replace the stored OAuth credentials for ${editingAccount.mailbox_email}? Existing secret values cannot be recovered.`;
+    if (!window.confirm(warning)) return;
+    const busyKey = accountBusyKey(editingAccount);
+    setBusyID(busyKey);
     setError(null);
     setMessage(null);
     try {
-      await adminFetch<OutreachEmailAccount>(`outreach/email-accounts/${editingID}`, {
-        method: "PATCH",
-        body: {
-          from_email: replacement.fromEmail.trim(),
-          credentials: {
-            client_id: replacement.clientID.trim(),
-            client_secret: replacement.clientSecret.trim(),
-            refresh_token: replacement.refreshToken.trim(),
+      const credentials = {
+        client_id: replacement.clientID.trim(),
+        client_secret: replacement.clientSecret.trim(),
+        refresh_token: replacement.refreshToken.trim(),
+      };
+      if (editingAccount.id) {
+        await adminFetch<OutreachEmailAccount>(`outreach/email-accounts/${editingAccount.id}`, {
+          method: "PATCH",
+          body: { from_email: replacement.fromEmail.trim(), credentials },
+        });
+      } else {
+        await adminFetch<OutreachEmailAccount>("outreach/email-accounts", {
+          method: "POST",
+          body: {
+            account_key: editingAccount.account_key,
+            mailbox_email: editingAccount.mailbox_email,
+            from_email: replacement.fromEmail.trim(),
+            credentials,
+            enabled: true,
           },
-        },
-      });
+        });
+      }
       setReplacement(emptyForm);
-      setEditingID(null);
-      setMessage("Sender address and OAuth credentials replaced securely.");
+      setEditingAccount(null);
+      setMessage(
+        createsOverride
+          ? "Database override saved. It now takes precedence for sending and inbox polling."
+          : "Sender address and OAuth credentials replaced securely.",
+      );
       await load();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Failed to replace credentials.");
@@ -156,11 +184,13 @@ export function OutreachEmailAccounts() {
           unified inbox. OAuth authorization must include <code>gmail.send</code> and{
           " "}<code>gmail.readonly</code>. Secrets are encrypted before database storage and are never
           returned to this page.
+          If an account already comes from the environment, use its <strong>Replace credentials</strong>{" "}
+          action below; the saved database override will take precedence.
         </p>
         {data && !data.encryption_ready ? (
           <div className="alert alert-error" role="alert" style={{ marginBottom: "1rem" }}>
-            Secure database credential storage is not configured. Environment accounts remain active,
-            but new accounts cannot be saved.
+            Secure database credential storage is not configured. Environment-only accounts remain
+            active, but database overrides are unavailable and new credentials cannot be saved.
           </div>
         ) : null}
         <form onSubmit={addAccount}>
@@ -208,7 +238,7 @@ export function OutreachEmailAccounts() {
             <button className="btn btn-primary" type="submit" disabled={saving || data?.encryption_ready === false}>
               {saving ? "Saving…" : "Add email account"}
             </button>
-            <span className="field-help">Existing environment or database mailboxes cannot be duplicated.</span>
+            <span className="field-help">New identities must be unique; partial account-key or mailbox conflicts are rejected.</span>
           </div>
         </form>
       </section>
@@ -218,8 +248,8 @@ export function OutreachEmailAccounts() {
           Connected accounts
         </h2>
         <p style={{ color: "var(--muted)", marginTop: 0 }}>
-          Environment accounts are protected and read-only. Database accounts can be disabled or have
-          their OAuth credentials replaced here.
+          Credentials can be replaced for every account. Replacing an environment account creates an
+          encrypted database override; database values always take precedence over environment values.
         </p>
         {loading && !data ? <EmptyState message="Loading connected email accounts…" /> : null}
         {data && data.accounts.length === 0 ? <EmptyState message="No Gmail accounts are configured." /> : null}
@@ -246,20 +276,26 @@ export function OutreachEmailAccounts() {
                       ) : null}
                     </td>
                     <td><code>{account.account_key}</code></td>
-                    <td>{account.source === "environment" ? "Environment" : "Database"}</td>
+                    <td>
+                      {account.source === "environment"
+                        ? "Environment"
+                        : account.overrides_environment
+                          ? "Database override"
+                          : "Database"}
+                    </td>
                     <td>
                       <StatusBadge
                         status={
                           account.effective
                             ? "active"
-                            : account.shadowed_by_environment
-                              ? "shadowed"
-                              : account.enabled
-                                ? "unavailable"
-                                : "disabled"
+                            : account.enabled
+                              ? "unavailable"
+                              : "disabled"
                         }
                       />
-                      {account.database_fallback ? <div className="field-help">DB duplicate ignored</div> : null}
+                      {account.overrides_environment && !account.effective ? (
+                        <div className="field-help">Environment fallback blocked</div>
+                      ) : null}
                     </td>
                     <td>{account.credentials_stored ? "Stored securely" : "Missing"}</td>
                     <td>
@@ -268,7 +304,7 @@ export function OutreachEmailAccounts() {
                           <button
                             className={account.enabled ? "btn btn-danger btn-compact" : "btn btn-secondary btn-compact"}
                             type="button"
-                            disabled={busyID === account.id}
+                            disabled={busyID === accountBusyKey(account)}
                             onClick={() => void toggleAccount(account)}
                           >
                             {account.enabled ? "Disable" : "Enable"}
@@ -276,14 +312,21 @@ export function OutreachEmailAccounts() {
                           <button
                             className="btn btn-secondary btn-compact"
                             type="button"
-                            disabled={busyID === account.id}
+                            disabled={busyID === accountBusyKey(account)}
                             onClick={() => beginReplacement(account)}
                           >
                             Replace credentials
                           </button>
                         </div>
                       ) : (
-                        <span className="field-help">Update server environment</span>
+                        <button
+                          className="btn btn-secondary btn-compact"
+                          type="button"
+                          disabled={data.encryption_ready === false || busyID === accountBusyKey(account)}
+                          onClick={() => beginReplacement(account)}
+                        >
+                          Replace credentials
+                        </button>
                       )}
                     </td>
                   </tr>
@@ -294,13 +337,16 @@ export function OutreachEmailAccounts() {
         ) : null}
       </section>
 
-      {editingID ? (
+      {editingAccount ? (
         <form className="card" onSubmit={replaceCredentials} aria-labelledby="replace-credentials-heading">
           <h2 id="replace-credentials-heading" style={{ marginTop: 0, fontSize: "1.05rem" }}>
             Replace OAuth credentials
           </h2>
           <p style={{ color: "var(--muted)", marginTop: 0 }}>
-            Enter the complete new credential set. Existing secret values cannot be viewed.
+            Enter the complete new credential set for <strong>{editingAccount.mailbox_email}</strong>. Existing
+            secret values cannot be viewed. {editingAccount.source === "environment" ? (
+              <>Saving creates an encrypted database override and leaves the environment configuration ignored.</>
+            ) : null}
           </p>
           <div className="form-grid">
             <label className="field-label">
@@ -317,10 +363,10 @@ export function OutreachEmailAccounts() {
             <CredentialFields form={replacement} setForm={setReplacement} prefix="replace" />
           </div>
           <div style={{ marginTop: "1rem", display: "flex", gap: "0.65rem" }}>
-            <button className="btn btn-primary" type="submit" disabled={busyID === editingID}>
-              {busyID === editingID ? "Replacing…" : "Replace credentials"}
+            <button className="btn btn-primary" type="submit" disabled={busyID === accountBusyKey(editingAccount)}>
+              {busyID === accountBusyKey(editingAccount) ? "Replacing…" : "Replace credentials"}
             </button>
-            <button className="btn btn-secondary" type="button" onClick={() => setEditingID(null)}>
+            <button className="btn btn-secondary" type="button" onClick={() => setEditingAccount(null)}>
               Cancel
             </button>
           </div>
@@ -328,6 +374,10 @@ export function OutreachEmailAccounts() {
       ) : null}
     </div>
   );
+}
+
+function accountBusyKey(account: OutreachEmailAccount) {
+  return account.id || `environment:${account.account_key}:${account.mailbox_email}`;
 }
 
 function CredentialFields({

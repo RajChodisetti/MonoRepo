@@ -11,9 +11,14 @@ OAuth material through browser reads.
 
 ## Decision
 
-- Keep environment accounts supported and read-only. They take precedence when
-  either their stable account key or normalized mailbox collides with a database
-  row.
+- Keep environment accounts supported as bootstrap configuration, while allowing
+  an internal administrator to replace their credentials by saving a database
+  row with the exact same stable account key and normalized mailbox. Database
+  rows take precedence everywhere: sending, health checks, unified inbox polling,
+  and direct replies.
+- Reject partial environment collisions that match only the account key or only
+  the mailbox. A disabled or undecryptable database override fails closed and
+  never silently restores the environment credential.
 - Store UI-managed mailbox identity in PostgreSQL and its OAuth client ID,
   client secret, and refresh token as one AES-256-GCM ciphertext. The application
   key is supplied separately through `OUTREACH_CREDENTIAL_ENCRYPTION_KEY` as
@@ -21,8 +26,8 @@ OAuth material through browser reads.
 - Bind ciphertext authentication to the immutable account key and mailbox.
   Credentials are write-only at the HTTP boundary and never returned or logged.
 - Allow internal administrators to add, enable, disable, and replace the
-  credentials for database accounts. Preserve disabled rows and their message,
-  quota, and inbox-sync history.
+  credentials for database accounts and existing environment identities.
+  Preserve disabled rows and their message, quota, and inbox-sync history.
 - Reload the union of environment and enabled database accounts at sending,
   health synchronization, and each inbox polling cycle. Database additions do
   not require a process restart and do not enable the bulk email job.
@@ -35,21 +40,26 @@ OAuth material through browser reads.
   for every account change.
 - Store plaintext OAuth fields: simpler but unnecessarily exposes durable
   credentials to database readers and backups.
-- Replace environment configuration with database rows: rejected because it
-  creates a risky cutover and removes the protected rollback source.
+- Prefer environment values on collision: rejected because it prevents the UI
+  from repairing an existing account and makes a stale deployment secret
+  override an explicit administrator update.
+- Replace environment configuration entirely with database rows: rejected
+  because it creates a risky all-at-once cutover and removes bootstrap support.
 
 ## Consequences
 
 The application needs a protected credential-encryption key in every environment
 that allows UI-managed accounts. Loss of that key makes database credentials
-unusable until replaced, but environment accounts continue to work. Key rotation
-requires a future re-encryption workflow. Runtime reloads add small database and
-provider-construction overhead to outreach operations in exchange for immediate,
-auditable changes.
+unusable until replaced. Environment-only accounts continue to work, but an
+identity with a database row does not fall back to the environment when disabled
+or unreadable. Key rotation requires a future re-encryption workflow. Runtime
+reloads add small database and provider-construction overhead to outreach
+operations in exchange for immediate, auditable changes.
 
 ## Rollback/Revisit Trigger
 
-Disable database accounts to return immediately to environment-only behavior.
+Replacing or removing an override requires an explicit credential-management
+operation; disabling it intentionally does not restore the environment secret.
 Migration `000052` can be rolled back only when the credential table is empty.
 Revisit with envelope/KMS encryption if account volume grows materially or key
 rotation becomes a compliance requirement.

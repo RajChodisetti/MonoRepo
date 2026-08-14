@@ -40,6 +40,7 @@ type Account struct {
 	Effective             bool       `json:"effective"`
 	Editable              bool       `json:"editable"`
 	CredentialsStored     bool       `json:"credentials_stored"`
+	OverridesEnvironment  bool       `json:"overrides_environment,omitempty"`
 	DatabaseFallback      bool       `json:"database_fallback,omitempty"`
 	ShadowedByEnvironment bool       `json:"shadowed_by_environment,omitempty"`
 	CreatedAt             *time.Time `json:"created_at,omitempty"`

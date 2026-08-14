@@ -3441,3 +3441,35 @@ deployment: new delivery attempts, outbound message snapshots, and health sends
 are all zero. The persisted email job remains disabled, no bulk job is active,
 and the scraper, data services, websites, voice services, and sequence activation
 state were not changed.
+
+## 2026-08-14 — Database-first Gmail credential overrides (unreleased)
+
+**Role / Delivery:** Changed the account registry so every listed Gmail account,
+including an environment-provided identity, can have its complete OAuth
+credential set replaced from the admin UI. Replacing an environment identity
+creates an encrypted database row with the exact same account key and mailbox;
+partial identity collisions are rejected. Database rows now take precedence in
+sending, mailbox health, direct replies, and unified-inbox polling. Disabled,
+missing-key, or undecryptable overrides fail closed instead of silently restoring
+the environment secret. The UI identifies overrides, confirms credential
+replacement and disabling, and explains when environment fallback is blocked.
+
+**Checks Run:** Focused outreach-account and HTTP handler tests passed. The full
+backend `go test ./...`, `go vet ./...`, and API/worker/migrator builds passed,
+including migration discovery. Admin ESLint, nonincremental TypeScript checking,
+and the 14-route production build passed. OpenAPI validation passed with the same
+11 unrelated existing warnings, and `git diff --check` passed. All provider calls
+remained mocked.
+
+**Business Value / Plan Fit:** Administrators can repair or rotate credentials
+for the three existing environment accounts without exposing old secrets or
+performing a deployment-config edit. A deliberate database update is always the
+authoritative value, eliminating ambiguity between configuration sources while
+preserving mailbox identity, quota history, and inbox continuity.
+
+**Risks / Approval State:** This is a fail-closed precedence change: disabling a
+database override also disables that identity until it is re-enabled or its
+credentials are replaced. No migration is required. The change is committed for
+review only; QA and production remain on the prior release, the production email
+job remains disabled, and no provider email, scrape, deployment, credential, or
+production-data mutation was performed.

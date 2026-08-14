@@ -474,6 +474,7 @@ export type OutreachEmailAccount = {
   effective: boolean;
   editable: boolean;
   credentials_stored: boolean;
+  overrides_environment?: boolean;
   database_fallback?: boolean;
   shadowed_by_environment?: boolean;
   created_at?: string;
