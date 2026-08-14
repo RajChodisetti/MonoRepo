@@ -53,6 +53,7 @@ scrape-worker
 worker (only when persisted email job is enabled)
   -> due follow-ups first
   -> then new recipients
+  -> deterministic first-email greeting from verified listing facts when the approved template uses greeting01
   -> Gmail quota claim + idempotent delivery attempt
   -> confirmed send advances integer sequence step and next-due timestamp
   -> failure/unknown leaves the step unchanged
@@ -69,6 +70,12 @@ lookup. Lifecycle gates still fail closed. Any unsubscribe copy is owned by the
 saved database template rather than application behavior. Google listing media
 is resolved live with attribution; owner/licensed media requires explicit admin
 approval.
+
+`{{greeting01}}` does not read listing media, menus, descriptions, or review
+text. It uses only a successful Google profile's safe city/cuisine and a
+4.0–5.0 rating with at least 10 reviews; all missing or rejected facts fall back
+to fixed local-restaurant wording. Migration `000047` creates an inactive draft
+only, so sequence activation and sender enablement remain separate approvals.
 
 See [lead-scrape-outreach.md](./runbooks/lead-scrape-outreach.md) for deployment
 and operational checks.

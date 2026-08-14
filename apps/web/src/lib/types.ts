@@ -338,15 +338,21 @@ export type OutreachSequencePreviewStep = {
 };
 
 export type OutreachSequencePreview = {
+  restaurant_id?: string;
   restaurant_name: string;
   owner_first_name?: string;
   greeting?: string;
+  greeting01: string;
+  facts_used: string[];
   steps: OutreachSequencePreviewStep[];
 };
 
 export type OutreachTemplateTestSendResponse = {
   recipient_email: string;
+  restaurant_id?: string;
   restaurant_name: string;
+  greeting01: string;
+  facts_used: string[];
   items: {
     template: "sequence";
     step?: number;

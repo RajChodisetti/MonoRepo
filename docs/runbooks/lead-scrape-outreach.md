@@ -35,6 +35,16 @@ need explicit admin approval before public use.
 - The active approved version may contain any positive number of steps.
 - Seed data contains three approved Tuvi Solutions messages.
 - Each step is plain text and is rendered from its saved PostgreSQL template.
+- `{{greeting01}}` is optional, deterministic, and allowed exactly once in the
+  first enabled email body. It is forbidden in subjects and later emails;
+  `{{greeting}}` remains supported for follow-ups and legacy active sequences.
+- A selected restaurant greeting uses city, the first safe cuisine ending in
+  `Restaurant`, rating, and review count only when its profile has a Google
+  place id and `scrape_status = 'success'`. Missing or unsafe optional facts
+  always select a generic fallback and never block delivery.
+- Preview and test-send accept an optional `restaurant_id`. The server then
+  ignores synthetic name/owner fields, renders authoritative facts, and returns
+  only `greeting01` plus non-sensitive fact-category names for review.
 - Any unsubscribe copy or URL must be authored in that saved template. The
   application does not append, require, validate, or render a specialized
   unsubscribe merge tag.
@@ -59,6 +69,12 @@ need explicit admin approval before public use.
 7. Run preview/fake-provider sequence tests. Do not send a real lead email.
 8. Inspect eligible/follow-up counts and sequence rendering in the admin UI.
 9. Enabling production outreach is a separate deliberate admin action.
+
+Migration `000047_deterministic_restaurant_greeting` creates an inactive draft
+cloned from the active sequence. Review and explicitly approve that draft in a
+separate administrator action; applying the migration alone does not change the
+active version or enable sending. Its down migration refuses to remove a draft
+that has been edited or activated.
 
 ## Operational checks
 

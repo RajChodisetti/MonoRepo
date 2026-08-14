@@ -25,7 +25,7 @@ sender-reputation risk.
   the global random pacing gate. PostgreSQL remains the authority across worker
   restarts and concurrent claims.
 - Start existing accounts conservatively on ramp day one. If an existing cycle
-  already consumed five or more slots when migration `000048` is applied, hold
+  already consumed five or more slots when migration `000049` is applied, hold
   that account for a fresh 24 hours before allowing the next ramp cycle.
 
 Here, “day” means a fully used quota cycle followed by its cooldown, not a UTC
@@ -43,7 +43,7 @@ up merely because wall-clock days pass.
 
 ## Consequences
 
-- Migration `000048_outreach_email_ramp` is required before this code can start.
+- Migration `000049_outreach_email_ramp` is required before this code can start.
 - A new mailbox needs eight fully used/cooldown cycles to reach 40. A lower
   configured ceiling is honored as soon as the next five-send step reaches it.
 - Health checks and deliberate template-test sends remain outside durable

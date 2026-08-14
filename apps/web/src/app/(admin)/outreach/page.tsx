@@ -5,6 +5,7 @@ import type { FormEvent } from "react";
 import { OutreachInbox } from "@/components/OutreachInbox";
 import { OutreachRecipients } from "@/components/OutreachRecipients";
 import { OutreachSequenceEditor } from "@/components/OutreachSequenceEditor";
+import { RestaurantSearch } from "@/components/RestaurantSearch";
 import { EmptyState, ErrorBanner, PageHeader, StatusBadge } from "@/components/ui";
 import { adminFetch } from "@/lib/client-api";
 import { formatDate } from "@/lib/constants";
@@ -14,6 +15,7 @@ import type {
   OutreachSequence,
   OutreachSequenceListResponse,
   OutreachTemplateTestSendResponse,
+  Restaurant,
 } from "@/lib/types";
 
 type View = "sequence" | "recipients" | "operations" | "inbox";
@@ -30,6 +32,7 @@ export default function OutreachPage() {
   const [testRecipientEmail, setTestRecipientEmail] = useState("");
   const [testRestaurantName, setTestRestaurantName] = useState("Tuvi Test Restaurant");
   const [testOwnerFirstName, setTestOwnerFirstName] = useState("");
+  const [selectedTestRestaurant, setSelectedTestRestaurant] = useState<Restaurant | null>(null);
   const [testSendResult, setTestSendResult] = useState<OutreachTemplateTestSendResponse | null>(null);
   const [loadingOperations, setLoadingOperations] = useState(true);
   const [loadingSequences, setLoadingSequences] = useState(true);
@@ -124,7 +127,7 @@ export default function OutreachPage() {
   async function sendTemplateTest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const recipient = testRecipientEmail.trim();
-    const restaurantName = testRestaurantName.trim() || "Tuvi Test Restaurant";
+    const restaurantName = selectedTestRestaurant?.name || testRestaurantName.trim() || "Tuvi Test Restaurant";
     if (!recipient) {
       setOperationsError("Enter a recipient email for the template test.");
       return;
@@ -145,8 +148,11 @@ export default function OutreachPage() {
         method: "POST",
         body: {
           recipient_email: recipient,
-          restaurant_name: restaurantName,
-          owner_first_name: testOwnerFirstName.trim() || undefined,
+          restaurant_id: selectedTestRestaurant?.id,
+          restaurant_name: selectedTestRestaurant ? undefined : restaurantName,
+          owner_first_name: selectedTestRestaurant
+            ? undefined
+            : testOwnerFirstName.trim() || undefined,
         },
       });
       setTestSendResult(result);
@@ -304,6 +310,19 @@ export default function OutreachPage() {
 
           <form className="card" style={{ marginBottom: "1rem" }} onSubmit={sendTemplateTest}>
             <h2 style={{ marginTop: 0, fontSize: "1.05rem" }}>Send template test</h2>
+            <RestaurantSearch
+              label="Saved restaurant (optional)"
+              selected={selectedTestRestaurant}
+              onSelect={(restaurant) => {
+                setSelectedTestRestaurant(restaurant);
+                if (restaurant) {
+                  setTestRestaurantName(restaurant.name);
+                  setTestOwnerFirstName("");
+                }
+                setTestSendResult(null);
+              }}
+              help="When selected, the server ignores synthetic fields; Google fields are used only from a verified successful profile."
+            />
             <div className="form-grid">
               <label>
                 Recipient email
@@ -317,21 +336,23 @@ export default function OutreachPage() {
                 />
               </label>
               <label>
-                Restaurant name
+                Synthetic restaurant name
                 <input
                   className="input"
                   value={testRestaurantName}
                   onChange={(event) => setTestRestaurantName(event.target.value)}
                   placeholder="Tuvi Test Restaurant"
+                  disabled={selectedTestRestaurant !== null}
                 />
               </label>
               <label>
-                Owner first name
+                Synthetic owner first name
                 <input
                   className="input"
                   value={testOwnerFirstName}
                   onChange={(event) => setTestOwnerFirstName(event.target.value)}
                   placeholder="Optional"
+                  disabled={selectedTestRestaurant !== null}
                 />
               </label>
             </div>
@@ -344,7 +365,20 @@ export default function OutreachPage() {
               </span>
             </div>
             {testSendResult ? (
-              <div className="table-wrap" style={{ marginTop: "1rem" }}>
+              <div style={{ marginTop: "1rem" }}>
+                <div className="greeting-audit" aria-live="polite">
+                  <span className="field-help">Server-rendered greeting01</span>
+                  <pre>{testSendResult.greeting01}</pre>
+                  <div className="facts-used">
+                    <strong>Facts used</strong>
+                    <span>
+                      {testSendResult.facts_used.length > 0
+                        ? testSendResult.facts_used.join(", ")
+                        : "Fallback wording only"}
+                    </span>
+                  </div>
+                </div>
+                <div className="table-wrap" style={{ marginTop: "1rem" }}>
                 <table className="data">
                   <thead>
                     <tr>
@@ -365,6 +399,7 @@ export default function OutreachPage() {
                     ))}
                   </tbody>
                 </table>
+                </div>
               </div>
             ) : null}
           </form>

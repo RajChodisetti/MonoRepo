@@ -225,7 +225,7 @@ func TestPlainTextOutreachMigrationFailsClosedBeforeEnrollment(t *testing.T) {
 	}
 }
 
-func TestRepositoryMigrationsIncludeInboxAndEmailRamp(t *testing.T) {
+func TestRepositoryMigrationsIncludeDeterministicGreetingInboxAndEmailRamp(t *testing.T) {
 	_, currentFile, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("runtime.Caller() did not return this test file")
@@ -237,26 +237,43 @@ func TestRepositoryMigrationsIncludeInboxAndEmailRamp(t *testing.T) {
 		t.Fatalf("Discover(repository migrations) error = %v", err)
 	}
 	wanted := map[int64]struct {
-		name         string
-		upFragments  []string
-		downFragment string
+		name          string
+		upFragments   []string
+		downFragments []string
 	}{
 		47: {
+			name: "deterministic_restaurant_greeting",
+			upFragments: []string{
+				"'draft'",
+				"false",
+				"{{greeting01}}",
+				"WHERE sequence_id = draft_sequence_id",
+				"AND enabled = true",
+				"migration 47 draft activation guard failed",
+			},
+			downFragments: []string{
+				"status <> 'draft'",
+				"updated_at <> created_at",
+				"refusing to remove migration 47 draft because it was activated or changed",
+				"refusing to remove migration 47 draft because its deterministic greeting copy changed",
+			},
+		},
+		48: {
 			name: "email_messages",
 			upFragments: []string{
 				"CREATE TABLE IF NOT EXISTS email_messages",
 				"CREATE TABLE IF NOT EXISTS outreach_inbound_sync",
 			},
-			downFragment: "DROP TABLE IF EXISTS email_messages",
+			downFragments: []string{"DROP TABLE IF EXISTS email_messages"},
 		},
-		48: {
+		49: {
 			name: "outreach_email_ramp",
 			upFragments: []string{
 				"ADD COLUMN IF NOT EXISTS ramp_day",
 				"CHECK (ramp_day BETWEEN 1 AND 8)",
 				"usage_count >= LEAST(send_limit, 5)",
 			},
-			downFragment: "DROP COLUMN IF EXISTS ramp_day",
+			downFragments: []string{"DROP COLUMN IF EXISTS ramp_day"},
 		},
 	}
 
@@ -278,8 +295,10 @@ func TestRepositoryMigrationsIncludeInboxAndEmailRamp(t *testing.T) {
 		if readErr != nil {
 			t.Fatalf("read migration %d down: %v", migration.Version, readErr)
 		}
-		if !strings.Contains(string(downSQL), want.downFragment) {
-			t.Fatalf("migration %d down missing %q", migration.Version, want.downFragment)
+		for _, fragment := range want.downFragments {
+			if !strings.Contains(string(downSQL), fragment) {
+				t.Fatalf("migration %d down missing %q", migration.Version, fragment)
+			}
 		}
 		delete(wanted, migration.Version)
 	}

@@ -2,8 +2,10 @@ package handlers
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -58,6 +60,28 @@ func TestOutreachInboxHandlersValidateAuthAndIdentifiersBeforeService(t *testing
 			name:       "mark read rejects invalid message id",
 			request:    requestWithPathValue(http.MethodPost, "/api/v1/outreach/messages/not-a-uuid/read", "id", "not-a-uuid"),
 			serve:      handler.MarkMessageRead,
+			principal:  &admin,
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name: "sequence preview rejects invalid restaurant id",
+			request: requestWithPathValue(
+				http.MethodPost,
+				"/api/v1/outreach/sequences/"+uuid.NewString()+"/preview",
+				"id",
+				uuid.NewString(),
+			),
+			serve: func(w http.ResponseWriter, r *http.Request) {
+				r.Body = io.NopCloser(strings.NewReader(`{"restaurant_id":"not-a-uuid"}`))
+				handler.PreviewSequence(w, r)
+			},
+			principal:  &admin,
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "template test rejects invalid restaurant id",
+			request:    httptest.NewRequest(http.MethodPost, "/api/v1/outreach/test-send", strings.NewReader(`{"recipient_email":"test@example.com","restaurant_id":"not-a-uuid"}`)),
+			serve:      handler.SendTemplateTest,
 			principal:  &admin,
 			wantStatus: http.StatusBadRequest,
 		},

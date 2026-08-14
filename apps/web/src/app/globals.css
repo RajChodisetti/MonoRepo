@@ -513,6 +513,98 @@ textarea:focus-visible {
   color: var(--ok);
 }
 
+.restaurant-search {
+  position: relative;
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.restaurant-search-input-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.restaurant-search-input-row .input {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.restaurant-search-results {
+  display: grid;
+  max-height: 17rem;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--bg-elevated);
+  box-shadow: 0 0.75rem 1.5rem color-mix(in srgb, #000 14%, transparent);
+}
+
+.restaurant-search-results button {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.65rem 0.75rem;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.restaurant-search-results button:last-child {
+  border-bottom: 0;
+}
+
+.restaurant-search-results button:hover,
+.restaurant-search-results button:focus-visible {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+.restaurant-search-results span,
+.restaurant-search-selected {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.restaurant-search-error {
+  color: var(--bad);
+  font-size: 0.8rem;
+}
+
+.greeting-audit {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--bg);
+}
+
+.greeting-audit pre {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.facts-used {
+  display: flex;
+  gap: 0.4rem 0.65rem;
+  align-items: baseline;
+  flex-wrap: wrap;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.facts-used strong {
+  color: var(--text);
+}
+
 .sequence-issues {
   margin: 0.4rem 0 0;
   padding-left: 1.2rem;

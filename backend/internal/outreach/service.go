@@ -73,14 +73,18 @@ func NewService(
 }
 
 type TemplateTestSendInput struct {
-	RecipientEmail string `json:"recipient_email"`
-	RestaurantName string `json:"restaurant_name,omitempty"`
-	OwnerFirstName string `json:"owner_first_name,omitempty"`
+	RecipientEmail string     `json:"recipient_email"`
+	RestaurantID   *uuid.UUID `json:"restaurant_id,omitempty"`
+	RestaurantName string     `json:"restaurant_name,omitempty"`
+	OwnerFirstName string     `json:"owner_first_name,omitempty"`
 }
 
 type TemplateTestSendResult struct {
 	RecipientEmail string                    `json:"recipient_email"`
+	RestaurantID   *uuid.UUID                `json:"restaurant_id,omitempty"`
 	RestaurantName string                    `json:"restaurant_name"`
+	Greeting01     string                    `json:"greeting01"`
+	FactsUsed      []string                  `json:"facts_used"`
 	Items          []TemplateTestEmailResult `json:"items"`
 }
 
@@ -119,30 +123,35 @@ func (service *Service) SendTemplateTest(ctx context.Context, principal auth.Pri
 		}
 		provider = builtProvider
 	}
-	name := cleanSingleLine(input.RestaurantName)
-	if name == "" {
-		name = "Tuvi Test Restaurant"
+	facts, restaurantID, err := service.resolveGreetingFacts(
+		ctx, input.RestaurantID, input.RestaurantName, input.OwnerFirstName, "Tuvi Test Restaurant",
+	)
+	if err != nil {
+		return TemplateTestSendResult{}, err
 	}
-	ownerFirstName := cleanFirstName(input.OwnerFirstName)
-	return service.sendTemplateTestEmails(ctx, provider, recipient, name, ownerFirstName, steps)
+	return service.sendTemplateTestEmails(ctx, provider, recipient, restaurantID, facts, steps)
 }
 
 func (service *Service) sendTemplateTestEmails(
 	ctx context.Context,
 	provider emailprovider.Provider,
 	recipientEmail string,
-	restaurantName string,
-	ownerFirstName string,
+	restaurantID *uuid.UUID,
+	facts GreetingFacts,
 	steps []SequenceStep,
 ) (TemplateTestSendResult, error) {
+	greeting01 := RenderGreeting01(facts)
 	result := TemplateTestSendResult{
 		RecipientEmail: recipientEmail,
-		RestaurantName: restaurantName,
+		RestaurantID:   restaurantID,
+		RestaurantName: cleanSingleLine(facts.RestaurantName),
+		Greeting01:     greeting01.Greeting01,
+		FactsUsed:      greeting01.FactsUsed,
 		Items:          []TemplateTestEmailResult{},
 	}
 
 	for _, step := range steps {
-		rendered, err := renderSequenceStep(step, restaurantName, ownerFirstName)
+		rendered, err := renderSequenceStep(step, facts)
 		if err != nil {
 			return result, fmt.Errorf("render sequence step %d: %w", step.Position, err)
 		}
@@ -578,9 +587,14 @@ func (service *Service) sendLead(ctx context.Context, lead EligibleLead, bulkJob
 	if err := checkSequenceDeliveryEligibility(delivery); err != nil {
 		return false, err
 	}
-	rendered, err := renderSequenceStep(
-		delivery.Step, delivery.RestaurantName, delivery.OwnerFirstName,
-	)
+	facts := delivery.GreetingFacts
+	if facts.RestaurantName == "" {
+		facts.RestaurantName = delivery.RestaurantName
+	}
+	if facts.OwnerFirstName == "" {
+		facts.OwnerFirstName = delivery.OwnerFirstName
+	}
+	rendered, err := renderSequenceStep(delivery.Step, facts)
 	if err != nil {
 		return false, fmt.Errorf("render outreach sequence step: %w", err)
 	}

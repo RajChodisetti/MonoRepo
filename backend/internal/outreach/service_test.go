@@ -13,6 +13,7 @@ import (
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/campaigns"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/outreach"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/config"
+	repository "github.com/rajchodisetti/restaurant-platform/backend/internal/platform/errors"
 	emailprovider "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/email"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/restaurants"
 )
@@ -21,6 +22,9 @@ type mockRepo struct {
 	count         int
 	leads         []outreach.EligibleLead
 	activeSteps   []outreach.SequenceStep
+	sequenceSteps []outreach.SequenceStep
+	greetingFacts map[uuid.UUID]outreach.GreetingFacts
+	greetingErr   error
 	delivery      outreach.SequenceDelivery
 	prepared      outreach.RenderedSequenceStep
 	preparedHTML  string
@@ -36,6 +40,24 @@ func (repo *mockRepo) CountEligibleLeads(context.Context) (int, error) { return 
 
 func (repo *mockRepo) ListActiveSequenceSteps(context.Context) ([]outreach.SequenceStep, error) {
 	return repo.activeSteps, nil
+}
+
+func (repo *mockRepo) ListSequenceSteps(context.Context, uuid.UUID) ([]outreach.SequenceStep, error) {
+	if repo.sequenceSteps != nil {
+		return repo.sequenceSteps, nil
+	}
+	return repo.activeSteps, nil
+}
+
+func (repo *mockRepo) GetGreetingFacts(_ context.Context, restaurantID uuid.UUID) (outreach.GreetingFacts, error) {
+	if repo.greetingErr != nil {
+		return outreach.GreetingFacts{}, repo.greetingErr
+	}
+	facts, ok := repo.greetingFacts[restaurantID]
+	if !ok {
+		return outreach.GreetingFacts{}, repository.ErrNotFound
+	}
+	return facts, nil
 }
 
 func (repo *mockRepo) GetSequenceDelivery(context.Context, uuid.UUID, int) (outreach.SequenceDelivery, error) {
@@ -126,7 +148,118 @@ func eligibleSequenceRepo() *mockRepo {
 			ConsentBasis:    "inferred_business", ConsentSource: "business_contact_import",
 			ConsentRecordedAt: &consentAt, ConsentEvidence: []byte(`{"policy":"inferred_business"}`),
 			SequenceStatus: outreach.SequenceStatusApproved, Step: step,
+			GreetingFacts: outreach.GreetingFacts{RestaurantName: "Test Cafe"},
 		},
+	}
+}
+
+func TestGreeting01IsIdenticalAcrossLivePreviewAndTemplateTest(t *testing.T) {
+	restaurantID := uuid.New()
+	sequenceID := uuid.New()
+	campaignID := uuid.New()
+	consentAt := time.Now().UTC()
+	rating := 4.7
+	reviewCount := 380
+	facts := outreach.GreetingFacts{
+		RestaurantName: "Spice Garden", OwnerFirstName: "Maya",
+		GooglePlaceID: "place-1", ScrapeStatus: "success", City: "Plano",
+		Cuisines: []byte(`["Indian Restaurant"]`),
+		Rating:   &rating, ReviewCount: &reviewCount,
+	}
+	step := outreach.SequenceStep{
+		ID: uuid.New(), SequenceID: sequenceID, Position: 1, Enabled: true,
+		SubjectTemplate:  "A practical idea for {{restaurant_name}}",
+		BodyTextTemplate: "{{greeting01}}\n\nThe online flow could make it easier for guests.",
+	}
+	newRepo := func() *mockRepo {
+		return &mockRepo{
+			leads:       []outreach.EligibleLead{{CampaignID: campaignID, RestaurantID: restaurantID, Step: 1}},
+			activeSteps: []outreach.SequenceStep{step}, sequenceSteps: []outreach.SequenceStep{step},
+			greetingFacts: map[uuid.UUID]outreach.GreetingFacts{restaurantID: facts},
+			delivery: outreach.SequenceDelivery{
+				CampaignID: campaignID, RestaurantID: restaurantID,
+				RestaurantName: facts.RestaurantName, OwnerFirstName: facts.OwnerFirstName,
+				RecipientEmail: "owner@example.com", LifecycleStatus: restaurants.StatusLead,
+				ConsentBasis: "inferred_business", ConsentSource: "business_contact_import",
+				ConsentRecordedAt: &consentAt, ConsentEvidence: []byte(`{"policy":"inferred_business"}`),
+				SequenceStatus: outreach.SequenceStatusApproved, Step: step, GreetingFacts: facts,
+			},
+		}
+	}
+
+	liveProvider := &mockEmailProvider{result: emailprovider.SendResult{ProviderMessageID: "live"}}
+	liveService := newSequenceService(t, newRepo(), liveProvider)
+	if _, err := liveService.RunBulkSend(context.Background(), uuid.New()); err != nil {
+		t.Fatalf("RunBulkSend() error = %v", err)
+	}
+
+	testProvider := &mockEmailProvider{result: emailprovider.SendResult{ProviderMessageID: "test"}}
+	testService := newSequenceService(t, newRepo(), testProvider)
+	result, err := testService.SendTemplateTest(context.Background(), internalAdminPrincipal(), outreach.TemplateTestSendInput{
+		RecipientEmail: "test@example.com", RestaurantID: &restaurantID,
+		RestaurantName: "Ignored Synthetic Name", OwnerFirstName: "Ignored",
+	})
+	if err != nil {
+		t.Fatalf("SendTemplateTest() error = %v", err)
+	}
+	preview, err := testService.PreviewSequence(context.Background(), internalAdminPrincipal(), sequenceID, outreach.PreviewSequenceInput{
+		RestaurantID: &restaurantID, RestaurantName: "Ignored Synthetic Name", OwnerFirstName: "Ignored",
+	})
+	if err != nil {
+		t.Fatalf("PreviewSequence() error = %v", err)
+	}
+
+	if liveProvider.request.TextBody != testProvider.request.TextBody {
+		t.Fatalf("live and test bodies differ:\nlive=%q\ntest=%q", liveProvider.request.TextBody, testProvider.request.TextBody)
+	}
+	if len(preview.Steps) != 1 || !strings.HasPrefix(liveProvider.request.TextBody, preview.Steps[0].BodyText+"\n\n") {
+		t.Fatalf("preview body is not the exact unsigned prefix of delivery: preview=%#v live=%q", preview.Steps, liveProvider.request.TextBody)
+	}
+	if preview.Greeting01 != result.Greeting01 || strings.Join(preview.FactsUsed, ",") != strings.Join(result.FactsUsed, ",") {
+		t.Fatalf("preview/test greeting audit differs: preview=%#v test=%#v", preview, result)
+	}
+	if preview.RestaurantName != "Spice Garden" || result.RestaurantName != "Spice Garden" || strings.Contains(preview.Greeting01, "Ignored") {
+		t.Fatalf("restaurant_id did not override synthetic inputs: preview=%#v test=%#v", preview, result)
+	}
+}
+
+func TestGreetingRestaurantLookupAuthorizationMissingAndSyntheticCompatibility(t *testing.T) {
+	sequenceID := uuid.New()
+	restaurantID := uuid.New()
+	step := outreach.SequenceStep{
+		ID: uuid.New(), SequenceID: sequenceID, Position: 1, Enabled: true,
+		SubjectTemplate:  "Hello {{restaurant_name}}",
+		BodyTextTemplate: "{{greeting01}}\n\nA short note.",
+	}
+	repo := &mockRepo{activeSteps: []outreach.SequenceStep{step}, sequenceSteps: []outreach.SequenceStep{step}}
+	service := newSequenceService(t, repo, &mockEmailProvider{})
+	owner := auth.Principal{UserID: uuid.New(), Role: auth.RoleRestaurantOwner}
+	if _, err := service.PreviewSequence(context.Background(), owner, sequenceID, outreach.PreviewSequenceInput{RestaurantID: &restaurantID}); !errors.Is(err, restaurants.ErrForbidden) {
+		t.Fatalf("PreviewSequence() error = %v, want forbidden", err)
+	}
+	if _, err := service.SendTemplateTest(context.Background(), owner, outreach.TemplateTestSendInput{
+		RecipientEmail: "test@example.com", RestaurantID: &restaurantID,
+	}); !errors.Is(err, restaurants.ErrForbidden) {
+		t.Fatalf("SendTemplateTest() error = %v, want forbidden", err)
+	}
+
+	if _, err := service.PreviewSequence(context.Background(), internalAdminPrincipal(), sequenceID, outreach.PreviewSequenceInput{RestaurantID: &restaurantID}); !errors.Is(err, outreach.ErrGreetingRestaurantNotFound) {
+		t.Fatalf("PreviewSequence() error = %v, want missing restaurant", err)
+	}
+	if _, err := service.SendTemplateTest(context.Background(), internalAdminPrincipal(), outreach.TemplateTestSendInput{
+		RecipientEmail: "test@example.com", RestaurantID: &restaurantID,
+	}); !errors.Is(err, outreach.ErrGreetingRestaurantNotFound) {
+		t.Fatalf("SendTemplateTest() error = %v, want missing restaurant", err)
+	}
+
+	preview, err := service.PreviewSequence(context.Background(), internalAdminPrincipal(), sequenceID, outreach.PreviewSequenceInput{
+		RestaurantName: "Synthetic Cafe", OwnerFirstName: "Sam",
+	})
+	if err != nil {
+		t.Fatalf("synthetic PreviewSequence() error = %v", err)
+	}
+	if preview.RestaurantID != nil || !strings.HasPrefix(preview.Greeting01, "Hi Sam,\n\nI came across Synthetic Cafe while looking at local restaurants.") {
+		t.Fatalf("synthetic preview = %#v, want backward-compatible name/owner rendering", preview)
 	}
 }
 

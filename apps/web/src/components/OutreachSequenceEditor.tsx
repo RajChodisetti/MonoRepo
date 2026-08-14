@@ -15,6 +15,8 @@ import type {
   OutreachSequenceStep,
 } from "@/lib/types";
 import { EmptyState, ErrorBanner, StatusBadge } from "@/components/ui";
+import { RestaurantSearch } from "@/components/RestaurantSearch";
+import type { Restaurant } from "@/lib/types";
 
 type Props = {
   sequences: OutreachSequence[];
@@ -74,6 +76,8 @@ export function OutreachSequenceEditor({
   const [message, setMessage] = useState<string | null>(null);
   const [sampleRestaurant, setSampleRestaurant] = useState("Sample Restaurant");
   const [sampleOwner, setSampleOwner] = useState("");
+  const [selectedPreviewRestaurant, setSelectedPreviewRestaurant] =
+    useState<Restaurant | null>(null);
   const [previewPosition, setPreviewPosition] = useState(1);
   const [serverPreview, setServerPreview] =
     useState<OutreachSequencePreview | null>(null);
@@ -278,8 +282,13 @@ export function OutreachSequenceEditor({
         {
           method: "POST",
           body: {
-            restaurant_name: sampleRestaurant.trim() || "Sample Restaurant",
-            owner_first_name: sampleOwner.trim() || undefined,
+            restaurant_id: selectedPreviewRestaurant?.id,
+            restaurant_name: selectedPreviewRestaurant
+              ? undefined
+              : sampleRestaurant.trim() || "Sample Restaurant",
+            owner_first_name: selectedPreviewRestaurant
+              ? undefined
+              : sampleOwner.trim() || undefined,
           },
         },
       );
@@ -524,8 +533,21 @@ export function OutreachSequenceEditor({
             <h2 id="sequence-preview-title">Personalized preview</h2>
             <p>Owner first name is used when available; otherwise the restaurant team is addressed.</p>
           </div>
+          <RestaurantSearch
+            label="Saved restaurant (optional)"
+            selected={selectedPreviewRestaurant}
+            onSelect={(restaurant) => {
+              setSelectedPreviewRestaurant(restaurant);
+              if (restaurant) {
+                setSampleRestaurant(restaurant.name);
+                setSampleOwner("");
+              }
+              setServerPreview(null);
+            }}
+            help="Select a saved restaurant for authoritative server facts; Google fields are used only from a verified successful profile."
+          />
           <label className="field-label" htmlFor="preview-restaurant">
-            Restaurant
+            Synthetic restaurant name
             <input
               id="preview-restaurant"
               className="input"
@@ -534,10 +556,11 @@ export function OutreachSequenceEditor({
                 setSampleRestaurant(event.target.value);
                 setServerPreview(null);
               }}
+              disabled={selectedPreviewRestaurant !== null}
             />
           </label>
           <label className="field-label" htmlFor="preview-owner">
-            Owner first name (optional)
+            Synthetic owner first name (optional)
             <input
               id="preview-owner"
               className="input"
@@ -546,6 +569,7 @@ export function OutreachSequenceEditor({
                 setSampleOwner(event.target.value);
                 setServerPreview(null);
               }}
+              disabled={selectedPreviewRestaurant !== null}
             />
           </label>
           <label className="field-label" htmlFor="preview-email">
@@ -571,6 +595,21 @@ export function OutreachSequenceEditor({
           >
             {busy ? "Rendering…" : "Verify saved preview"}
           </button>
+
+          {serverPreview ? (
+            <div className="greeting-audit" aria-live="polite">
+              <span className="field-help">Server-rendered greeting01</span>
+              <pre>{serverPreview.greeting01}</pre>
+              <div className="facts-used">
+                <strong>Facts used</strong>
+                {serverPreview.facts_used.length > 0 ? (
+                  <span>{serverPreview.facts_used.join(", ")}</span>
+                ) : (
+                  <span>Fallback wording only</span>
+                )}
+              </div>
+            </div>
+          ) : null}
 
           {selectedPreviewStep ? (
             <div className="email-preview" aria-live="polite">

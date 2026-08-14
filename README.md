@@ -147,8 +147,9 @@ Current migrations:
   inferred-business evidence, and integer recipient progress
 - `000043_manual_media_review` — explicit owner/licensed media approval audit
 - `000044` through `000046` — SEO unlock security and current outreach copy
-- `000047_email_messages` — accepted outbound snapshots and inbound reply capture
-- `000048_outreach_email_ramp` — durable 5-to-40 per-mailbox warm-up cycles
+- `000047_deterministic_restaurant_greeting` — inactive greeting01 sequence draft
+- `000048_email_messages` — accepted outbound snapshots and inbound reply capture
+- `000049_outreach_email_ramp` — durable 5-to-40 per-mailbox warm-up cycles
 
 **Rollback notes:**
 
@@ -348,6 +349,14 @@ at the same sequence step and are recorded as skipped instead of being marked
 emailed. The saved database template is the sole source of any unsubscribe copy
 or link; the application does not inject or validate an unsubscribe merge tag,
 serve an unsubscribe route, or consult the legacy suppression table.
+
+The optional first-email `{{greeting01}}` merge field is deterministic and uses
+no AI. It may appear exactly once in the first enabled body, never in a subject
+or follow-up. City, cuisine, rating, and review count are used only for profiles
+with a Google place id and a successful scrape; unsafe or missing facts select
+generic wording without blocking delivery. Existing `{{greeting}}` templates
+remain compatible. Migration `000047` creates only an inactive draft for human
+review and does not activate a sequence or enable the email job.
 
 Key environment variables:
 

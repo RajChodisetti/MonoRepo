@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/campaigns"
+	repository "github.com/rajchodisetti/restaurant-platform/backend/internal/platform/errors"
 )
 
 type Repository interface {
@@ -21,6 +22,13 @@ type Repository interface {
 type Postgres struct {
 	pool *pgxpool.Pool
 }
+
+const ownerFirstNameSelectExpression = `COALESCE(
+  NULLIF(trim(profile.apollo_lead #>> '{contact,first_name}'), ''),
+  NULLIF(split_part(trim(profile.apollo_lead #>> '{contact,name}'), ' ', 1), ''),
+  NULLIF(split_part(trim(profile.owners ->> 0), ' ', 1), ''),
+  ''
+)`
 
 func NewPostgres(pool *pgxpool.Pool) *Postgres {
 	return &Postgres{pool: pool}
@@ -255,6 +263,81 @@ type sequenceDeliveryRepository interface {
 	NextSequenceDueAt(ctx context.Context) (*time.Time, error)
 }
 
+func (repo *Postgres) ListSequenceSteps(ctx context.Context, sequenceID uuid.UUID) ([]SequenceStep, error) {
+	if repo.pool == nil {
+		return nil, fmt.Errorf("database pool is not configured")
+	}
+	rows, err := repo.pool.Query(ctx, `
+		SELECT id, sequence_id, position, enabled, delay_hours,
+		       subject_template, body_text_template, created_at, updated_at
+		FROM outreach_email_sequence_steps
+		WHERE sequence_id = $1
+		ORDER BY position`, sequenceID)
+	if err != nil {
+		return nil, fmt.Errorf("list outreach sequence steps: %w", err)
+	}
+	defer rows.Close()
+	steps := []SequenceStep{}
+	for rows.Next() {
+		var step SequenceStep
+		if err := rows.Scan(
+			&step.ID, &step.SequenceID, &step.Position, &step.Enabled,
+			&step.DelayHours, &step.SubjectTemplate, &step.BodyTextTemplate,
+			&step.CreatedAt, &step.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan outreach sequence step: %w", err)
+		}
+		steps = append(steps, step)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate outreach sequence steps: %w", err)
+	}
+	if len(steps) == 0 {
+		var exists bool
+		if err := repo.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM outreach_email_sequences WHERE id = $1)`, sequenceID).Scan(&exists); err != nil {
+			return nil, fmt.Errorf("check outreach sequence: %w", err)
+		}
+		if !exists {
+			return nil, repository.ErrNotFound
+		}
+	}
+	return steps, nil
+}
+
+func (repo *Postgres) GetGreetingFacts(ctx context.Context, restaurantID uuid.UUID) (GreetingFacts, error) {
+	if repo.pool == nil {
+		return GreetingFacts{}, fmt.Errorf("database pool is not configured")
+	}
+	const query = `
+		SELECT restaurant.name,
+		       ` + ownerFirstNameSelectExpression + `,
+		       COALESCE(profile.google_place_id, ''),
+		       COALESCE(profile.scrape_status, ''),
+		       COALESCE(profile.city, ''),
+		       COALESCE(profile.cuisines, '[]'::jsonb),
+		       profile.rating,
+		       profile.reviews_count
+		FROM restaurants restaurant
+		LEFT JOIN restaurant_profiles profile ON profile.restaurant_id = restaurant.id
+		WHERE restaurant.id = $1`
+	var facts GreetingFacts
+	if err := repo.pool.QueryRow(ctx, query, restaurantID).Scan(
+		&facts.RestaurantName,
+		&facts.OwnerFirstName,
+		&facts.GooglePlaceID,
+		&facts.ScrapeStatus,
+		&facts.City,
+		&facts.Cuisines,
+		&facts.Rating,
+		&facts.ReviewCount,
+	); errors.Is(err, pgx.ErrNoRows) {
+		return GreetingFacts{}, repository.ErrNotFound
+	} else if err != nil {
+		return GreetingFacts{}, fmt.Errorf("load restaurant greeting facts: %w", err)
+	}
+	return facts, nil
+}
+
 func (repo *Postgres) GetSequenceDelivery(ctx context.Context, campaignID uuid.UUID, position int) (SequenceDelivery, error) {
 	if repo.pool == nil {
 		return SequenceDelivery{}, fmt.Errorf("database pool is not configured")
@@ -263,12 +346,13 @@ func (repo *Postgres) GetSequenceDelivery(ctx context.Context, campaignID uuid.U
 		SELECT campaign.id,
 		       restaurant.id,
 		       restaurant.name,
-		       COALESCE(
-		         NULLIF(trim(profile.apollo_lead #>> '{contact,first_name}'), ''),
-		         NULLIF(split_part(trim(profile.apollo_lead #>> '{contact,name}'), ' ', 1), ''),
-		         NULLIF(split_part(trim(profile.owners ->> 0), ' ', 1), ''),
-		         ''
-		       ),
+		       ` + ownerFirstNameSelectExpression + `,
+		       COALESCE(profile.google_place_id, ''),
+		       COALESCE(profile.scrape_status, ''),
+		       COALESCE(profile.city, ''),
+		       COALESCE(profile.cuisines, '[]'::jsonb),
+		       profile.rating,
+		       profile.reviews_count,
 		       lower(trim(restaurant.email)),
 		       restaurant.status,
 		       restaurant.shown_interest,
@@ -305,6 +389,12 @@ func (repo *Postgres) GetSequenceDelivery(ctx context.Context, campaignID uuid.U
 		&delivery.RestaurantID,
 		&delivery.RestaurantName,
 		&delivery.OwnerFirstName,
+		&delivery.GreetingFacts.GooglePlaceID,
+		&delivery.GreetingFacts.ScrapeStatus,
+		&delivery.GreetingFacts.City,
+		&delivery.GreetingFacts.Cuisines,
+		&delivery.GreetingFacts.Rating,
+		&delivery.GreetingFacts.ReviewCount,
 		&delivery.RecipientEmail,
 		&delivery.LifecycleStatus,
 		&delivery.ShownInterest,
@@ -327,6 +417,8 @@ func (repo *Postgres) GetSequenceDelivery(ctx context.Context, campaignID uuid.U
 	} else if err != nil {
 		return SequenceDelivery{}, fmt.Errorf("load sequence delivery: %w", err)
 	}
+	delivery.GreetingFacts.RestaurantName = delivery.RestaurantName
+	delivery.GreetingFacts.OwnerFirstName = delivery.OwnerFirstName
 	return delivery, nil
 }
 

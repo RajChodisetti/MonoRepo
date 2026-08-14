@@ -1581,6 +1581,12 @@ paths:
       operationId: previewOutreachSequence
       security:
         - bearerAuth: []
+      description: |
+        Requires role `internal_admin`. When `restaurant_id` is supplied, the server
+        loads authoritative restaurant and verified Google listing facts and ignores
+        synthetic restaurant fields. Without it, existing synthetic previews remain
+        supported. The response reports the deterministic `greeting01` and only the
+        non-sensitive fact categories used to render it.
       requestBody:
         required: true
         content:
@@ -1594,6 +1600,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OutreachSequencePreview'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /api/v1/outreach/recipients:
     get:
@@ -1829,6 +1843,9 @@ paths:
         does not enroll recipients, and does not send to restaurant leads. Messages use
         the shared Tuvi logo signature. Any unsubscribe copy is supplied by the
         saved database template; this endpoint does not add or validate it.
+        When `restaurant_id` is supplied, authoritative server-side greeting facts
+        replace any synthetic restaurant name or owner fields. The response returns
+        the exact deterministic greeting and the fact categories used.
       requestBody:
         required: true
         content:
@@ -1848,6 +1865,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '503':
           description: Email sending is disabled or outreach accounts are not configured
 
@@ -4360,10 +4379,13 @@ components:
         subject_template:
           type: string
           maxLength: 200
+          description: Plain-text subject. `{{greeting01}}` is never allowed here.
         body_text_template:
           type: string
           maxLength: 10000
-          description: Plain text template body.
+          description: |
+            Plain-text template body. `{{greeting01}}` may appear exactly once and
+            only in the first enabled email. Legacy `{{greeting}}` remains valid.
         created_at:
           type: string
           format: date-time
@@ -4456,12 +4478,17 @@ components:
 
     PreviewOutreachSequenceRequest:
       type: object
-      required: [restaurant_name]
       properties:
+        restaurant_id:
+          type: string
+          format: uuid
+          description: Optional authoritative restaurant lookup; takes precedence over synthetic fields.
         restaurant_name:
           type: string
+          description: Backward-compatible synthetic name used only when restaurant_id is absent.
         owner_first_name:
           type: string
+          description: Backward-compatible synthetic owner name used only when restaurant_id is absent.
 
     RenderedOutreachSequenceStep:
       type: object
@@ -4481,12 +4508,24 @@ components:
 
     OutreachSequencePreview:
       type: object
-      required: [restaurant_name, greeting, steps]
+      required: [restaurant_name, greeting, greeting01, facts_used, steps]
       properties:
+        restaurant_id:
+          type: string
+          format: uuid
         restaurant_name:
           type: string
         greeting:
           type: string
+          description: Legacy salutation rendered for {{greeting}} compatibility.
+        greeting01:
+          type: string
+          description: Deterministic salutation, blank separator, and exactly two greeting lines.
+        facts_used:
+          type: array
+          items:
+            type: string
+            enum: [owner_first_name, restaurant_name, cuisine, city, rating, review_count]
         steps:
           type: array
           items:
@@ -4766,23 +4805,38 @@ components:
           type: string
           format: email
           description: Single custom recipient that receives every rendered outreach template.
+        restaurant_id:
+          type: string
+          format: uuid
+          description: Optional authoritative restaurant lookup; takes precedence over synthetic fields.
         restaurant_name:
           type: string
-          description: Optional sample restaurant name used while rendering templates.
+          description: Optional synthetic restaurant name used only when restaurant_id is absent.
           example: Tuvi Test Restaurant
         owner_first_name:
           type: string
-          description: Optional owner first name used in programmed sequence greetings.
+          description: Optional synthetic owner first name used only when restaurant_id is absent.
           example: Raj
 
     OutreachTemplateTestSendResponse:
       type: object
+      required: [recipient_email, restaurant_name, greeting01, facts_used, items]
       properties:
         recipient_email:
           type: string
           format: email
         restaurant_name:
           type: string
+        restaurant_id:
+          type: string
+          format: uuid
+        greeting01:
+          type: string
+        facts_used:
+          type: array
+          items:
+            type: string
+            enum: [owner_first_name, restaurant_name, cuisine, city, rating, review_count]
         items:
           type: array
           items:

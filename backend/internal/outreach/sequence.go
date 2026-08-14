@@ -29,14 +29,15 @@ const (
 )
 
 var (
-	templatePlaceholderPattern = regexp.MustCompile(`\{\{[a-z_]+\}\}`)
+	templatePlaceholderPattern = regexp.MustCompile(`\{\{[^{}\r\n]+\}\}`)
 	rawURLPattern              = regexp.MustCompile(`(?i)https?://[^\s<>"']+`)
 	bareDomainPattern          = regexp.MustCompile(`(?i)(?:www\.)?(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}(?::[0-9]{1,5})?(?:/[^\s<>"']*)?`)
 	htmlElementPattern         = regexp.MustCompile(`(?i)<[a-z][^>]*>`)
 	validLeadEmailPattern      = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
 
-	ErrSequenceInvalid = errors.New("outreach sequence is invalid")
-	ErrSequenceStale   = errors.New("outreach sequence changed after it was loaded")
+	ErrSequenceInvalid            = errors.New("outreach sequence is invalid")
+	ErrSequenceStale              = errors.New("outreach sequence changed after it was loaded")
+	ErrGreetingRestaurantNotFound = errors.New("greeting restaurant was not found")
 )
 
 type Sequence struct {
@@ -81,8 +82,9 @@ type UpdateSequenceInput struct {
 }
 
 type PreviewSequenceInput struct {
-	RestaurantName string `json:"restaurant_name"`
-	OwnerFirstName string `json:"owner_first_name,omitempty"`
+	RestaurantID   *uuid.UUID `json:"restaurant_id,omitempty"`
+	RestaurantName string     `json:"restaurant_name,omitempty"`
+	OwnerFirstName string     `json:"owner_first_name,omitempty"`
 }
 
 type RenderedSequenceStep struct {
@@ -94,8 +96,11 @@ type RenderedSequenceStep struct {
 }
 
 type SequencePreview struct {
+	RestaurantID   *uuid.UUID             `json:"restaurant_id,omitempty"`
 	RestaurantName string                 `json:"restaurant_name"`
 	Greeting       string                 `json:"greeting"`
+	Greeting01     string                 `json:"greeting01"`
+	FactsUsed      []string               `json:"facts_used"`
 	Steps          []RenderedSequenceStep `json:"steps"`
 }
 
@@ -135,10 +140,19 @@ type SequenceDelivery struct {
 	ConsentEvidence   json.RawMessage
 	SequenceStatus    string
 	Step              SequenceStep
+	GreetingFacts     GreetingFacts
 }
 
 type activeSequenceStepsRepository interface {
 	ListActiveSequenceSteps(ctx context.Context) ([]SequenceStep, error)
+}
+
+type sequenceStepsRepository interface {
+	ListSequenceSteps(ctx context.Context, sequenceID uuid.UUID) ([]SequenceStep, error)
+}
+
+type greetingFactsRepository interface {
+	GetGreetingFacts(ctx context.Context, restaurantID uuid.UUID) (GreetingFacts, error)
 }
 
 const rebaseUntouchedEnrollmentsQuery = `
@@ -438,17 +452,25 @@ func (service *Service) PreviewSequence(ctx context.Context, principal auth.Prin
 	if err := validateSequenceSteps(steps); err != nil {
 		return SequencePreview{}, err
 	}
-	name := cleanSingleLine(input.RestaurantName)
-	if name == "" {
-		name = "Example Restaurant"
+	facts, restaurantID, err := service.resolveGreetingFacts(
+		ctx, input.RestaurantID, input.RestaurantName, input.OwnerFirstName, "Example Restaurant",
+	)
+	if err != nil {
+		return SequencePreview{}, err
 	}
-	greeting := outreachGreeting(input.OwnerFirstName, name)
-	preview := SequencePreview{RestaurantName: name, Greeting: greeting, Steps: []RenderedSequenceStep{}}
+	name := cleanSingleLine(facts.RestaurantName)
+	greeting01 := RenderGreeting01(facts)
+	preview := SequencePreview{
+		RestaurantID: restaurantID, RestaurantName: name,
+		Greeting:   outreachGreeting(facts.OwnerFirstName, name),
+		Greeting01: greeting01.Greeting01, FactsUsed: greeting01.FactsUsed,
+		Steps: []RenderedSequenceStep{},
+	}
 	for _, step := range steps {
 		if !step.Enabled {
 			continue
 		}
-		rendered, err := renderSequenceStep(step, name, input.OwnerFirstName)
+		rendered, err := renderSequenceStep(step, facts)
 		if err != nil {
 			return SequencePreview{}, err
 		}
@@ -536,6 +558,9 @@ func (service *Service) ListRecipientProgress(ctx context.Context, principal aut
 }
 
 func (service *Service) listSequenceSteps(ctx context.Context, sequenceID uuid.UUID) ([]SequenceStep, error) {
+	if repo, ok := service.repo.(sequenceStepsRepository); ok {
+		return repo.ListSequenceSteps(ctx, sequenceID)
+	}
 	if service.pool == nil {
 		return nil, fmt.Errorf("database pool is not configured")
 	}
@@ -621,6 +646,13 @@ func validateSequenceSteps(steps []SequenceStep) error {
 	sort.Slice(steps, func(i, j int) bool { return steps[i].Position < steps[j].Position })
 	enabled := 0
 	firstEnabledChecked := false
+	firstEnabledPosition := 0
+	for _, step := range steps {
+		if step.Enabled {
+			firstEnabledPosition = step.Position
+			break
+		}
+	}
 	for index, step := range steps {
 		if step.Position != index+1 {
 			return fmt.Errorf("%w: step positions must be contiguous and 1-based", ErrSequenceInvalid)
@@ -637,7 +669,7 @@ func validateSequenceSteps(steps []SequenceStep) error {
 				}
 			}
 		}
-		if err := validateSequenceTemplate(step); err != nil {
+		if err := validateSequenceTemplate(step, step.Position == firstEnabledPosition); err != nil {
 			return err
 		}
 	}
@@ -647,23 +679,37 @@ func validateSequenceSteps(steps []SequenceStep) error {
 	return nil
 }
 
-func validateSequenceTemplate(step SequenceStep) error {
+func validateSequenceTemplate(step SequenceStep, firstEnabled bool) error {
 	subject := strings.TrimSpace(step.SubjectTemplate)
 	body := strings.TrimSpace(step.BodyTextTemplate)
 	if subject == "" || len(subject) > 200 || strings.ContainsAny(subject, "\r\n") {
 		return fmt.Errorf("%w: step %d subject must be one line and at most 200 characters", ErrSequenceInvalid, step.Position)
 	}
-	if body == "" || len(body) > 10000 || htmlElementPattern.MatchString(body) {
+	if body == "" || len(body) > 10000 || htmlElementPattern.MatchString(subject) || htmlElementPattern.MatchString(body) {
 		return fmt.Errorf("%w: step %d body must be plain text", ErrSequenceInvalid, step.Position)
 	}
 	allowed := map[string]bool{
 		"{{greeting}}": true, "{{restaurant_name}}": true,
-		"{{website_url}}": true,
+		"{{website_url}}": true, "{{greeting01}}": true,
 	}
 	for _, value := range append(templatePlaceholderPattern.FindAllString(subject, -1), templatePlaceholderPattern.FindAllString(body, -1)...) {
 		if !allowed[value] {
 			return fmt.Errorf("%w: step %d contains unsupported placeholder %s", ErrSequenceInvalid, step.Position, value)
 		}
+	}
+	greeting01SubjectCount := strings.Count(subject, "{{greeting01}}")
+	greeting01BodyCount := strings.Count(body, "{{greeting01}}")
+	if greeting01SubjectCount > 0 {
+		return fmt.Errorf("%w: step %d cannot use {{greeting01}} in the subject", ErrSequenceInvalid, step.Position)
+	}
+	if greeting01BodyCount > 0 && !firstEnabled {
+		return fmt.Errorf("%w: step %d can use {{greeting01}} only in the first enabled email body", ErrSequenceInvalid, step.Position)
+	}
+	if greeting01BodyCount > 1 {
+		return fmt.Errorf("%w: step %d can use {{greeting01}} exactly once", ErrSequenceInvalid, step.Position)
+	}
+	if greeting01BodyCount == 1 && strings.Contains(body, "{{greeting}}") {
+		return fmt.Errorf("%w: step %d must replace {{greeting}} when using {{greeting01}}", ErrSequenceInvalid, step.Position)
 	}
 	return nil
 }
@@ -672,14 +718,17 @@ func containsUnmanagedLinkCandidate(value string) bool {
 	return rawURLPattern.MatchString(value) || bareDomainPattern.MatchString(value)
 }
 
-func renderSequenceStep(step SequenceStep, restaurantName, ownerFirstName string) (RenderedSequenceStep, error) {
-	name := cleanSingleLine(restaurantName)
+func renderSequenceStep(step SequenceStep, facts GreetingFacts) (RenderedSequenceStep, error) {
+	name := cleanSingleLine(facts.RestaurantName)
 	if name == "" {
 		return RenderedSequenceStep{}, fmt.Errorf("%w: restaurant name is required", campaigns.ErrNotEligible)
 	}
-	greeting := outreachGreeting(ownerFirstName, name)
+	facts.RestaurantName = name
+	greeting := outreachGreeting(facts.OwnerFirstName, name)
+	greeting01 := RenderGreeting01(facts).Greeting01
 	replacer := strings.NewReplacer(
 		"{{greeting}}", greeting,
+		"{{greeting01}}", greeting01,
 		"{{restaurant_name}}", name,
 		"{{website_url}}", websiteURL,
 	)
@@ -693,6 +742,39 @@ func renderSequenceStep(step SequenceStep, restaurantName, ownerFirstName string
 		Position: step.Position, DelayHours: step.DelayHours,
 		Subject: subject, BodyText: body, URLCount: len(urls),
 	}, nil
+}
+
+func (service *Service) resolveGreetingFacts(
+	ctx context.Context,
+	restaurantID *uuid.UUID,
+	restaurantName string,
+	ownerFirstName string,
+	defaultRestaurantName string,
+) (GreetingFacts, *uuid.UUID, error) {
+	if restaurantID != nil {
+		repo, ok := service.repo.(greetingFactsRepository)
+		if !ok {
+			return GreetingFacts{}, nil, fmt.Errorf("greeting facts repository is not configured")
+		}
+		facts, err := repo.GetGreetingFacts(ctx, *restaurantID)
+		if errors.Is(err, repository.ErrNotFound) {
+			return GreetingFacts{}, nil, ErrGreetingRestaurantNotFound
+		}
+		if err != nil {
+			return GreetingFacts{}, nil, err
+		}
+		id := *restaurantID
+		return facts, &id, nil
+	}
+	name := cleanSingleLine(restaurantName)
+	if name == "" {
+		name = defaultRestaurantName
+	}
+	return GreetingFacts{
+		RestaurantName: name,
+		OwnerFirstName: cleanFirstName(ownerFirstName),
+		Cuisines:       json.RawMessage("[]"),
+	}, nil, nil
 }
 
 func checkSequenceDeliveryEligibility(delivery SequenceDelivery) error {

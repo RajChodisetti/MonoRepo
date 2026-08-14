@@ -3,19 +3,18 @@ import type { OutreachSequenceStep } from "@/lib/types";
 export const WEBSITE_TOKEN = "{{website_url}}";
 export const ALLOWED_MERGE_TAGS = new Set([
   "greeting",
+  "greeting01",
   "restaurant_name",
   "website_url",
 ]);
 
-const MERGE_TAG_PATTERN = /{{\s*([a-z_]+)\s*}}/gi;
+const MERGE_TAG_PATTERN = /{{([^{}\r\n]+)}}/g;
 const HTML_TAG_PATTERN = /<\s*\/?\s*[a-z][^>]*>/i;
 
 export function validateSequenceStep(
   step: OutreachSequenceStep,
   index: number,
 ): string[] {
-  if (!step.enabled) return [];
-
   const issues: string[] = [];
   const subject = step.subject_template.trim();
   const body = step.body_text_template.trim();
@@ -27,11 +26,27 @@ export function validateSequenceStep(
     issues.push("HTML is not allowed; use plain text only.");
   }
 
-  const unknownTags = Array.from(`${subject}\n${body}`.matchAll(MERGE_TAG_PATTERN))
-    .map((match) => match[1].toLowerCase())
+  const mergeTags = Array.from(`${subject}\n${body}`.matchAll(MERGE_TAG_PATTERN));
+  const unknownTags = mergeTags
+    .map((match) => match[1])
     .filter((tag) => !ALLOWED_MERGE_TAGS.has(tag));
   if (unknownTags.length > 0) {
     issues.push(`Unknown merge tag: {{${Array.from(new Set(unknownTags)).join("}}, {{")}}}.`);
+  }
+
+  const greeting01SubjectCount = subject.split("{{greeting01}}").length - 1;
+  const greeting01BodyCount = body.split("{{greeting01}}").length - 1;
+  if (greeting01SubjectCount > 0) {
+    issues.push("Use {{greeting01}} only in the message body.");
+  }
+  if (greeting01BodyCount > 0 && index !== 0) {
+    issues.push("Use {{greeting01}} only in the first enabled email.");
+  }
+  if (greeting01BodyCount > 1) {
+    issues.push("Use {{greeting01}} exactly once.");
+  }
+  if (greeting01BodyCount === 1 && body.includes("{{greeting}}")) {
+    issues.push("Replace {{greeting}} when using {{greeting01}}.");
   }
 
   if (!Number.isInteger(step.delay_hours) || step.delay_hours < 0) {
@@ -65,9 +80,11 @@ export function renderLocalTemplate(
   const restaurant = restaurantName.trim() || "Sample Restaurant";
   const owner = ownerFirstName.trim();
   const greeting = owner ? `Hi ${owner},` : `Hi ${restaurant} team,`;
+  const greeting01 = `${greeting}\n\nI came across ${restaurant} while looking at local restaurants.\nI thought it was worth reaching out directly to your team.`;
 
   return value
     .replaceAll("{{greeting}}", greeting)
+    .replaceAll("{{greeting01}}", greeting01)
     .replaceAll("{{restaurant_name}}", restaurant)
     .replaceAll(WEBSITE_TOKEN, "");
 }

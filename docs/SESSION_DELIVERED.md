@@ -3154,3 +3154,55 @@ The dedicated inbound mailbox, `gmail.readonly` refresh token, DNS/plus-address
 routing, production configuration, sender enablement, any real email, push, and
 deployment all remain explicit follow-up approval gates. No external provider
 call, email send, production mutation, push, or deployment occurred.
+
+## 2026-08-14 — Deterministic Restaurant Greeting Plan
+
+**Role:** Backend, Admin Frontend, Database Migration, Documentation, and Test Agent
+
+**Delivered:** Added a pure no-AI `GreetingFacts` renderer for `{{greeting01}}`.
+It always emits one safe salutation and exactly two greeting lines. Owner first
+name, restaurant name, city, the first safe cuisine ending in `Restaurant`, and
+rating/review count follow the approved deterministic fallback order. Listing
+facts are ignored unless `google_place_id` is present and `scrape_status` is
+`success`; unsafe or missing optional values never block delivery. Review text,
+menu items, descriptions, and inferred claims are not queried or rendered.
+
+Live delivery, saved-sequence preview, and template test sends now share the
+same renderer. The delivery query preserves Apollo-first-name, Apollo-name, then
+profile-owner precedence and snapshots the signed final body through the
+existing preparation path. Preview and test-send accept optional
+`restaurant_id`; internal-admin authorization is required, server facts override
+synthetic inputs, and responses expose `greeting01` plus non-sensitive
+`facts_used` category names. Legacy synthetic requests and active sequences
+using `{{greeting}}` remain compatible. Template validation confines
+`{{greeting01}}` to one occurrence in the first enabled body and rejects it in
+subjects/later emails, HTML, unsupported tags, and unresolved placeholders.
+
+The admin sequence preview and deliberate test-send form reuse the existing
+restaurant endpoint for debounced same-origin search, show authoritative
+greeting/fact audits, and preserve the server-side session/BFF boundary.
+Migration `000047_deterministic_restaurant_greeting` clones the active sequence
+into a fixed inactive draft, replaces the first enabled greeting, and removes
+the repetitive opening sentence. Its down migration fails closed after edits or
+activation. Because the prior inbox/ramp migrations were local and unapplied,
+they are reconciled without feature loss as `000048_email_messages` and
+`000049_outreach_email_ramp`.
+
+**Checks Run:** Focused outreach/HTTP/migration tests passed 112 tests. `rtk make
+test`, `rtk go vet ./backend/...`, and `rtk go build ./backend/cmd/...` passed.
+Admin lint, explicit non-incremental TypeScript checking, and the 14-route
+production build passed. `rtk make openapi` validated the API document with 11
+pre-existing unrelated warnings. Migration discovery/content guards and `rtk
+git diff --check` passed; every provider interaction in tests used mocks.
+
+**Business Value / Plan Fit:** First-contact emails can reference trustworthy
+listing facts without an AI dependency or per-recipient generated-copy review,
+while reviewers can see exactly which fact categories shaped the message before
+activation or a deliberate test send.
+
+**Risks / Approval State:** Migrations `000047`–`000049` remain unapplied. The
+new sequence remains an inactive draft; active sequences, existing campaign
+pinning, the persisted email-job control, and provider routing are unchanged.
+Draft approval, sender enablement, any real test/lead email, production
+migration, push, and deployment remain explicit administrator actions. Nothing
+was pushed, deployed, migrated, activated, enabled, or sent.

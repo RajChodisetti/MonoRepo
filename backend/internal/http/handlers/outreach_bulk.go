@@ -276,6 +276,8 @@ func (handler *OutreachBulkHandler) writeSequenceError(w http.ResponseWriter, er
 		handler.writeError(w, http.StatusForbidden, "forbidden", "Internal administrator access is required.")
 	case errors.Is(err, repository.ErrNotFound):
 		handler.writeError(w, http.StatusNotFound, "not_found", "Outreach sequence was not found.")
+	case errors.Is(err, outreach.ErrGreetingRestaurantNotFound):
+		handler.writeError(w, http.StatusNotFound, "restaurant_not_found", "Restaurant was not found.")
 	case errors.Is(err, outreach.ErrSequenceStale):
 		handler.writeError(w, http.StatusConflict, "stale_sequence", err.Error())
 	case errors.Is(err, outreach.ErrSequenceInvalid):
@@ -295,6 +297,8 @@ func (handler *OutreachBulkHandler) writeTemplateTestError(w http.ResponseWriter
 		handler.writeError(w, http.StatusServiceUnavailable, "outreach_not_configured", "Outreach email accounts are not configured.")
 	case errors.Is(err, outreach.ErrInvalidRecipientEmail):
 		handler.writeError(w, http.StatusBadRequest, "invalid_recipient_email", "recipient_email must be a single valid email address.")
+	case errors.Is(err, outreach.ErrGreetingRestaurantNotFound):
+		handler.writeError(w, http.StatusNotFound, "restaurant_not_found", "Restaurant was not found.")
 	case errors.Is(err, outreach.ErrSequenceInvalid):
 		handler.writeError(w, http.StatusBadRequest, "invalid_sequence", err.Error())
 	default:

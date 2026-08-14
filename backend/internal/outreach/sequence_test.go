@@ -27,7 +27,7 @@ func TestValidateAndRenderPlainText(t *testing.T) {
 	if err := validateSequenceSteps([]SequenceStep{step}); err != nil {
 		t.Fatalf("validateSequenceSteps() error = %v", err)
 	}
-	rendered, err := renderSequenceStep(step, "Harbour Cafe", "Ava")
+	rendered, err := renderSequenceStep(step, GreetingFacts{RestaurantName: "Harbour Cafe", OwnerFirstName: "Ava"})
 	if err != nil {
 		t.Fatalf("renderSequenceStep() error = %v", err)
 	}
@@ -42,7 +42,7 @@ func TestValidateAndRenderPlainText(t *testing.T) {
 func TestValidateSequenceTemplateAllowsAdminManagedLinks(t *testing.T) {
 	step := validTestStep()
 	step.BodyTextTemplate += "\n\nTuvi overview: {{website_url}}\nhttps://example.com"
-	if err := validateSequenceTemplate(step); err != nil {
+	if err := validateSequenceTemplate(step, true); err != nil {
 		t.Fatalf("validateSequenceTemplate() error = %v", err)
 	}
 }
@@ -52,7 +52,7 @@ func TestRenderPreservesDatabaseManagedUnsubscribeCopy(t *testing.T) {
 	const databaseCopy = "Unsubscribe: https://email-provider.example/preferences"
 	step.BodyTextTemplate += "\n\n" + databaseCopy
 
-	rendered, err := renderSequenceStep(step, "Harbour Cafe", "Ava")
+	rendered, err := renderSequenceStep(step, GreetingFacts{RestaurantName: "Harbour Cafe", OwnerFirstName: "Ava"})
 	if err != nil {
 		t.Fatalf("renderSequenceStep() error = %v", err)
 	}
@@ -63,13 +63,86 @@ func TestRenderPreservesDatabaseManagedUnsubscribeCopy(t *testing.T) {
 
 func TestRenderFallsBackToRestaurantGreeting(t *testing.T) {
 	rendered, err := renderSequenceStep(
-		validTestStep(), "Harbour Cafe", "",
+		validTestStep(), GreetingFacts{RestaurantName: "Harbour Cafe"},
 	)
 	if err != nil {
 		t.Fatalf("renderSequenceStep() error = %v", err)
 	}
 	if !strings.HasPrefix(rendered.BodyText, "Hi Harbour Cafe team,") {
 		t.Fatalf("body = %q, want restaurant fallback greeting", rendered.BodyText)
+	}
+}
+
+func TestValidateSequenceGreeting01Rules(t *testing.T) {
+	first := validTestStep()
+	first.BodyTextTemplate = "{{greeting01}}\n\nA non-repeating first paragraph."
+	followUp := SequenceStep{
+		Position: 2, Enabled: true, DelayHours: 72,
+		SubjectTemplate:  "Following up with {{restaurant_name}}",
+		BodyTextTemplate: "{{greeting}}\n\nA legacy-compatible follow-up.",
+	}
+	if err := validateSequenceSteps([]SequenceStep{first, followUp}); err != nil {
+		t.Fatalf("validateSequenceSteps() error = %v, want greeting01 first and legacy greeting later", err)
+	}
+
+	tests := []struct {
+		name  string
+		steps []SequenceStep
+	}{
+		{
+			name: "greeting01 in subject",
+			steps: []SequenceStep{{
+				Position: 1, Enabled: true, SubjectTemplate: "{{greeting01}}", BodyTextTemplate: "Plain text",
+			}},
+		},
+		{
+			name: "greeting01 in later email",
+			steps: []SequenceStep{validTestStep(), {
+				Position: 2, Enabled: true, DelayHours: 72,
+				SubjectTemplate: "Follow up", BodyTextTemplate: "{{greeting01}}\n\nLater",
+			}},
+		},
+		{
+			name: "greeting01 repeated",
+			steps: []SequenceStep{{
+				Position: 1, Enabled: true, SubjectTemplate: "Hello",
+				BodyTextTemplate: "{{greeting01}}\n{{greeting01}}",
+			}},
+		},
+		{
+			name: "greeting01 mixed with legacy greeting",
+			steps: []SequenceStep{{
+				Position: 1, Enabled: true, SubjectTemplate: "Hello",
+				BodyTextTemplate: "{{greeting01}}\n{{greeting}}",
+			}},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if err := validateSequenceSteps(test.steps); !errors.Is(err, ErrSequenceInvalid) {
+				t.Fatalf("validateSequenceSteps() error = %v, want ErrSequenceInvalid", err)
+			}
+		})
+	}
+}
+
+func TestValidateAndRenderRejectsUnresolvedOrNonPlainTextTags(t *testing.T) {
+	tests := []SequenceStep{
+		{Position: 1, Enabled: true, SubjectTemplate: "Hello", BodyTextTemplate: "{{unknown123}}"},
+		{Position: 1, Enabled: true, SubjectTemplate: "Hello", BodyTextTemplate: "{{greeting-01}}"},
+		{Position: 1, Enabled: true, SubjectTemplate: "{{ greeting01 }}", BodyTextTemplate: "Plain"},
+		{Position: 1, Enabled: true, SubjectTemplate: "Hello", BodyTextTemplate: "<strong>not plain</strong>"},
+	}
+	for _, step := range tests {
+		if err := validateSequenceSteps([]SequenceStep{step}); !errors.Is(err, ErrSequenceInvalid) {
+			t.Fatalf("validateSequenceSteps(%q) error = %v, want ErrSequenceInvalid", step.BodyTextTemplate, err)
+		}
+	}
+
+	step := validTestStep()
+	step.BodyTextTemplate += "\n\n{{unknown123}}"
+	if _, err := renderSequenceStep(step, GreetingFacts{RestaurantName: "Harbour Cafe"}); !errors.Is(err, ErrSequenceInvalid) {
+		t.Fatalf("renderSequenceStep() error = %v, want unresolved-tag rejection", err)
 	}
 }
 

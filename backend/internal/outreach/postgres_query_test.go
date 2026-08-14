@@ -30,3 +30,19 @@ func TestEligibleLeadQueryUsesStrictLifecycleAndFollowupPhaseGate(t *testing.T) 
 		}
 	}
 }
+
+func TestGreetingOwnerPrecedenceRemainsApolloFirstNameThenApolloNameThenOwners(t *testing.T) {
+	wantOrder := []string{
+		"apollo_lead #>> '{contact,first_name}'",
+		"apollo_lead #>> '{contact,name}'",
+		"profile.owners ->> 0",
+	}
+	last := -1
+	for _, fragment := range wantOrder {
+		position := strings.Index(ownerFirstNameSelectExpression, fragment)
+		if position <= last {
+			t.Fatalf("owner precedence expression %q does not preserve order %#v", ownerFirstNameSelectExpression, wantOrder)
+		}
+		last = position
+	}
+}

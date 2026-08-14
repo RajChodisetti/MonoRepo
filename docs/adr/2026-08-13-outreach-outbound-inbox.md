@@ -39,7 +39,7 @@ Sending mailboxes remain `gmail.send` only.
 
 ## Consequences
 
-- Migration `000047` is required; the source branch's `000039` was renumbered
+- Migration `000048` is required; the source branch's `000039` was renumbered
   during reconciliation because the deployed lineage already uses `000039`.
 - Production needs `outreach@` (or the configured plus-address mailbox),
   `OUTREACH_INBOUND_ENABLED=true`, and a readonly refresh token for that mailbox
