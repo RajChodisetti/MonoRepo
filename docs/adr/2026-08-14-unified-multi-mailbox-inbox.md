@@ -19,6 +19,9 @@ mail must remain visible; it must not break listing or pause unrelated outreach.
 - Preserve the optional `OUTREACH_INBOUND_MAILBOX_JSON` account introduced by
   the production hotfix. Poll it alongside all sender accounts and register it
   for explicit admin replies without adding it to the bulk quota rotation.
+  When it names the same mailbox as a sender under a different key, deduplicate
+  the poller under the sender's durable key while retaining the dedicated
+  read-scoped credential.
 - Retain `OUTREACH_INBOUND_ACCOUNT_KEY` only as the selector for the canonical
   plus-address Reply-To when no dedicated inbox object is configured. It no
   longer limits which configured inboxes are read.

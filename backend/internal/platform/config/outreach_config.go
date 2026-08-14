@@ -177,7 +177,11 @@ func loadOutreachInboundAccount(parser *envParser, cfg *OutreachConfig) {
 	cfg.InboundMailboxes = append([]GmailMailConfig(nil), cfg.GoogleWorkspaceAccounts...)
 	if raw := strings.TrimSpace(cfg.InboundMailboxJSON); raw != "" {
 		account, ok := parseOutreachInboundMailboxJSON(parser, raw)
-		if !ok || !addInboundPollingMailbox(parser, cfg, account) {
+		if !ok {
+			return
+		}
+		account, ok = addInboundPollingMailbox(parser, cfg, account)
+		if !ok {
 			return
 		}
 		assignInboundMailbox(parser, cfg, account)
@@ -243,23 +247,28 @@ func parseOutreachInboundMailboxJSON(parser *envParser, raw string) (GmailMailCo
 	return account, true
 }
 
-func addInboundPollingMailbox(parser *envParser, cfg *OutreachConfig, account GmailMailConfig) bool {
+func addInboundPollingMailbox(parser *envParser, cfg *OutreachConfig, account GmailMailConfig) (GmailMailConfig, bool) {
 	for index, existing := range cfg.InboundMailboxes {
 		if existing.AccountKey == account.AccountKey {
 			if existing.MailboxEmail != account.MailboxEmail {
 				parser.addError(fmt.Errorf("OUTREACH_INBOUND_MAILBOX_JSON key %q conflicts with a different configured mailbox", account.AccountKey))
-				return false
+				return GmailMailConfig{}, false
 			}
 			cfg.InboundMailboxes[index] = account
-			return true
+			return account, true
 		}
 		if existing.MailboxEmail == account.MailboxEmail {
-			parser.addError(fmt.Errorf("OUTREACH_INBOUND_MAILBOX_JSON mailbox %q uses a different configured account key", account.MailboxEmail))
-			return false
+			// The dedicated inbox can carry a read-scoped token for a mailbox that
+			// already sends outreach. Keep the sender's durable key so inbound and
+			// outbound messages remain in one thread, while using the dedicated
+			// credentials for inbox polling.
+			account.AccountKey = existing.AccountKey
+			cfg.InboundMailboxes[index] = account
+			return account, true
 		}
 	}
 	cfg.InboundMailboxes = append(cfg.InboundMailboxes, account)
-	return true
+	return account, true
 }
 
 func assignInboundMailbox(parser *envParser, cfg *OutreachConfig, selected GmailMailConfig) {

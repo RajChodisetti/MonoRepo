@@ -169,6 +169,39 @@ func TestLoadOutreachInboundRejectsDedicatedMailboxKeyConflict(t *testing.T) {
 	}
 }
 
+func TestLoadOutreachInboundReusesSenderKeyForSameDedicatedMailbox(t *testing.T) {
+	t.Setenv("OUTREACH_INBOUND_ENABLED", "true")
+	t.Setenv("OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON", `[{
+		"key":"sales",
+		"mailbox_email":"sales@tuvisolutions.com",
+		"client_id":"send-client-id",
+		"client_secret":"send-client-secret",
+		"refresh_token":"send-refresh-token"
+	}]`)
+	t.Setenv("OUTREACH_INBOUND_MAILBOX_JSON", `{
+		"key":"inbound",
+		"mailbox_email":"sales@tuvisolutions.com",
+		"client_id":"read-client-id",
+		"client_secret":"read-client-secret",
+		"refresh_token":"read-refresh-token"
+	}`)
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Outreach.InboundMailbox == nil || cfg.Outreach.InboundMailbox.AccountKey != "sales" {
+		t.Fatalf("InboundMailbox = %#v, want sender key", cfg.Outreach.InboundMailbox)
+	}
+	if len(cfg.Outreach.InboundMailboxes) != 1 {
+		t.Fatalf("InboundMailboxes len = %d, want same mailbox deduplicated", len(cfg.Outreach.InboundMailboxes))
+	}
+	mailbox := cfg.Outreach.InboundMailboxes[0]
+	if mailbox.AccountKey != "sales" || mailbox.RefreshToken != "read-refresh-token" {
+		t.Fatalf("InboundMailboxes[0] = %#v, want sender key with dedicated read credentials", mailbox)
+	}
+}
+
 func TestLoadOutreachInboundRequiresSendingAccountWhenEnabled(t *testing.T) {
 	t.Setenv("OUTREACH_INBOUND_ENABLED", "true")
 	t.Setenv("OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON", "")

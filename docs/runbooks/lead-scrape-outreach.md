@@ -95,7 +95,9 @@ Set `OUTREACH_INBOUND_ENABLED=true` and optionally
 dedicated object is present, it defines the canonical plus-address Reply-To and
 is polled alongside every entry in `OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON`.
 It is registered for manual same-mailbox replies but is not added to the bulk
-quota rotation.
+quota rotation. If it duplicates a sender mailbox under another key, the worker
+uses the sender's durable key and the dedicated read credential so messages are
+not fetched twice or split into separate conversations.
 
 Without a dedicated object, `OUTREACH_INBOUND_ACCOUNT_KEY` must select an entry already present in
 `OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON`; when omitted, the first entry defines
