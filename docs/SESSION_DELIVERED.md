@@ -3393,3 +3393,51 @@ isolated and visibly unhealthy until an administrator re-consents them with
 polls ran as requested, but no provider email was sent. The persisted email job
 remains disabled in QA and production, no scrape or unrelated service was
 restarted, and QA still has no separate worker/admin footprint.
+
+## 2026-08-14 — Admin-managed outreach Gmail accounts deployed
+
+**Role / Delivery:** Added an internal-admin **Outreach → Email accounts**
+registry for future Gmail mailboxes. Environment accounts remain protected and
+read-only; enabled database accounts are merged at runtime, with environment
+configuration winning any stable-key or normalized-mailbox collision. The API
+rejects duplicates, never returns OAuth values, and encrypts each complete
+client-ID/client-secret/refresh-token set with AES-256-GCM bound to the immutable
+account identity. Operators can add, enable, disable, and replace credentials
+without a process restart. Sending, same-mailbox replies, quota/health sync, and
+each unified-inbox poll reload the effective account set. Disabling preserves
+quota, sync, message, and audit history.
+
+Migration `000052_outreach_email_credentials` and protected, independent QA and
+production encryption keys are deployed. Commit `6f1a4da` runs from
+`/opt/tuvi/releases/monorepo-6f1a4da-mailbox-ui-20260814T165047Z` in the QA API
+and production API/worker/admin footprint. QA has no separate worker/admin and
+its public Caddy host intentionally exposes only the existing SEO allowlist, so
+the internal account route was verified directly on the isolated loopback API.
+
+**Checks Run:** The full backend suite passed 544 tests across 46 packages;
+backend vet and API/worker/migrator builds passed. Admin lint, nonincremental
+TypeScript checking, and its 14-route production build passed. OpenAPI validated
+with 11 pre-existing unrelated warnings; Compose rendering, migration discovery
+and fail-closed rollback checks, and `git diff --check` passed. The local Docker
+daemon did not return observable output for a disposable migration run, so the
+reviewed image was validated instead by applying migration 52 first to isolated
+PostgreSQL 16 QA and then production. Both report schema 52 and an empty
+credential table. Production and QA API route checks, production admin login,
+protected-key length checks inside the new containers, image IDs, and restart
+counts passed.
+
+**Business Value / Plan Fit:** Administrators can grow the sending/inbox pool
+from the UI without a code deployment or duplicate mailbox processing. Existing
+environment configuration remains a safe rollback source, while database
+credentials are encrypted and write-only.
+
+**Risks / Approval State:** Fresh verified custom-format QA/production database
+backups, mode-`0600` protected-config backups, and explicit rollback image tags
+were created before mutation. Production has three effective
+environment-managed accounts and zero database-managed accounts. The existing
+inbox poll attempted all three: one token succeeds and two still need Google
+`gmail.readonly` re-consent. No health check or outreach email was sent during
+deployment: new delivery attempts, outbound message snapshots, and health sends
+are all zero. The persisted email job remains disabled, no bulk job is active,
+and the scraper, data services, websites, voice services, and sequence activation
+state were not changed.
