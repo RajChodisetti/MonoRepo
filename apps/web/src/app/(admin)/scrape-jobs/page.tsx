@@ -15,6 +15,7 @@ export default function ScrapeJobsPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [resumingJobId, setResumingJobId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -56,6 +57,31 @@ export default function ScrapeJobsPage() {
       setError(err instanceof Error ? err.message : "Failed to trigger job");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function onResume(job: ScrapeJob) {
+    if (
+      !window.confirm(
+        `Resume the failed ${job.city} · ${job.niche} scrape job from its saved progress?`,
+      )
+    ) {
+      return;
+    }
+    setResumingJobId(job.id);
+    setError(null);
+    try {
+      const resumed = await adminFetch<ScrapeJob>(
+        `scrape-jobs/${job.id}/resume`,
+        { method: "POST" },
+      );
+      setJobs((current) =>
+        current.map((item) => (item.id === resumed.id ? resumed : item)),
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to resume job");
+    } finally {
+      setResumingJobId(null);
     }
   }
 
@@ -128,6 +154,7 @@ export default function ScrapeJobsPage() {
                 <th>Imported</th>
                 <th>Requests</th>
                 <th>Updated</th>
+                <th>Resume</th>
                 <th></th>
               </tr>
             </thead>
@@ -144,6 +171,20 @@ export default function ScrapeJobsPage() {
                     {job.requests_used_window}/{job.max_requests_per_window}
                   </td>
                   <td>{formatDate(job.updated_at)}</td>
+                  <td>
+                    {job.status === "failed" ? (
+                      <button
+                        className="btn btn-secondary"
+                        type="button"
+                        onClick={() => onResume(job)}
+                        disabled={resumingJobId !== null}
+                      >
+                        {resumingJobId === job.id ? "Resuming…" : "Resume"}
+                      </button>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
                   <td>
                     <Link href={`/scrape-jobs/${job.id}`}>Open</Link>
                   </td>

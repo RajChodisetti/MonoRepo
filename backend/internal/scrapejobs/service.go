@@ -77,11 +77,17 @@ func (service *Service) List(ctx context.Context, principal auth.Principal, limi
 	return service.repo.ListRecent(ctx, limit)
 }
 
-func (service *Service) RetryFailed(ctx context.Context, principal auth.Principal, id uuid.UUID) (Job, error) {
+func (service *Service) ResumeFailed(ctx context.Context, principal auth.Principal, id uuid.UUID) (Job, error) {
 	if !auth.IsInternalAdmin(principal.Role) {
 		return Job{}, ErrForbidden
 	}
 	return service.repo.RetryFailed(ctx, id)
+}
+
+// RetryFailed preserves the original service API while callers move to the
+// clearer resume terminology.
+func (service *Service) RetryFailed(ctx context.Context, principal auth.Principal, id uuid.UUID) (Job, error) {
+	return service.ResumeFailed(ctx, principal, id)
 }
 
 func normalizeCity(value string) string {

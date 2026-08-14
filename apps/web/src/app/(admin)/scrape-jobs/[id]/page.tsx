@@ -13,7 +13,7 @@ export default function ScrapeJobDetailPage() {
   const id = params.id;
   const [job, setJob] = useState<ScrapeJob | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [retrying, setRetrying] = useState(false);
+  const [resuming, setResuming] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -36,18 +36,25 @@ export default function ScrapeJobDetailPage() {
     return () => clearInterval(t);
   }, [job, load]);
 
-  async function retry() {
-    setRetrying(true);
+  async function resume() {
+    if (
+      !window.confirm(
+        "Resume this failed scrape job from its saved cells and candidates?",
+      )
+    ) {
+      return;
+    }
+    setResuming(true);
     setError(null);
     try {
-      const data = await adminFetch<ScrapeJob>(`scrape-jobs/${id}/retry`, {
+      const data = await adminFetch<ScrapeJob>(`scrape-jobs/${id}/resume`, {
         method: "POST",
       });
       setJob(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Retry failed");
+      setError(err instanceof Error ? err.message : "Resume failed");
     } finally {
-      setRetrying(false);
+      setResuming(false);
     }
   }
 
@@ -69,10 +76,10 @@ export default function ScrapeJobDetailPage() {
               <button
                 className="btn btn-primary"
                 type="button"
-                onClick={retry}
-                disabled={retrying}
+                onClick={resume}
+                disabled={resuming}
               >
-                {retrying ? "Retrying…" : "Retry failed job"}
+                {resuming ? "Resuming…" : "Resume job"}
               </button>
             ) : null}
           </>

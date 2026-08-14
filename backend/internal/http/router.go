@@ -248,6 +248,7 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	mux.Handle("POST /api/v1/scrape-jobs", protectInternalAdmin(http.HandlerFunc(scrapeJobHandler.Trigger)))
 	mux.Handle("GET /api/v1/scrape-jobs", protectInternalAdmin(http.HandlerFunc(scrapeJobHandler.List)))
 	mux.Handle("GET /api/v1/scrape-jobs/{id}", protectInternalAdmin(http.HandlerFunc(scrapeJobHandler.Get)))
+	mux.Handle("POST /api/v1/scrape-jobs/{id}/resume", protectInternalAdmin(http.HandlerFunc(scrapeJobHandler.Resume)))
 	mux.Handle("POST /api/v1/scrape-jobs/{id}/retry", protectInternalAdmin(http.HandlerFunc(scrapeJobHandler.Retry)))
 
 	mux.Handle("GET /api/v1/restaurants/{id}/images", protectRestaurantAdmin(http.HandlerFunc(restaurantImagesAdminHandler.List)))

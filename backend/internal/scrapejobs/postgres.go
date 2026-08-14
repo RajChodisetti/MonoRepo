@@ -132,14 +132,14 @@ func (repo *Postgres) ListRecent(ctx context.Context, limit int) ([]Job, error) 
 	return jobs, nil
 }
 
-func (repo *Postgres) RetryFailed(ctx context.Context, id uuid.UUID) (Job, error) {
+func (repo *Postgres) ResumeFailed(ctx context.Context, id uuid.UUID) (Job, error) {
 	if repo.pool == nil {
 		return Job{}, fmt.Errorf("database pool is not configured")
 	}
 
 	tx, err := repo.pool.Begin(ctx)
 	if err != nil {
-		return Job{}, fmt.Errorf("begin scrape job retry: %w", err)
+		return Job{}, fmt.Errorf("begin scrape job resume: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
@@ -149,7 +149,7 @@ func (repo *Postgres) RetryFailed(ctx context.Context, id uuid.UUID) (Job, error
 	if err := tx.QueryRow(ctx, `SELECT status, city_key, niche FROM scrape_jobs WHERE id = $1 FOR UPDATE`, id).Scan(&status, &cityKey, &niche); errors.Is(err, pgx.ErrNoRows) {
 		return Job{}, ErrNotFound
 	} else if err != nil {
-		return Job{}, fmt.Errorf("lock scrape job for retry: %w", err)
+		return Job{}, fmt.Errorf("lock scrape job for resume: %w", err)
 	}
 	if status != StatusFailed {
 		return Job{}, ErrNotFailed
@@ -161,7 +161,7 @@ func (repo *Postgres) RetryFailed(ctx context.Context, id uuid.UUID) (Job, error
 		  WHERE id <> $1 AND city_key = $2 AND niche = $3
 		    AND status IN ('queued', 'running', 'waiting')
 		)`, id, cityKey, niche).Scan(&activeExists); err != nil {
-		return Job{}, fmt.Errorf("check active scrape job before retry: %w", err)
+		return Job{}, fmt.Errorf("check active scrape job before resume: %w", err)
 	}
 	if activeExists {
 		return Job{}, ErrActiveJobExists
@@ -204,9 +204,15 @@ func (repo *Postgres) RetryFailed(ctx context.Context, id uuid.UUID) (Job, error
 		return Job{}, fmt.Errorf("queue failed scrape job: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return Job{}, fmt.Errorf("commit scrape job retry: %w", err)
+		return Job{}, fmt.Errorf("commit scrape job resume: %w", err)
 	}
 	return repo.GetByID(ctx, id)
+}
+
+// RetryFailed keeps compatibility for internal callers that still use the old
+// action name. Both paths preserve completed cells and imported candidates.
+func (repo *Postgres) RetryFailed(ctx context.Context, id uuid.UUID) (Job, error) {
+	return repo.ResumeFailed(ctx, id)
 }
 
 type rowScanner interface {

@@ -95,7 +95,16 @@ func (handler *ScrapeJobHandler) Get(w http.ResponseWriter, r *http.Request) {
 	handler.writeJSON(w, http.StatusOK, job)
 }
 
+func (handler *ScrapeJobHandler) Resume(w http.ResponseWriter, r *http.Request) {
+	handler.resumeFailed(w, r)
+}
+
+// Retry keeps the original endpoint backward compatible.
 func (handler *ScrapeJobHandler) Retry(w http.ResponseWriter, r *http.Request) {
+	handler.resumeFailed(w, r)
+}
+
+func (handler *ScrapeJobHandler) resumeFailed(w http.ResponseWriter, r *http.Request) {
 	principal, ok := auth.PrincipalFromContext(r.Context())
 	if !ok {
 		handler.writeError(w, http.StatusUnauthorized, "unauthorized", "Authentication is required.")
@@ -107,7 +116,7 @@ func (handler *ScrapeJobHandler) Retry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	job, err := handler.service.RetryFailed(r.Context(), principal, id)
+	job, err := handler.service.ResumeFailed(r.Context(), principal, id)
 	if err != nil {
 		handler.mapError(w, err)
 		return
@@ -150,7 +159,7 @@ func (handler *ScrapeJobHandler) mapError(w http.ResponseWriter, err error) {
 	case errors.Is(err, scrapejobs.ErrNotFound):
 		handler.writeError(w, http.StatusNotFound, "scrape_job_not_found", "Scrape job was not found.")
 	case errors.Is(err, scrapejobs.ErrNotFailed):
-		handler.writeError(w, http.StatusConflict, "scrape_job_not_failed", "Only a failed scrape job can be retried.")
+		handler.writeError(w, http.StatusConflict, "scrape_job_not_failed", "Only a failed scrape job can be resumed.")
 	case errors.Is(err, scrapejobs.ErrActiveJobExists):
 		handler.writeError(w, http.StatusConflict, "active_scrape_job_exists", "Another active scrape job already exists for this city and niche.")
 	default:

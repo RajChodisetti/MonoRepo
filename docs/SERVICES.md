@@ -46,7 +46,7 @@ provider configuration.
 ```text
 scrape-worker
   -> Google Places discovery
-  -> optional targeted Apollo work-email/owner enrichment
+  -> optional best-effort Apollo work-email/owner enrichment (failures continue Places import)
   -> PostgreSQL restaurant + inferred-business source evidence
   -> active approved sequence enrollment when name + valid email exist
 

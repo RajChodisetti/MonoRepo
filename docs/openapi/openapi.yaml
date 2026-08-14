@@ -20,8 +20,10 @@ info:
 
     ## Lead ingestion and outreach flow (admin)
     1. `POST /api/v1/scrape-jobs` — create or return the active durable city/niche scrape job.
-    2. The scrape worker uses Google Places first and Apollo only for missing contact details.
-       It pauses at 500 combined provider requests and resumes after its durable `resume_at`.
+    2. The scrape worker uses Google Places first and Apollo only as best-effort enrichment
+       for missing contact details. Missing credentials or Apollo provider failures never
+       discard or block verified Places leads. The worker pauses at 500 combined provider
+       requests and resumes after its durable `resume_at`.
     3. Any inferred-business restaurant with a name, valid email, recorded consent evidence,
        and lifecycle `lead` or `emailed` is enrolled unless interested.
     4. Inspect the protected profile and demo review-preview endpoints; neither discloses
@@ -1321,8 +1323,11 @@ paths:
 
         The scrape worker partitions the city into durable grid cells, subdivides saturated
         cells, deduplicates candidates by Google Place ID, and uses Google Places before
-        targeted Apollo enrichment for missing owner/work-email details. The combined provider
-        request window is capped at 500. A capped job becomes `waiting` with `resume_at` set
+        best-effort targeted Apollo enrichment for missing owner/work-email details. Missing
+        Apollo configuration switches the job to Places-only processing; Apollo provider
+        failures are recorded on that candidate while verified Places data continues to
+        import. The combined provider request window is capped at 500. A capped job becomes
+        `waiting` with `resume_at` set
         24 hours later, then resumes from persisted cell/page/candidate state. A completed
         coverage pass is revisited in later cycles so newly added Place IDs can be discovered.
         A leaf that remains provider-capped at the configured maximum grid depth stays
@@ -1415,23 +1420,24 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /api/v1/scrape-jobs/{id}/retry:
+  /api/v1/scrape-jobs/{id}/resume:
     parameters:
       - $ref: '#/components/parameters/scrapeJobId'
     post:
       tags: [Scrape Jobs]
-      summary: Retry a failed city scrape job from its durable progress
-      operationId: retryCityScrapeJob
+      summary: Resume a failed city scrape job from its durable progress
+      operationId: resumeCityScrapeJob
       security:
         - bearerAuth: []
       description: |
         Requires role `internal_admin`. Requeues only a `failed` job, resets failed
         cells/candidates for another attempt, and preserves imported candidates and
-        durable city progress. A request window older than 24 hours is reset; a newer
-        window keeps its consumed request count.
+        all completed durable city progress. A candidate stopped during optional Apollo
+        enrichment remains at its saved Places-details checkpoint. A request window older
+        than 24 hours is reset; a newer window keeps its consumed request count.
       responses:
         '202':
-          description: Failed job requeued
+          description: Failed job resumed from durable progress
           content:
             application/json:
               schema:
@@ -1445,7 +1451,42 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: Scrape job is not failed
+          description: Scrape job is not failed, or another active city/niche job exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/scrape-jobs/{id}/retry:
+    parameters:
+      - $ref: '#/components/parameters/scrapeJobId'
+    post:
+      deprecated: true
+      tags: [Scrape Jobs]
+      summary: Legacy alias for resuming a failed city scrape job
+      operationId: retryCityScrapeJob
+      security:
+        - bearerAuth: []
+      description: |
+        Backward-compatible alias for `POST /api/v1/scrape-jobs/{id}/resume`.
+        New admin clients should use the resume endpoint.
+      responses:
+        '202':
+          description: Failed job resumed from durable progress
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScrapeJob'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Scrape job is not failed, or another active city/niche job exists
           content:
             application/json:
               schema:

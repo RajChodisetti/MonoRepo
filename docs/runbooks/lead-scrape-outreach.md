@@ -7,7 +7,10 @@ lead-eligibility or outreach dependency.
 ## Runtime topology
 
 - `scrape-worker` claims durable city jobs and uses Google Places first.
-- Apollo may add missing owner and work-email details.
+- Apollo may add missing owner and work-email details, but missing credentials,
+  no-match, and provider failures do not mark the job failed or stop verified
+  Places data from importing. The shared request ceiling still pauses all
+  provider work when exhausted.
 - `import_to_db.py` upserts the restaurant/profile and records the lead as
   `inferred_business` with source evidence.
 - `ensure_outreach_sequence_enrollment(uuid)` enrolls any restaurant with a
@@ -75,6 +78,20 @@ cloned from the active sequence. Review and explicitly approve that draft in a
 separate administrator action; applying the migration alone does not change the
 active version or enable sending. Its down migration refuses to remove a draft
 that has been edited or activated.
+
+## Resume a failed scrape job
+
+The Scrape jobs admin screen shows a deliberate **Resume** action only for a
+failed job. Confirming it calls `POST /api/v1/scrape-jobs/{id}/resume` and
+requeues the same job. It preserves completed/subdivided cells, imported and
+duplicate candidates, Places detail checkpoints, total request accounting, and
+the current request window when it is less than 24 hours old. Only interrupted
+or explicitly failed work is made pending again. If another active job exists
+for the same city and niche, resume fails closed with HTTP 409.
+
+Do not use Resume as a provider smoke test. It is an explicit production
+mutation and can cause the worker to make real Places/Apollo calls once it
+claims the queued job.
 
 ## Operational checks
 

@@ -56,6 +56,14 @@ candidates, a combined 500-call window, and a 24-hour `resume_at`; completed
 coverage cycles revisit the city for newly added Place IDs. See
 `docs/runbooks/lead-scrape-outreach.md` from the repository root.
 
+Apollo is optional enrichment in this durable path. When it is disabled,
+misconfigured, unavailable, or rejects a request, the worker records/skips the
+enrichment and continues importing verified Google Places data. The shared
+request ceiling still pauses all provider work because no further Places calls
+are allowed after that ceiling. Failed jobs can be deliberately resumed through
+`POST /api/v1/scrape-jobs/{id}/resume`; completed cells and imported candidates
+remain intact.
+
 ## Retired one-shot ingestion
 
 `daily_ingestion.py`, `cron_lead_ingestion.sh`, and `make ingest-daily` are
@@ -73,7 +81,7 @@ Trigger all production city work through `POST /api/v1/scrape-jobs`.
 | `INGESTION_ENV_FILE` | unset | Protected host-side env file loaded after local defaults |
 | `DATABASE_URL` | required | PostgreSQL source of truth and fail-closed dedup store |
 | `PLACES_API` / `GOOGLE_PLACES_API_KEY` | required | Places API (New) credential |
-| `APOLLO_API_KEY` | required by default | Targeted owner/work-email enrichment credential |
+| `APOLLO_API_KEY` | optional | Targeted owner/work-email enrichment credential; a missing key falls back to Places-only import |
 | `APOLLO_ENRICHMENT_ENABLED` | `true` | Run Apollo after Places for missing contact fields |
 
 Run summaries: `state/ingestion_state.json` (gitignored)

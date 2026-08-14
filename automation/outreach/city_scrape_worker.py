@@ -47,6 +47,21 @@ class CoverageIncomplete(RuntimeError):
     """A provider result cap prevented proof of complete cell coverage."""
 
 
+def _apollo_available(cfg: Config, job_id: str) -> bool:
+    """Return whether optional Apollo enrichment is usable for this job."""
+    if not bool(getattr(cfg, "APOLLO_ENRICHMENT_ENABLED", True)):
+        return False
+    try:
+        get_apollo_api_key(cfg)
+    except ValueError:
+        log.warning(
+            "apollo_enrichment_unavailable job_id=%s; continuing with Google Places only",
+            job_id,
+        )
+        return False
+    return True
+
+
 def _env_int(name: str, default: int, minimum: int = 1) -> int:
     raw = os.getenv(name, str(default)).strip()
     try:
@@ -145,14 +160,12 @@ class CityScrapeWorker:
         try:
             niche = get_niche(str(job["niche"]))
             get_places_api_key(self.cfg)
-            apollo_enabled = bool(getattr(self.cfg, "APOLLO_ENRICHMENT_ENABLED", True))
-            if apollo_enabled:
-                get_apollo_api_key(self.cfg)
             bounds = get_city_search_bounds(city)
         except ValueError as exc:
             raise PermanentScrapeJobError(
                 f"scrape job preflight configuration failed: {exc}"
             ) from exc
+        apollo_enabled = _apollo_available(self.cfg, job_id)
         self.store.ensure_initial_grid(
             job_id,
             int(job["cycle_number"]),
@@ -364,12 +377,36 @@ class CityScrapeWorker:
 
         if status == "details_ready":
             if apollo_enabled and needs_apollo_enrichment(record):
-                record, apollo_stats = enrich_missing_contact_with_apollo(
-                    record,
-                    self.cfg,
-                    niche,
-                    budget=budget,
-                )
+                apollo_error_logged = False
+                try:
+                    record, apollo_stats = enrich_missing_contact_with_apollo(
+                        record,
+                        self.cfg,
+                        niche,
+                        budget=budget,
+                    )
+                except BudgetExhausted:
+                    self.store.save_candidate(candidate_id, "details_ready", record)
+                    raise
+                except Exception:
+                    # Apollo is optional. Preserve the verified Places record
+                    # even if its adapter fails outside the expected safe
+                    # ApolloAPIError result path.
+                    log.warning(
+                        "apollo_enrichment_failed_unexpectedly job_id=%s candidate_id=%s; "
+                        "importing Google Places data without Apollo",
+                        job_id,
+                        candidate_id,
+                    )
+                    apollo_error_logged = True
+                    apollo_stats = {
+                        "status": "error",
+                        "error": "Apollo enrichment failed unexpectedly",
+                        "search_requests": 0,
+                        "match_requests": 0,
+                        "owner_added": False,
+                        "email_added": False,
+                    }
                 record["apollo_enrichment"] = apollo_stats
                 apollo_status = str(apollo_stats.get("status") or "")
                 if apollo_status == "budget_exhausted":
@@ -377,27 +414,23 @@ class CityScrapeWorker:
                     raise BudgetExhausted("request window exhausted during Apollo enrichment")
                 if apollo_status == "error":
                     error_code = apollo_stats.get("error_code")
-                    if isinstance(error_code, int) and 400 <= error_code < 500 and error_code != 429:
-                        if error_code == 404:
-                            # Apollo is optional enrichment after Places. A
-                            # person-match miss must not discard an otherwise
-                            # usable Places lead.
-                            apollo_stats["status"] = "no_match"
-                            apollo_stats.pop("error", None)
-                            record["apollo_enrichment"] = apollo_stats
-                            log.info(
-                                "Apollo returned no owner/contact match for %s; importing the Places lead",
-                                record.get("name") or record.get("google_place_id") or candidate_id,
-                            )
-                        else:
-                            raise PermanentScrapeJobError(
-                                "Apollo permanently rejected contact enrichment "
-                                f"with HTTP {error_code}"
-                            )
-                    else:
-                        raise RuntimeError(
-                            "Apollo contact enrichment failed: "
-                            f"{apollo_stats.get('error') or 'provider error'}"
+                    if error_code == 404:
+                        apollo_stats["status"] = "no_match"
+                        apollo_stats.pop("error", None)
+                        record["apollo_enrichment"] = apollo_stats
+                        log.info(
+                            "Apollo returned no owner/contact match for %s; importing the Places lead",
+                            record.get("name")
+                            or record.get("google_place_id")
+                            or candidate_id,
+                        )
+                    elif not apollo_error_logged:
+                        log.warning(
+                            "apollo_enrichment_failed_optional job_id=%s candidate_id=%s "
+                            "status_code=%s; importing Google Places data without Apollo",
+                            job_id,
+                            candidate_id,
+                            error_code if isinstance(error_code, int) else "unknown",
                         )
             self.store.save_candidate(candidate_id, "enriched", record)
             status = "enriched"

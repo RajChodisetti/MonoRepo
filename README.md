@@ -276,6 +276,7 @@ curl http://localhost:8080/readyz \
 | `POST /api/v1/scrape-jobs` | Bearer + `internal_admin` | Create/return a durable Places-first city scrape job |
 | `GET /api/v1/scrape-jobs` | Bearer + `internal_admin` | List recent durable city scrape jobs |
 | `GET /api/v1/scrape-jobs/{id}` | Bearer + `internal_admin` | Monitor request window, resume time, grid, and candidate progress |
+| `POST /api/v1/scrape-jobs/{id}/resume` | Bearer + `internal_admin` | Resume a failed job from its durable cell/candidate checkpoints |
 | `PATCH /api/v1/outreach/email-job` | Bearer + `internal_admin` | Explicitly enable/disable the persisted email job |
 | `POST /api/v1/outreach/bulk-send` | Bearer + `internal_admin` | Queue the enabled, quota-managed sequence workflow |
 | `GET /api/v1/outreach/bulk-send/status` | Bearer + `internal_admin` | Follow-up/new counts, pacing, and active/last job status |

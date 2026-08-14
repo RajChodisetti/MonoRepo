@@ -3206,3 +3206,44 @@ pinning, the persisted email-job control, and provider routing are unchanged.
 Draft approval, sender enablement, any real test/lead email, production
 migration, push, and deployment remain explicit administrator actions. Nothing
 was pushed, deployed, migrated, activated, enabled, or sent.
+
+## 2026-08-14 — Best-Effort Apollo and Durable Scraper Resume
+
+**Role:** Scrape Automation, Backend API, Admin Frontend, Documentation, and Test Agent
+
+**Delivered:** The durable city worker no longer treats Apollo availability or
+provider errors as a job-level dependency. A missing Apollo key switches the
+claimed job to Places-only processing. Expected Apollo HTTP/network failures
+and unexpected adapter exceptions are recorded with safe enrichment metadata,
+then the verified Google Places record continues through import. Apollo 404
+remains a no-match. Exhausting the shared 500-request window still checkpoints
+the candidate and pauses because the same cap also governs subsequent Places
+calls.
+
+Added canonical internal-admin `POST /api/v1/scrape-jobs/{id}/resume` behavior
+and retained `/retry` as a deprecated-compatible alias. Resume requeues only a
+failed job, refuses a conflicting active city/niche job, preserves completed and
+subdivided cells plus imported/duplicate and in-progress candidates, and resets
+only interrupted/failed work. The admin job list now has a Resume column, and
+both list/detail actions require confirmation and expose pending/error states
+through the existing same-origin BFF session boundary.
+
+**Checks Run:** The Python 3.12 ingestion environment passed all 34 outreach
+automation tests, including missing-key, Apollo provider-error, unexpected
+adapter-error, and request-cap checkpoint cases; no provider call was made.
+Targeted Go scrape-job/handler tests passed 44 tests. `rtk make test`, `rtk go
+vet ./backend/...`, and `rtk go build ./backend/cmd/...` passed. Admin lint,
+explicit non-incremental TypeScript checking, and the 14-route production build
+passed. `rtk make openapi` validated the API document with 11 pre-existing
+unrelated warnings.
+
+**Business Value / Plan Fit:** Google Places discovery and import can continue
+when optional contact enrichment is unavailable, while an operator can recover
+a failed durable job without discarding completed city coverage or reimporting
+finished candidates.
+
+**Risks / Approval State:** Resume is a deliberate production mutation that can
+cause real provider requests after a worker claims the job. No job was resumed,
+no real provider was called, and no production state, migration, deployment,
+sender control, email, or branch remote was changed. Production use remains an
+explicit administrator action.
