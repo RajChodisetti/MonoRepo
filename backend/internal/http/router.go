@@ -18,6 +18,7 @@ import (
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/leadreview"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/media"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/outreach"
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/outreachaccounts"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/config"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/db"
 	emailprovider "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/email"
@@ -79,25 +80,10 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	demoEngagementHandler := handlers.NewDemoEngagementHandler(demoEngagementService, writeJSON, writeError)
 	campaignHandler := handlers.NewCampaignHandler(campaignService, writeJSON, writeError)
 	outreachRepo := outreach.NewPostgres(dataStore.Pool())
-	emailHealthService, emailHealthErr := emailprovider.NewHealthServiceFromConfig(
-		context.Background(),
-		cfg.Email,
-		cfg.Outreach,
-		outreachRepo,
-	)
-	if emailHealthErr != nil {
-		log.WarnContext(context.Background(), "email_health_unavailable", "error", emailHealthErr)
-		emailHealthService = nil
-	}
-	outreachAccountPool, outreachPoolErr := emailprovider.NewPersistentAccountPoolFromConfig(
-		context.Background(),
-		cfg.Email,
-		cfg.Outreach,
-		outreachRepo,
-	)
-	if outreachPoolErr != nil {
-		log.WarnContext(context.Background(), "outreach_account_pool_unavailable", "error", outreachPoolErr)
-	}
+	accountStore := outreachaccounts.NewPostgres(dataStore.Pool())
+	accountService := outreachaccounts.NewService(accountStore, cfg.Outreach, cfg.Outreach.CredentialEncryptionKey, log)
+	emailHealthService := emailprovider.NewReloadingHealthService(cfg.Email, accountService, outreachRepo)
+	outreachAccountPool := emailprovider.NewReloadingPersistentAccountPool(cfg.Email, accountService, outreachRepo)
 	outreachService := outreach.NewService(
 		outreachRepo,
 		dataStore.Pool(),
@@ -115,6 +101,7 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	)
 	outreachBulkHandler := handlers.NewOutreachBulkHandler(outreachService, writeJSON, writeError)
 	emailHealthHandler := handlers.NewEmailHealthHandler(emailHealthService, cfg.Outreach, writeJSON, writeError)
+	emailAccountsHandler := handlers.NewOutreachEmailAccountsHandler(accountService, writeJSON, writeError)
 	scrapeJobRepo := scrapejobs.NewPostgres(dataStore.Pool())
 	scrapeJobService := scrapejobs.NewService(scrapeJobRepo)
 	scrapeJobHandler := handlers.NewScrapeJobHandler(scrapeJobService, writeJSON, writeError)
@@ -240,6 +227,9 @@ func NewRouter(log *slog.Logger, readiness ReadinessChecker, dataStore *store.St
 	mux.Handle("POST /api/v1/outreach/sequences/{id}/preview", protectInternalAdmin(http.HandlerFunc(outreachBulkHandler.PreviewSequence)))
 	mux.Handle("GET /api/v1/outreach/recipients", protectInternalAdmin(http.HandlerFunc(outreachBulkHandler.ListRecipients)))
 	mux.Handle("POST /api/v1/outreach/test-send", protectInternalAdmin(http.HandlerFunc(outreachBulkHandler.SendTemplateTest)))
+	mux.Handle("GET /api/v1/outreach/email-accounts", protectInternalAdmin(http.HandlerFunc(emailAccountsHandler.List)))
+	mux.Handle("POST /api/v1/outreach/email-accounts", protectInternalAdmin(http.HandlerFunc(emailAccountsHandler.Create)))
+	mux.Handle("PATCH /api/v1/outreach/email-accounts/{id}", protectInternalAdmin(http.HandlerFunc(emailAccountsHandler.Update)))
 	mux.Handle("GET /api/v1/outreach/email-accounts/health", protectInternalAdmin(http.HandlerFunc(emailHealthHandler.Status)))
 	mux.Handle("GET /api/v1/outreach/inbox", protectInternalAdmin(http.HandlerFunc(outreachBulkHandler.ListInbox)))
 	mux.Handle("POST /api/v1/outreach/messages/{id}/read", protectInternalAdmin(http.HandlerFunc(outreachBulkHandler.MarkMessageRead)))

@@ -2032,6 +2032,104 @@ paths:
         '503':
           description: Email sending is disabled or outreach accounts are not configured
 
+  /api/v1/outreach/email-accounts:
+    get:
+      tags: [Email Campaigns]
+      summary: List environment and database outreach email accounts
+      operationId: listOutreachEmailAccounts
+      security:
+        - bearerAuth: []
+      description: |
+        Requires role `internal_admin`. Returns mailbox identity and effective status only;
+        OAuth credentials are never returned. Environment configuration wins when an
+        account key or normalized mailbox also exists in the database.
+      responses:
+        '200':
+          description: Deduplicated outreach email account registry
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutreachEmailAccountList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Email Campaigns]
+      summary: Add an encrypted database-managed Gmail outreach account
+      operationId: createOutreachEmailAccount
+      security:
+        - bearerAuth: []
+      description: |
+        Requires role `internal_admin`. The complete Gmail OAuth credential set is encrypted
+        before storage. The account participates in outreach sending and unified inbox polling
+        without a process restart. Duplicate keys or normalized mailboxes are rejected.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOutreachEmailAccountRequest'
+      responses:
+        '201':
+          description: Database-managed email account created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutreachEmailAccount'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          description: Secure credential storage is not configured
+
+  /api/v1/outreach/email-accounts/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      tags: [Email Campaigns]
+      summary: Enable, disable, or replace credentials for a database email account
+      operationId: updateOutreachEmailAccount
+      security:
+        - bearerAuth: []
+      description: |
+        Requires role `internal_admin`. Account key and mailbox identity are immutable.
+        Disabling retains history but immediately excludes the account from new sending and polls.
+        Credential replacement requires the complete new OAuth credential set.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateOutreachEmailAccountRequest'
+      responses:
+        '200':
+          description: Updated database-managed account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutreachEmailAccount'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          description: Secure credential storage is not configured
+
   /api/v1/outreach/email-accounts/health:
     get:
       tags: [Email Campaigns]
@@ -5139,6 +5237,113 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/EmailAccountHealth'
+
+    OutreachEmailAccountList:
+      type: object
+      required: [accounts, encryption_ready]
+      properties:
+        accounts:
+          type: array
+          items:
+            $ref: '#/components/schemas/OutreachEmailAccount'
+        encryption_ready:
+          type: boolean
+          description: Whether new database credentials can be encrypted and saved.
+
+    OutreachEmailAccount:
+      type: object
+      required:
+        - account_key
+        - mailbox_email
+        - from_email
+        - source
+        - enabled
+        - effective
+        - editable
+        - credentials_stored
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Present only for database-managed accounts.
+        account_key:
+          type: string
+          pattern: '^[a-z0-9][a-z0-9_-]{1,63}$'
+        mailbox_email:
+          type: string
+          format: email
+        from_email:
+          type: string
+          format: email
+        source:
+          type: string
+          enum: [environment, database]
+        enabled:
+          type: boolean
+        effective:
+          type: boolean
+          description: Whether the account is currently included in the runtime account set.
+        editable:
+          type: boolean
+        credentials_stored:
+          type: boolean
+        database_fallback:
+          type: boolean
+          description: An environment account currently wins over the same database mailbox.
+        shadowed_by_environment:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    GmailOAuthCredentialsInput:
+      type: object
+      required: [client_id, client_secret, refresh_token]
+      properties:
+        client_id:
+          type: string
+          writeOnly: true
+        client_secret:
+          type: string
+          writeOnly: true
+        refresh_token:
+          type: string
+          writeOnly: true
+
+    CreateOutreachEmailAccountRequest:
+      type: object
+      required: [account_key, mailbox_email, credentials]
+      properties:
+        account_key:
+          type: string
+          pattern: '^[a-z0-9][a-z0-9_-]{1,63}$'
+        mailbox_email:
+          type: string
+          format: email
+        from_email:
+          type: string
+          format: email
+          description: Defaults to mailbox_email.
+        credentials:
+          $ref: '#/components/schemas/GmailOAuthCredentialsInput'
+        enabled:
+          type: boolean
+          default: true
+
+    UpdateOutreachEmailAccountRequest:
+      type: object
+      minProperties: 1
+      properties:
+        from_email:
+          type: string
+          format: email
+        credentials:
+          $ref: '#/components/schemas/GmailOAuthCredentialsInput'
+        enabled:
+          type: boolean
 
     EmailAccountHealth:
       type: object

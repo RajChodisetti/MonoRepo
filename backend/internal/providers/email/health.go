@@ -37,6 +37,11 @@ type HealthStore interface {
 	ListEmailHealth(ctx context.Context) ([]HealthStatus, error)
 }
 
+type HealthMonitor interface {
+	RunDue(context.Context) error
+	List(context.Context) ([]HealthStatus, error)
+}
+
 type healthAccount struct {
 	key      string
 	from     string
@@ -161,3 +166,5 @@ func sanitizeHealthError(err error) string {
 	}
 	return message
 }
+
+var _ HealthMonitor = (*HealthService)(nil)

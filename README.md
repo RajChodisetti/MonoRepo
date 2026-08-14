@@ -150,6 +150,8 @@ Current migrations:
 - `000047_deterministic_restaurant_greeting` — inactive greeting01 sequence draft
 - `000048_email_messages` — accepted outbound snapshots and inbound reply capture
 - `000049_outreach_email_ramp` — durable 5-to-40 per-mailbox warm-up cycles
+- `000050` through `000051` — reconciled outreach enrollment and unified multi-mailbox inbox
+- `000052_outreach_email_credentials` — encrypted admin-managed Gmail account registry
 
 **Rollback notes:**
 
@@ -285,6 +287,8 @@ curl http://localhost:8080/readyz \
 | `GET/POST /api/v1/outreach/sequences...` | Bearer + `internal_admin` | List, draft, edit, preview, and approve sequence versions |
 | `GET /api/v1/outreach/recipients` | Bearer + `internal_admin` | Inspect integer sequence progress and next-due state |
 | `GET /api/v1/outreach/inbox` | Bearer + `internal_admin` | List restaurant and unmatched reply threads |
+| `GET/POST /api/v1/outreach/email-accounts` | Bearer + `internal_admin` | List effective accounts or add encrypted DB-managed Gmail credentials |
+| `PATCH /api/v1/outreach/email-accounts/{id}` | Bearer + `internal_admin` | Enable, disable, or replace a DB-managed account's credentials |
 | `POST /api/v1/outreach/messages/{id}/read` | Bearer + `internal_admin` | Mark one captured message read |
 | `POST /api/v1/outreach/messages/{id}/reply` | Bearer + `internal_admin` | Send and snapshot a custom same-mailbox reply |
 | `GET /api/public/v1/demo/{slug}?token=...` | Public | Public demo payload only (no internal fields) |

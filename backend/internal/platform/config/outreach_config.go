@@ -41,6 +41,7 @@ func loadOutreachConfig(parser *envParser) OutreachConfig {
 		EmailHealthInterval:         parser.duration("OUTREACH_EMAIL_HEALTH_INTERVAL", 24*time.Hour),
 		ZohoAccountsJSON:            parser.string("OUTREACH_ZOHO_ACCOUNTS_JSON", ""),
 		GoogleWorkspaceAccountsJSON: parser.string("OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON", ""),
+		CredentialEncryptionKey:     parser.string("OUTREACH_CREDENTIAL_ENCRYPTION_KEY", ""),
 		InboundEnabled:              parser.bool("OUTREACH_INBOUND_ENABLED", false),
 		InboundAccountKey:           strings.TrimSpace(parser.string("OUTREACH_INBOUND_ACCOUNT_KEY", "")),
 		InboundMailboxJSON:          parser.string("OUTREACH_INBOUND_MAILBOX_JSON", ""),

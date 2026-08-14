@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net"
@@ -128,6 +129,7 @@ type OutreachConfig struct {
 	ZohoAccountsJSON            string
 	GoogleWorkspaceAccounts     []GmailMailConfig
 	GoogleWorkspaceAccountsJSON string
+	CredentialEncryptionKey     string
 	InboundEnabled              bool
 	InboundDomain               string
 	InboundLocalPart            string
@@ -406,6 +408,12 @@ func (c Config) Validate() error {
 	if c.Outreach.EmailHealthEnabled && len(c.Outreach.GoogleWorkspaceAccounts) > 0 {
 		if _, err := canonicalOutreachMailbox(c.Outreach.EmailHealthRecipient); err != nil {
 			errs = append(errs, fmt.Errorf("OUTREACH_EMAIL_HEALTH_RECIPIENT must be a single valid email address"))
+		}
+	}
+	if encodedKey := strings.TrimSpace(c.Outreach.CredentialEncryptionKey); encodedKey != "" {
+		key, err := base64.StdEncoding.DecodeString(encodedKey)
+		if err != nil || len(key) != 32 {
+			errs = append(errs, fmt.Errorf("OUTREACH_CREDENTIAL_ENCRYPTION_KEY must be standard base64 encoding of exactly 32 bytes"))
 		}
 	}
 	if c.App.Env == EnvProduction && strings.TrimSpace(c.Email.RedirectTo) != "" {

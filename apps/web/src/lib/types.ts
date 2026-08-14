@@ -464,6 +464,27 @@ export type EmailMessage = {
   created_at: string;
 };
 
+export type OutreachEmailAccount = {
+  id?: string;
+  account_key: string;
+  mailbox_email: string;
+  from_email: string;
+  source: "environment" | "database";
+  enabled: boolean;
+  effective: boolean;
+  editable: boolean;
+  credentials_stored: boolean;
+  database_fallback?: boolean;
+  shadowed_by_environment?: boolean;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type OutreachEmailAccountListResponse = {
+  accounts: OutreachEmailAccount[];
+  encryption_ready: boolean;
+};
+
 export type InboxThread = {
   restaurant_id?: string;
   restaurant_name?: string;

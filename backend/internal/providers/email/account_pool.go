@@ -12,6 +12,22 @@ import (
 
 var ErrAccountsExhausted = errors.New("all outreach email accounts are unavailable")
 
+// AccountPoolProvider is the runtime contract used by outreach. Implementations
+// may reload their configured accounts between operations.
+type AccountPoolProvider interface {
+	Provider
+	Configured(context.Context) (bool, error)
+	Durable() bool
+	NextAvailableAt(context.Context) (*time.Time, error)
+	Exhausted() bool
+	SendDirect(context.Context, SendRequest) (SendResult, error)
+	SendDirectFrom(context.Context, string, SendRequest) (SendResult, error)
+}
+
+func (pool *AccountPool) Configured(context.Context) (bool, error) {
+	return pool != nil && len(pool.accounts) > 0, nil
+}
+
 type accountProvider struct {
 	key      string
 	provider Provider
@@ -371,3 +387,4 @@ func durableFinalizeContext(ctx context.Context) (context.Context, context.Cance
 }
 
 var _ Provider = (*AccountPool)(nil)
+var _ AccountPoolProvider = (*AccountPool)(nil)

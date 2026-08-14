@@ -28,7 +28,7 @@ type Service struct {
 	campaignService *campaigns.Service
 	restaurants     *restaurants.Service
 	tokenResolver   DemoTokenResolver
-	emailPool       *emailprovider.AccountPool
+	emailPool       emailprovider.AccountPoolProvider
 	emailProvider   emailprovider.Provider
 	emailCfg        config.EmailConfig
 	outreachCfg     config.OutreachConfig
@@ -44,7 +44,7 @@ func NewService(
 	campaignService *campaigns.Service,
 	restaurantsService *restaurants.Service,
 	tokenResolver DemoTokenResolver,
-	emailPool *emailprovider.AccountPool,
+	emailPool emailprovider.AccountPoolProvider,
 	emailProvider emailprovider.Provider,
 	emailCfg config.EmailConfig,
 	outreachCfg config.OutreachConfig,
@@ -114,8 +114,15 @@ func (service *Service) SendTemplateTest(ctx context.Context, principal auth.Pri
 		return TemplateTestSendResult{}, fmt.Errorf("%w: active outreach sequence has no enabled steps", ErrSequenceInvalid)
 	}
 	var provider emailprovider.Provider
-	if service.emailPool != nil && !service.emailPool.Durable() {
-		provider = service.emailPool
+	if service.emailPool != nil {
+		configured, configuredErr := service.emailPool.Configured(ctx)
+		if configuredErr != nil {
+			return TemplateTestSendResult{}, configuredErr
+		}
+		if !configured {
+			return TemplateTestSendResult{}, ErrNotConfigured
+		}
+		provider = directPoolProvider{pool: service.emailPool}
 	} else {
 		builtProvider, providerErr := emailprovider.NewAccountPoolFromConfig(service.emailCfg, service.outreachCfg)
 		if providerErr != nil {
@@ -130,6 +137,14 @@ func (service *Service) SendTemplateTest(ctx context.Context, principal auth.Pri
 		return TemplateTestSendResult{}, err
 	}
 	return service.sendTemplateTestEmails(ctx, provider, recipient, restaurantID, facts, steps)
+}
+
+type directPoolProvider struct {
+	pool emailprovider.AccountPoolProvider
+}
+
+func (provider directPoolProvider) Send(ctx context.Context, request emailprovider.SendRequest) (emailprovider.SendResult, error) {
+	return provider.pool.SendDirect(ctx, request)
 }
 
 func (service *Service) sendTemplateTestEmails(
@@ -204,6 +219,13 @@ func (service *Service) SetEmailJob(ctx context.Context, principal auth.Principa
 		}, err
 	}
 	if service.emailPool == nil {
+		return EmailJobActionResult{}, ErrNotConfigured
+	}
+	configured, err := service.emailPool.Configured(ctx)
+	if err != nil {
+		return EmailJobActionResult{}, err
+	}
+	if !configured {
 		return EmailJobActionResult{}, ErrNotConfigured
 	}
 	if err := validateBulkMax(service.outreachCfg.BulkMax); err != nil {
@@ -341,7 +363,14 @@ func (service *Service) GetStatus(ctx context.Context, principal auth.Principal)
 		return StatusResult{}, err
 	}
 	result.EmailJob = control
-	if service.emailPool != nil && service.emailPool.Durable() {
+	configured := false
+	if service.emailPool != nil {
+		configured, err = service.emailPool.Configured(ctx)
+		if err != nil {
+			return StatusResult{}, err
+		}
+	}
+	if configured && service.emailPool.Durable() {
 		nextAvailableAt, err := service.emailPool.NextAvailableAt(ctx)
 		if err != nil {
 			return StatusResult{}, err
@@ -395,6 +424,13 @@ func (service *Service) RunBulkSend(ctx context.Context, triggeredBy uuid.UUID, 
 		return summary, nil
 	}
 	if service.emailPool == nil {
+		return summary, ErrNotConfigured
+	}
+	configured, err := service.emailPool.Configured(ctx)
+	if err != nil {
+		return summary, err
+	}
+	if !configured {
 		return summary, ErrNotConfigured
 	}
 	if err := validateBulkMax(service.outreachCfg.BulkMax); err != nil {

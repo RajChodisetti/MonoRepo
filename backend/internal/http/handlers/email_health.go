@@ -9,14 +9,14 @@ import (
 )
 
 type EmailHealthHandler struct {
-	service    *emailprovider.HealthService
+	service    emailprovider.HealthMonitor
 	cfg        config.OutreachConfig
 	writeJSON  func(http.ResponseWriter, int, any)
 	writeError func(http.ResponseWriter, int, string, string)
 }
 
 func NewEmailHealthHandler(
-	service *emailprovider.HealthService,
+	service emailprovider.HealthMonitor,
 	cfg config.OutreachConfig,
 	writeJSON func(http.ResponseWriter, int, any),
 	writeError func(http.ResponseWriter, int, string, string),

@@ -283,6 +283,16 @@ func TestLoadRejectsEnabledStorageWithoutCredentials(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsInvalidOutreachCredentialEncryptionKey(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("OUTREACH_CREDENTIAL_ENCRYPTION_KEY", "not-a-32-byte-key")
+
+	_, err := Load()
+	if err == nil || !strings.Contains(err.Error(), "OUTREACH_CREDENTIAL_ENCRYPTION_KEY must be standard base64 encoding of exactly 32 bytes") {
+		t.Fatalf("Load() error = %v, want credential encryption key validation", err)
+	}
+}
+
 func TestValidateRejectsInvalidDatabasePoolSettings(t *testing.T) {
 	cfg, err := Load()
 	if err != nil {
@@ -336,6 +346,7 @@ func clearEnv(t *testing.T) {
 		"OUTREACH_INBOUND_ENABLED",
 		"OUTREACH_INBOUND_ACCOUNT_KEY",
 		"OUTREACH_INBOUND_MAILBOX_JSON",
+		"OUTREACH_CREDENTIAL_ENCRYPTION_KEY",
 		"OUTREACH_INBOUND_POLL_SECONDS",
 		"LLM_PROVIDER",
 		"LLM_API_KEY",

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { OutreachInbox } from "@/components/OutreachInbox";
+import { OutreachEmailAccounts } from "@/components/OutreachEmailAccounts";
 import { OutreachRecipients } from "@/components/OutreachRecipients";
 import { OutreachSequenceEditor } from "@/components/OutreachSequenceEditor";
 import { RestaurantSearch } from "@/components/RestaurantSearch";
@@ -18,7 +19,7 @@ import type {
   Restaurant,
 } from "@/lib/types";
 
-type View = "sequence" | "recipients" | "operations" | "inbox";
+type View = "sequence" | "recipients" | "operations" | "accounts" | "inbox";
 
 export default function OutreachPage() {
   const [view, setView] = useState<View>("sequence");
@@ -172,6 +173,7 @@ export default function OutreachPage() {
     { id: "sequence", label: "Email sequence" },
     { id: "recipients", label: "Recipient progress" },
     { id: "operations", label: "Sending & health" },
+    { id: "accounts", label: "Email accounts" },
     { id: "inbox", label: "Inbox" },
   ];
 
@@ -241,6 +243,12 @@ export default function OutreachPage() {
       {view === "inbox" ? (
         <div role="tabpanel" id="outreach-panel-inbox" aria-labelledby="outreach-tab-inbox">
           <OutreachInbox />
+        </div>
+      ) : null}
+
+      {view === "accounts" ? (
+        <div role="tabpanel" id="outreach-panel-accounts" aria-labelledby="outreach-tab-accounts">
+          <OutreachEmailAccounts />
         </div>
       ) : null}
 
@@ -407,7 +415,7 @@ export default function OutreachPage() {
           <div className="card" style={{ marginBottom: "1rem" }}>
             <h2 style={{ marginTop: 0, fontSize: "1.05rem" }}>Gmail sender health</h2>
             <p style={{ color: "var(--muted)", marginTop: 0 }}>
-              Mailboxes remain quota-managed and paced. Credentials stay in protected server configuration.
+              Mailboxes remain quota-managed and paced. Credentials come from protected environment configuration or encrypted database storage.
             </p>
             {!emailHealth || emailHealth.accounts.length === 0 ? (
               <EmptyState message="No Gmail outreach accounts are configured." />

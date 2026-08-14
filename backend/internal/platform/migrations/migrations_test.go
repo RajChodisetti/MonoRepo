@@ -307,6 +307,19 @@ func TestRepositoryMigrationsIncludeLatestOutreachChanges(t *testing.T) {
 				"DROP COLUMN IF EXISTS received_at",
 			},
 		},
+		52: {
+			name: "outreach_email_credentials",
+			upFragments: []string{
+				"CREATE TABLE outreach_email_credentials",
+				"credential_ciphertext bytea NOT NULL",
+				"mailbox_email text NOT NULL UNIQUE",
+				"encryption_version = 1",
+			},
+			downFragments: []string{
+				"refusing to remove migration 52 while encrypted outreach email credentials exist",
+				"DROP TABLE outreach_email_credentials",
+			},
+		},
 	}
 
 	for _, migration := range migrations {

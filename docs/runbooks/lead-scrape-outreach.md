@@ -88,6 +88,30 @@ Migration `000050_reconcile_outreach_enrollment` replaces the stale
 suppression-gated enrollment function, backfills missing eligible enrollments,
 and leaves the email job disabled. Applying it never activates sending.
 
+Migration `000052_outreach_email_credentials` adds encrypted, database-managed
+Gmail accounts. Configure `OUTREACH_CREDENTIAL_ENCRYPTION_KEY` as standard
+base64 encoding of exactly 32 random bytes before using the admin form. The down
+migration refuses to remove the table while any encrypted credentials remain.
+
+## Add or manage Gmail accounts from the admin UI
+
+Use **Outreach → Email accounts** to add another Google Workspace mailbox.
+Supply a stable lowercase account key, mailbox/from address, OAuth client ID,
+client secret, and a mailbox refresh token authorized for `gmail.send` and
+`gmail.readonly`. The API encrypts the complete credential set before database
+storage and never returns it. Database accounts can be enabled, disabled, or
+have their complete credential set replaced; account key and mailbox identity
+remain immutable for audit and conversation continuity.
+
+The effective runtime list is the union of
+`OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON`, an optional dedicated inbound mailbox,
+and enabled database accounts. Environment configuration wins any duplicate
+account key or normalized mailbox. Sending, health registration, and each inbox
+poll reload this effective list, so a UI change does not require a restart.
+Disabling an account preserves its messages, quota history, and sync history but
+excludes it from new sends and polls. Adding an account does not enable the bulk
+email job.
+
 ## Unified inbox across configured sending mailboxes
 
 Set `OUTREACH_INBOUND_ENABLED=true` and optionally
@@ -100,10 +124,10 @@ uses the sender's durable key and the dedicated read credential so messages are
 not fetched twice or split into separate conversations.
 
 Without a dedicated object, `OUTREACH_INBOUND_ACCOUNT_KEY` must select an entry already present in
-`OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON`; when omitted, the first entry defines
-the canonical plus-address Reply-To. Every configured Google Workspace account
-is polled independently and every refresh token needs both `gmail.send` and
-`gmail.readonly`.
+`OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON`; when omitted, the first effective
+environment-or-database sending entry defines the canonical plus-address
+Reply-To. Every effective Google Workspace account is polled independently and
+every refresh token needs both `gmail.send` and `gmail.readonly`.
 
 The initial and fallback sync uses `in:inbox newer_than:10d`; the API also
 filters on Gmail's provider-received timestamp, so only the last 10 days are

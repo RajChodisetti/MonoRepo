@@ -5,12 +5,14 @@ import (
 	"errors"
 	"log/slog"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/campaigns"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/jobs"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/outreach"
+	"github.com/rajchodisetti/restaurant-platform/backend/internal/outreachaccounts"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/config"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/db"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/logger"
@@ -20,14 +22,15 @@ import (
 )
 
 type WorkerApp struct {
-	cfg         config.Config
-	log         *slog.Logger
-	db          *db.DB
-	store       *store.Store
-	queue       *jobs.PostgresQueue
-	worker      *jobs.Worker
-	emailHealth *emailprovider.HealthService
-	inbound     []*outreach.InboundService
+	cfg           config.Config
+	log           *slog.Logger
+	db            *db.DB
+	store         *store.Store
+	queue         *jobs.PostgresQueue
+	worker        *jobs.Worker
+	emailHealth   emailprovider.HealthMonitor
+	accountLoader emailprovider.OutreachConfigLoader
+	outreachRepo  *outreach.Postgres
 }
 
 func NewWorker(ctx context.Context) (*WorkerApp, error) {
@@ -62,19 +65,10 @@ func NewWorker(ctx context.Context) (*WorkerApp, error) {
 		return nil, err
 	}
 	outreachRepo := outreach.NewPostgres(dataStore.Pool())
-	emailHealth, err := emailprovider.NewHealthServiceFromConfig(ctx, cfg.Email, cfg.Outreach, outreachRepo)
-	if err != nil {
-		return nil, err
-	}
-	outreachAccountPool, outreachPoolErr := emailprovider.NewPersistentAccountPoolFromConfig(
-		ctx,
-		cfg.Email,
-		cfg.Outreach,
-		outreachRepo,
-	)
-	if outreachPoolErr != nil {
-		log.WarnContext(ctx, "outreach_account_pool_unavailable", "error", outreachPoolErr)
-	}
+	accountStore := outreachaccounts.NewPostgres(dataStore.Pool())
+	accountLoader := outreachaccounts.NewService(accountStore, cfg.Outreach, cfg.Outreach.CredentialEncryptionKey, log)
+	emailHealth := emailprovider.NewReloadingHealthService(cfg.Email, accountLoader, outreachRepo)
+	outreachAccountPool := emailprovider.NewReloadingPersistentAccountPool(cfg.Email, accountLoader, outreachRepo)
 	outreachService := outreach.NewService(
 		outreachRepo,
 		dataStore.Pool(),
@@ -96,34 +90,16 @@ func NewWorker(ctx context.Context) (*WorkerApp, error) {
 		return nil, err
 	}
 
-	inbound := make([]*outreach.InboundService, 0, len(cfg.Outreach.InboundMailboxes))
-	if cfg.Outreach.InboundEnabled {
-		for _, mailbox := range cfg.Outreach.InboundMailboxes {
-			reader, inboxErr := emailprovider.NewGmailInbox(cfg.Email, mailbox)
-			if inboxErr != nil {
-				log.WarnContext(ctx, "outreach_inbound_mailbox_unavailable", "mailbox_key", mailbox.AccountKey, "error", inboxErr)
-				continue
-			}
-			inbound = append(inbound, outreach.NewInboundService(
-				outreachRepo,
-				dataStore.Campaigns,
-				reader,
-				mailbox.AccountKey,
-				cfg.Outreach,
-				log.With("mailbox_key", mailbox.AccountKey),
-			))
-		}
-	}
-
 	return &WorkerApp{
-		cfg:         cfg,
-		log:         log,
-		db:          database,
-		store:       dataStore,
-		queue:       queue,
-		worker:      worker,
-		emailHealth: emailHealth,
-		inbound:     inbound,
+		cfg:           cfg,
+		log:           log,
+		db:            database,
+		store:         dataStore,
+		queue:         queue,
+		worker:        worker,
+		emailHealth:   emailHealth,
+		accountLoader: accountLoader,
+		outreachRepo:  outreachRepo,
 	}, nil
 }
 
@@ -133,8 +109,8 @@ func (w *WorkerApp) Run(ctx context.Context) error {
 
 	w.queue.StartPoller(ctx)
 	go w.runEmailHealthChecks(ctx)
-	for _, inbox := range w.inbound {
-		go w.runInboundPoll(ctx, inbox)
+	if w.cfg.Outreach.InboundEnabled {
+		go w.runInboundPoll(ctx)
 	}
 
 	sample, err := jobs.NewSampleJob("worker booted")
@@ -179,8 +155,8 @@ func (w *WorkerApp) runEmailHealthChecks(ctx context.Context) {
 	}
 }
 
-func (w *WorkerApp) runInboundPoll(ctx context.Context, inbound *outreach.InboundService) {
-	if inbound == nil {
+func (w *WorkerApp) runInboundPoll(ctx context.Context) {
+	if w.accountLoader == nil || w.outreachRepo == nil {
 		return
 	}
 	interval := w.cfg.Outreach.InboundPollInterval
@@ -188,11 +164,7 @@ func (w *WorkerApp) runInboundPoll(ctx context.Context, inbound *outreach.Inboun
 		interval = time.Minute
 	}
 	run := func() {
-		checkCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-		defer cancel()
-		if err := inbound.Poll(checkCtx); err != nil {
-			w.log.ErrorContext(ctx, "outreach_inbound_poll_failed", "error", err)
-		}
+		w.pollInboundMailboxes(ctx)
 	}
 	run()
 	ticker := time.NewTicker(interval)
@@ -205,4 +177,43 @@ func (w *WorkerApp) runInboundPoll(ctx context.Context, inbound *outreach.Inboun
 			run()
 		}
 	}
+}
+
+func (w *WorkerApp) pollInboundMailboxes(ctx context.Context) {
+	effective, err := w.accountLoader.Load(ctx)
+	if err != nil {
+		w.log.ErrorContext(ctx, "outreach_inbound_accounts_unavailable", "error", err)
+		return
+	}
+	if !effective.InboundEnabled {
+		return
+	}
+
+	var wait sync.WaitGroup
+	for _, mailbox := range effective.InboundMailboxes {
+		mailbox := mailbox
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			reader, inboxErr := emailprovider.NewGmailInbox(w.cfg.Email, mailbox)
+			if inboxErr != nil {
+				w.log.WarnContext(ctx, "outreach_inbound_mailbox_unavailable", "mailbox_key", mailbox.AccountKey, "error", inboxErr)
+				return
+			}
+			inbound := outreach.NewInboundService(
+				w.outreachRepo,
+				w.store.Campaigns,
+				reader,
+				mailbox.AccountKey,
+				effective,
+				w.log.With("mailbox_key", mailbox.AccountKey),
+			)
+			checkCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+			defer cancel()
+			if pollErr := inbound.Poll(checkCtx); pollErr != nil {
+				w.log.ErrorContext(ctx, "outreach_inbound_poll_failed", "mailbox_key", mailbox.AccountKey, "error", pollErr)
+			}
+		}()
+	}
+	wait.Wait()
 }
