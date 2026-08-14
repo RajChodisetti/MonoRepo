@@ -193,45 +193,12 @@ const eligibleLeadsBaseQuery = `
 	  AND restaurant.outreach_consent_recorded_at IS NOT NULL
 	  AND length(trim(restaurant.outreach_consent_source)) > 0
 	  AND jsonb_typeof(restaurant.outreach_consent_evidence) = 'object'
-	  AND restaurant.outreach_consent_evidence <> '{}'::jsonb
-	  AND (
-	    campaign.current_step > 0
-	    OR NOT EXISTS (
-	      SELECT 1
-	      FROM email_campaigns existing_campaign
-	      JOIN restaurants existing_restaurant
-	        ON existing_restaurant.id = existing_campaign.restaurant_id
-	      JOIN outreach_email_sequences existing_sequence
-	        ON existing_sequence.id = existing_campaign.sequence_id
-	      JOIN outreach_email_sequence_steps existing_step
-	        ON existing_step.sequence_id = existing_campaign.sequence_id
-	       AND existing_step.position = existing_campaign.next_step
-	      WHERE existing_campaign.campaign_type = 'outreach'
-	        AND existing_campaign.sequence_id IS NOT NULL
-	        AND existing_campaign.status = 'approved'
-	        AND existing_campaign.current_step > 0
-	        AND existing_campaign.next_step IS NOT NULL
-	        AND existing_campaign.next_send_at IS NOT NULL
-	        AND existing_campaign.next_send_at <= now()
-	        AND existing_sequence.status IN ('approved', 'archived')
-	        AND existing_sequence.approved_at IS NOT NULL
-	        AND existing_step.enabled = true
-	        AND length(trim(existing_restaurant.name)) > 0
-	        AND lower(trim(existing_restaurant.email)) ~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$'
-	        AND (
-	          SELECT count(*)
-	          FROM restaurants shared_restaurant
-	          WHERE lower(trim(shared_restaurant.email)) = lower(trim(existing_restaurant.email))
-	        ) <= 3
-	        AND existing_restaurant.status IN ('lead', 'emailed')
-	        AND existing_restaurant.shown_interest = false
-	        AND existing_restaurant.outreach_consent_basis = 'inferred_business'
-	        AND existing_restaurant.outreach_consent_recorded_at IS NOT NULL
-	        AND length(trim(existing_restaurant.outreach_consent_source)) > 0
-	        AND jsonb_typeof(existing_restaurant.outreach_consent_evidence) = 'object'
-	        AND existing_restaurant.outreach_consent_evidence <> '{}'::jsonb
-	    )
-	  )`
+	  AND restaurant.outreach_consent_evidence <> '{}'::jsonb`
+
+const eligibleLeadsOrderBy = `
+		ORDER BY (campaign.current_step > 0) DESC,
+		         campaign.next_send_at ASC,
+		         restaurant.created_at ASC`
 
 func (repo *Postgres) ListEligibleLeads(ctx context.Context, limit int) ([]EligibleLead, error) {
 	if repo.pool == nil {
@@ -242,10 +209,7 @@ func (repo *Postgres) ListEligibleLeads(ctx context.Context, limit int) ([]Eligi
 	}
 
 	query := `
-		SELECT campaign.id, restaurant.id, COALESCE(campaign.demo_site_id, '00000000-0000-0000-0000-000000000000'::uuid), campaign.next_step` + eligibleLeadsBaseQuery + `
-		ORDER BY (campaign.current_step > 0) DESC,
-		         campaign.next_send_at ASC,
-		         restaurant.created_at ASC
+		SELECT campaign.id, restaurant.id, COALESCE(campaign.demo_site_id, '00000000-0000-0000-0000-000000000000'::uuid), campaign.next_step` + eligibleLeadsBaseQuery + eligibleLeadsOrderBy + `
 		LIMIT $1`
 
 	rows, err := repo.pool.Query(ctx, query, limit)
@@ -524,11 +488,7 @@ func (repo *Postgres) CountEligibleLeads(ctx context.Context) (int, error) {
 	return count, nil
 }
 
-func (repo *Postgres) CountRecipientStatuses(ctx context.Context) (RecipientStatusCounts, error) {
-	if repo.pool == nil {
-		return RecipientStatusCounts{}, fmt.Errorf("database pool is not configured")
-	}
-	const query = `
+const recipientStatusCountsQuery = `
 		WITH recipient_state AS MATERIALIZED (
 		  SELECT campaign.current_step,
 		         campaign.next_step,
@@ -575,18 +535,12 @@ func (repo *Postgres) CountRecipientStatuses(ctx context.Context) (RecipientStat
 		           AND next_step IS NOT NULL
 		           AND next_send_at IS NOT NULL AS policy_eligible
 		  FROM recipient_state
-		), phase AS (
-		  SELECT EXISTS (
-		    SELECT 1 FROM policy_state
-		    WHERE policy_eligible AND current_step > 0 AND next_send_at <= now()
-		  ) AS due_followups
 		)
 		SELECT count(*) FILTER (
 		         WHERE policy_eligible AND current_step > 0 AND next_send_at <= now()
 		       ),
 		       count(*) FILTER (
 		         WHERE policy_eligible AND current_step = 0 AND next_send_at <= now()
-		           AND NOT (SELECT due_followups FROM phase)
 		       ),
 		       count(*) FILTER (
 		         WHERE completed_at IS NULL AND NOT policy_eligible
@@ -595,8 +549,13 @@ func (repo *Postgres) CountRecipientStatuses(ctx context.Context) (RecipientStat
 		         WHERE completed_at IS NOT NULL
 		       )
 		FROM policy_state`
+
+func (repo *Postgres) CountRecipientStatuses(ctx context.Context) (RecipientStatusCounts, error) {
+	if repo.pool == nil {
+		return RecipientStatusCounts{}, fmt.Errorf("database pool is not configured")
+	}
 	var counts RecipientStatusCounts
-	if err := repo.pool.QueryRow(ctx, query).Scan(
+	if err := repo.pool.QueryRow(ctx, recipientStatusCountsQuery).Scan(
 		&counts.DueFollowups, &counts.NewRecipients, &counts.Paused, &counts.Completed,
 	); err != nil {
 		return RecipientStatusCounts{}, fmt.Errorf("count outreach recipient states: %w", err)

@@ -32,7 +32,7 @@ function holdLabel(recipient: OutreachRecipient) {
   if (recipient.completed_at) return "Sequence complete";
   if (recipient.hold_reason) return recipient.hold_reason;
   if (recipient.eligible) {
-    return recipient.current_step > 0 ? "Due follow-up has priority" : "Eligible after due follow-ups";
+    return recipient.current_step > 0 ? "Due follow-up · priority" : "Eligible new recipient";
   }
   return "Paused by outreach policy";
 }
@@ -94,8 +94,8 @@ export function OutreachRecipients() {
         </h2>
         <p style={{ color: "var(--muted)", margin: "0.3rem 0 0", lineHeight: 1.5 }}>
           Confirmed sends advance the integer step. Failed or unknown provider outcomes do not.
-          Due follow-ups are selected before new restaurants. Future follow-ups do not idle the
-          queue, and addresses shared by more than three restaurant records are blocked.
+          Due follow-ups rank before new restaurants but never block their eligibility. Addresses
+          shared by more than three restaurant records are blocked without affecting other emails.
         </p>
       </div>
 

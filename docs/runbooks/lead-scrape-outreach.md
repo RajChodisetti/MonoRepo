@@ -54,9 +54,8 @@ need explicit admin approval before public use.
   unsubscribe merge tag.
 - Delay is measured from the previous confirmed delivery; seed delays are 0,
   3, and 3 days.
-- Due follow-ups are claimed before new recipients.
-- A future-due follow-up does not block new recipients while the worker has
-  current capacity.
+- Due follow-ups are ordered before new recipients, but neither due nor future
+  follow-ups remove new recipients from the eligible set.
 - A normalized email used by more than three restaurant records is excluded at
   selection and rechecked immediately before delivery. The Restaurants admin
   page lists every shared-email group and its restaurant records.

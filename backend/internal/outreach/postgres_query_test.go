@@ -5,20 +5,20 @@ import (
 	"testing"
 )
 
-func TestEligibleLeadQueryUsesStrictLifecycleDueFollowupGateAndSharedEmailLimit(t *testing.T) {
+func TestEligibleLeadQueryUsesStrictLifecyclePriorityOrderingAndSharedEmailLimit(t *testing.T) {
 	if strings.Contains(eligibleLeadsBaseQuery, "demo_ready") {
 		t.Fatal("eligible query still accepts demo_ready")
 	}
-	if strings.Count(eligibleLeadsBaseQuery, "status IN ('lead', 'emailed')") < 2 {
-		t.Fatal("eligible query does not enforce lead/emailed for both selected and blocking recipients")
+	if strings.Count(eligibleLeadsBaseQuery, "status IN ('lead', 'emailed')") != 1 {
+		t.Fatal("eligible query must evaluate lifecycle only for the selected recipient")
 	}
-	gateAt := strings.Index(eligibleLeadsBaseQuery, "existing_campaign.current_step > 0")
-	if gateAt < 0 {
-		t.Fatal("eligible query has no unfinished-followup phase gate")
+	for _, forbidden := range []string{"existing_campaign", "NOT EXISTS"} {
+		if strings.Contains(eligibleLeadsBaseQuery, forbidden) {
+			t.Fatalf("eligible query still lets another campaign block this recipient through %q", forbidden)
+		}
 	}
-	gate := eligibleLeadsBaseQuery[gateAt:]
-	if !strings.Contains(gate, "existing_campaign.next_send_at <= now()") {
-		t.Fatal("only due follow-ups may block new-recipient delivery")
+	if !strings.Contains(eligibleLeadsOrderBy, "ORDER BY (campaign.current_step > 0) DESC") {
+		t.Fatal("due follow-ups must retain ordering priority")
 	}
 	for _, required := range []string{
 		"outreach_consent_basis = 'inferred_business'",
@@ -29,8 +29,19 @@ func TestEligibleLeadQueryUsesStrictLifecycleDueFollowupGateAndSharedEmailLimit(
 			t.Fatalf("eligible query missing policy guard %q", required)
 		}
 	}
-	if strings.Count(eligibleLeadsBaseQuery, ") <= 3") < 2 {
-		t.Fatal("eligible query must reject shared emails for selected and blocking recipients")
+	if strings.Count(eligibleLeadsBaseQuery, ") <= 3") != 1 {
+		t.Fatal("eligible query must apply the shared-email limit only to the selected recipient")
+	}
+}
+
+func TestRecipientStatusCountsDoNotHideNewRecipientsBehindFollowups(t *testing.T) {
+	for _, forbidden := range []string{"due_followups", "NOT (SELECT"} {
+		if strings.Contains(recipientStatusCountsQuery, forbidden) {
+			t.Fatalf("recipient counts still hide new recipients behind follow-ups through %q", forbidden)
+		}
+	}
+	if !strings.Contains(recipientStatusCountsQuery, "current_step = 0 AND next_send_at <= now()") {
+		t.Fatal("recipient counts must include every due, policy-eligible new recipient")
 	}
 }
 

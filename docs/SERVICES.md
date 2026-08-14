@@ -73,9 +73,10 @@ approval.
 
 Automated outreach excludes normalized email addresses used by more than three
 restaurant records, with the same check repeated at delivery preparation. Due
-follow-ups retain priority, but future-due follow-ups no longer idle new-recipient
-work. Migration `000050` reconciles missing sequence enrollments while keeping
-the email job disabled for explicit administrator review.
+follow-ups retain ordering priority but never determine whether a new recipient
+is eligible; both categories remain in the same candidate set. Migration
+`000050` reconciles missing sequence enrollments while keeping the email job
+disabled for explicit administrator review.
 
 `{{greeting01}}` does not read listing media, menus, descriptions, or review
 text. It uses only a successful Google profile's safe city/cuisine and a

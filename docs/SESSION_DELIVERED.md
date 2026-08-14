@@ -3280,3 +3280,32 @@ disabled and cancels only queued outreach work so the repaired population can be
 reviewed before any administrator re-enables delivery. No migration was applied
 to production, no provider was called, no message was sent, and nothing was
 deployed, pushed, activated, or enabled.
+
+## 2026-08-14 — Follow-up priority without recipient blocking
+
+**Role / Delivery:** Corrected the sequence selector so each due restaurant is
+evaluated independently. Due follow-ups remain first in the query ordering, but
+neither due nor future follow-ups remove new restaurants from eligibility. The
+normalized-email count remains correlated to the candidate being evaluated, so
+an address used by more than three restaurant records blocks only that address.
+Recipient status counts and admin explanations now expose due follow-ups and due
+new recipients at the same time.
+
+**Checks Run:** Outreach tests passed 74 tests and the complete backend suite
+passed 529 tests across 45 packages; backend vet and command builds passed.
+Admin lint, non-incremental TypeScript checking, and the 14-route production
+build passed. OpenAPI remains valid with 11 pre-existing unrelated warnings, and
+`git diff --check` passed. Two initial verification invocations used the wrong
+working directory/`npm exec` argument shape; both were rerun successfully with
+the correct commands.
+
+**Business Value / Plan Fit:** Enabling the email job can work through every due,
+policy-eligible restaurant with a valid email instead of idling new prospects
+behind an unrelated follow-up. Follow-ups retain business priority without
+acting as a global gate.
+
+**Risks / Approval State:** Existing per-restaurant protections remain: invalid
+email, completed or paused lifecycle, expressed interest/reply, withdrawn or
+missing consent evidence, disabled sequence steps, and the shared-email cap.
+No email job was enabled, no provider was called, no message was sent, and
+nothing was deployed, pushed, or migrated.

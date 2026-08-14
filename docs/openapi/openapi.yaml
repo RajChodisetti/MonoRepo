@@ -1886,9 +1886,9 @@ paths:
         HTML alternative only for line breaks and the Tuvi logo signature. Rendering
         permits exactly `https://tuvisolutions.com`.
         The first enabled step is immediate; each later enabled step uses its configured
-        delay (the approved default sequence uses 72 hours). Due follow-ups are selected
-        before new recipients; future-due follow-ups do not idle the queue. Addresses used
-        by more than three restaurant records are excluded and rechecked before delivery.
+        delay (the approved default sequence uses 72 hours). Due follow-ups rank before
+        new recipients but never remove new recipients from eligibility. Addresses used by
+        more than three restaurant records are excluded and rechecked before delivery.
 
         Confirmed provider acceptance alone advances `current_step`, records the send time,
         and schedules the next enabled step. Skipped or failed/ambiguous outcomes never
