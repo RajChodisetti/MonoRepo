@@ -3309,3 +3309,46 @@ email, completed or paused lifecycle, expressed interest/reply, withdrawn or
 missing consent evidence, disabled sequence steps, and the shared-email cap.
 No email job was enabled, no provider was called, no message was sent, and
 nothing was deployed, pushed, or migrated.
+
+## 2026-08-14 — Reconciled QA and production deployment
+
+**Role / Delivery:** Reconciled every fetched remote branch tip into
+`codex/reconcile-outbound-inboxes-ramp-20260813`. The only outstanding tip was
+a superseded merge-only branch whose tree contained no unique file changes.
+Published the reconciled branch and deployed release `d68aaaf` to production
+and to the services present in QA. Production now runs the API, durable worker,
+scrape worker, admin portal, and corporate website from the release; QA runs its
+isolated API and corporate website from the same release. Both databases are at
+schema 50. A failed-closed migration 47 check exposed that production already
+had non-repetitive sequence copy; the migration was corrected to accept that
+safe copy while preserving its inactive-draft and down-migration safeguards,
+then the complete verification suite was rerun before deployment continued.
+
+**Checks Run:** The complete backend suite passed 529 tests across 45 packages,
+with backend vet and command builds passing. Admin lint, TypeScript checking,
+and its 14-route production build passed; the public website lint, TypeScript
+check, and 61-page production build passed. OpenAPI validation passed with 11
+pre-existing warnings, Compose rendered successfully, migration checks passed,
+and `git diff --check` passed. QA and production route smokes returned expected
+success/authentication statuses; all deployed containers were healthy with zero
+restarts, and scanned API/worker/scraper/admin/site logs contained no matching
+panic, fatal, traceback, error, or migration-failure entries.
+
+**Business Value / Plan Fit:** The production sequence system, gradual 5-to-40
+outbound ramp, deterministic greetings, Apollo-optional/resumable scraping,
+editable subjects, shared-email visibility, unified inbox replies, and fair
+follow-up prioritization now ship together from one traceable branch. Production
+contains 958 restaurant records with valid emails, 955 policy-eligible records,
+and no eligible record missing an enrollment; addresses shared by more than
+three restaurant records remain held independently.
+
+**Risks / Approval State:** Verified PostgreSQL dumps, protected-environment
+archives, deployment records, prior release pointers, and rollback image tags
+were created before mutation. Outreach sending remains disabled in QA and
+production, all three sender accounts remain at ramp day one, no outreach or
+provider email was sent, no scrape job was resumed, and the new greeting
+sequence remains an inactive draft. QA has no separately configured admin,
+durable worker, or scrape worker, so only its existing API/site footprint was
+deployed. The requested WhatsApp notification is pending because both available
+WhatsApp Web sessions require the user to sign in; the Chrome login page was
+left open for handoff.

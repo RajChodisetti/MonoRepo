@@ -18,6 +18,20 @@ protected configuration under `/opt/tuvi/env`, and
 Image OCR is retired. Do not restore an OCR container, cron entry, provider key,
 or one-shot job.
 
+## Environments
+
+- Production website: `https://tuvisolutions.com`
+- Production admin/API: `https://api.tuvisolutions.com/admin`
+- Production demo: `https://demo.tuvisolutions.com`
+- QA website: `https://qa-tuvi.170.64.154.143.sslip.io`
+- QA API: `https://qa-api.170.64.154.143.sslip.io`
+
+The current QA footprint contains isolated PostgreSQL, Redis, API, and corporate
+website services. It does not currently include separate QA admin, durable
+worker, or scrape-worker services. Deploy and verify only the services that are
+already configured there; adding a new QA service is an infrastructure change
+that requires a separate review.
+
 ## Protected configuration
 
 Keep these files mode `0600` and never print their values:

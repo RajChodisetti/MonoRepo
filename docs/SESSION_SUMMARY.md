@@ -1,6 +1,6 @@
 # Session Summary
 
-Local branch `codex/reconcile-outbound-inboxes-ramp-20260813` now evaluates every due outreach recipient independently: follow-ups sort first but never block new-recipient eligibility, while addresses shared by more than three restaurant records remain held at selection and delivery boundaries.
-The admin UI exposes editable subject/title fields, shared-email client groups, restaurant-specific deterministic greeting previews, and manual inbox replies sent through the same configured Google Workspace account and thread.
-Migration `000050` backfills enrollment and deliberately leaves the email job disabled for administrator review; prior Apollo-optional scraping, resumable jobs, deterministic greetings, inbox capture, and the 5-to-40 ramp remain intact.
-Full backend tests/vet/build, admin lint/type-check/build, OpenAPI, and diff checks pass. Nothing was pushed, deployed, migrated, resumed, activated, enabled, or sent.
+Branch `codex/reconcile-outbound-inboxes-ramp-20260813` reconciles every remote branch tip and is deployed to the configured QA and production services at release commit `d68aaaf`.
+Both databases are at schema 50; QA API/site and production API, workers, admin, and website passed health and route smoke checks with zero restarts.
+Outreach sending remains disabled in both environments, no provider email was sent, and duplicate addresses shared by more than three restaurant records remain blocked while follow-ups act only as priority.
+Database, environment, release-pointer, and image rollback artifacts were recorded before deployment; WhatsApp notification awaits an authenticated browser session.
