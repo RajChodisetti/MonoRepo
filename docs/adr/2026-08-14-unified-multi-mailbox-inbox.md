@@ -1,7 +1,7 @@
 # ADR: Unified multi-mailbox outreach inbox
 
 Date: 2026-08-14
-Status: Accepted (local/unreleased)
+Status: Accepted (deployed 2026-08-14)
 
 ## Context
 

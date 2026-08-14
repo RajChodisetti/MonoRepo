@@ -3352,3 +3352,44 @@ durable worker, or scrape worker, so only its existing API/site footprint was
 deployed. The requested WhatsApp notification is pending because both available
 WhatsApp Web sessions require the user to sign in; the Chrome login page was
 left open for handoff.
+
+## 2026-08-14 — Unified recent inbox deployed to QA and production
+
+**Role / Delivery:** Added one isolated Gmail poller per configured outreach
+mailbox, a strict provider-received 10-day inbox window, complete pagination,
+per-mailbox cursors and health, unmatched-message capture, receiving-mailbox
+filters, and same-mailbox threaded replies. The admin inbox now paginates every
+recent message, shows mailbox health/address, and safely renders mail without a
+restaurant match. Preserved the production-only dedicated inbox configuration;
+when it duplicates a sender mailbox, its read-scoped credential is polled under
+the sender's durable key so it is neither fetched twice nor added to bulk quota.
+Migration `000051` is deployed to QA and production, and release `976671e` runs
+in the QA API plus the production API/worker/admin footprint.
+
+**Checks Run:** Targeted mailbox/config/provider tests passed, followed by 536
+backend tests across 45 packages, backend vet, command builds, admin lint,
+nonincremental TypeScript checking, the 14-route admin production build,
+OpenAPI validation with 11 pre-existing unrelated warnings, migration checks,
+and `git diff --check`. Verified PostgreSQL custom-format backups with
+`pg_restore --list`, protected-config backup permissions/checksums, Compose
+rendering, migration 51 columns/indexes, zero application container restarts,
+production site/API/admin HTTP 200 responses, QA site HTTP 200, and QA API
+routing through an expected fixture 404 carrying an application request ID.
+
+**Business Value / Plan Fit:** The admin inbox now captures all recent inbox
+mail instead of only outreach-matched replies, keeps one account's permission
+failure from blocking another, and sends a manual reply through the receiving
+mailbox/thread. Production imported 48 provider-received messages within the
+10-day window. Two duplicate rows created during the mailbox-key transition
+were identified by provider ID, their match/read metadata was merged into the
+canonical copies, and only those two redundant rows were removed; the verified
+pre-deployment database backup remains the recovery source.
+
+**Risks / Approval State:** Production attempted all three configured physical
+mailboxes. One succeeds; two existing sender refresh tokens do not authorize
+the required inbox read scope/permission. Those accounts remain
+isolated and visibly unhealthy until an administrator re-consents them with
+`gmail.readonly`; no code change can expand an issued refresh token. Gmail read
+polls ran as requested, but no provider email was sent. The persisted email job
+remains disabled in QA and production, no scrape or unrelated service was
+restarted, and QA still has no separate worker/admin footprint.

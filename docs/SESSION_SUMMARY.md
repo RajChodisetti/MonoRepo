@@ -1,6 +1,6 @@
 # Session Summary
 
-Branch `codex/reconcile-outbound-inboxes-ramp-20260813` reconciles every remote branch tip and is deployed to the configured QA and production services at release commit `d68aaaf`.
-Both databases are at schema 50; QA API/site and production API, workers, admin, and website passed health and route smoke checks with zero restarts.
-Outreach sending remains disabled in both environments, no provider email was sent, and duplicate addresses shared by more than three restaurant records remain blocked while follow-ups act only as priority.
-Database, environment, release-pointer, and image rollback artifacts were recorded before deployment; WhatsApp notification awaits an authenticated browser session.
+Branch `codex/reconcile-outbound-inboxes-ramp-20260813` now contains and deploys the unified 10-day, multi-mailbox admin inbox at application release `976671e`.
+QA and production are at schema 51; QA API and production API/worker/admin passed health and route checks with zero restarts, and bulk outreach remains disabled.
+Production captured 48 recent inbox messages from the authorized mailbox; two other sender refresh tokens need Google `gmail.readonly` re-consent before their inboxes can sync.
+Verified database/environment backups and rollback images were created, and two redundant provider rows from the mailbox-key transition were consolidated and removed with metadata preserved.
