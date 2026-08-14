@@ -78,16 +78,15 @@ BEGIN
   IF greeting_count <> 1 THEN
     RAISE EXCEPTION 'migration 47 expected exactly one {{greeting}} in the first enabled step';
   END IF;
-  IF strpos(first_body, repeated_paragraph) = 0 THEN
-    RAISE EXCEPTION 'migration 47 expected first-email paragraph was not found';
-  END IF;
-
   UPDATE outreach_email_sequence_steps
-  SET body_text_template = replace(
-        regexp_replace(first_body, '\{\{greeting\}\}', '{{greeting01}}'),
-        repeated_paragraph,
-        revised_paragraph
-      ),
+  SET body_text_template = CASE
+        WHEN strpos(first_body, repeated_paragraph) > 0 THEN replace(
+          regexp_replace(first_body, '\{\{greeting\}\}', '{{greeting01}}'),
+          repeated_paragraph,
+          revised_paragraph
+        )
+        ELSE regexp_replace(first_body, '\{\{greeting\}\}', '{{greeting01}}')
+      END,
       updated_at = now()
   WHERE id = first_step_id;
 

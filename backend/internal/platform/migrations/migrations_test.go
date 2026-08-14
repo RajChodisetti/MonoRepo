@@ -247,6 +247,8 @@ func TestRepositoryMigrationsIncludeLatestOutreachChanges(t *testing.T) {
 				"'draft'",
 				"false",
 				"{{greeting01}}",
+				"WHEN strpos(first_body, repeated_paragraph) > 0",
+				"ELSE regexp_replace(first_body",
 				"WHERE sequence_id = draft_sequence_id",
 				"AND enabled = true",
 				"migration 47 draft activation guard failed",
@@ -308,6 +310,9 @@ func TestRepositoryMigrationsIncludeLatestOutreachChanges(t *testing.T) {
 		}
 		if migration.Version == 50 && strings.Contains(string(upSQL), "email_suppressions") {
 			t.Fatal("migration 50 up must not retain the legacy suppression enrollment gate")
+		}
+		if migration.Version == 47 && strings.Contains(string(upSQL), "expected first-email paragraph was not found") {
+			t.Fatal("migration 47 must accept active copy that is already non-repetitive")
 		}
 		downSQL, readErr := os.ReadFile(migration.DownPath)
 		if readErr != nil {

@@ -47,7 +47,6 @@ BEGIN
   IF first_step_id IS NULL OR
      (length(first_body) - length(replace(first_body, '{{greeting01}}', ''))) /
        length('{{greeting01}}') <> 1 OR
-     strpos(first_body, 'The online flow could probably make it easier for guests to get answers and request a table without adding more work for the team.') = 0 OR
      EXISTS (
        SELECT 1
        FROM outreach_email_sequence_steps
