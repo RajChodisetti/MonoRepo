@@ -101,6 +101,18 @@ func buildAccountPool(
 		})
 	}
 
+	directOnlyAccounts := make([]accountProvider, 0, 1)
+	if inbound := outreachCfg.InboundMailbox; inbound != nil {
+		accountKey := strings.TrimSpace(inbound.AccountKey)
+		if _, exists := seenKeys[accountKey]; !exists {
+			provider, err := NewGmail(emailCfg, *inbound)
+			if err != nil {
+				return nil, fmt.Errorf("dedicated inbound Google Workspace account: %w", err)
+			}
+			directOnlyAccounts = append(directOnlyAccounts, accountProvider{key: accountKey, provider: provider})
+		}
+	}
+
 	maxTotal := outreachCfg.BulkMax
 	if maxTotal <= 0 {
 		maxTotal = accountCount * outreachCfg.EmailsPerAccount
@@ -108,6 +120,9 @@ func buildAccountPool(
 	if quota == nil {
 		pool, err := newAccountPoolProviders(keyedProviders, outreachCfg.EmailsPerAccount, maxTotal)
 		if err != nil {
+			return nil, err
+		}
+		if err := attachDirectAccounts(pool, directOnlyAccounts); err != nil {
 			return nil, err
 		}
 		attachReplyTo(pool, outreachCfg)
@@ -125,8 +140,20 @@ func buildAccountPool(
 	if err != nil {
 		return nil, err
 	}
+	if err := attachDirectAccounts(pool, directOnlyAccounts); err != nil {
+		return nil, err
+	}
 	attachReplyTo(pool, outreachCfg)
 	return pool, nil
+}
+
+func attachDirectAccounts(pool *AccountPool, accounts []accountProvider) error {
+	for _, account := range accounts {
+		if err := pool.addDirectAccount(account); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func attachReplyTo(pool *AccountPool, outreachCfg config.OutreachConfig) {

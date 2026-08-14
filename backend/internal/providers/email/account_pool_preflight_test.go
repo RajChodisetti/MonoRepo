@@ -162,6 +162,37 @@ func TestAccountPoolSendDirectFromUsesRequestedMailbox(t *testing.T) {
 	}
 }
 
+func TestAccountPoolSendDirectFromSupportsDirectOnlyInbox(t *testing.T) {
+	bulk := &preflightProvider{}
+	inbox := &preflightProvider{}
+	pool, err := newAccountPoolProviders(
+		[]accountProvider{{key: "bulk", provider: bulk}},
+		40,
+		40,
+	)
+	if err != nil {
+		t.Fatalf("newAccountPoolProviders() error = %v", err)
+	}
+	if err := pool.addDirectAccount(accountProvider{key: "inbound", provider: inbox}); err != nil {
+		t.Fatalf("addDirectAccount() error = %v", err)
+	}
+
+	result, err := pool.SendDirectFrom(context.Background(), "inbound", SendRequest{
+		To:       "owner@example.com",
+		Subject:  "Re: hello",
+		TextBody: "Thanks",
+	})
+	if err != nil {
+		t.Fatalf("SendDirectFrom() error = %v", err)
+	}
+	if bulk.sends != 0 || inbox.sends != 1 || result.AccountKey != "inbound" {
+		t.Fatalf("provider sends/account = %d/%d/%q", bulk.sends, inbox.sends, result.AccountKey)
+	}
+	if len(pool.accounts) != 1 {
+		t.Fatalf("quota-managed accounts = %d, want direct-only inbox excluded", len(pool.accounts))
+	}
+}
+
 func TestPersistentAccountPoolRegistersDurablePacingPolicy(t *testing.T) {
 	t.Parallel()
 

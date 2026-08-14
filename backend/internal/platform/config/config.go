@@ -132,6 +132,7 @@ type OutreachConfig struct {
 	InboundDomain               string
 	InboundLocalPart            string
 	InboundAccountKey           string
+	InboundMailboxJSON          string
 	InboundMailbox              *GmailMailConfig
 	InboundMailboxes            []GmailMailConfig
 	InboundPollInterval         time.Duration

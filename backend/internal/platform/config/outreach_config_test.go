@@ -114,6 +114,61 @@ func TestLoadOutreachInboundUsesSelectedSendingAccount(t *testing.T) {
 	}
 }
 
+func TestLoadOutreachInboundKeepsDedicatedMailboxAndPollsAllSendingAccounts(t *testing.T) {
+	t.Setenv("OUTREACH_INBOUND_ENABLED", "true")
+	t.Setenv("OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON", `[
+		{"key":"sales-one","mailbox_email":"sales1@tuvisolutions.com","client_id":"client-id","client_secret":"client-secret","refresh_token":"refresh-token"},
+		{"key":"sales-two","mailbox_email":"sales2@tuvisolutions.com","client_id":"client-id","client_secret":"client-secret","refresh_token":"refresh-token"}
+	]`)
+	t.Setenv("OUTREACH_INBOUND_MAILBOX_JSON", `{
+		"key":"inbound",
+		"mailbox_email":"inbox@tuvisolutions.com",
+		"client_id":"inbound-client-id",
+		"client_secret":"inbound-client-secret",
+		"refresh_token":"inbound-refresh-token"
+	}`)
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Outreach.InboundMailbox == nil || cfg.Outreach.InboundMailbox.AccountKey != "inbound" {
+		t.Fatalf("InboundMailbox = %#v", cfg.Outreach.InboundMailbox)
+	}
+	if cfg.Outreach.InboundLocalPart != "inbox" || cfg.Outreach.InboundDomain != "tuvisolutions.com" {
+		t.Fatalf("inbound reply address = %s@%s", cfg.Outreach.InboundLocalPart, cfg.Outreach.InboundDomain)
+	}
+	if len(cfg.Outreach.InboundMailboxes) != 3 {
+		t.Fatalf("InboundMailboxes len = %d, want two senders plus dedicated inbox", len(cfg.Outreach.InboundMailboxes))
+	}
+	if cfg.Outreach.InboundMailboxes[2].AccountKey != "inbound" {
+		t.Fatalf("InboundMailboxes = %#v", cfg.Outreach.InboundMailboxes)
+	}
+}
+
+func TestLoadOutreachInboundRejectsDedicatedMailboxKeyConflict(t *testing.T) {
+	t.Setenv("OUTREACH_INBOUND_ENABLED", "true")
+	t.Setenv("OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON", `[{
+		"key":"inbound",
+		"mailbox_email":"sales@tuvisolutions.com",
+		"client_id":"client-id",
+		"client_secret":"client-secret",
+		"refresh_token":"refresh-token"
+	}]`)
+	t.Setenv("OUTREACH_INBOUND_MAILBOX_JSON", `{
+		"key":"inbound",
+		"mailbox_email":"inbox@tuvisolutions.com",
+		"client_id":"inbound-client-id",
+		"client_secret":"inbound-client-secret",
+		"refresh_token":"inbound-refresh-token"
+	}`)
+
+	_, err := config.Load()
+	if err == nil || !strings.Contains(err.Error(), "conflicts with a different configured mailbox") {
+		t.Fatalf("Load() error = %v, want dedicated mailbox key conflict", err)
+	}
+}
+
 func TestLoadOutreachInboundRequiresSendingAccountWhenEnabled(t *testing.T) {
 	t.Setenv("OUTREACH_INBOUND_ENABLED", "true")
 	t.Setenv("OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON", "")

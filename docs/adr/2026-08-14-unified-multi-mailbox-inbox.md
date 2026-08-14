@@ -16,8 +16,12 @@ mail must remain visible; it must not break listing or pause unrelated outreach.
 - Start one Gmail inbox poller for every entry in
   `OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON`. Each refresh token must authorize
   both `gmail.send` and `gmail.readonly`.
+- Preserve the optional `OUTREACH_INBOUND_MAILBOX_JSON` account introduced by
+  the production hotfix. Poll it alongside all sender accounts and register it
+  for explicit admin replies without adding it to the bulk quota rotation.
 - Retain `OUTREACH_INBOUND_ACCOUNT_KEY` only as the selector for the canonical
-  plus-address Reply-To. It no longer limits which configured inboxes are read.
+  plus-address Reply-To when no dedicated inbox object is configured. It no
+  longer limits which configured inboxes are read.
 - On initial sync or an expired history cursor, capture the complete result of
   `in:inbox newer_than:10d`, with pagination. Read the profile history cursor
   before listing so mail arriving during the bootstrap cannot be skipped.
@@ -59,7 +63,8 @@ mail must remain visible; it must not break listing or pause unrelated outreach.
 - The admin surface contains private mailbox correspondence and remains restricted
   to `internal_admin`; no inbox content is added to public restaurant payloads.
 - Adding another properly authorized Google Workspace account remains an
-  environment-only change. Zoho is not part of the active outreach account pool
+  environment-only change. The production dedicated-inbox configuration remains
+  backward compatible. Zoho is not part of the active outreach account pool
   and would require a separate inbox adapter if reintroduced.
 
 ## Rollback / Revisit Trigger

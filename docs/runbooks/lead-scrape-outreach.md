@@ -91,7 +91,13 @@ and leaves the email job disabled. Applying it never activates sending.
 ## Unified inbox across configured sending mailboxes
 
 Set `OUTREACH_INBOUND_ENABLED=true` and optionally
-`OUTREACH_INBOUND_ACCOUNT_KEY`. The key must select an entry already present in
+`OUTREACH_INBOUND_MAILBOX_JSON` with one dedicated Gmail account. When the
+dedicated object is present, it defines the canonical plus-address Reply-To and
+is polled alongside every entry in `OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON`.
+It is registered for manual same-mailbox replies but is not added to the bulk
+quota rotation.
+
+Without a dedicated object, `OUTREACH_INBOUND_ACCOUNT_KEY` must select an entry already present in
 `OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON`; when omitted, the first entry defines
 the canonical plus-address Reply-To. Every configured Google Workspace account
 is polled independently and every refresh token needs both `gmail.send` and

@@ -19,6 +19,7 @@ type accountProvider struct {
 
 type AccountPool struct {
 	accounts          []accountProvider
+	directAccounts    map[string]Provider
 	limitPerAccount   int
 	currentIndex      int
 	sentOnCurrent     int
@@ -50,6 +51,7 @@ func NewAccountPool(providers []Provider, limitPerAccount, maxTotal int) (*Accou
 	}
 	return &AccountPool{
 		accounts:        accounts,
+		directAccounts:  directProviderMap(accounts),
 		limitPerAccount: limitPerAccount,
 		maxTotal:        maxTotal,
 	}, nil
@@ -89,6 +91,7 @@ func newAccountPoolProviders(accounts []accountProvider, limitPerAccount, maxTot
 	}
 	return &AccountPool{
 		accounts:        accounts,
+		directAccounts:  directProviderMap(accounts),
 		limitPerAccount: limitPerAccount,
 		maxTotal:        maxTotal,
 	}, nil
@@ -183,17 +186,36 @@ func (pool *AccountPool) SendDirectFrom(ctx context.Context, accountKey string, 
 		return SendResult{}, ErrAccountsExhausted
 	}
 	accountKey = strings.TrimSpace(accountKey)
-	for _, account := range pool.accounts {
-		if account.key != accountKey {
-			continue
-		}
-		result, err := account.provider.Send(ctx, req)
+	if provider, ok := pool.directAccounts[accountKey]; ok {
+		result, err := provider.Send(ctx, req)
 		if result.AccountKey == "" {
-			result.AccountKey = account.key
+			result.AccountKey = accountKey
 		}
 		return result, err
 	}
 	return SendResult{}, fmt.Errorf("outreach email account %q is not configured", accountKey)
+}
+
+func directProviderMap(accounts []accountProvider) map[string]Provider {
+	providers := make(map[string]Provider, len(accounts))
+	for _, account := range accounts {
+		providers[account.key] = account.provider
+	}
+	return providers
+}
+
+func (pool *AccountPool) addDirectAccount(account accountProvider) error {
+	if pool == nil || account.provider == nil || strings.TrimSpace(account.key) == "" {
+		return fmt.Errorf("direct email account requires a stable key and provider")
+	}
+	if pool.directAccounts == nil {
+		pool.directAccounts = make(map[string]Provider)
+	}
+	if _, exists := pool.directAccounts[account.key]; exists {
+		return fmt.Errorf("direct email account duplicates stable key %q", account.key)
+	}
+	pool.directAccounts[account.key] = account.provider
+	return nil
 }
 
 func (pool *AccountPool) sendInMemory(ctx context.Context, req SendRequest) (SendResult, error) {
