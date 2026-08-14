@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { LegalList, LegalPage, LegalSection } from "@/components/legal/LegalPage";
 
-const updated = "10 August 2026";
+const updated = "13 August 2026";
 
 export const metadata: Metadata = {
   title: "Terms of Service | Tuvi Solutions",
@@ -78,9 +78,11 @@ export default function TermsPage() {
         <p>
           The <strong className="text-ink">tuvi</strong> Google Workspace application may
           be connected only by an authorized mailbox owner or administrator. A connected
-          mailbox authorizes tuvi to use the Gmail API to send approved messages; it does
-          not give tuvi permission to read the mailbox, contacts, or Google Drive files.
-          The owner may revoke access through their Google Account at any time.
+          sending mailbox authorizes tuvi to use the Gmail API to send approved messages;
+          it does not give tuvi permission to read that mailbox, contacts, or Google Drive
+          files. A separately connected inbound mailbox may grant read-only access solely
+          to capture outreach replies. The owner may revoke access through their Google
+          Account at any time.
         </p>
         <p>
           Use of Google-connected functionality is also subject to applicable Google

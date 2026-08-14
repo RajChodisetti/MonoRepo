@@ -53,7 +53,7 @@ func TestGmailProviderSendsViaHTTPSAPIContract(t *testing.T) {
 			}
 			rawMessage = string(decoded)
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"id":"gmail-message-id"}`))
+			_, _ = w.Write([]byte(`{"id":"gmail-message-id","threadId":"gmail-thread-id"}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -90,6 +90,12 @@ func TestGmailProviderSendsViaHTTPSAPIContract(t *testing.T) {
 	if result.ProviderMessageID != "gmail-message-id" {
 		t.Fatalf("ProviderMessageID = %q, want gmail-message-id", result.ProviderMessageID)
 	}
+	if result.ProviderThreadID != "gmail-thread-id" {
+		t.Fatalf("ProviderThreadID = %q, want gmail-thread-id", result.ProviderThreadID)
+	}
+	if result.RFCMessageID == "" || !strings.Contains(result.RFCMessageID, "@example.com") {
+		t.Fatalf("RFCMessageID = %q, want a Message-ID using the from domain", result.RFCMessageID)
+	}
 	firstRawMessage := rawMessage
 	if _, err := provider.Send(context.Background(), emailprovider.SendRequest{
 		To:       "owner2@restaurant.example",
@@ -108,6 +114,7 @@ func TestGmailProviderSendsViaHTTPSAPIContract(t *testing.T) {
 		"From: \"Tuvi Solutions\" <sales1@example.com>",
 		"To: <owner@restaurant.example>",
 		"Reply-To: <contact@example.com>",
+		"Message-ID:",
 		"MIME-Version: 1.0",
 		"multipart/alternative",
 	} {

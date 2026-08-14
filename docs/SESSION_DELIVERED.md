@@ -3104,3 +3104,53 @@ received all three at 09:49 UTC; the delivered MIME bodies contain no
 unsubscribe/opt-out copy, retain the Team Tuvi text/HTML signature, and passed
 SPF, DKIM, and DMARC. This path did not enroll a lead, advance a campaign,
 enable the email job, or create a bulk job.
+
+## 2026-08-14 — Outbound Inbox Reconciliation and Gradual Send Ramp
+
+**Role:** Repository Integration, Backend, Frontend, Documentation, and Test Agent
+
+**Delivered:** Fetched every remote and created local branch
+`codex/reconcile-outbound-inboxes-ramp-20260813` from
+`origin/release/remove-outreach-unsubscribe-latest-20260812`. That base already
+contained every `origin/*` feature tip except `origin/outbound_inboxes`; the
+remaining unmerged fork had no unique patches. Merged the two unique outbound
+inbox commits while preserving the current sequence editor, recipient progress,
+restaurant details, website structure, and existing outreach behavior. The
+source branch's colliding migration `000039_email_messages` is reconciled as
+`000047_email_messages`.
+
+Added unreleased migration `000048_outreach_email_ramp`. Each durable Gmail
+mailbox starts with 5 attempts across the configured send window, then advances
+to 10, 15, 20, 25, 30, 35, and 40 only after fully using an allowance and
+completing the existing minimum 24-hour cooldown. The ramp day is persisted in
+PostgreSQL, survives worker restarts, respects lower configured caps, and stays
+at 40 after reaching it. Existing accounts begin conservatively at day one;
+accounts already over five used slots wait a fresh 24 hours before advancing.
+
+The reconciled inbox stores accepted outbound message snapshots, assigns unique
+Reply-To tokens, polls one separately configured `gmail.readonly` mailbox,
+matches replies, pauses matched campaigns, and exposes internal-admin inbox and
+per-restaurant message views. The poller now falls back to a bounded dedicated
+Inbox rescan when Gmail history expires and does not advance its cursor after a
+capture/pause failure. Environment examples, Google disclosure/privacy/terms
+copy, README routes, ADR, startup checks, migration discovery coverage, and
+OpenAPI contracts are aligned. Inbound polling remains disabled by default.
+
+**Checks Run:** Targeted Go tests passed 131 tests across outreach, email
+provider, config, migration, handler, and store packages. `rtk make test`,
+`rtk go vet ./backend/...`, and `rtk go build ./backend/cmd/...` passed. Admin
+and corporate Next.js lint, explicit non-incremental TypeScript checks, and
+production builds passed (14 admin routes and 61 corporate routes). `rtk make
+openapi` validated the API document with 12 pre-existing warnings. `rtk git
+diff --check` passed.
+
+**Business Value / Plan Fit:** Operators can review sent content and inbound
+owner replies without granting read access to sending mailboxes, while the
+automated sender warms each mailbox gradually instead of immediately consuming
+the former 40-attempt ceiling.
+
+**Risks / Approval State:** Migrations `000047` and `000048` are not applied.
+The dedicated inbound mailbox, `gmail.readonly` refresh token, DNS/plus-address
+routing, production configuration, sender enablement, any real email, push, and
+deployment all remain explicit follow-up approval gates. No external provider
+call, email send, production mutation, push, or deployment occurred.

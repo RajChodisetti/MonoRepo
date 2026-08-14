@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/config"
 )
 
@@ -107,7 +108,12 @@ func buildAccountPool(
 		maxTotal = accountCount * outreachCfg.EmailsPerAccount
 	}
 	if quota == nil {
-		return NewAccountPool(providers, outreachCfg.EmailsPerAccount, maxTotal)
+		pool, err := NewAccountPool(providers, outreachCfg.EmailsPerAccount, maxTotal)
+		if err != nil {
+			return nil, err
+		}
+		attachReplyTo(pool, outreachCfg)
+		return pool, nil
 	}
 
 	cooldown := outreachCfg.AccountCooldown
@@ -117,5 +123,24 @@ func buildAccountPool(
 	if err := quota.SyncEmailAccounts(ctx, registrations, cooldown); err != nil {
 		return nil, fmt.Errorf("sync outreach email accounts: %w", err)
 	}
-	return newPersistentAccountPool(keyedProviders, outreachCfg.EmailsPerAccount, maxTotal, cooldown, quota)
+	pool, err := newPersistentAccountPool(keyedProviders, outreachCfg.EmailsPerAccount, maxTotal, cooldown, quota)
+	if err != nil {
+		return nil, err
+	}
+	attachReplyTo(pool, outreachCfg)
+	return pool, nil
+}
+
+func attachReplyTo(pool *AccountPool, outreachCfg config.OutreachConfig) {
+	if pool == nil {
+		return
+	}
+	localPart := outreachCfg.InboundLocalPart
+	domain := outreachCfg.InboundDomain
+	if localPart == "" || domain == "" {
+		return
+	}
+	pool.replyToForAttempt = func(attemptID uuid.UUID) string {
+		return ReplyToAddress(localPart, domain, attemptID)
+	}
 }

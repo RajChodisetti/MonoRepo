@@ -19,9 +19,36 @@ import (
 	emailprovider "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/email"
 )
 
-const emailDeliveryLease = 5 * time.Minute
+const (
+	emailDeliveryLease = 5 * time.Minute
+	emailRampStep      = 5
+)
 
 var errDeliveryAttemptNotSending = errors.New("delivery attempt is not in sending state")
+
+func rampedSendLimit(maxLimit, rampDay int) int {
+	if maxLimit < 1 {
+		return 0
+	}
+	if rampDay < 1 {
+		rampDay = 1
+	}
+	daysToLimit := (maxLimit + emailRampStep - 1) / emailRampStep
+	if rampDay >= daysToLimit {
+		return maxLimit
+	}
+	return rampDay * emailRampStep
+}
+
+func nextEmailRampDay(maxLimit, rampDay int) int {
+	if rampDay < 1 {
+		rampDay = 1
+	}
+	if rampedSendLimit(maxLimit, rampDay) >= maxLimit {
+		return rampDay
+	}
+	return rampDay + 1
+}
 
 type SequenceDeliveryFinalization struct {
 	CampaignID        uuid.UUID
@@ -491,7 +518,7 @@ func (repo *Postgres) ClaimEmailDelivery(
 		  WHERE enabled = true
 		    AND account_key = ANY($1::text[])
 		    AND usage_count > 0
-		    AND usage_count < send_limit
+		    AND usage_count < LEAST(send_limit, ramp_day * 5)
 		  ORDER BY position ASC, created_at ASC
 		  LIMIT 1
 		)
@@ -500,6 +527,7 @@ func (repo *Postgres) ClaimEmailDelivery(
 		       account.cycle_number,
 		       account.usage_count,
 		       account.send_limit,
+		       account.ramp_day,
 		       account.cycle_started_at,
 		       account.send_window_seconds,
 		       account.send_jitter_min_seconds,
@@ -515,7 +543,10 @@ func (repo *Postgres) ClaimEmailDelivery(
 		    )
 		    OR NOT EXISTS (SELECT 1 FROM active_partial)
 		  )
-		ORDER BY CASE WHEN account.usage_count < account.send_limit THEN 0 ELSE 1 END,
+		ORDER BY CASE
+		           WHEN account.usage_count < LEAST(account.send_limit, account.ramp_day * 5) THEN 0
+		           ELSE 1
+		         END,
 		         account.position ASC,
 		         account.created_at ASC
 		FOR UPDATE OF account
@@ -525,6 +556,7 @@ func (repo *Postgres) ClaimEmailDelivery(
 	var cycleNumber int64
 	var usageCount int
 	var sendLimit int
+	var rampDay int
 	var cycleStartedAt *time.Time
 	var sendWindowSeconds int
 	var sendJitterMinSeconds int
@@ -535,6 +567,7 @@ func (repo *Postgres) ClaimEmailDelivery(
 		&cycleNumber,
 		&usageCount,
 		&sendLimit,
+		&rampDay,
 		&cycleStartedAt,
 		&sendWindowSeconds,
 		&sendJitterMinSeconds,
@@ -546,9 +579,11 @@ func (repo *Postgres) ClaimEmailDelivery(
 		return emailprovider.DeliveryClaim{}, fmt.Errorf("select available outreach email account: %w", err)
 	}
 
-	resetCycle := usageCount >= sendLimit
+	currentSendLimit := rampedSendLimit(sendLimit, rampDay)
+	resetCycle := usageCount >= currentSendLimit
 	if resetCycle {
 		cycleNumber++
+		rampDay = nextEmailRampDay(sendLimit, rampDay)
 		usageCount = 0
 	}
 	if resetCycle || cycleStartedAt == nil {
@@ -556,7 +591,8 @@ func (repo *Postgres) ClaimEmailDelivery(
 		cycleStartedAt = &started
 	}
 	usageCount++
-	reachesLimit := usageCount >= sendLimit
+	dailySendLimit := rampedSendLimit(sendLimit, rampDay)
+	reachesLimit := usageCount >= dailySendLimit
 	jitter, err := randomPacingJitter(
 		time.Duration(sendJitterMinSeconds)*time.Second,
 		time.Duration(sendJitterMaxSeconds)*time.Second,
@@ -571,7 +607,7 @@ func (repo *Postgres) ClaimEmailDelivery(
 			now,
 			cycleStartedAt.UTC(),
 			usageCount,
-			sendLimit,
+			dailySendLimit,
 			time.Duration(sendWindowSeconds)*time.Second,
 			jitter,
 		)
@@ -585,17 +621,19 @@ func (repo *Postgres) ClaimEmailDelivery(
 	const consumeSlot = `
 		UPDATE outreach_email_accounts
 		SET cycle_number = $2,
-		    usage_count = $3,
-		    cycle_started_at = $4,
-		    available_at = $5,
-		    last_used_at = $6,
-		    updated_at = $6
+		    ramp_day = $3,
+		    usage_count = $4,
+		    cycle_started_at = $5,
+		    available_at = $6,
+		    last_used_at = $7,
+		    updated_at = $7
 		WHERE id = $1`
 	if _, err := tx.Exec(
 		ctx,
 		consumeSlot,
 		accountID,
 		cycleNumber,
+		rampDay,
 		usageCount,
 		cycleStartedAt.UTC(),
 		nextAccountSendAt,
@@ -790,13 +828,13 @@ func (repo *Postgres) NextEmailAccountAvailableAt(
 
 	const query = `
 		WITH configured AS MATERIALIZED (
-		  SELECT id, position, created_at, usage_count, send_limit, available_at
+		  SELECT id, position, created_at, usage_count, send_limit, ramp_day, available_at
 		  FROM outreach_email_accounts
 		  WHERE enabled = true AND account_key = ANY($1::text[])
 		), active_partial AS (
 		  SELECT available_at
 		  FROM configured
-		  WHERE usage_count > 0 AND usage_count < send_limit
+		  WHERE usage_count > 0 AND usage_count < LEAST(send_limit, ramp_day * 5)
 		  ORDER BY position ASC, created_at ASC
 		  LIMIT 1
 		), account_gate AS (

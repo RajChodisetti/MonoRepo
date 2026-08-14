@@ -10,11 +10,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/auth"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/campaigns"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/config"
+	repository "github.com/rajchodisetti/restaurant-platform/backend/internal/platform/errors"
 	emailprovider "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/email"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/restaurants"
 )
@@ -669,6 +671,18 @@ func (service *Service) sendLead(ctx context.Context, lead EligibleLead, bulkJob
 		if !result.Finalized {
 			return false, fmt.Errorf("quota-managed accepted delivery was not finalized")
 		}
+		if err := service.persistOutbound(
+			ctx,
+			delivery.RestaurantID,
+			delivery.CampaignID,
+			delivery.RecipientEmail,
+			request.Subject,
+			request.TextBody,
+			request.HTMLBody,
+			result,
+		); err != nil {
+			return false, err
+		}
 		service.log.InfoContext(ctx, "bulk_outreach_lead_sent",
 			"restaurant_id", lead.RestaurantID,
 			"campaign_id", delivery.CampaignID,
@@ -687,6 +701,18 @@ func (service *Service) sendLead(ctx context.Context, lead EligibleLead, bulkJob
 		Outcome:           sequenceOutcomeSent,
 		ProviderMessageID: result.ProviderMessageID,
 	}); err != nil {
+		return false, err
+	}
+	if err := service.persistOutbound(
+		ctx,
+		delivery.RestaurantID,
+		delivery.CampaignID,
+		delivery.RecipientEmail,
+		request.Subject,
+		request.TextBody,
+		request.HTMLBody,
+		result,
+	); err != nil {
 		return false, err
 	}
 
@@ -768,4 +794,122 @@ func (service *Service) DeferBulkJob(
 		return fmt.Errorf("bulk outreach job is not running and cannot be deferred")
 	}
 	return nil
+}
+
+func (service *Service) persistOutbound(
+	ctx context.Context,
+	restaurantID uuid.UUID,
+	campaignID uuid.UUID,
+	toEmail string,
+	subject string,
+	textBody string,
+	htmlBody string,
+	result emailprovider.SendResult,
+) error {
+	store, ok := service.repo.(*Postgres)
+	if !ok || store == nil {
+		return nil
+	}
+	now := time.Now().UTC()
+	restaurantIDCopy := restaurantID
+	campaignIDCopy := campaignID
+	var attemptID *uuid.UUID
+	if result.DeliveryAttemptID != uuid.Nil {
+		id := result.DeliveryAttemptID
+		attemptID = &id
+	}
+	replyToken := result.DeliveryAttemptID
+	if parsed, ok := emailprovider.ParseReplyToken(
+		result.ReplyTo,
+		service.outreachCfg.InboundLocalPart,
+		service.outreachCfg.InboundDomain,
+	); ok {
+		replyToken = parsed
+	}
+	var replyTokenPtr *uuid.UUID
+	if replyToken != uuid.Nil {
+		token := replyToken
+		replyTokenPtr = &token
+	}
+	_, err := store.InsertMessage(ctx, Message{
+		RestaurantID:      &restaurantIDCopy,
+		CampaignID:        &campaignIDCopy,
+		DeliveryAttemptID: attemptID,
+		ReplyToken:        replyTokenPtr,
+		Direction:         MessageDirectionOutbound,
+		FromEmail:         result.FromEmail,
+		ToEmail:           toEmail,
+		ReplyTo:           result.ReplyTo,
+		Subject:           subject,
+		BodyText:          snapshotBody(textBody, htmlBody),
+		GmailMessageID:    result.ProviderMessageID,
+		GmailThreadID:     result.ProviderThreadID,
+		RFCMessageID:      result.RFCMessageID,
+		MailboxKey:        result.AccountKey,
+		ReadAt:            &now,
+	})
+	if err != nil {
+		return fmt.Errorf("record outbound email message: %w", err)
+	}
+	return nil
+}
+
+func (service *Service) ListInbox(
+	ctx context.Context,
+	principal auth.Principal,
+	unreadOnly bool,
+	limit int,
+	offset int,
+) (InboxList, error) {
+	if !auth.IsInternalAdmin(principal.Role) {
+		return InboxList{}, restaurants.ErrForbidden
+	}
+	store, ok := service.repo.(*Postgres)
+	if !ok || store == nil {
+		return InboxList{Threads: []InboxThread{}}, nil
+	}
+	return store.ListInbox(ctx, unreadOnly, limit, offset)
+}
+
+func (service *Service) ListRestaurantMessages(
+	ctx context.Context,
+	principal auth.Principal,
+	restaurantID uuid.UUID,
+	markRead bool,
+) ([]Message, error) {
+	if !auth.IsInternalAdmin(principal.Role) {
+		return nil, restaurants.ErrForbidden
+	}
+	if _, err := service.restaurants.GetRestaurant(ctx, principal, restaurantID); err != nil {
+		return nil, err
+	}
+	store, ok := service.repo.(*Postgres)
+	if !ok || store == nil {
+		return []Message{}, nil
+	}
+	if markRead {
+		if err := store.MarkRestaurantInboundRead(ctx, restaurantID); err != nil {
+			return nil, err
+		}
+	}
+	return store.ListRestaurantMessages(ctx, restaurantID)
+}
+
+func (service *Service) MarkMessageRead(
+	ctx context.Context,
+	principal auth.Principal,
+	messageID uuid.UUID,
+) (Message, error) {
+	if !auth.IsInternalAdmin(principal.Role) {
+		return Message{}, restaurants.ErrForbidden
+	}
+	store, ok := service.repo.(*Postgres)
+	if !ok || store == nil {
+		return Message{}, repository.ErrNotFound
+	}
+	record, err := store.MarkMessageRead(ctx, messageID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Message{}, repository.ErrNotFound
+	}
+	return record, err
 }

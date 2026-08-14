@@ -36,9 +36,10 @@ info:
     `POST /api/v1/outreach/bulk-send` or the email-job toggle enqueues
     one durable `outreach.bulk_send` workflow. Each job activation reserves at most one
     provider attempt, then requeues for its PostgreSQL `available_at`. PostgreSQL
-    conservatively allocates at most 40 attempts per configured account across an 8-hour
-    window and enforces a 24-hour cooldown after slot 40. Forty is an attempt ceiling, not
-    a guarantee of accepted or delivered messages.
+    warms each configured account through durable cycle ceilings of 5, 10, 15, 20,
+    25, 30, 35, and 40 attempts across an 8-hour window. It enforces a 24-hour cooldown
+    after each fully used allowance; once 40 is reached, 40 remains the ceiling. These are
+    attempt ceilings, not guarantees of accepted or delivered messages.
 
     Email transport is HTTP(S)-only (Gmail or Zoho for the quota pool; Zoho or Resend for
     generic sends); SMTP is rejected. In production,
@@ -773,6 +774,41 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Member'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/restaurants/{id}/messages:
+    parameters:
+      - $ref: '#/components/parameters/restaurantId'
+    get:
+      tags: [Email Campaigns]
+      summary: List captured outreach messages for a restaurant
+      operationId: listRestaurantOutreachMessages
+      security:
+        - bearerAuth: []
+      description: |
+        Requires role `internal_admin`. Returns accepted outbound snapshots and captured
+        inbound replies newest first. Unless `mark_read=false`, unread inbound messages for
+        this restaurant are marked read as part of the request.
+      parameters:
+        - name: mark_read
+          in: query
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: Captured restaurant messages
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailMessageList'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -1587,6 +1623,81 @@ paths:
               schema:
                 $ref: '#/components/schemas/OutreachRecipientList'
 
+  /api/v1/outreach/inbox:
+    get:
+      tags: [Email Campaigns]
+      summary: List outreach inbox threads
+      operationId: listOutreachInbox
+      security:
+        - bearerAuth: []
+      description: |
+        Requires role `internal_admin`. Groups accepted outbound snapshots and captured
+        replies by restaurant. Replies that cannot be matched are retained as separate
+        unmatched threads.
+      parameters:
+        - name: unread
+          in: query
+          schema:
+            type: boolean
+            default: false
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Outreach inbox threads
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutreachInboxList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/outreach/messages/{id}/read:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Email Campaigns]
+      summary: Mark one captured outreach message read
+      operationId: markOutreachMessageRead
+      security:
+        - bearerAuth: []
+      description: Requires role `internal_admin`.
+      responses:
+        '200':
+          description: Updated message
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailMessage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/outreach/bulk-send:
     post:
       tags: [Email Campaigns]
@@ -1612,6 +1723,9 @@ paths:
         Confirmed provider acceptance alone advances `current_step`, records the send time,
         and schedules the next enabled step. Skipped or failed/ambiguous outcomes never
         advance. Provider quotas and pacing remain PostgreSQL-backed and restart-safe.
+        Each mailbox starts at 5 attempts for its first fully used allowance, then rises
+        by 5 after each 24-hour cooldown until it reaches and remains at the configured
+        ceiling (maximum 40).
       responses:
         '202':
           description: Bulk job queued
@@ -4434,6 +4548,110 @@ components:
             $ref: '#/components/schemas/OutreachRecipient'
         total:
           type: integer
+
+    EmailMessage:
+      type: object
+      required: [id, direction, from_email, to_email, subject, body_text, unmatched, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        restaurant_id:
+          type: string
+          format: uuid
+          nullable: true
+        campaign_id:
+          type: string
+          format: uuid
+          nullable: true
+        delivery_attempt_id:
+          type: string
+          format: uuid
+          nullable: true
+        reply_token:
+          type: string
+          format: uuid
+          nullable: true
+        direction:
+          type: string
+          enum: [outbound, inbound]
+        from_email:
+          type: string
+        to_email:
+          type: string
+        reply_to:
+          type: string
+        subject:
+          type: string
+        body_text:
+          type: string
+        gmail_message_id:
+          type: string
+        gmail_thread_id:
+          type: string
+        rfc_message_id:
+          type: string
+        mailbox_key:
+          type: string
+        unmatched:
+          type: boolean
+        read_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    EmailMessageList:
+      type: object
+      required: [messages]
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmailMessage'
+
+    OutreachInboxThread:
+      type: object
+      required: [unmatched, unread_count, last_direction, last_snippet, last_at, last_message_id]
+      properties:
+        restaurant_id:
+          type: string
+          format: uuid
+          nullable: true
+        restaurant_name:
+          type: string
+        email:
+          type: string
+        unmatched:
+          type: boolean
+        unread_count:
+          type: integer
+          minimum: 0
+        last_direction:
+          type: string
+          enum: [outbound, inbound]
+        last_snippet:
+          type: string
+        last_at:
+          type: string
+          format: date-time
+        last_message_id:
+          type: string
+          format: uuid
+
+    OutreachInboxList:
+      type: object
+      required: [threads, total]
+      properties:
+        threads:
+          type: array
+          items:
+            $ref: '#/components/schemas/OutreachInboxThread'
+        total:
+          type: integer
+          minimum: 0
 
     BulkOutreachTriggerResponse:
       type: object

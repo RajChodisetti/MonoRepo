@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
+import { OutreachInbox } from "@/components/OutreachInbox";
 import { OutreachRecipients } from "@/components/OutreachRecipients";
 import { OutreachSequenceEditor } from "@/components/OutreachSequenceEditor";
 import { EmptyState, ErrorBanner, PageHeader, StatusBadge } from "@/components/ui";
@@ -15,7 +16,7 @@ import type {
   OutreachTemplateTestSendResponse,
 } from "@/lib/types";
 
-type View = "sequence" | "recipients" | "operations";
+type View = "sequence" | "recipients" | "operations" | "inbox";
 
 export default function OutreachPage() {
   const [view, setView] = useState<View>("sequence");
@@ -165,6 +166,7 @@ export default function OutreachPage() {
     { id: "sequence", label: "Email sequence" },
     { id: "recipients", label: "Recipient progress" },
     { id: "operations", label: "Sending & health" },
+    { id: "inbox", label: "Inbox" },
   ];
 
   return (
@@ -227,6 +229,12 @@ export default function OutreachPage() {
       {view === "recipients" ? (
         <div role="tabpanel" id="outreach-panel-recipients" aria-labelledby="outreach-tab-recipients">
           <OutreachRecipients />
+        </div>
+      ) : null}
+
+      {view === "inbox" ? (
+        <div role="tabpanel" id="outreach-panel-inbox" aria-labelledby="outreach-tab-inbox">
+          <OutreachInbox />
         </div>
       ) : null}
 

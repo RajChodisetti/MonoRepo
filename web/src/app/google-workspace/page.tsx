@@ -8,11 +8,11 @@ const app = {
   description:
     "tuvi is a private, company-operated application from Tuvi Solutions. Authorized Tuvi team members use it to send individually reviewed business email from their Google Workspace mailboxes through the Gmail API over HTTPS.",
   dataUse:
-    "tuvi requests only the gmail.send permission. It cannot read inbox messages, contacts, attachments, message history, or Google Drive files.",
+    "Sending mailboxes request gmail.send. A separate inbound mailbox may use gmail.readonly only to capture replies to outreach plus-addresses; sending mailboxes cannot read inbox mail.",
   access:
     "Mailbox access is limited to authorized Tuvi Solutions owners and administrators. There is no public signup.",
   metadataDescription:
-    "tuvi uses Google OAuth and the Gmail API to send individually reviewed email from authorized Tuvi Solutions Google Workspace mailboxes.",
+    "tuvi uses Google OAuth and the Gmail API to send individually reviewed email and capture replies through a separate inbound mailbox.",
 } as const;
 
 export const metadata: Metadata = {
@@ -30,12 +30,12 @@ export const metadata: Metadata = {
 
 const cards = [
   {
-    title: "One narrow permission",
-    body: "tuvi requests only gmail.send so it can submit an individually reviewed outbound message to Gmail over HTTPS.",
+    title: "Narrow send permission",
+    body: "Sending mailboxes request gmail.send so tuvi can submit an individually reviewed outbound message to Gmail over HTTPS.",
   },
   {
-    title: "No mailbox reading",
-    body: "It does not request access to read inbox messages, contacts, attachments, message history, or Google Drive files.",
+    title: "Inbound replies stay separate",
+    body: "A dedicated inbound mailbox may use gmail.readonly only to capture outreach replies. Sending mailboxes do not read inbox mail, contacts, attachments, message history, or Google Drive files.",
   },
   {
     title: "Controlled access",
@@ -70,7 +70,7 @@ export default function GoogleWorkspacePage() {
           <section className="mt-12 rounded-3xl border border-border bg-bg p-7 sm:p-10">
             <h2 className="font-display text-3xl font-semibold tracking-[-0.025em] text-ink">How access is used</h2>
             <ol className="mt-6 grid gap-6 text-sm leading-7 text-muted md:grid-cols-3">
-              <li><span className="block font-display text-3xl font-semibold text-primary">01</span>An authorized mailbox owner or administrator connects their mailbox to tuvi and grants the Gmail send permission through Google OAuth.</li>
+              <li><span className="block font-display text-3xl font-semibold text-primary">01</span>An authorized owner or administrator grants Gmail send access to a sending mailbox. A separate inbound mailbox may grant read-only access solely for outreach replies.</li>
               <li><span className="block font-display text-3xl font-semibold text-primary">02</span>tuvi exchanges the authorization for a short-lived access token and sends only the message prepared for delivery.</li>
               <li><span className="block font-display text-3xl font-semibold text-primary">03</span>Tuvi records delivery metadata for audit, security, and suppression purposes. Access can be revoked from the Google Account at any time.</li>
             </ol>

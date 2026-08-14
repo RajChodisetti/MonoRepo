@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/config"
 )
 
@@ -128,7 +129,7 @@ func (provider *gmailProvider) Send(ctx context.Context, req SendRequest) (SendR
 		return SendResult{}, fmt.Errorf("gmail recipient: %w", err)
 	}
 
-	rawMessage, err := buildGmailMessage(
+	rawMessage, rfcMessageID, err := buildGmailMessage(
 		provider.cfg.FromEmail,
 		provider.email.FromName,
 		to,
@@ -178,8 +179,9 @@ func (provider *gmailProvider) Send(ctx context.Context, req SendRequest) (SendR
 	}
 
 	var parsed struct {
-		ID    string `json:"id"`
-		Error struct {
+		ID       string `json:"id"`
+		ThreadID string `json:"threadId"`
+		Error    struct {
 			Code    int    `json:"code"`
 			Message string `json:"message"`
 			Status  string `json:"status"`
@@ -203,7 +205,13 @@ func (provider *gmailProvider) Send(ctx context.Context, req SendRequest) (SendR
 	if messageID == "" {
 		messageID = "gmail:unavailable"
 	}
-	result := SendResult{ProviderMessageID: messageID}
+	result := SendResult{
+		ProviderMessageID: messageID,
+		ProviderThreadID:  strings.TrimSpace(parsed.ThreadID),
+		RFCMessageID:      rfcMessageID,
+		FromEmail:         provider.cfg.FromEmail,
+		ReplyTo:           strings.TrimSpace(req.ReplyTo),
+	}
 	if !strings.EqualFold(to, originalTo) {
 		result.RedirectedTo = to
 	}
@@ -285,35 +293,41 @@ func buildGmailMessage(
 	subject string,
 	textBody string,
 	htmlBody string,
-) ([]byte, error) {
+) ([]byte, string, error) {
 	fromEmail, err := canonicalMailbox(fromEmail)
 	if err != nil {
-		return nil, fmt.Errorf("gmail from address: %w", err)
+		return nil, "", fmt.Errorf("gmail from address: %w", err)
 	}
 	toEmail, err = canonicalMailbox(toEmail)
 	if err != nil {
-		return nil, fmt.Errorf("gmail recipient: %w", err)
+		return nil, "", fmt.Errorf("gmail recipient: %w", err)
 	}
 	fromName, err = cleanHeaderValue(fromName, "from name")
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	subject, err = cleanHeaderValue(subject, "subject")
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	replyTo = strings.TrimSpace(replyTo)
 	if replyTo != "" {
 		replyTo, err = canonicalMailbox(replyTo)
 		if err != nil {
-			return nil, fmt.Errorf("gmail reply-to: %w", err)
+			return nil, "", fmt.Errorf("gmail reply-to: %w", err)
 		}
 	}
 	textBody = strings.TrimSpace(textBody)
 	htmlBody = strings.TrimSpace(htmlBody)
 	if textBody == "" && htmlBody == "" {
-		return nil, fmt.Errorf("gmail send: html or text body is required")
+		return nil, "", fmt.Errorf("gmail send: html or text body is required")
 	}
+
+	fromDomain := fromEmail
+	if at := strings.LastIndex(fromEmail, "@"); at >= 0 {
+		fromDomain = fromEmail[at+1:]
+	}
+	rfcMessageID := fmt.Sprintf("<tuvi.%s@%s>", uuid.NewString(), fromDomain)
 
 	var body bytes.Buffer
 	fromHeader := (&mail.Address{Name: fromName, Address: fromEmail}).String()
@@ -322,6 +336,7 @@ func buildGmailMessage(
 	fmt.Fprintf(&body, "To: %s\r\n", toHeader)
 	fmt.Fprintf(&body, "Subject: %s\r\n", mime.QEncoding.Encode("UTF-8", subject))
 	fmt.Fprintf(&body, "Date: %s\r\n", time.Now().UTC().Format(time.RFC1123Z))
+	fmt.Fprintf(&body, "Message-ID: %s\r\n", rfcMessageID)
 	if replyTo != "" {
 		fmt.Fprintf(&body, "Reply-To: %s\r\n", (&mail.Address{Address: replyTo}).String())
 	}
@@ -334,15 +349,15 @@ func buildGmailMessage(
 		})
 		fmt.Fprintf(&body, "Content-Type: %s\r\n\r\n", contentType)
 		if err := writeGmailMIMEPart(writer, "text/plain; charset=UTF-8", textBody); err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		if err := writeGmailMIMEPart(writer, "text/html; charset=UTF-8", htmlBody); err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		if err := writer.Close(); err != nil {
-			return nil, fmt.Errorf("gmail close MIME body: %w", err)
+			return nil, "", fmt.Errorf("gmail close MIME body: %w", err)
 		}
-		return body.Bytes(), nil
+		return body.Bytes(), rfcMessageID, nil
 	}
 
 	contentType := "text/plain; charset=UTF-8"
@@ -355,12 +370,12 @@ func buildGmailMessage(
 	body.WriteString("Content-Transfer-Encoding: quoted-printable\r\n\r\n")
 	encoded := quotedprintable.NewWriter(&body)
 	if _, err := encoded.Write([]byte(content)); err != nil {
-		return nil, fmt.Errorf("gmail encode body: %w", err)
+		return nil, "", fmt.Errorf("gmail encode body: %w", err)
 	}
 	if err := encoded.Close(); err != nil {
-		return nil, fmt.Errorf("gmail close encoded body: %w", err)
+		return nil, "", fmt.Errorf("gmail close encoded body: %w", err)
 	}
-	return body.Bytes(), nil
+	return body.Bytes(), rfcMessageID, nil
 }
 
 func writeGmailMIMEPart(writer *multipart.Writer, contentType string, content string) error {

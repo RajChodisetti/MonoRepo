@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -298,5 +299,89 @@ func (handler *OutreachBulkHandler) writeTemplateTestError(w http.ResponseWriter
 		handler.writeError(w, http.StatusBadRequest, "invalid_sequence", err.Error())
 	default:
 		handler.writeError(w, http.StatusInternalServerError, "template_test_send_failed", err.Error())
+	}
+}
+
+func (handler *OutreachBulkHandler) ListInbox(w http.ResponseWriter, r *http.Request) {
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		handler.writeError(w, http.StatusUnauthorized, "unauthorized", "Authentication is required.")
+		return
+	}
+	query := r.URL.Query()
+	unreadOnly := strings.EqualFold(strings.TrimSpace(query.Get("unread")), "true")
+	limit := 50
+	offset := 0
+	if raw := strings.TrimSpace(query.Get("limit")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 1 || parsed > 100 {
+			handler.writeError(w, http.StatusBadRequest, "invalid_request", "limit must be between 1 and 100.")
+			return
+		}
+		limit = parsed
+	}
+	if raw := strings.TrimSpace(query.Get("offset")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 0 {
+			handler.writeError(w, http.StatusBadRequest, "invalid_request", "offset must be a non-negative integer.")
+			return
+		}
+		offset = parsed
+	}
+	result, err := handler.service.ListInbox(r.Context(), principal, unreadOnly, limit, offset)
+	if err != nil {
+		handler.writeInboxError(w, err)
+		return
+	}
+	handler.writeJSON(w, http.StatusOK, result)
+}
+
+func (handler *OutreachBulkHandler) ListRestaurantMessages(w http.ResponseWriter, r *http.Request) {
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		handler.writeError(w, http.StatusUnauthorized, "unauthorized", "Authentication is required.")
+		return
+	}
+	restaurantID, err := restaurantIDFromRequest(r)
+	if err != nil {
+		handler.writeError(w, http.StatusBadRequest, "invalid_request", "Restaurant id must be a valid UUID.")
+		return
+	}
+	markRead := !strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("mark_read")), "false")
+	messages, err := handler.service.ListRestaurantMessages(r.Context(), principal, restaurantID, markRead)
+	if err != nil {
+		handler.writeInboxError(w, err)
+		return
+	}
+	handler.writeJSON(w, http.StatusOK, map[string]any{"messages": messages})
+}
+
+func (handler *OutreachBulkHandler) MarkMessageRead(w http.ResponseWriter, r *http.Request) {
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		handler.writeError(w, http.StatusUnauthorized, "unauthorized", "Authentication is required.")
+		return
+	}
+	messageID, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		handler.writeError(w, http.StatusBadRequest, "invalid_request", "Message id must be a valid UUID.")
+		return
+	}
+	record, err := handler.service.MarkMessageRead(r.Context(), principal, messageID)
+	if err != nil {
+		handler.writeInboxError(w, err)
+		return
+	}
+	handler.writeJSON(w, http.StatusOK, record)
+}
+
+func (handler *OutreachBulkHandler) writeInboxError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, restaurants.ErrForbidden):
+		handler.writeError(w, http.StatusForbidden, "forbidden", "You do not have access to this inbox.")
+	case errors.Is(err, repository.ErrNotFound):
+		handler.writeError(w, http.StatusNotFound, "not_found", "Email message was not found.")
+	default:
+		handler.writeError(w, http.StatusInternalServerError, "inbox_failed", err.Error())
 	}
 }

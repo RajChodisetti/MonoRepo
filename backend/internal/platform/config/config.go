@@ -128,6 +128,12 @@ type OutreachConfig struct {
 	ZohoAccountsJSON            string
 	GoogleWorkspaceAccounts     []GmailMailConfig
 	GoogleWorkspaceAccountsJSON string
+	InboundEnabled              bool
+	InboundDomain               string
+	InboundLocalPart            string
+	InboundMailboxJSON          string
+	InboundMailbox              *GmailMailConfig
+	InboundPollInterval         time.Duration
 }
 
 type LLMConfig struct {

@@ -146,6 +146,9 @@ Current migrations:
 - `000042_plain_text_outreach_sequences` — approved sequence versions,
   inferred-business evidence, and integer recipient progress
 - `000043_manual_media_review` — explicit owner/licensed media approval audit
+- `000044` through `000046` — SEO unlock security and current outreach copy
+- `000047_email_messages` — accepted outbound snapshots and inbound reply capture
+- `000048_outreach_email_ramp` — durable 5-to-40 per-mailbox warm-up cycles
 
 **Rollback notes:**
 
@@ -263,6 +266,7 @@ curl http://localhost:8080/readyz \
 | `DELETE /api/v1/restaurants/{id}` | Bearer + `internal_admin` | Soft archive (`status = archived`) |
 | `GET /api/v1/restaurants/{id}/members` | Bearer + `internal_admin` | List restaurant members |
 | `POST /api/v1/restaurants/{id}/members` | Bearer + `internal_admin` | Assign owner to restaurant |
+| `GET /api/v1/restaurants/{id}/messages` | Bearer + `internal_admin` | List captured outbound snapshots and inbound replies |
 | `POST /api/v1/restaurants/{id}/demo-sites` | Bearer + `internal_admin` | Create a draft demo site (returns one-time token) |
 | `GET /api/v1/restaurants/{id}/profile/review-preview` | Bearer + `internal_admin` | Inspect profile/contact and capture review versions without bearer secrets |
 | `PATCH /api/v1/restaurants/{id}/profile/review` | Bearer + `internal_admin` | Audit profile approval/rejection for demo/public content |
@@ -276,6 +280,8 @@ curl http://localhost:8080/readyz \
 | `GET /api/v1/outreach/bulk-send/status` | Bearer + `internal_admin` | Follow-up/new counts, pacing, and active/last job status |
 | `GET/POST /api/v1/outreach/sequences...` | Bearer + `internal_admin` | List, draft, edit, preview, and approve sequence versions |
 | `GET /api/v1/outreach/recipients` | Bearer + `internal_admin` | Inspect integer sequence progress and next-due state |
+| `GET /api/v1/outreach/inbox` | Bearer + `internal_admin` | List restaurant and unmatched reply threads |
+| `POST /api/v1/outreach/messages/{id}/read` | Bearer + `internal_admin` | Mark one captured message read |
 | `GET /api/public/v1/demo/{slug}?token=...` | Public | Public demo payload only (no internal fields) |
 | `GET /api/public/v1/restaurants/{id}/table-availability` | Public | Return available RFC3339 reservation-request slots |
 | `PUT /api/public/v1/restaurants/{id}/reservations` | Public | Submit an idempotent reservation request in `pending` status |

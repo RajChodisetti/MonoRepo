@@ -225,6 +225,69 @@ func TestPlainTextOutreachMigrationFailsClosedBeforeEnrollment(t *testing.T) {
 	}
 }
 
+func TestRepositoryMigrationsIncludeInboxAndEmailRamp(t *testing.T) {
+	_, currentFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller() did not return this test file")
+	}
+	dir := filepath.Join(filepath.Dir(currentFile), "..", "..", "..", "migrations")
+
+	migrations, err := Discover(dir)
+	if err != nil {
+		t.Fatalf("Discover(repository migrations) error = %v", err)
+	}
+	wanted := map[int64]struct {
+		name         string
+		upFragments  []string
+		downFragment string
+	}{
+		47: {
+			name: "email_messages",
+			upFragments: []string{
+				"CREATE TABLE IF NOT EXISTS email_messages",
+				"CREATE TABLE IF NOT EXISTS outreach_inbound_sync",
+			},
+			downFragment: "DROP TABLE IF EXISTS email_messages",
+		},
+		48: {
+			name: "outreach_email_ramp",
+			upFragments: []string{
+				"ADD COLUMN IF NOT EXISTS ramp_day",
+				"CHECK (ramp_day BETWEEN 1 AND 8)",
+				"usage_count >= LEAST(send_limit, 5)",
+			},
+			downFragment: "DROP COLUMN IF EXISTS ramp_day",
+		},
+	}
+
+	for _, migration := range migrations {
+		want, exists := wanted[migration.Version]
+		if !exists || migration.Name != want.name {
+			continue
+		}
+		upSQL, readErr := os.ReadFile(migration.UpPath)
+		if readErr != nil {
+			t.Fatalf("read migration %d up: %v", migration.Version, readErr)
+		}
+		for _, fragment := range want.upFragments {
+			if !strings.Contains(string(upSQL), fragment) {
+				t.Fatalf("migration %d up missing %q", migration.Version, fragment)
+			}
+		}
+		downSQL, readErr := os.ReadFile(migration.DownPath)
+		if readErr != nil {
+			t.Fatalf("read migration %d down: %v", migration.Version, readErr)
+		}
+		if !strings.Contains(string(downSQL), want.downFragment) {
+			t.Fatalf("migration %d down missing %q", migration.Version, want.downFragment)
+		}
+		delete(wanted, migration.Version)
+	}
+	if len(wanted) != 0 {
+		t.Fatalf("repository migrations missing expected versions: %v", wanted)
+	}
+}
+
 func writeMigrationFile(t *testing.T, dir, name string) {
 	t.Helper()
 

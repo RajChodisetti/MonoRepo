@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 var ErrAccountsExhausted = errors.New("all outreach email accounts are unavailable")
@@ -16,14 +18,15 @@ type accountProvider struct {
 }
 
 type AccountPool struct {
-	accounts        []accountProvider
-	limitPerAccount int
-	currentIndex    int
-	sentOnCurrent   int
-	totalSent       int
-	maxTotal        int
-	quota           QuotaStore
-	cooldown        time.Duration
+	accounts          []accountProvider
+	limitPerAccount   int
+	currentIndex      int
+	sentOnCurrent     int
+	totalSent         int
+	maxTotal          int
+	quota             QuotaStore
+	cooldown          time.Duration
+	replyToForAttempt func(uuid.UUID) string
 }
 
 // NewAccountPool retains the in-memory constructor for isolated/local callers.
@@ -221,6 +224,11 @@ func (pool *AccountPool) sendDurable(ctx context.Context, req SendRequest) (Send
 	if err != nil {
 		return managedResult, err
 	}
+	if strings.TrimSpace(req.ReplyTo) == "" && pool.replyToForAttempt != nil {
+		if replyTo := pool.replyToForAttempt(claim.AttemptID); replyTo != "" {
+			req.ReplyTo = replyTo
+		}
+	}
 
 	result := SendResult{
 		QuotaManaged:      true,
@@ -242,6 +250,13 @@ func (pool *AccountPool) sendDurable(ctx context.Context, req SendRequest) (Send
 
 	providerResult, sendErr := provider.Send(ctx, req)
 	result.ProviderMessageID = providerResult.ProviderMessageID
+	result.ProviderThreadID = providerResult.ProviderThreadID
+	result.RFCMessageID = providerResult.RFCMessageID
+	result.FromEmail = providerResult.FromEmail
+	result.ReplyTo = providerResult.ReplyTo
+	if result.ReplyTo == "" {
+		result.ReplyTo = strings.TrimSpace(req.ReplyTo)
+	}
 	result.RedirectedTo = providerResult.RedirectedTo
 	result.Skipped = providerResult.Skipped
 
