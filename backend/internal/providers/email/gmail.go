@@ -150,6 +150,9 @@ func (provider *gmailProvider) Send(ctx context.Context, req SendRequest) (SendR
 
 	accessToken, err := provider.accessToken(ctx)
 	if err != nil {
+		if ctx.Err() != nil {
+			return SendResult{}, ctx.Err()
+		}
 		return SendResult{}, err
 	}
 
@@ -197,18 +200,26 @@ func (provider *gmailProvider) Send(ctx context.Context, req SendRequest) (SendR
 			Status  string `json:"status"`
 		} `json:"error"`
 	}
-	if err := json.Unmarshal(respBody, &parsed); err != nil {
-		return SendResult{}, fmt.Errorf("gmail decode response: %w", err)
-	}
+	decodeErr := json.Unmarshal(respBody, &parsed)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		message := strings.TrimSpace(parsed.Error.Message)
-		if message == "" {
-			message = strings.TrimSpace(parsed.Error.Status)
+		message := ""
+		if decodeErr == nil {
+			message = strings.TrimSpace(parsed.Error.Message)
+			if message == "" {
+				message = strings.TrimSpace(parsed.Error.Status)
+			}
 		}
 		if message == "" {
 			message = resp.Status
 		}
-		return SendResult{}, fmt.Errorf("gmail API error (%d): %s", resp.StatusCode, redactEmailAddresses(message))
+		apiErr := fmt.Errorf("gmail API error (%d): %s", resp.StatusCode, redactEmailAddresses(message))
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			return SendResult{}, fmt.Errorf("%w: %v", ErrAccountUnavailable, apiErr)
+		}
+		return SendResult{}, apiErr
+	}
+	if decodeErr != nil {
+		return SendResult{}, fmt.Errorf("gmail decode response: %w", decodeErr)
 	}
 
 	messageID := strings.TrimSpace(parsed.ID)
@@ -314,20 +325,40 @@ func (provider *gmailProvider) refreshAccessToken(ctx context.Context) (string, 
 		Error            string `json:"error"`
 		ErrorDescription string `json:"error_description"`
 	}
-	if err := json.Unmarshal(respBody, &parsed); err != nil {
-		return "", 0, fmt.Errorf("gmail token decode: %w", err)
-	}
+	decodeErr := json.Unmarshal(respBody, &parsed)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 || strings.TrimSpace(parsed.AccessToken) == "" {
-		message := strings.TrimSpace(parsed.ErrorDescription)
-		if message == "" {
-			message = strings.TrimSpace(parsed.Error)
+		message := ""
+		if decodeErr == nil {
+			message = strings.TrimSpace(parsed.ErrorDescription)
+			if message == "" {
+				message = strings.TrimSpace(parsed.Error)
+			}
 		}
 		if message == "" {
 			message = resp.Status
 		}
-		return "", 0, fmt.Errorf("gmail token refresh failed: %s", redactEmailAddresses(message))
+		tokenErr := fmt.Errorf("gmail token refresh failed: %s", redactEmailAddresses(message))
+		if gmailCredentialRejected(resp.StatusCode, parsed.Error) {
+			return "", 0, fmt.Errorf("%w: %v", ErrAccountUnavailable, tokenErr)
+		}
+		if decodeErr != nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			return "", 0, fmt.Errorf("gmail token decode: %w", decodeErr)
+		}
+		return "", 0, tokenErr
 	}
 	return strings.TrimSpace(parsed.AccessToken), time.Duration(parsed.ExpiresIn) * time.Second, nil
+}
+
+func gmailCredentialRejected(statusCode int, oauthError string) bool {
+	if statusCode == http.StatusUnauthorized || statusCode == http.StatusForbidden {
+		return true
+	}
+	switch strings.ToLower(strings.TrimSpace(oauthError)) {
+	case "access_denied", "deleted_client", "invalid_client", "invalid_grant", "invalid_scope", "unauthorized_client":
+		return true
+	default:
+		return false
+	}
 }
 
 func buildGmailMessage(

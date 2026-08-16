@@ -28,6 +28,7 @@ type StoredAccount struct {
 	UpdatedBy            *uuid.UUID
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
+	clearAuthQuarantine  bool
 }
 
 type Account struct {

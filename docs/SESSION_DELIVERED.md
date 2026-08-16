@@ -3819,3 +3819,38 @@ mode-`0600` backups
 `/opt/tuvi/backups/postgres/monorepo-pre-2ffc134-20260816T164156Z.dump`,
 `/opt/tuvi/backups/config/env-pre-2ffc134-20260816T164156Z.tar.gz`, and
 `/opt/tuvi/backups/config/stack.env-pre-2ffc134-20260816T164156Z`.
+
+## 2026-08-16 — Outreach signature, test-send failover, and greeting01 fixes
+
+**Role / Delivery:** Implemented the three reported outreach fixes on local branch
+`codex/fix-outreach-signature-test-send-greeting-20260816` in an isolated linked
+worktree, leaving the pre-existing dirty checkout untouched. Draft saves now consume
+the authoritative sequence response, retain its fresh `updated_at` token, and expose
+the persisted signature in verified preview. The two test-send controls explicitly
+identify selected-saved versus active sequence versions. Both controls acquire one
+operation-local sender pool for the complete template batch, skip Gmail accounts only
+after definitive credential/authorization rejection, and retain fail-closed behavior
+for ambiguous provider outcomes. Scheduled rejection finalizes the attempt as failed,
+quarantines that account, restores campaign eligibility, and defers to persisted
+pacing; credential, sender-address, and disabled-to-enabled updates clear only that
+dedicated quarantine. Template 1 UI now displays only `[GREETING]` / `{{greeting01}}`,
+with regression coverage proving preview, test, and live rendering use it exactly once.
+
+**Checks Run:** `go test ./backend/...` passed 598 tests; targeted final packages
+passed 215 tests; the race-enabled email/outreach/outreachaccounts suite passed 166;
+`go vet ./backend/...` and `go build ./backend/cmd/...` passed. Admin ESLint,
+nonincremental TypeScript, and the 14-route Next.js production build passed. OpenAPI
+validated with 11 pre-existing warnings, all changed Go files were `gofmt` clean, and
+`git diff --check` passed.
+
+**Business Value / Plan Fit:** Saved signatures are immediately visible and tied to
+the version actually tested. One revoked or insufficiently authorized mailbox no
+longer blocks both test-send surfaces or the remaining scheduled sender rotation, and
+operators see only the canonical Template 1 greeting value.
+
+**Risks / Approval State:** This work is local and unreleased. It adds no migration
+and reuses the existing failed-attempt and email-health schema. No provider call,
+health probe, production mutation, deployment, or real email send was performed. The
+new PostgreSQL claim/quarantine/update CTEs have unit and contract coverage but no live
+database integration test because this repository has no database test harness; an
+approved post-deploy test-recipient smoke remains required before relying on delivery.

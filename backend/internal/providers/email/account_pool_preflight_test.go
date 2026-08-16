@@ -2,6 +2,8 @@ package email
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -13,8 +15,15 @@ import (
 
 type preflightQuotaStore struct {
 	claims        int
+	completes     int
+	skips         int
+	unknowns      int
+	failures      int
+	quarantines   int
 	attemptID     uuid.UUID
 	registrations []QuotaAccountConfig
+	failureCode   string
+	quarantineKey string
 }
 
 func (store *preflightQuotaStore) SyncEmailAccounts(_ context.Context, accounts []QuotaAccountConfig, _ time.Duration) error {
@@ -35,14 +44,17 @@ func (store *preflightQuotaStore) ClaimEmailDelivery(context.Context, []string, 
 }
 
 func (store *preflightQuotaStore) CompleteEmailDelivery(context.Context, DeliveryClaim, string) error {
+	store.completes++
 	return nil
 }
 
 func (store *preflightQuotaStore) SkipEmailDelivery(context.Context, DeliveryClaim, bool, bool) error {
+	store.skips++
 	return nil
 }
 
 func (store *preflightQuotaStore) MarkEmailDeliveryUnknown(context.Context, DeliveryClaim, string) error {
+	store.unknowns++
 	return nil
 }
 
@@ -50,15 +62,118 @@ func (store *preflightQuotaStore) NextEmailAccountAvailableAt(context.Context, [
 	return nil, nil
 }
 
+func (store *preflightQuotaStore) FailEmailDelivery(_ context.Context, _ DeliveryClaim, errorCode string) error {
+	store.failures++
+	store.failureCode = errorCode
+	return nil
+}
+
+func (store *preflightQuotaStore) QuarantineEmailAccount(_ context.Context, accountKey, _ string) error {
+	store.quarantines++
+	store.quarantineKey = accountKey
+	return nil
+}
+
 type preflightProvider struct {
 	sends int
 	last  SendRequest
+	err   error
 }
 
 func (provider *preflightProvider) Send(_ context.Context, req SendRequest) (SendResult, error) {
 	provider.sends++
 	provider.last = req
+	if provider.err != nil {
+		return SendResult{}, provider.err
+	}
 	return SendResult{ProviderMessageID: "message-1", ReplyTo: req.ReplyTo}, nil
+}
+
+func TestDurableAccountPoolScheduledAuthRejectionFailsAndQuarantines(t *testing.T) {
+	quota := &preflightQuotaStore{}
+	provider := &preflightProvider{err: fmt.Errorf("%w: invalid grant", ErrAccountUnavailable)}
+	pool, err := newPersistentAccountPool(
+		[]accountProvider{{key: "account-1", provider: provider}},
+		40,
+		40,
+		24*time.Hour,
+		quota,
+	)
+	if err != nil {
+		t.Fatalf("newPersistentAccountPool() error = %v", err)
+	}
+
+	result, err := pool.Send(context.Background(), SendRequest{
+		To: "owner@example.com", Subject: "Scheduled outreach", TextBody: "hello",
+		Delivery: &DeliveryContext{CampaignID: uuid.New(), RestaurantID: uuid.New(), Step: 1},
+	})
+	if !errors.Is(err, ErrAccountUnavailable) {
+		t.Fatalf("Send() error = %v, want ErrAccountUnavailable", err)
+	}
+	if !result.QuotaManaged || !result.Finalized {
+		t.Fatalf("Send() result = %#v, want finalized quota-managed failure", result)
+	}
+	if quota.failures != 1 || quota.quarantines != 1 || quota.unknowns != 0 {
+		t.Fatalf("finalization calls = failed %d, quarantined %d, unknown %d", quota.failures, quota.quarantines, quota.unknowns)
+	}
+	if quota.failureCode != AccountUnavailableErrorCode || quota.quarantineKey != "account-1" {
+		t.Fatalf("failure code/key = %q/%q", quota.failureCode, quota.quarantineKey)
+	}
+}
+
+func TestDurableAccountPoolScheduledAmbiguousFailureRemainsUnknown(t *testing.T) {
+	quota := &preflightQuotaStore{}
+	provider := &preflightProvider{err: errors.New("provider response could not be read")}
+	pool, err := newPersistentAccountPool(
+		[]accountProvider{{key: "account-1", provider: provider}},
+		40,
+		40,
+		24*time.Hour,
+		quota,
+	)
+	if err != nil {
+		t.Fatalf("newPersistentAccountPool() error = %v", err)
+	}
+
+	result, err := pool.Send(context.Background(), SendRequest{
+		To: "owner@example.com", Subject: "Scheduled outreach", TextBody: "hello",
+		Delivery: &DeliveryContext{CampaignID: uuid.New(), RestaurantID: uuid.New(), Step: 1},
+	})
+	if err == nil || errors.Is(err, ErrAccountUnavailable) {
+		t.Fatalf("Send() error = %v, want unchanged ambiguous failure", err)
+	}
+	if !result.QuotaManaged || !result.Finalized {
+		t.Fatalf("Send() result = %#v, want finalized quota-managed unknown", result)
+	}
+	if quota.unknowns != 1 || quota.failures != 0 || quota.quarantines != 0 {
+		t.Fatalf("finalization calls = unknown %d, failed %d, quarantined %d", quota.unknowns, quota.failures, quota.quarantines)
+	}
+}
+
+func TestDurableAccountPoolWithoutFailureExtensionFailsClosed(t *testing.T) {
+	quota := &quotaTouchCounter{claim: DeliveryClaim{AttemptID: uuid.New(), AccountKey: "account-1"}}
+	provider := &preflightProvider{err: fmt.Errorf("%w: invalid grant", ErrAccountUnavailable)}
+	pool, err := newPersistentAccountPool(
+		[]accountProvider{{key: "account-1", provider: provider}},
+		40,
+		40,
+		24*time.Hour,
+		quota,
+	)
+	if err != nil {
+		t.Fatalf("newPersistentAccountPool() error = %v", err)
+	}
+
+	result, err := pool.Send(context.Background(), SendRequest{
+		To: "owner@example.com", Subject: "Scheduled outreach", TextBody: "hello",
+		Delivery: &DeliveryContext{CampaignID: uuid.New(), RestaurantID: uuid.New(), Step: 1},
+	})
+	if err == nil || errors.Is(err, ErrAccountUnavailable) {
+		t.Fatalf("Send() error = %v, want non-recoverable durable configuration failure", err)
+	}
+	if !result.Finalized || quota.unknowns != 1 {
+		t.Fatalf("Send() result/unknowns = %#v/%d, want finalized unknown", result, quota.unknowns)
+	}
 }
 
 func TestDurableAccountPoolValidatesBeforeClaim(t *testing.T) {

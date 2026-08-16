@@ -65,11 +65,19 @@ func (pool *ReloadingAccountPool) Send(ctx context.Context, request SendRequest)
 }
 
 func (pool *ReloadingAccountPool) SendDirect(ctx context.Context, request SendRequest) (SendResult, error) {
-	current, err := pool.currentDirect(ctx)
+	provider, err := pool.AcquireDirect(ctx)
 	if err != nil {
 		return SendResult{}, err
 	}
-	return current.SendDirect(ctx, request)
+	return provider.Send(ctx, request)
+}
+
+func (pool *ReloadingAccountPool) AcquireDirect(ctx context.Context) (Provider, error) {
+	current, err := pool.currentDirect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return current.AcquireDirect(ctx)
 }
 
 func (pool *ReloadingAccountPool) SendDirectFrom(ctx context.Context, accountKey string, request SendRequest) (SendResult, error) {

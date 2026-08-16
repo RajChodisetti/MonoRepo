@@ -3,6 +3,7 @@ package email_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -12,6 +13,17 @@ import (
 
 type countingProvider struct {
 	sends int
+}
+
+type directResultProvider struct {
+	sends  int
+	result email.SendResult
+	err    error
+}
+
+func (provider *directResultProvider) Send(context.Context, email.SendRequest) (email.SendResult, error) {
+	provider.sends++
+	return provider.result, provider.err
 }
 
 func TestNewAccountPoolFromConfigUsesUIControlInsteadOfLegacyEmailFlag(t *testing.T) {
@@ -166,5 +178,63 @@ func TestAccountPoolResetStartsANewManualRunAllowance(t *testing.T) {
 	pool.Reset()
 	if _, err := pool.Send(context.Background(), email.SendRequest{To: "lead@example.com", TextBody: "hi"}); err != nil {
 		t.Fatalf("Send() after Reset error = %v", err)
+	}
+}
+
+func TestAccountPoolSendDirectSkipsOnlySafeUnavailableAccounts(t *testing.T) {
+	t.Parallel()
+
+	unavailable := &directResultProvider{err: fmt.Errorf("%w: revoked refresh token", email.ErrAccountUnavailable)}
+	healthy := &directResultProvider{result: email.SendResult{ProviderMessageID: "accepted"}}
+	pool, err := email.NewAccountPool([]email.Provider{unavailable, healthy}, 1, 2)
+	if err != nil {
+		t.Fatalf("NewAccountPool() error = %v", err)
+	}
+	direct, err := pool.AcquireDirect(context.Background())
+	if err != nil {
+		t.Fatalf("AcquireDirect() error = %v", err)
+	}
+
+	for index := range 2 {
+		result, sendErr := direct.Send(context.Background(), email.SendRequest{To: "lead@example.com", TextBody: "hi"})
+		if sendErr != nil {
+			t.Fatalf("direct Send(%d) error = %v", index+1, sendErr)
+		}
+		if result.ProviderMessageID != "accepted" || result.AccountKey != "in-memory-2" {
+			t.Fatalf("direct Send(%d) result = %#v", index+1, result)
+		}
+	}
+	if unavailable.sends != 1 || healthy.sends != 2 {
+		t.Fatalf("provider sends = unavailable %d, healthy %d; want 1, 2", unavailable.sends, healthy.sends)
+	}
+
+	secondOperation, err := pool.AcquireDirect(context.Background())
+	if err != nil {
+		t.Fatalf("second AcquireDirect() error = %v", err)
+	}
+	if _, err := secondOperation.Send(context.Background(), email.SendRequest{To: "lead@example.com", TextBody: "hi"}); err != nil {
+		t.Fatalf("second operation Send() error = %v", err)
+	}
+	if unavailable.sends != 2 || healthy.sends != 3 {
+		t.Fatalf("provider sends after fresh snapshot = unavailable %d, healthy %d; want 2, 3", unavailable.sends, healthy.sends)
+	}
+}
+
+func TestAccountPoolSendDirectDoesNotRetryAmbiguousFailure(t *testing.T) {
+	t.Parallel()
+
+	ambiguous := &directResultProvider{err: errors.New("provider response could not be read")}
+	healthy := &directResultProvider{result: email.SendResult{ProviderMessageID: "must-not-send"}}
+	pool, err := email.NewAccountPool([]email.Provider{ambiguous, healthy}, 1, 2)
+	if err != nil {
+		t.Fatalf("NewAccountPool() error = %v", err)
+	}
+
+	result, err := pool.SendDirect(context.Background(), email.SendRequest{To: "lead@example.com", TextBody: "hi"})
+	if err == nil || errors.Is(err, email.ErrAccountUnavailable) {
+		t.Fatalf("SendDirect() error = %v, want unchanged ambiguous error", err)
+	}
+	if result.AccountKey != "in-memory-1" || ambiguous.sends != 1 || healthy.sends != 0 {
+		t.Fatalf("result/sends = %#v, %d/%d", result, ambiguous.sends, healthy.sends)
 	}
 }

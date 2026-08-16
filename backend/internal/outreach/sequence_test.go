@@ -66,6 +66,13 @@ func TestRenderSquareBracketPlaceholders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("renderSequenceStep() error = %v", err)
 	}
+	greeting01 := RenderGreeting01(facts).Greeting01
+	if count := strings.Count(rendered.BodyText, greeting01); count != 1 {
+		t.Fatalf("rendered Template 1 greeting01 count = %d, want 1: %q", count, rendered.BodyText)
+	}
+	if strings.Contains(rendered.BodyText, "Hi Maya,") {
+		t.Fatalf("rendered Template 1 contains legacy greeting: %q", rendered.BodyText)
+	}
 	for _, expected := range []string{
 		"Morning Maya,", "Spice Garden", "Owner: Maya", "Cuisine: Indian",
 		"City: Plano", "Rating: 4.8", "Reviews: 426", websiteURL,

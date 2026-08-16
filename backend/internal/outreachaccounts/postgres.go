@@ -9,6 +9,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	emailprovider "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/email"
 )
 
 type Repository interface {
@@ -90,16 +92,34 @@ func (repo *Postgres) Update(ctx context.Context, account StoredAccount) (Stored
 		return StoredAccount{}, fmt.Errorf("database pool is not configured")
 	}
 	updated, err := scanStoredAccount(repo.pool.QueryRow(ctx, `
-		UPDATE outreach_email_credentials
-		SET from_email = $2,
-		    credential_ciphertext = $3,
-		    enabled = $4,
-		    updated_by = $5,
-		    updated_at = now()
-		WHERE id = $1
-		RETURNING id, account_key, mailbox_email, from_email, credential_ciphertext,
-		          encryption_version, enabled, created_by, updated_by, created_at, updated_at`,
+		WITH updated AS (
+		  UPDATE outreach_email_credentials
+		  SET from_email = $2,
+		      credential_ciphertext = $3,
+		      enabled = $4,
+		      updated_by = $5,
+		      updated_at = now()
+		  WHERE id = $1
+		  RETURNING id, account_key, mailbox_email, from_email, credential_ciphertext,
+		            encryption_version, enabled, created_by, updated_by, created_at, updated_at
+		), clear_quarantine AS (
+		  UPDATE outreach_email_account_health AS health
+		  SET health_status = CASE WHEN health.enabled THEN 'pending' ELSE 'disabled' END,
+		      last_checked_at = NULL,
+		      next_check_at = CASE WHEN health.enabled THEN now() ELSE NULL END,
+		      provider_message_id = '',
+		      last_error = '',
+		      updated_at = now()
+		  FROM updated
+		  WHERE $6
+		    AND health.account_key = updated.account_key
+		    AND health.last_error = $7
+		)
+		SELECT id, account_key, mailbox_email, from_email, credential_ciphertext,
+		       encryption_version, enabled, created_by, updated_by, created_at, updated_at
+		FROM updated`,
 		account.ID, account.FromEmail, account.CredentialCiphertext, account.Enabled, account.UpdatedBy,
+		account.clearAuthQuarantine, emailprovider.AccountUnavailableErrorCode,
 	))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return StoredAccount{}, ErrNotFound

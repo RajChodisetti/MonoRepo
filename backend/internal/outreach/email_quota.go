@@ -638,11 +638,24 @@ func (repo *Postgres) ClaimEmailDelivery(
 		               )
 		           END
 		         ), 0)::int AS remaining_limit
-		  FROM outreach_email_accounts
-		  WHERE enabled = true AND account_key = ANY($1::text[])
+		  FROM outreach_email_accounts AS quota_account
+		  WHERE quota_account.enabled = true
+		    AND quota_account.account_key = ANY($1::text[])
+		    AND NOT EXISTS (
+		      SELECT 1
+		      FROM outreach_email_account_health AS health
+		      WHERE health.account_key = quota_account.account_key
+		        AND health.last_error = $3
+		    )
 		) AS quota
 		WHERE account.enabled = true
 		  AND account.account_key = ANY($1::text[])
+		  AND NOT EXISTS (
+		    SELECT 1
+		    FROM outreach_email_account_health AS health
+		    WHERE health.account_key = account.account_key
+		      AND health.last_error = $3
+		  )
 		  AND account.available_at <= clock_timestamp()
 		  AND (
 		    account.cycle_started_at IS DISTINCT FROM $2::timestamptz
@@ -664,7 +677,13 @@ func (repo *Postgres) ClaimEmailDelivery(
 	var sendJitterMaxSeconds int
 	var totalConfiguredLimit int
 	var remainingDailyLimit int
-	if err := tx.QueryRow(ctx, selectAccount, accountKeys, window.Start).Scan(
+	if err := tx.QueryRow(
+		ctx,
+		selectAccount,
+		accountKeys,
+		window.Start,
+		emailprovider.AccountUnavailableErrorCode,
+	).Scan(
 		&accountID,
 		&accountKey,
 		&cycleNumber,
@@ -976,8 +995,15 @@ func (repo *Postgres) NextEmailAccountAvailableAt(
 	const query = `
 		WITH configured AS MATERIALIZED (
 		  SELECT id, position, created_at, usage_count, send_limit, ramp_day, available_at
-		  FROM outreach_email_accounts
-		  WHERE enabled = true AND account_key = ANY($1::text[])
+		  FROM outreach_email_accounts AS account
+		  WHERE account.enabled = true
+		    AND account.account_key = ANY($1::text[])
+		    AND NOT EXISTS (
+		      SELECT 1
+		      FROM outreach_email_account_health AS health
+		      WHERE health.account_key = account.account_key
+		        AND health.last_error = $2
+		    )
 		)
 		SELECT (SELECT count(*) FROM configured),
 		       GREATEST((SELECT min(available_at) FROM configured), pacing.next_send_at),
@@ -987,7 +1013,12 @@ func (repo *Postgres) NextEmailAccountAvailableAt(
 	var accountCount int
 	var next *time.Time
 	var databaseNow time.Time
-	if err := repo.pool.QueryRow(ctx, query, accountKeys).Scan(&accountCount, &next, &databaseNow); err != nil {
+	if err := repo.pool.QueryRow(
+		ctx,
+		query,
+		accountKeys,
+		emailprovider.AccountUnavailableErrorCode,
+	).Scan(&accountCount, &next, &databaseNow); err != nil {
 		return nil, fmt.Errorf("get next outreach email account availability: %w", err)
 	}
 	if accountCount == 0 {
@@ -1044,6 +1075,22 @@ func (repo *Postgres) MarkEmailDeliveryUnknown(
 	}
 	return repo.finalizeEmailDelivery(ctx, claim, deliveryFinalization{
 		status:    "unknown",
+		eventType: campaigns.EventFailed,
+		errorCode: code,
+	})
+}
+
+func (repo *Postgres) FailEmailDelivery(
+	ctx context.Context,
+	claim emailprovider.DeliveryClaim,
+	errorCode string,
+) error {
+	code := strings.TrimSpace(errorCode)
+	if code == "" {
+		code = "provider_rejected_before_acceptance"
+	}
+	return repo.finalizeEmailDelivery(ctx, claim, deliveryFinalization{
+		status:    "failed",
 		eventType: campaigns.EventFailed,
 		errorCode: code,
 	})
@@ -1250,3 +1297,4 @@ func (repo *Postgres) finalizeEmailDelivery(
 }
 
 var _ emailprovider.QuotaStore = (*Postgres)(nil)
+var _ emailprovider.AccountFailureStore = (*Postgres)(nil)

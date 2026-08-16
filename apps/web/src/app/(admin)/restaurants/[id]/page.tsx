@@ -527,21 +527,16 @@ function RestaurantDetailInner() {
         </form>
         <div className="card" style={{ display: "grid", gap: "0.75rem", alignContent: "start" }}>
           <div>
-            <h3 style={{ margin: 0, fontSize: "1rem" }}>Restaurant-specific greetings</h3>
+            <h3 style={{ margin: 0, fontSize: "1rem" }}>Template 1 greeting</h3>
             <p style={{ color: "var(--muted)", margin: "0.35rem 0 0", fontSize: "0.86rem" }}>
-              Deterministic values rendered from this restaurant&apos;s authoritative listing facts.
+              The value used for <code>[GREETING]</code> and its legacy <code>{"{{greeting01}}"}</code> alias,
+              rendered from this restaurant&apos;s authoritative listing facts.
             </p>
           </div>
           {greetingPreview ? (
             <>
               <div>
-                <strong>{"{{greeting}}"}</strong>
-                <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", margin: "0.35rem 0 0" }}>
-                  {greetingPreview.greeting}
-                </pre>
-              </div>
-              <div>
-                <strong>{"{{greeting01}}"}</strong>
+                <strong><code>[GREETING]</code> / <code>{"{{greeting01}}"}</code></strong>
                 <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", margin: "0.35rem 0 0" }}>
                   {greetingPreview.greeting01}
                 </pre>

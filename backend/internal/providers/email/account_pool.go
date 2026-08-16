@@ -20,6 +20,7 @@ type AccountPoolProvider interface {
 	Durable() bool
 	NextAvailableAt(context.Context) (*time.Time, error)
 	Exhausted() bool
+	AcquireDirect(context.Context) (Provider, error)
 	SendDirect(context.Context, SendRequest) (SendResult, error)
 	SendDirectFrom(context.Context, string, SendRequest) (SendResult, error)
 }
@@ -36,6 +37,7 @@ type accountProvider struct {
 type AccountPool struct {
 	accounts          []accountProvider
 	directAccounts    map[string]Provider
+	directUnavailable map[string]struct{}
 	limitPerAccount   int
 	currentIndex      int
 	sentOnCurrent     int
@@ -163,6 +165,7 @@ func (pool *AccountPool) Reset() {
 	pool.currentIndex = 0
 	pool.sentOnCurrent = 0
 	pool.totalSent = 0
+	pool.directUnavailable = nil
 }
 
 func (pool *AccountPool) Send(ctx context.Context, req SendRequest) (SendResult, error) {
@@ -185,13 +188,57 @@ func (pool *AccountPool) SendDirect(ctx context.Context, req SendRequest) (SendR
 	if pool.currentIndex >= len(pool.accounts) {
 		pool.currentIndex = 0
 	}
-	account := pool.accounts[pool.currentIndex]
-	pool.currentIndex = (pool.currentIndex + 1) % len(pool.accounts)
-	result, err := account.provider.Send(ctx, req)
-	if result.AccountKey == "" {
-		result.AccountKey = account.key
+	accountFailures := make([]error, 0, len(pool.accounts))
+	for range pool.accounts {
+		account := pool.accounts[pool.currentIndex]
+		pool.currentIndex = (pool.currentIndex + 1) % len(pool.accounts)
+		if _, unavailable := pool.directUnavailable[account.key]; unavailable {
+			continue
+		}
+		result, err := account.provider.Send(ctx, req)
+		if result.AccountKey == "" {
+			result.AccountKey = account.key
+		}
+		if err == nil {
+			return result, nil
+		}
+		if ctx.Err() != nil || !errors.Is(err, ErrAccountUnavailable) {
+			return result, err
+		}
+		if pool.directUnavailable == nil {
+			pool.directUnavailable = make(map[string]struct{})
+		}
+		pool.directUnavailable[account.key] = struct{}{}
+		accountFailures = append(accountFailures, fmt.Errorf("email account %q: %w", account.key, err))
 	}
-	return result, err
+	if len(accountFailures) == 0 {
+		return SendResult{}, ErrAccountsExhausted
+	}
+	return SendResult{}, fmt.Errorf("%w: %w", ErrAccountsExhausted, errors.Join(accountFailures...))
+}
+
+type directAccountPoolProvider struct {
+	pool *AccountPool
+}
+
+func (provider directAccountPoolProvider) Send(ctx context.Context, req SendRequest) (SendResult, error) {
+	return provider.pool.SendDirect(ctx, req)
+}
+
+// AcquireDirect returns a quota-free sender snapshot. A caller that sends a
+// bounded batch through the returned Provider retains account rotation and
+// provider token caches for the complete operation.
+func (pool *AccountPool) AcquireDirect(context.Context) (Provider, error) {
+	if pool == nil || len(pool.accounts) == 0 {
+		return nil, ErrAccountsExhausted
+	}
+	snapshot := &AccountPool{
+		accounts:        append([]accountProvider(nil), pool.accounts...),
+		directAccounts:  pool.directAccounts,
+		limitPerAccount: pool.limitPerAccount,
+		maxTotal:        pool.maxTotal,
+	}
+	return directAccountPoolProvider{pool: snapshot}, nil
 }
 
 // SendDirectFrom sends a bounded manual message through one explicitly selected
@@ -324,11 +371,36 @@ func (pool *AccountPool) sendDurable(ctx context.Context, req SendRequest) (Send
 	result.Skipped = providerResult.Skipped
 
 	if sendErr != nil {
+		accountFailureStoreUnavailable := false
+		if errors.Is(sendErr, ErrAccountUnavailable) {
+			if failureStore, ok := pool.quota.(AccountFailureStore); ok {
+				finalizeCtx, cancel := durableFinalizeContext(ctx)
+				defer cancel()
+				const failureCode = AccountUnavailableErrorCode
+				if failErr := failureStore.FailEmailDelivery(finalizeCtx, claim, failureCode); failErr != nil {
+					unknownErr := pool.markUnknown(ctx, claim, "delivery_failure_finalization_unknown")
+					if unknownErr != nil {
+						return result, fmt.Errorf("record definitive provider rejection: %v; record unknown delivery: %w", failErr, unknownErr)
+					}
+					result.Finalized = true
+					return result, fmt.Errorf("record definitive provider rejection: %w", failErr)
+				}
+				result.Finalized = true
+				if quarantineErr := failureStore.QuarantineEmailAccount(finalizeCtx, claim.AccountKey, failureCode); quarantineErr != nil {
+					return result, fmt.Errorf("quarantine rejected email account: %w", quarantineErr)
+				}
+				return result, sendErr
+			}
+			accountFailureStoreUnavailable = true
+		}
 		finalizeErr := pool.markUnknown(ctx, claim, "provider_send_unknown")
 		if finalizeErr != nil {
 			return result, fmt.Errorf("provider send failed: %v; record unknown delivery: %w", sendErr, finalizeErr)
 		}
 		result.Finalized = true
+		if accountFailureStoreUnavailable {
+			return result, fmt.Errorf("durable account failure handling is not configured")
+		}
 		return result, sendErr
 	}
 

@@ -180,6 +180,51 @@ func (repo *Postgres) RecordEmailHealthResult(
 	return nil
 }
 
+// QuarantineEmailAccount records a definitive credential/authorization
+// rejection without changing the admin-managed credential row. Durable quota
+// selection excludes the account until a successful health check clears the
+// code. Enabled health rows are made immediately due; disabled rows stay
+// disabled so quarantine cannot override the health-check control.
+func (repo *Postgres) QuarantineEmailAccount(ctx context.Context, accountKey, errorCode string) error {
+	if repo.pool == nil {
+		return fmt.Errorf("database pool is not configured")
+	}
+	accountKey = strings.TrimSpace(accountKey)
+	errorCode = strings.TrimSpace(errorCode)
+	if accountKey == "" || errorCode == "" {
+		return fmt.Errorf("email account and failure code are required")
+	}
+	result, err := repo.pool.Exec(ctx, `
+		INSERT INTO outreach_email_account_health (
+			account_key, provider, provider_identity, from_email, enabled,
+			health_status, last_checked_at, next_check_at, provider_message_id, last_error
+		)
+		SELECT account_key, provider, provider_identity, from_email, false,
+		       'failed', now(), NULL, '', $2
+		FROM outreach_email_accounts
+		WHERE account_key = $1
+		ON CONFLICT (provider_identity) DO UPDATE
+		SET account_key = EXCLUDED.account_key,
+		    provider = EXCLUDED.provider,
+		    from_email = EXCLUDED.from_email,
+		    health_status = 'failed',
+		    last_checked_at = now(),
+		    next_check_at = CASE
+		      WHEN outreach_email_account_health.enabled THEN now()
+		      ELSE outreach_email_account_health.next_check_at
+		    END,
+		    provider_message_id = '',
+		    last_error = EXCLUDED.last_error,
+		    updated_at = now()`, accountKey, errorCode)
+	if err != nil {
+		return fmt.Errorf("quarantine email account: %w", err)
+	}
+	if result.RowsAffected() != 1 {
+		return fmt.Errorf("email account was not found for quarantine")
+	}
+	return nil
+}
+
 func (repo *Postgres) ListEmailHealth(ctx context.Context) ([]emailprovider.HealthStatus, error) {
 	if repo.pool == nil {
 		return []emailprovider.HealthStatus{}, nil

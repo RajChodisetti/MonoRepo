@@ -378,6 +378,7 @@ export type OutreachSequencePreview = {
   greeting?: string;
   greeting01: string;
   facts_used: string[];
+  signature: OutreachEmailSignature;
   steps: OutreachSequencePreviewStep[];
 };
 

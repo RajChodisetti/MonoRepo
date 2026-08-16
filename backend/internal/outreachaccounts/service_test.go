@@ -15,7 +15,8 @@ import (
 )
 
 type memoryRepository struct {
-	records []StoredAccount
+	records                  []StoredAccount
+	clearedAuthQuarantineKey string
 }
 
 func (repo *memoryRepository) List(context.Context) ([]StoredAccount, error) {
@@ -47,6 +48,10 @@ func (repo *memoryRepository) Create(_ context.Context, record StoredAccount) (S
 func (repo *memoryRepository) Update(_ context.Context, record StoredAccount) (StoredAccount, error) {
 	for index, existing := range repo.records {
 		if existing.ID == record.ID {
+			if record.clearAuthQuarantine {
+				repo.clearedAuthQuarantineKey = record.AccountKey
+				record.clearAuthQuarantine = false
+			}
 			record.UpdatedAt = time.Now().UTC()
 			repo.records[index] = record
 			return record, nil
@@ -294,6 +299,46 @@ func TestServiceUpdateCanDisableAndReplaceCredentials(t *testing.T) {
 	}
 	if updated.Enabled || bytes.Equal(before, repo.records[0].CredentialCiphertext) {
 		t.Fatalf("Update() = %#v, credential replacement or disable was not persisted", updated)
+	}
+	if repo.clearedAuthQuarantineKey != "support" {
+		t.Fatalf("cleared auth quarantine key = %q, want support", repo.clearedAuthQuarantineKey)
+	}
+}
+
+func TestServiceReenableClearsCredentialQuarantine(t *testing.T) {
+	vault, err := newCredentialCipher(testEncryptionKey())
+	if err != nil {
+		t.Fatal(err)
+	}
+	record := storedFixture(t, vault, "support", "support@example.com", false, "stored")
+	repo := &memoryRepository{records: []StoredAccount{record}}
+	service := NewService(repo, testBaseConfig(), testEncryptionKey(), nil)
+	enabled := true
+
+	if _, err := service.Update(context.Background(), testAdmin(), record.ID, UpdateInput{Enabled: &enabled}); err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	if repo.clearedAuthQuarantineKey != "support" {
+		t.Fatalf("cleared auth quarantine key = %q, want support", repo.clearedAuthQuarantineKey)
+	}
+}
+
+func TestServiceFromAddressUpdateClearsCredentialQuarantine(t *testing.T) {
+	vault, err := newCredentialCipher(testEncryptionKey())
+	if err != nil {
+		t.Fatal(err)
+	}
+	record := storedFixture(t, vault, "support", "support@example.com", true, "stored")
+	repo := &memoryRepository{records: []StoredAccount{record}}
+	service := NewService(repo, testBaseConfig(), testEncryptionKey(), nil)
+	fromEmail := "corrected-sender@example.com"
+
+	updated, err := service.Update(context.Background(), testAdmin(), record.ID, UpdateInput{FromEmail: &fromEmail})
+	if err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	if updated.FromEmail != fromEmail || repo.clearedAuthQuarantineKey != "support" {
+		t.Fatalf("updated account/quarantine = %#v / %q", updated, repo.clearedAuthQuarantineKey)
 	}
 }
 

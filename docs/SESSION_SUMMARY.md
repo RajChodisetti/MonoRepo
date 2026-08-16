@@ -1,4 +1,4 @@
-Release `2ffc134` is deployed to the QA API and production API/worker/admin at schema 54; `master` and the feature branch are reconciled to that commit.
-The inbox is newest-received first, shows subject/text/from/by, opens complete stored text, and preserves page/detail state across manual and 15-second refreshes.
-Template tests and same-mailbox replies bypass scheduled quota state while scheduled outreach still claims durable quota; the Sydney window remains 07:00-12:00.
-Outreach remains disabled with zero active jobs/due health checks/send changes; production polling is 15 seconds and the `a07fffc` release plus explicit images/backups remain available for rollback.
+Release `2ffc134` remains deployed to QA API and production API/worker/admin at schema 54; outreach remains disabled and no provider send was performed.
+Local branch `codex/fix-outreach-signature-test-send-greeting-20260816` now rehydrates saved signatures, distinguishes selected versus active test versions, and verifies the persisted signature in preview.
+Definitive Gmail credential/auth failures skip to other configured accounts for direct tests and quarantine/defer safely for scheduled work; ambiguous outcomes still fail closed.
+Template 1 surfaces now show only the canonical `greeting01`, with preview/test/live parity tests; the change is unreleased and awaits approved deployment plus a test-recipient smoke.

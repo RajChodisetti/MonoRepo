@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,105 @@ import (
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/config"
 	emailprovider "github.com/rajchodisetti/restaurant-platform/backend/internal/providers/email"
 )
+
+func TestGmailProviderClassifiesOnlyDefinitivePreAcceptanceAccountFailures(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		tokenStatus int
+		tokenBody   string
+		sendStatus  int
+		sendBody    string
+		wantSafe    bool
+		wantSends   int
+	}{
+		{
+			name: "revoked refresh token", tokenStatus: http.StatusBadRequest,
+			tokenBody: `{"error":"invalid_grant","error_description":"Token has been expired or revoked."}`,
+			wantSafe:  true,
+		},
+		{
+			name: "missing Gmail send permission", tokenStatus: http.StatusOK,
+			tokenBody:  `{"access_token":"access-token","expires_in":3600}`,
+			sendStatus: http.StatusForbidden,
+			sendBody:   `{"error":{"code":403,"status":"PERMISSION_DENIED","message":"Insufficient Permission"}}`,
+			wantSafe:   true, wantSends: 1,
+		},
+		{
+			name: "authorization rejection without JSON", tokenStatus: http.StatusOK,
+			tokenBody:  `{"access_token":"access-token","expires_in":3600}`,
+			sendStatus: http.StatusUnauthorized,
+			sendBody:   "",
+			wantSafe:   true, wantSends: 1,
+		},
+		{
+			name: "temporary token endpoint failure is not a credential rejection", tokenStatus: http.StatusInternalServerError,
+			tokenBody: `{"error":"temporarily_unavailable"}`,
+		},
+		{
+			name: "ambiguous provider failure", tokenStatus: http.StatusOK,
+			tokenBody:  `{"access_token":"access-token","expires_in":3600}`,
+			sendStatus: http.StatusInternalServerError,
+			sendBody:   `{"error":{"code":500,"status":"INTERNAL","message":"Internal error"}}`,
+			wantSends:  1,
+		},
+		{
+			name: "malformed accepted response is ambiguous", tokenStatus: http.StatusOK,
+			tokenBody:  `{"access_token":"access-token","expires_in":3600}`,
+			sendStatus: http.StatusOK,
+			sendBody:   `<html>not JSON</html>`,
+			wantSends:  1,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			sendRequests := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				switch r.URL.Path {
+				case "/token":
+					w.WriteHeader(test.tokenStatus)
+					_, _ = w.Write([]byte(test.tokenBody))
+				case "/gmail/v1/users/me/messages/send":
+					sendRequests++
+					w.WriteHeader(test.sendStatus)
+					_, _ = w.Write([]byte(test.sendBody))
+				default:
+					http.NotFound(w, r)
+				}
+			}))
+			defer server.Close()
+
+			provider, err := emailprovider.NewGmailWithClient(
+				config.EmailConfig{},
+				config.GmailMailConfig{
+					MailboxEmail: "sales@example.com", ClientID: "client-id",
+					ClientSecret: "client-secret", RefreshToken: "refresh-token",
+				},
+				server.Client(), server.URL+"/gmail/v1", server.URL+"/token",
+			)
+			if err != nil {
+				t.Fatalf("NewGmailWithClient() error = %v", err)
+			}
+
+			_, err = provider.Send(context.Background(), emailprovider.SendRequest{
+				To: "owner@example.com", Subject: "Test", TextBody: "Body",
+			})
+			if err == nil {
+				t.Fatal("Send() error = nil, want provider failure")
+			}
+			if got := errors.Is(err, emailprovider.ErrAccountUnavailable); got != test.wantSafe {
+				t.Fatalf("errors.Is(ErrAccountUnavailable) = %v, want %v; error = %v", got, test.wantSafe, err)
+			}
+			if sendRequests != test.wantSends {
+				t.Fatalf("Gmail send requests = %d, want %d", sendRequests, test.wantSends)
+			}
+		})
+	}
+}
 
 func TestGmailProviderSendsViaHTTPSAPIContract(t *testing.T) {
 	var tokenForm url.Values

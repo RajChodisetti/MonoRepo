@@ -31,6 +31,20 @@ the Outreach UI. Enabling immediately queues the durable eligible-lead run;
 disabling prevents the next Gmail provider request from starting. Daily health
 checks are controlled separately by `OUTREACH_EMAIL_HEALTH_ENABLED`.
 
+The Gmail adapter distinguishes definitive pre-acceptance credential or
+authorization rejection from ambiguous delivery failure. Direct internal-admin
+template tests may skip only the definitive class and retain one operation-local
+account pool across the full multi-message test. Quota-managed delivery records
+that class as a failed attempt, restores the campaign's approved step, stores a
+dedicated health quarantine for the account, and resumes through another account
+only after the persisted pacing gate. Ambiguous provider outcomes remain
+`unknown` and stop automatic progress to avoid duplicate email.
+
+Successful enabled health checks clear the dedicated quarantine. An explicit
+database credential replacement, From-address correction, or disabled-to-enabled
+transition clears that same code atomically without changing the separate health
+or bulk-job controls.
+
 ## Options Considered
 
 - Gmail API with per-mailbox OAuth: selected for explicit mailbox authority and

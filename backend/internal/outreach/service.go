@@ -146,13 +146,19 @@ func (service *Service) SendTemplateTest(ctx context.Context, principal auth.Pri
 		if !configured {
 			return TemplateTestSendResult{}, ErrNotConfigured
 		}
-		provider = directPoolProvider{pool: service.emailPool}
+		provider, err = service.emailPool.AcquireDirect(ctx)
+		if err != nil {
+			return TemplateTestSendResult{}, err
+		}
 	} else {
 		builtProvider, providerErr := emailprovider.NewAccountPoolFromConfig(service.emailCfg, service.outreachCfg)
 		if providerErr != nil {
 			return TemplateTestSendResult{}, ErrNotConfigured
 		}
-		provider = directPoolProvider{pool: builtProvider}
+		provider, providerErr = builtProvider.AcquireDirect(ctx)
+		if providerErr != nil {
+			return TemplateTestSendResult{}, ErrNotConfigured
+		}
 	}
 	facts, restaurantID, err := service.resolveGreetingFacts(
 		ctx, input.RestaurantID, input.RestaurantName, input.OwnerFirstName, "Tuvi Test Restaurant",
@@ -161,14 +167,6 @@ func (service *Service) SendTemplateTest(ctx context.Context, principal auth.Pri
 		return TemplateTestSendResult{}, err
 	}
 	return service.sendTemplateTestEmails(ctx, provider, recipient, restaurantID, facts, signature, steps)
-}
-
-type directPoolProvider struct {
-	pool emailprovider.AccountPoolProvider
-}
-
-func (provider directPoolProvider) Send(ctx context.Context, request emailprovider.SendRequest) (emailprovider.SendResult, error) {
-	return provider.pool.SendDirect(ctx, request)
 }
 
 func (service *Service) sendTemplateTestEmails(
@@ -527,6 +525,22 @@ func (service *Service) RunBulkSend(ctx context.Context, triggeredBy uuid.UUID, 
 					// An account can cross its availability boundary between the
 					// failed claim and this lookup. Requeue briefly instead of
 					// failing a one-attempt bulk job at that boundary.
+					retryAt := time.Now().UTC().Add(time.Second)
+					nextAvailableAt = &retryAt
+				}
+				summary.NextAvailableAt = nextAvailableAt
+				break
+			}
+			if errors.Is(err, emailprovider.ErrAccountUnavailable) {
+				summary.Attempted++
+				summary.Failed++
+				summary.StoppedReason = "account_unavailable"
+				nextAvailableAt, availabilityErr := service.emailPool.NextAvailableAt(ctx)
+				if availabilityErr != nil {
+					_, _ = SetEmailJobControl(ctx, service.pool, false, nil)
+					return summary, availabilityErr
+				}
+				if nextAvailableAt == nil {
 					retryAt := time.Now().UTC().Add(time.Second)
 					nextAvailableAt = &retryAt
 				}

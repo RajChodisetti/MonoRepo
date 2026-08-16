@@ -110,6 +110,23 @@ partial conflicts (matching only the key or only the mailbox) are rejected.
 Existing environment secrets are never read into the browser or copied into the
 database.
 
+A definitive OAuth credential rejection (for example an expired/revoked grant,
+invalid client/scope, or Gmail 401/403 response) is known to occur before Gmail
+accepts the message. Direct template tests skip that account for the complete
+test batch and try the next configured sender. Scheduled delivery records the
+attempt as failed, returns the campaign to its approved step, and excludes the
+account from later claims with the dedicated
+`credential_or_authorization_rejected` health code. Network errors, provider
+5xx responses, malformed success responses, and other ambiguous outcomes remain
+`unknown` and are never retried automatically because Gmail may have accepted
+the message.
+
+An enabled due health check that succeeds clears the dedicated quarantine.
+For database-managed accounts, replacing credentials, correcting the From
+address, or explicitly re-enabling a disabled account also clears only this
+credential/authorization quarantine atomically. None of these recovery actions
+enables the bulk email job, and a disabled health-check control remains disabled.
+
 The effective runtime list is the union of
 `OUTREACH_GOOGLE_WORKSPACE_ACCOUNTS_JSON`, an optional dedicated inbound mailbox,
 and enabled database accounts. A database identity always takes precedence over

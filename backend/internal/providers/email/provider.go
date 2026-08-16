@@ -13,7 +13,12 @@ import (
 
 const ProviderDisabled = "disabled"
 
-var ErrSendingDisabled = errors.New("email sending is disabled")
+var (
+	ErrSendingDisabled    = errors.New("email sending is disabled")
+	ErrAccountUnavailable = errors.New("email account failed before message acceptance")
+)
+
+const AccountUnavailableErrorCode = "credential_or_authorization_rejected"
 
 type SendRequest struct {
 	To         string

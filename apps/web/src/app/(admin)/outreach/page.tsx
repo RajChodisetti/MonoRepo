@@ -189,7 +189,7 @@ export default function OutreachPage() {
     }
     if (
       !confirm(
-        `Send every enabled email from the active template to ${recipient}? This uses the real configured sender account.`,
+        `Send every enabled email from active version ${activeSequence.version} to ${recipient}? This uses the saved signature for ${activeSequence.signature.name} and a real configured sender account.`,
       )
     ) {
       return;
@@ -212,7 +212,7 @@ export default function OutreachPage() {
         },
       });
       setTestSendResult(result);
-      setMessage(`Sent ${result.items.length} outreach test emails to ${result.recipient_email}.`);
+      setMessage(`Sent ${result.items.length} email${result.items.length === 1 ? "" : "s"} from active version ${activeSequence.version} to ${result.recipient_email}.`);
     } catch (reason) {
       setOperationsError(
         reason instanceof Error
@@ -426,7 +426,12 @@ export default function OutreachPage() {
           </div>
 
           <form className="card" style={{ marginBottom: "1rem" }} onSubmit={sendTemplateTest}>
-            <h2 style={{ marginTop: 0, fontSize: "1.05rem" }}>Send template test</h2>
+            <h2 style={{ marginTop: 0, fontSize: "1.05rem" }}>Send active-version test</h2>
+            <p style={{ color: "var(--muted)", marginTop: 0 }}>
+              {activeSequence
+                ? `Uses active version ${activeSequence.version} and its saved signature for ${activeSequence.signature.name}. Draft edits are not included here.`
+                : "Make a saved template active before testing the active version and signature."}
+            </p>
             <RestaurantSearch
               label="Saved restaurant (optional)"
               selected={selectedTestRestaurant}
@@ -487,7 +492,7 @@ export default function OutreachPage() {
                 {sendingTest ? "Sending..." : "Send test emails"}
               </button>
               <span className="field-help">
-                Sends every enabled email from the active template to this address only.
+                Sends every enabled email from the active version with that version&apos;s saved signature.
               </span>
             </div>
             {testSendResult ? (

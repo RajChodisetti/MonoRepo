@@ -112,6 +112,7 @@ type SequencePreview struct {
 	Greeting       string                 `json:"greeting"`
 	Greeting01     string                 `json:"greeting01"`
 	FactsUsed      []string               `json:"facts_used"`
+	Signature      SequenceSignature      `json:"signature"`
 	Steps          []RenderedSequenceStep `json:"steps"`
 }
 
@@ -220,6 +221,25 @@ const rebaseUntouchedEnrollmentsQuery = `
 	      AND event.event_type IN ('sent', 'skipped', 'failed')
 	  )`
 
+const listSequencesQuery = `
+	SELECT id, name, version, status, is_active,
+	       signature_name, signature_title, signature_details,
+	       approved_at, approved_by, created_at, updated_at
+	FROM outreach_email_sequences
+	ORDER BY created_at DESC, version DESC`
+
+const updateSequenceDraftQuery = `
+	UPDATE outreach_email_sequences
+	SET name = $2,
+	    signature_name = $3,
+	    signature_title = $4,
+	    signature_details = $5,
+	    updated_at = now()
+	WHERE id = $1
+	RETURNING id, name, version, status, is_active,
+	          signature_name, signature_title, signature_details,
+	          approved_at, approved_by, created_at, updated_at`
+
 func (service *Service) ListSequences(ctx context.Context, principal auth.Principal) (SequenceList, error) {
 	if !auth.IsInternalAdmin(principal.Role) {
 		return SequenceList{}, restaurants.ErrForbidden
@@ -227,12 +247,7 @@ func (service *Service) ListSequences(ctx context.Context, principal auth.Princi
 	if service.pool == nil {
 		return SequenceList{}, fmt.Errorf("database pool is not configured")
 	}
-	rows, err := service.pool.Query(ctx, `
-		SELECT id, name, version, status, is_active,
-		       signature_name, signature_title, signature_details,
-		       approved_at, approved_by, created_at, updated_at
-		FROM outreach_email_sequences
-		ORDER BY created_at DESC, version DESC`)
+	rows, err := service.pool.Query(ctx, listSequencesQuery)
 	if err != nil {
 		return SequenceList{}, fmt.Errorf("list outreach sequences: %w", err)
 	}
@@ -416,17 +431,7 @@ func (service *Service) UpdateSequenceDraft(ctx context.Context, principal auth.
 		}
 	}
 	var sequence Sequence
-	if err := tx.QueryRow(ctx, `
-		UPDATE outreach_email_sequences
-		SET name = $2,
-		    signature_name = $3,
-		    signature_title = $4,
-		    signature_details = $5,
-		    updated_at = now()
-		WHERE id = $1
-		RETURNING id, name, version, status, is_active,
-		          signature_name, signature_title, signature_details,
-		          approved_at, approved_by, created_at, updated_at`,
+	if err := tx.QueryRow(ctx, updateSequenceDraftQuery,
 		sequenceID, name, signature.Name, signature.Title, signature.AdditionalDetails).Scan(
 		&sequence.ID, &sequence.Name, &sequence.Version, &sequence.Status,
 		&sequence.IsActive,
@@ -525,6 +530,10 @@ func (service *Service) PreviewSequence(ctx context.Context, principal auth.Prin
 	if err := validateSequenceSteps(steps); err != nil {
 		return SequencePreview{}, err
 	}
+	signature, err := service.sequenceSignature(ctx, sequenceID)
+	if err != nil {
+		return SequencePreview{}, err
+	}
 	facts, restaurantID, err := service.resolveGreetingFacts(
 		ctx, input.RestaurantID, input.RestaurantName, input.OwnerFirstName, "Example Restaurant",
 	)
@@ -537,7 +546,7 @@ func (service *Service) PreviewSequence(ctx context.Context, principal auth.Prin
 		RestaurantID: restaurantID, RestaurantName: name,
 		Greeting:   outreachGreeting(facts.OwnerFirstName, name),
 		Greeting01: greeting01.Greeting01, FactsUsed: greeting01.FactsUsed,
-		Steps: []RenderedSequenceStep{},
+		Signature: signature, Steps: []RenderedSequenceStep{},
 	}
 	for _, step := range steps {
 		if !step.Enabled {

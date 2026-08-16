@@ -82,6 +82,7 @@ export function OutreachSequenceEditor({
   const [name, setName] = useState("");
   const [signature, setSignature] = useState<OutreachEmailSignature>(DEFAULT_EMAIL_SIGNATURE);
   const [steps, setSteps] = useState<OutreachSequenceStep[]>([]);
+  const [savedUpdatedAt, setSavedUpdatedAt] = useState("");
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -122,6 +123,7 @@ export function OutreachSequenceEditor({
       setName("");
       setSignature(DEFAULT_EMAIL_SIGNATURE);
       setSteps([]);
+      setSavedUpdatedAt("");
       return;
     }
     if (pendingSelectionId) {
@@ -141,6 +143,7 @@ export function OutreachSequenceEditor({
     setName(selected.name);
     setSignature(selected.signature || DEFAULT_EMAIL_SIGNATURE);
     setSteps(cloneSteps(selected.steps || []));
+    setSavedUpdatedAt(selected.updated_at);
     setPreviewPosition(selected.steps?.[0]?.position || 1);
     setDirty(false);
     setServerPreview(null);
@@ -250,25 +253,43 @@ export function OutreachSequenceEditor({
     setError(null);
     setMessage(null);
     try {
-      await adminFetch(`outreach/sequences/${selected.id}`, {
-        method: "PUT",
-        body: {
-          name: name.trim(),
-          expected_updated_at: selected.updated_at,
-          signature: {
-            name: signature.name.trim(),
-            title: signature.title.trim(),
-            additional_details: signature.additional_details.trim(),
+      const response = await adminFetch<OutreachSequence | { sequence: OutreachSequence }>(
+        `outreach/sequences/${selected.id}`,
+        {
+          method: "PUT",
+          body: {
+            name: name.trim(),
+            expected_updated_at: savedUpdatedAt || selected.updated_at,
+            signature: {
+              name: signature.name.trim(),
+              title: signature.title.trim(),
+              additional_details: signature.additional_details.trim(),
+            },
+            steps: steps.map((step, index) => ({
+              ...step,
+              position: index + 1,
+            })),
           },
-          steps: steps.map((step, index) => ({
-            ...step,
-            position: index + 1,
-          })),
         },
-      });
-      await onReload();
+      );
+      const saved = normalizeSequence(response);
+      if (!saved?.signature) {
+        throw new Error("The server did not return the saved template and signature.");
+      }
+      setName(saved.name);
+      setSignature(saved.signature);
+      setSteps(cloneSteps(saved.steps || []));
+      setSavedUpdatedAt(saved.updated_at);
+      setPreviewPosition((current) =>
+        saved.steps?.some((step) => step.position === current)
+          ? current
+          : saved.steps?.[0]?.position || 1,
+      );
       setDirty(false);
-      setMessage("Template saved.");
+      setServerPreview(null);
+      setTestResult(null);
+      setMessage(`Template version ${saved.version} and its signature were saved.`);
+      await onReload();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not save draft");
     } finally {
@@ -291,7 +312,7 @@ export function OutreachSequenceEditor({
     try {
       await adminFetch(`outreach/sequences/${selected.id}/approve`, {
         method: "POST",
-        body: { expected_updated_at: selected.updated_at },
+        body: { expected_updated_at: savedUpdatedAt || selected.updated_at },
       });
       await onReload();
       setMessage(
@@ -348,7 +369,7 @@ export function OutreachSequenceEditor({
       setError("Save this template before sending a test.");
       return;
     }
-    if (!confirm(`Send every enabled email from “${selected.name}” to ${recipient}? This uses a real configured sender account.`)) {
+    if (!confirm(`Send every enabled email from selected saved version ${selected.version} of “${name}” to ${recipient}? This uses its saved signature and a real configured sender account.`)) {
       return;
     }
     setSendingTest(true);
@@ -371,7 +392,7 @@ export function OutreachSequenceEditor({
         },
       });
       setTestResult(result);
-      setMessage(`Sent ${result.items.length} saved template email${result.items.length === 1 ? "" : "s"} to ${result.recipient_email}.`);
+      setMessage(`Sent ${result.items.length} email${result.items.length === 1 ? "" : "s"} from selected saved version ${selected.version} to ${result.recipient_email}.`);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not send the saved template test.");
     } finally {
@@ -795,7 +816,16 @@ export function OutreachSequenceEditor({
                     sampleOwner,
                   )}
               </pre>
-              <TuviEmailSignaturePreview signature={signature} />
+              <span className="field-help">
+                {serverPreview
+                  ? "Saved signature verified by the server"
+                  : dirty
+                    ? "Unsaved signature preview"
+                    : "Loaded saved signature; verify the preview to confirm it with the server"}
+              </span>
+              <TuviEmailSignaturePreview
+                signature={serverPreview?.signature || signature}
+              />
             </div>
           ) : (
             <EmptyState message="Add an email to preview it." />
@@ -803,8 +833,11 @@ export function OutreachSequenceEditor({
 
           <form className="template-test-form" onSubmit={sendSavedTest}>
             <div>
-              <h3>Send saved template test</h3>
-              <p>This sends the selected saved version—not whichever version happens to be active.</p>
+              <h3>Send selected saved-version test</h3>
+              <p>
+                This sends selected version {selected?.version} with its saved signature—not
+                whichever version happens to be active.
+              </p>
             </div>
             <label className="field-label" htmlFor="template-test-recipient">
               Recipient email
@@ -822,7 +855,7 @@ export function OutreachSequenceEditor({
               />
             </label>
             <button className="btn btn-primary" type="submit" disabled={!selected || dirty || sendingTest}>
-              {sendingTest ? "Sending…" : "Send saved test"}
+              {sendingTest ? "Sending…" : "Send selected saved test"}
             </button>
             {dirty ? <span className="field-help">Save the template before sending a test.</span> : null}
             {testResult ? (

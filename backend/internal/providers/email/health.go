@@ -2,6 +2,7 @@ package email
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -139,7 +140,11 @@ func (service *HealthService) RunDue(ctx context.Context) error {
 		})
 		result, sendErr := account.provider.Send(ctx, request)
 		if sendErr != nil {
-			if recordErr := service.store.RecordEmailHealthResult(ctx, key, false, "", sanitizeHealthError(sendErr)); recordErr != nil {
+			safeError := sanitizeHealthError(sendErr)
+			if errors.Is(sendErr, ErrAccountUnavailable) {
+				safeError = AccountUnavailableErrorCode
+			}
+			if recordErr := service.store.RecordEmailHealthResult(ctx, key, false, "", safeError); recordErr != nil {
 				return fmt.Errorf("record Gmail health failure for %q: %w", key, recordErr)
 			}
 			continue

@@ -129,11 +129,13 @@ func (service *Service) Update(ctx context.Context, principal auth.Principal, id
 	if err != nil {
 		return Account{}, err
 	}
+	wasEnabled := record.Enabled
 	if input.FromEmail != nil {
 		record.FromEmail, err = canonicalMailbox(*input.FromEmail)
 		if err != nil {
 			return Account{}, fmt.Errorf("%w: from_email %v", ErrInvalid, err)
 		}
+		record.clearAuthQuarantine = true
 	}
 	if input.Enabled != nil {
 		record.Enabled = *input.Enabled
@@ -152,6 +154,10 @@ func (service *Service) Update(ctx context.Context, principal auth.Principal, id
 		if err != nil {
 			return Account{}, err
 		}
+		record.clearAuthQuarantine = true
+	}
+	if input.Enabled != nil && !wasEnabled && record.Enabled {
+		record.clearAuthQuarantine = true
 	}
 	actor := principal.UserID
 	record.UpdatedBy = &actor

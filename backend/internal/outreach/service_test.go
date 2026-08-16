@@ -189,7 +189,7 @@ func TestGreeting01IsIdenticalAcrossLivePreviewAndTemplateTest(t *testing.T) {
 	step := outreach.SequenceStep{
 		ID: uuid.New(), SequenceID: sequenceID, Position: 1, Enabled: true,
 		SubjectTemplate:  "A practical idea for {{restaurant_name}}",
-		BodyTextTemplate: "{{greeting01}}\n\nThe online flow could make it easier for guests.",
+		BodyTextTemplate: "[GREETING]\n\nThe online flow could make it easier for guests.",
 	}
 	newRepo := func() *mockRepo {
 		return &mockRepo{
@@ -240,6 +240,22 @@ func TestGreeting01IsIdenticalAcrossLivePreviewAndTemplateTest(t *testing.T) {
 	}
 	if preview.RestaurantName != "Spice Garden" || result.RestaurantName != "Spice Garden" || strings.Contains(preview.Greeting01, "Ignored") {
 		t.Fatalf("restaurant_id did not override synthetic inputs: preview=%#v test=%#v", preview, result)
+	}
+	wantGreeting01 := outreach.RenderGreeting01(facts).Greeting01
+	if result.Greeting01 != wantGreeting01 || preview.Greeting01 != wantGreeting01 {
+		t.Fatalf("greeting01 audit differs from the Template 1 renderer: want=%q preview=%q test=%q", wantGreeting01, preview.Greeting01, result.Greeting01)
+	}
+	for path, body := range map[string]string{
+		"live":    liveProvider.request.TextBody,
+		"preview": preview.Steps[0].BodyText,
+		"test":    testProvider.request.TextBody,
+	} {
+		if count := strings.Count(body, wantGreeting01); count != 1 {
+			t.Errorf("%s Template 1 greeting01 count = %d, want 1: %q", path, count, body)
+		}
+		if strings.Contains(body, "Hi Maya,") {
+			t.Errorf("%s Template 1 contains legacy greeting: %q", path, body)
+		}
 	}
 }
 
@@ -543,5 +559,107 @@ func TestSendTemplateTestTargetsSelectedSavedDraftAndSignature(t *testing.T) {
 		if !strings.Contains(provider.request.TextBody, token) || !strings.Contains(provider.request.HTMLBody, token) {
 			t.Fatalf("selected signature missing %q: %#v", token, provider.request)
 		}
+	}
+}
+
+type scheduledAccountUnavailablePool struct {
+	next  time.Time
+	sends int
+}
+
+func (pool *scheduledAccountUnavailablePool) Send(context.Context, emailprovider.SendRequest) (emailprovider.SendResult, error) {
+	pool.sends++
+	return emailprovider.SendResult{QuotaManaged: true, Finalized: true, AccountKey: "revoked"},
+		fmt.Errorf("%w: revoked credential", emailprovider.ErrAccountUnavailable)
+}
+
+func (*scheduledAccountUnavailablePool) Configured(context.Context) (bool, error) { return true, nil }
+func (*scheduledAccountUnavailablePool) Durable() bool                            { return true }
+func (pool *scheduledAccountUnavailablePool) NextAvailableAt(context.Context) (*time.Time, error) {
+	next := pool.next
+	return &next, nil
+}
+func (*scheduledAccountUnavailablePool) Exhausted() bool { return false }
+func (pool *scheduledAccountUnavailablePool) AcquireDirect(context.Context) (emailprovider.Provider, error) {
+	return pool, nil
+}
+func (pool *scheduledAccountUnavailablePool) SendDirect(ctx context.Context, request emailprovider.SendRequest) (emailprovider.SendResult, error) {
+	return pool.Send(ctx, request)
+}
+func (pool *scheduledAccountUnavailablePool) SendDirectFrom(ctx context.Context, _ string, request emailprovider.SendRequest) (emailprovider.SendResult, error) {
+	return pool.Send(ctx, request)
+}
+
+func newSequenceServiceWithEmailPool(repo *mockRepo, pool emailprovider.AccountPoolProvider) *outreach.Service {
+	campaignRepo := &campaigns.Mock{}
+	return outreach.NewService(
+		repo,
+		nil,
+		campaignRepo,
+		campaigns.NewService(campaignRepo, nil, nil, nil, config.AppURLsConfig{PublicBaseURL: "https://api.example.com"}),
+		nil,
+		outreach.DemoTokenResolver{},
+		pool,
+		nil,
+		config.EmailConfig{Provider: "fake"},
+		config.OutreachConfig{BulkMax: 150},
+		config.AppURLsConfig{
+			PresentationSiteURL: "https://tuvisolutions.com/services/restaurants",
+			PublicMarketingURL:  "https://tuvisolutions.com",
+		},
+		nil,
+		nil,
+	)
+}
+
+func TestRunBulkSendDefersAfterScheduledAccountAuthRejection(t *testing.T) {
+	repo := eligibleSequenceRepo()
+	next := time.Now().UTC().Add(3 * time.Minute)
+	pool := &scheduledAccountUnavailablePool{next: next}
+	service := newSequenceServiceWithEmailPool(repo, pool)
+
+	summary, err := service.RunBulkSend(context.Background(), uuid.New())
+	if err != nil {
+		t.Fatalf("RunBulkSend() error = %v", err)
+	}
+	if pool.sends != 1 || summary.Attempted != 1 || summary.Failed != 1 {
+		t.Fatalf("scheduled failure = sends %d, summary %#v", pool.sends, summary)
+	}
+	if summary.StoppedReason != "account_unavailable" || summary.NextAvailableAt == nil || !summary.NextAvailableAt.Equal(next) {
+		t.Fatalf("scheduled deferral = %#v, want account_unavailable at %s", summary, next)
+	}
+	if len(repo.finalizations) != 0 {
+		t.Fatalf("service finalizations = %#v, want durable pool to own finalization", repo.finalizations)
+	}
+}
+
+func TestSendTemplateTestKeepsUnavailableAccountOutOfMultiStepSnapshot(t *testing.T) {
+	sequenceID := uuid.New()
+	repo := &mockRepo{activeSteps: []outreach.SequenceStep{
+		{
+			ID: uuid.New(), SequenceID: sequenceID, Position: 1, Enabled: true,
+			SubjectTemplate: "First for {{restaurant_name}}", BodyTextTemplate: "{{greeting}}\n\nFirst body.",
+		},
+		{
+			ID: uuid.New(), SequenceID: sequenceID, Position: 2, Enabled: true, DelayHours: 72,
+			SubjectTemplate: "Second for {{restaurant_name}}", BodyTextTemplate: "{{greeting}}\n\nSecond body.",
+		},
+	}}
+	unavailable := &mockEmailProvider{err: fmt.Errorf("%w: revoked refresh token", emailprovider.ErrAccountUnavailable)}
+	healthy := &mockEmailProvider{result: emailprovider.SendResult{ProviderMessageID: "accepted"}}
+	pool, err := emailprovider.NewAccountPool([]emailprovider.Provider{unavailable, healthy}, 40, 80)
+	if err != nil {
+		t.Fatalf("NewAccountPool() error = %v", err)
+	}
+	service := newSequenceServiceWithEmailPool(repo, pool)
+
+	result, err := service.SendTemplateTest(context.Background(), internalAdminPrincipal(), outreach.TemplateTestSendInput{
+		RecipientEmail: "test@example.com", RestaurantName: "Fallback Cafe",
+	})
+	if err != nil {
+		t.Fatalf("SendTemplateTest() error = %v", err)
+	}
+	if len(result.Items) != 2 || unavailable.sends != 1 || healthy.sends != 2 {
+		t.Fatalf("multi-step failover = %d items, bad/healthy sends %d/%d; want 2, 1/2", len(result.Items), unavailable.sends, healthy.sends)
 	}
 }

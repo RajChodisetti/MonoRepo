@@ -51,3 +51,11 @@ type QuotaStore interface {
 	MarkEmailDeliveryUnknown(ctx context.Context, claim DeliveryClaim, errorCode string) error
 	NextEmailAccountAvailableAt(ctx context.Context, accountKeys []string) (*time.Time, error)
 }
+
+// AccountFailureStore is the optional durable extension used only when a
+// provider proves that it rejected a message before acceptance. Implementations
+// keep ambiguous provider outcomes on the stricter unknown-delivery path.
+type AccountFailureStore interface {
+	FailEmailDelivery(ctx context.Context, claim DeliveryClaim, errorCode string) error
+	QuarantineEmailAccount(ctx context.Context, accountKey, errorCode string) error
+}

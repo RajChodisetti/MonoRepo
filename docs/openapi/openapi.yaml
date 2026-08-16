@@ -1698,8 +1698,9 @@ paths:
         Requires role `internal_admin`. When `restaurant_id` is supplied, the server
         loads authoritative restaurant and verified Google listing facts and ignores
         synthetic restaurant fields. Without it, existing synthetic previews remain
-        supported. The response reports the deterministic `greeting01` and only the
-        non-sensitive fact categories used to render it.
+        supported. The response reports the deterministic `greeting01`, only the
+        non-sensitive fact categories used to render it, and the selected saved
+        sequence version's persisted signature.
       requestBody:
         required: true
         content:
@@ -4850,7 +4851,7 @@ components:
 
     OutreachSequencePreview:
       type: object
-      required: [restaurant_name, greeting, greeting01, facts_used, steps]
+      required: [restaurant_name, greeting, greeting01, facts_used, signature, steps]
       properties:
         restaurant_id:
           type: string
@@ -4868,6 +4869,10 @@ components:
           items:
             type: string
             enum: [owner_first_name, restaurant_name, cuisine, city, rating, review_count]
+        signature:
+          description: Persisted signature from the selected saved sequence version.
+          allOf:
+            - $ref: '#/components/schemas/OutreachEmailSignature'
         steps:
           type: array
           items:

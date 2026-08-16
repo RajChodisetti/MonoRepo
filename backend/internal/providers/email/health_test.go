@@ -11,11 +11,12 @@ import (
 
 type healthTestProvider struct {
 	requests []SendRequest
+	err      error
 }
 
 func (provider *healthTestProvider) Send(_ context.Context, request SendRequest) (SendResult, error) {
 	provider.requests = append(provider.requests, request)
-	return SendResult{ProviderMessageID: "gmail-health-message"}, nil
+	return SendResult{ProviderMessageID: "gmail-health-message"}, provider.err
 }
 
 type healthTestStore struct {
@@ -23,6 +24,7 @@ type healthTestStore struct {
 	recorded  bool
 	healthy   bool
 	messageID string
+	safeError string
 }
 
 func (store *healthTestStore) SyncEmailHealthAccounts(context.Context, []HealthAccountConfig, time.Duration) error {
@@ -33,11 +35,36 @@ func (store *healthTestStore) ClaimDueEmailHealthAccounts(context.Context, []str
 	return store.due, nil
 }
 
-func (store *healthTestStore) RecordEmailHealthResult(_ context.Context, _ string, healthy bool, messageID, _ string) error {
+func (store *healthTestStore) RecordEmailHealthResult(_ context.Context, _ string, healthy bool, messageID, safeError string) error {
 	store.recorded = true
 	store.healthy = healthy
 	store.messageID = messageID
+	store.safeError = safeError
 	return nil
+}
+
+func TestHealthServicePreservesAccountQuarantineOnRepeatedAuthRejection(t *testing.T) {
+	provider := &healthTestProvider{err: ErrAccountUnavailable}
+	store := &healthTestStore{due: []string{"gmail-1"}}
+	service := &HealthService{
+		cfg: config.OutreachConfig{
+			EmailHealthEnabled:   true,
+			EmailHealthRecipient: "health@example.com",
+			EmailHealthInterval:  24 * time.Hour,
+		},
+		store: store,
+		accounts: map[string]healthAccount{
+			"gmail-1": {key: "gmail-1", from: "sales@example.com", provider: provider},
+		},
+		ordered: []string{"gmail-1"},
+	}
+
+	if err := service.RunDue(context.Background()); err != nil {
+		t.Fatalf("RunDue() error = %v", err)
+	}
+	if !store.recorded || store.healthy || store.safeError != AccountUnavailableErrorCode {
+		t.Fatalf("health result = recorded %v, healthy %v, error %q", store.recorded, store.healthy, store.safeError)
+	}
 }
 
 func (store *healthTestStore) ListEmailHealth(context.Context) ([]HealthStatus, error) {
