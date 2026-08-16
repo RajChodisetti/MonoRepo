@@ -3854,3 +3854,68 @@ health probe, production mutation, deployment, or real email send was performed.
 new PostgreSQL claim/quarantine/update CTEs have unit and contract coverage but no live
 database integration test because this repository has no database test harness; an
 approved post-deploy test-recipient smoke remains required before relying on delivery.
+
+## 2026-08-16 — Outreach signature, sender failover, and greeting01 release deployed
+
+**Role / Delivery:** With explicit commit, push, branch-reconciliation, QA, and
+production approval, published implementation commit `4d6ea73` (`fix(outreach):
+persist signatures and fail over senders`) to canonical `master` and
+`codex/fix-outreach-signature-test-send-greeting-20260816`. Built immutable backend
+image `sha256:935d9dd82ce0` and admin image `sha256:0ad377b47f21`, both labelled with
+the full implementation commit. Ran the schema-54 no-op migrator, verified the exact
+backend image in an isolated QA canary, promoted it to the fixed QA API service, and
+then promoted the same backend digest to production API/worker plus the reviewed
+admin digest to production admin-web. No other production service was recreated.
+
+The active release is
+`/opt/tuvi/releases/monorepo-4d6ea73-outreach-failover-20260816T201756Z`; immediate
+code rollback points to
+`/opt/tuvi/releases/monorepo-2ffc134-inbox-hardening-20260816T164156Z`. Corrected the
+previously stale current-release, QA-API-release, and deployed-at pointer files after
+both environments passed. A final consistency audit found the production containers
+still inherited an older `APP_VERSION`; the backed-up stack environment was changed
+only to the full `4d6ea73` revision and the same verified API/admin/worker images were
+recreated successfully.
+
+**Checks Run:** The release commit had already passed 598 backend tests, 215 targeted
+tests, 166 race-enabled provider/outreach tests, `go vet`, all backend command builds,
+admin ESLint/direct TypeScript/14-route production build, both Compose renders,
+OpenAPI validation with 11 pre-existing warnings, and `git diff --check`. The archive
+used for deployment matched SHA-256
+`a90ff39a74cd62c4da43255abeceb4eefd60df422d70d12601d60380903ec471`, and all four
+pre-deploy backups passed format/list validation.
+
+QA returned 200 on its loopback public API, 401 on its protected API, the expected
+public-allowlist 404, and 200 on its site. Production returned 200 for public API,
+admin login, corporate site, and demo; 401 for protected outreach; 307 for
+unauthenticated admin outreach; and 404 for a fake retired-unsubscribe token. QA and
+production remain at schema `54|54`, `email_job=false`, and zero queued/running bulk
+jobs. QA delivery/outbound counts stayed `0/0`; production stayed `1/1`; sender-health
+due count stayed zero immediately before and after worker recreation. API, worker,
+admin, and QA API all run the expected digest and full revision/version with zero
+restarts and no panic, fatal, traceback, schema-failure, or migration-failure signal.
+The first QA aggregate command failed closed on shell quoting before migration or
+container mutation; its corrected form passed.
+
+**Business Value / Plan Fit:** Signature saves and previews now use the persisted
+sequence version, both test-send surfaces can continue through a definitively rejected
+sender credential, scheduled rotation quarantines and recovers rejected accounts
+safely, and Template 1 shows only the intended canonical greeting. The deployment
+preserved all Phase 1 human approval and sending gates.
+
+**Risks / Approval State:** Outreach remains disabled. No real test, scheduled,
+health-check, or provider email was sent during deployment, so inbox delivery still
+requires a separately approved test-recipient smoke. The new PostgreSQL
+claim/quarantine/update CTEs still lack a live database integration harness, although
+the production schema/invariants and disabled-path runtime passed. Rollback requires
+no migration down and should not restore databases by default because that could lose
+new inbound data.
+
+Rollback retains stopped QA container
+`tuvi-qa-api-api-rollback-2ffc134-20260816T201756Z`, explicit
+`rollback-4d6ea73-20260816T201756Z` API/worker/migrator/admin/backend image tags, and
+mode-`0600` backups
+`/opt/tuvi/backups/qa-postgres/qa-pre-4d6ea73-20260816T201756Z.dump`,
+`/opt/tuvi/backups/postgres/monorepo-pre-4d6ea73-20260816T201756Z.dump`,
+`/opt/tuvi/backups/config/env-pre-4d6ea73-20260816T201756Z.tar.gz`, and
+`/opt/tuvi/backups/config/stack.env-pre-4d6ea73-20260816T201756Z`.

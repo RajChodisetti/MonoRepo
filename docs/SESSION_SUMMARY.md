@@ -1,4 +1,4 @@
-Release `2ffc134` remains deployed to QA API and production API/worker/admin at schema 54; outreach remains disabled and no provider send was performed.
-Local branch `codex/fix-outreach-signature-test-send-greeting-20260816` now rehydrates saved signatures, distinguishes selected versus active test versions, and verifies the persisted signature in preview.
-Definitive Gmail credential/auth failures skip to other configured accounts for direct tests and quarantine/defer safely for scheduled work; ambiguous outcomes still fail closed.
-Template 1 surfaces now show only the canonical `greeting01`, with preview/test/live parity tests; the change is unreleased and awaits approved deployment plus a test-recipient smoke.
+Release `4d6ea73` is deployed to QA API and production API/worker/admin at schema 54 with matching immutable digests, revision labels, and runtime version markers.
+Saved signatures now rehydrate authoritatively, test-send skips definitively rejected sender credentials, scheduled rotation quarantines/defer-recovers safely, and Template 1 shows only canonical `greeting01`.
+QA/production HTTP, database, disabled-outreach, no-delivery, zero-restart, and fatal-log invariants passed; stale release pointers were reconciled to the new release.
+Outreach remains disabled and no provider email or health probe was sent; a separately approved test-recipient smoke and live PostgreSQL CTE integration coverage remain outstanding.
