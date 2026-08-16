@@ -132,18 +132,21 @@ func TestDurableAccountPoolSendDirectSkipsQuotaClaim(t *testing.T) {
 }
 
 func TestAccountPoolSendDirectFromUsesRequestedMailbox(t *testing.T) {
+	quota := &preflightQuotaStore{}
 	first := &preflightProvider{}
 	second := &preflightProvider{}
-	pool, err := newAccountPoolProviders(
+	pool, err := newPersistentAccountPool(
 		[]accountProvider{
 			{key: "first", provider: first},
 			{key: "reply-mailbox", provider: second},
 		},
 		40,
 		80,
+		24*time.Hour,
+		quota,
 	)
 	if err != nil {
-		t.Fatalf("newAccountPoolProviders() error = %v", err)
+		t.Fatalf("newPersistentAccountPool() error = %v", err)
 	}
 
 	result, err := pool.SendDirectFrom(context.Background(), "reply-mailbox", SendRequest{
@@ -159,6 +162,12 @@ func TestAccountPoolSendDirectFromUsesRequestedMailbox(t *testing.T) {
 	}
 	if result.AccountKey != "reply-mailbox" {
 		t.Fatalf("AccountKey = %q, want reply-mailbox", result.AccountKey)
+	}
+	if result.QuotaManaged {
+		t.Fatal("SendDirectFrom() result was quota managed")
+	}
+	if quota.claims != 0 {
+		t.Fatalf("quota claims = %d, want 0", quota.claims)
 	}
 }
 

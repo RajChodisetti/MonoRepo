@@ -45,7 +45,7 @@ func loadOutreachConfig(parser *envParser) OutreachConfig {
 		InboundEnabled:              parser.bool("OUTREACH_INBOUND_ENABLED", false),
 		InboundAccountKey:           strings.TrimSpace(parser.string("OUTREACH_INBOUND_ACCOUNT_KEY", "")),
 		InboundMailboxJSON:          parser.string("OUTREACH_INBOUND_MAILBOX_JSON", ""),
-		InboundPollInterval:         time.Duration(parser.int("OUTREACH_INBOUND_POLL_SECONDS", 60)) * time.Second,
+		InboundPollInterval:         time.Duration(parser.int("OUTREACH_INBOUND_POLL_SECONDS", 15)) * time.Second,
 	}
 
 	if cfg.InboundPollInterval < 15*time.Second {

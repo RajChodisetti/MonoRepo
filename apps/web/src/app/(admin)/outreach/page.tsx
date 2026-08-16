@@ -311,7 +311,8 @@ export default function OutreachPage() {
         <div role="tabpanel" id="outreach-panel-operations" aria-labelledby="outreach-tab-operations">
           <div className="alert alert-info" style={{ marginBottom: "1rem" }}>
             Scheduled outreach uses the daily mailbox quota only inside the saved Australia/Sydney window.
-            Template tests, inbox replies, health checks, and other direct emails are outside this schedule.
+            Manual template tests, inbox replies, health checks, and other direct emails do not consume that
+            scheduled daily quota or wait for its window. Gmail and other provider limits still apply.
           </div>
           {loadingOperations && !status ? <EmptyState message="Loading outreach status…" /> : null}
 

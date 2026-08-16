@@ -3,6 +3,9 @@ package outreach_test
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -91,11 +94,19 @@ type mockEmailProvider struct {
 	request emailprovider.SendRequest
 	result  emailprovider.SendResult
 	err     error
+	sends   int
 }
 
 func (provider *mockEmailProvider) Send(_ context.Context, req emailprovider.SendRequest) (emailprovider.SendResult, error) {
+	provider.sends++
 	provider.request = req
 	return provider.result, provider.err
+}
+
+type fallbackRoundTripFunc func(*http.Request) (*http.Response, error)
+
+func (roundTrip fallbackRoundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return roundTrip(request)
 }
 
 func testAccountPool(t *testing.T, provider emailprovider.Provider) *emailprovider.AccountPool {
@@ -383,6 +394,114 @@ func TestSendTemplateTestEmailsSendsSavedSequenceExactlyWithSignature(t *testing
 	if !strings.Contains(provider.request.TextBody, "Praveen Maurya") ||
 		!strings.Contains(provider.request.TextBody, "https://tuvisolutions.com") {
 		t.Fatalf("last request missing text signature: %q", provider.request.TextBody)
+	}
+}
+
+func TestSendTemplateTestBypassesManualAccountPoolLimit(t *testing.T) {
+	t.Parallel()
+
+	repo := eligibleSequenceRepo()
+	provider := &mockEmailProvider{result: emailprovider.SendResult{ProviderMessageID: "manual-test"}}
+	service := newSequenceService(t, repo, provider)
+
+	for index := range 51 {
+		_, err := service.SendTemplateTest(context.Background(), internalAdminPrincipal(), outreach.TemplateTestSendInput{
+			RecipientEmail: "test@example.com",
+			RestaurantName: "Manual Test Cafe",
+		})
+		if err != nil {
+			t.Fatalf("manual template send %d error = %v", index+1, err)
+		}
+	}
+	if provider.sends != 51 {
+		t.Fatalf("provider sends = %d, want 51 manual sends without account-pool exhaustion", provider.sends)
+	}
+}
+
+func TestSendTemplateTestFallbackBypassesManualAccountLimit(t *testing.T) {
+	sequenceID := uuid.New()
+	repo := eligibleSequenceRepo()
+	repo.activeSteps = []outreach.SequenceStep{
+		{
+			ID: uuid.New(), SequenceID: sequenceID, Position: 1, Enabled: true,
+			SubjectTemplate:  "First note for {{restaurant_name}}",
+			BodyTextTemplate: "{{greeting01}}\n\nFirst manual test body.",
+		},
+		{
+			ID: uuid.New(), SequenceID: sequenceID, Position: 2, Enabled: true, DelayHours: 72,
+			SubjectTemplate:  "Second note for {{restaurant_name}}",
+			BodyTextTemplate: "{{greeting}}\n\nSecond manual test body.",
+		},
+	}
+
+	originalTransport := http.DefaultTransport
+	tokenRequests := 0
+	sendRequests := 0
+	http.DefaultTransport = fallbackRoundTripFunc(func(request *http.Request) (*http.Response, error) {
+		var body string
+		switch {
+		case request.Method == http.MethodPost && request.URL.Host == "oauth2.googleapis.com" && request.URL.Path == "/token":
+			tokenRequests++
+			body = `{"access_token":"isolated-test-token","expires_in":3600}`
+		case request.Method == http.MethodPost && request.URL.Host == "gmail.googleapis.com" && request.URL.Path == "/gmail/v1/users/me/messages/send":
+			sendRequests++
+			body = fmt.Sprintf(`{"id":"manual-%d","threadId":"thread-%d"}`, sendRequests, sendRequests)
+		default:
+			return nil, fmt.Errorf("unexpected fallback email request: %s %s", request.Method, request.URL.Redacted())
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Status:     "200 OK",
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(body)),
+			Request:    request,
+		}, nil
+	})
+	t.Cleanup(func() { http.DefaultTransport = originalTransport })
+
+	campaignRepo := &campaigns.Mock{}
+	service := outreach.NewService(
+		repo,
+		nil,
+		campaignRepo,
+		campaigns.NewService(campaignRepo, nil, nil, nil, config.AppURLsConfig{PublicBaseURL: "https://api.example.com"}),
+		nil,
+		outreach.DemoTokenResolver{},
+		nil,
+		nil,
+		config.EmailConfig{Provider: "gmail", FromName: "Tuvi"},
+		config.OutreachConfig{
+			BulkMax:          1,
+			EmailsPerAccount: 1,
+			GoogleWorkspaceAccounts: []config.GmailMailConfig{{
+				AccountKey:   "fallback",
+				MailboxEmail: "fallback@example.com",
+				FromEmail:    "fallback@example.com",
+				ClientID:     "isolated-client",
+				ClientSecret: "isolated-secret",
+				RefreshToken: "isolated-refresh",
+			}},
+		},
+		config.AppURLsConfig{
+			PresentationSiteURL: "https://tuvisolutions.com/services/restaurants",
+			PublicMarketingURL:  "https://tuvisolutions.com",
+		},
+		nil,
+		nil,
+	)
+
+	result, err := service.SendTemplateTest(context.Background(), internalAdminPrincipal(), outreach.TemplateTestSendInput{
+		RecipientEmail: "test@example.com",
+		RestaurantName: "Fallback Cafe",
+	})
+	if err != nil {
+		t.Fatalf("fallback SendTemplateTest() error = %v", err)
+	}
+	if len(result.Items) != 2 || sendRequests != 2 {
+		t.Fatalf("fallback manual sends = %d items/%d requests, want 2 despite account limit 1", len(result.Items), sendRequests)
+	}
+	if tokenRequests != 1 {
+		t.Fatalf("fallback token requests = %d, want 1 isolated provider session", tokenRequests)
 	}
 }
 

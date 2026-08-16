@@ -1,7 +1,7 @@
 # ADR: Sydney scheduled outreach window
 
 Date: 2026-08-15
-Status: Accepted (local/unreleased)
+Status: Accepted (deployed; inbox freshness/detail hardening local/unreleased)
 
 ## Context
 
@@ -37,12 +37,26 @@ mailbox.
   claims lock and read the persisted window transactionally, so saved changes
   take effect without a process restart.
 - Keep template tests, inbox replies, health checks, and other direct/manual
-  email paths outside the scheduled window and daily quota. Existing global
-  send-disable and admin confirmation controls still apply.
+  email paths outside the scheduled window and daily quota, including quota
+  reconciliation, synchronization, claims, and pacing. Existing global
+  send-disable and admin confirmation controls still apply; provider limits do
+  not change.
 - Return the latest inbound message ID for each inbox thread separately from the
   latest overall message ID. The UI always replies to that inbound snapshot and
   the backend selects the Gmail provider using its captured `mailbox_key`, so a
   reply is sent from the address that received the email.
+- Build each inbox row from its latest received message: subject, bounded text
+  preview, sender, receiving address, received timestamp, and inbound message ID
+  all come from the same deterministic snapshot. Order rows by that received
+  timestamp with a stable message-ID tie-breaker; unread count is a filter/badge
+  and neither unread state nor a later admin reply moves older received mail
+  above newer mail.
+- Keep complete message bodies out of the 15-second paginated response. Opening
+  a subject, preview, or Open action marks only that received message read and
+  returns its complete stored text for an escaped, pre-wrapped detail dialog.
+  Refresh the mounted inbox every 15 seconds, retain the current page, filters,
+  and open detail for in-app manual/automatic refreshes, and default inbound
+  Gmail polling to the same interval.
 
 ## Options Considered
 
@@ -70,6 +84,12 @@ mailbox.
   window to compensate.
 - Inbox replies remain available after an earlier admin response and continue
   to preserve Gmail thread and RFC reply headers.
+- Inbox detail shows the complete stored text body, not attachments or a
+  faithful rendered MIME message. HTML fallback content is displayed literally
+  rather than executed as markup.
+- Inbound Gmail polling runs four times as often as the previous 60-second
+  default. Existing deployments with an explicit interval retain that override
+  until their protected configuration is changed and the worker is recreated.
 - Production deployment, configuration mutation, and enabling real outreach
   remain explicit approval gates. This decision does not authorize any send.
 

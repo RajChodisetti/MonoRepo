@@ -49,6 +49,11 @@ type InboxThread struct {
 	MailboxEmail   string     `json:"mailbox_email"`
 	Unmatched      bool       `json:"unmatched"`
 	UnreadCount    int        `json:"unread_count"`
+	Subject        string     `json:"subject"`
+	TextSnippet    string     `json:"text_snippet"`
+	FromEmail      string     `json:"from_email"`
+	ToEmail        string     `json:"to_email"`
+	ReceivedAt     time.Time  `json:"received_at"`
 	LastDirection  string     `json:"last_direction"`
 	LastSnippet    string     `json:"last_snippet"`
 	LastAt         time.Time  `json:"last_at"`

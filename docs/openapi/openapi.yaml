@@ -1761,6 +1761,10 @@ paths:
         Requires role `internal_admin`. Lists conversations received during the last
         10 days across every configured Google Workspace outreach mailbox. Messages
         that cannot be matched to a restaurant are retained as unmatched threads.
+        Each summary's subject, text snippet, sender, recipient, received timestamp,
+        and reply message id come from its latest received inbound message. Threads
+        are ordered by that received timestamp first; unread count and later outbound
+        replies do not move an older received message ahead of a newer one.
       parameters:
         - name: unread
           in: query
@@ -1814,7 +1818,10 @@ paths:
       operationId: markOutreachMessageRead
       security:
         - bearerAuth: []
-      description: Requires role `internal_admin`.
+      description: |
+        Requires role `internal_admin`. Marks the captured message read idempotently
+        and returns its complete stored `body_text` together with its subject, sender,
+        recipient, and message metadata.
       responses:
         '200':
           description: Updated message
@@ -5072,7 +5079,7 @@ components:
 
     OutreachInboxThread:
       type: object
-      required: [mailbox_key, mailbox_email, unmatched, unread_count, last_direction, last_snippet, last_at, last_message_id, reply_message_id]
+      required: [mailbox_key, mailbox_email, unmatched, unread_count, subject, text_snippet, from_email, to_email, received_at, last_direction, last_snippet, last_at, last_message_id, reply_message_id]
       properties:
         restaurant_id:
           type: string
@@ -5091,6 +5098,22 @@ components:
         unread_count:
           type: integer
           minimum: 0
+        subject:
+          type: string
+          description: Subject of the latest received inbound message in this thread.
+        text_snippet:
+          type: string
+          description: Whitespace-normalized preview of the latest received inbound message body, limited to 180 characters.
+        from_email:
+          type: string
+          description: Sender of the latest received inbound message.
+        to_email:
+          type: string
+          description: Recipient address captured on the latest received inbound message.
+        received_at:
+          type: string
+          format: date-time
+          description: Provider-received timestamp of the latest inbound message.
         last_direction:
           type: string
           enum: [outbound, inbound]

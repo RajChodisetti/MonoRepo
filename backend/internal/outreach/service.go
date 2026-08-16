@@ -152,7 +152,7 @@ func (service *Service) SendTemplateTest(ctx context.Context, principal auth.Pri
 		if providerErr != nil {
 			return TemplateTestSendResult{}, ErrNotConfigured
 		}
-		provider = builtProvider
+		provider = directPoolProvider{pool: builtProvider}
 	}
 	facts, restaurantID, err := service.resolveGreetingFacts(
 		ctx, input.RestaurantID, input.RestaurantName, input.OwnerFirstName, "Tuvi Test Restaurant",

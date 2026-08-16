@@ -3,9 +3,30 @@ package config_test
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/config"
 )
+
+func TestLoadOutreachInboundPollIntervalDefaultsAndClampsToFifteenSeconds(t *testing.T) {
+	t.Setenv("OUTREACH_INBOUND_POLL_SECONDS", "")
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load() default error = %v", err)
+	}
+	if cfg.Outreach.InboundPollInterval != 15*time.Second {
+		t.Fatalf("default InboundPollInterval = %s, want 15s", cfg.Outreach.InboundPollInterval)
+	}
+
+	t.Setenv("OUTREACH_INBOUND_POLL_SECONDS", "5")
+	cfg, err = config.Load()
+	if err != nil {
+		t.Fatalf("Load() clamped error = %v", err)
+	}
+	if cfg.Outreach.InboundPollInterval != 15*time.Second {
+		t.Fatalf("clamped InboundPollInterval = %s, want 15s", cfg.Outreach.InboundPollInterval)
+	}
+}
 
 func TestLoadOutreachZohoAccountsJSON(t *testing.T) {
 	t.Setenv("OUTREACH_ZOHO_ACCOUNTS_JSON", `[{"account_id":"acc1","from_email":"a@example.com","client_id":"cid","client_secret":"sec","refresh_token":"rt","region":"com"}]`)

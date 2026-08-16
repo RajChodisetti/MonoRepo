@@ -183,35 +183,65 @@ func (repo *Postgres) FindRestaurantIDByEmail(ctx context.Context, email string)
 const inboxThreadsCTE = `
 	WITH messages AS (
 	  SELECT m.id, m.restaurant_id, m.direction, m.from_email, m.to_email,
-	         m.body_text, m.read_at, m.received_at, m.created_at, m.mailbox_key,
+	         m.subject, m.body_text, m.read_at, m.received_at, m.created_at, m.mailbox_key,
 	         COALESCE(NULLIF(m.gmail_thread_id, ''), COALESCE(m.restaurant_id::text, m.id::text)) AS conversation_key,
 	         r.name AS restaurant_name,
 	         CASE WHEN m.direction = 'inbound' THEN m.from_email ELSE m.to_email END AS email
 	  FROM email_messages m
 	  LEFT JOIN restaurants r ON r.id = m.restaurant_id
 	  WHERE m.received_at >= now() - interval '10 days'
-	), threads AS (
+	), thread_rollup AS (
 	  SELECT mailbox_key,
 	         conversation_key,
-	         ((array_agg(restaurant_id ORDER BY received_at DESC, created_at DESC)
+	         ((array_agg(restaurant_id ORDER BY received_at DESC, created_at DESC, id DESC)
 	           FILTER (WHERE restaurant_id IS NOT NULL))[1]) AS restaurant_id,
 	         COALESCE(max(restaurant_name), '') AS restaurant_name,
-	         COALESCE((array_agg(email ORDER BY received_at DESC, created_at DESC))[1], '') AS email,
-	         COALESCE((array_agg(to_email ORDER BY received_at DESC, created_at DESC)
-	           FILTER (WHERE direction = 'inbound'))[1], '') AS mailbox_email,
+	         COALESCE((array_agg(email ORDER BY received_at DESC, created_at DESC, id DESC))[1], '') AS email,
 	         bool_and(restaurant_id IS NULL) AS unmatched,
 	         count(*) FILTER (WHERE direction = 'inbound' AND read_at IS NULL)::int AS unread_count,
-	         (array_agg(direction ORDER BY received_at DESC, created_at DESC))[1] AS last_direction,
+	         (array_agg(direction ORDER BY received_at DESC, created_at DESC, id DESC))[1] AS last_direction,
 	         (array_agg(left(btrim(regexp_replace(body_text, '\s+', ' ', 'g')), 180)
-	           ORDER BY received_at DESC, created_at DESC))[1] AS last_snippet,
+	           ORDER BY received_at DESC, created_at DESC, id DESC))[1] AS last_snippet,
 	         max(received_at) AS last_at,
-	         (array_agg(id ORDER BY received_at DESC, created_at DESC))[1] AS last_message_id,
-	         (array_agg(id ORDER BY received_at DESC, created_at DESC)
+	         (array_agg(id ORDER BY received_at DESC, created_at DESC, id DESC))[1] AS last_message_id,
+	         (array_agg(id ORDER BY received_at DESC, created_at DESC, id DESC)
 	           FILTER (WHERE direction = 'inbound'))[1] AS reply_message_id
 	  FROM messages
 	  GROUP BY mailbox_key, conversation_key
 	  HAVING bool_or(direction = 'inbound')
+	), threads AS (
+	  SELECT rollup.restaurant_id,
+	         rollup.restaurant_name,
+	         rollup.email,
+	         rollup.mailbox_key,
+	         inbound.to_email AS mailbox_email,
+	         rollup.unmatched,
+	         rollup.unread_count,
+	         inbound.subject,
+	         left(btrim(regexp_replace(inbound.body_text, '\s+', ' ', 'g')), 180) AS text_snippet,
+	         inbound.from_email,
+	         inbound.to_email,
+	         inbound.received_at,
+	         rollup.last_direction,
+	         rollup.last_snippet,
+	         rollup.last_at,
+	         rollup.last_message_id,
+	         rollup.reply_message_id
+	  FROM thread_rollup rollup
+	  JOIN messages inbound ON inbound.id = rollup.reply_message_id
 	)`
+
+const inboxThreadsLatestFirstOrder = `received_at DESC, reply_message_id DESC`
+
+const inboxThreadsListQuery = inboxThreadsCTE + `
+		SELECT restaurant_id, restaurant_name, email, mailbox_key, mailbox_email, unmatched, unread_count,
+		       subject, text_snippet, from_email, to_email, received_at,
+		       last_direction, last_snippet, last_at, last_message_id, reply_message_id
+		FROM threads
+		WHERE ($1 = '' OR mailbox_key = $1)
+		  AND (NOT $2 OR unread_count > 0)
+		ORDER BY ` + inboxThreadsLatestFirstOrder + `
+		LIMIT $3 OFFSET $4`
 
 func (repo *Postgres) ListInbox(ctx context.Context, unreadOnly bool, mailboxKey string, limit, offset int) (InboxList, error) {
 	if limit <= 0 || limit > 100 {
@@ -231,15 +261,7 @@ func (repo *Postgres) ListInbox(ctx context.Context, unreadOnly bool, mailboxKey
 		return InboxList{}, fmt.Errorf("count inbox threads: %w", err)
 	}
 
-	query := inboxThreadsCTE + `
-		SELECT restaurant_id, restaurant_name, email, mailbox_key, mailbox_email, unmatched, unread_count,
-		       last_direction, last_snippet, last_at, last_message_id, reply_message_id
-		FROM threads
-		WHERE ($1 = '' OR mailbox_key = $1)
-		  AND (NOT $2 OR unread_count > 0)
-		ORDER BY unread_count DESC, last_at DESC
-		LIMIT $3 OFFSET $4`
-	rows, err := repo.pool.Query(ctx, query, mailboxKey, unreadOnly, limit, offset)
+	rows, err := repo.pool.Query(ctx, inboxThreadsListQuery, mailboxKey, unreadOnly, limit, offset)
 	if err != nil {
 		return InboxList{}, fmt.Errorf("list inbox threads: %w", err)
 	}
@@ -274,6 +296,11 @@ func scanInboxThread(row messageScanner) (InboxThread, error) {
 		&thread.MailboxEmail,
 		&thread.Unmatched,
 		&thread.UnreadCount,
+		&thread.Subject,
+		&thread.TextSnippet,
+		&thread.FromEmail,
+		&thread.ToEmail,
+		&thread.ReceivedAt,
 		&thread.LastDirection,
 		&thread.LastSnippet,
 		&thread.LastAt,

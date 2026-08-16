@@ -511,6 +511,11 @@ export type InboxThread = {
   mailbox_email: string;
   unmatched: boolean;
   unread_count: number;
+  from_email: string;
+  to_email: string;
+  subject: string;
+  text_snippet: string;
+  received_at: string;
   last_direction: string;
   last_snippet: string;
   last_at: string;

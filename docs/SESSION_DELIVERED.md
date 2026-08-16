@@ -3684,3 +3684,64 @@ targets are also retained. Verified mode-`0600` pre-migration backups are
 `/opt/tuvi/backups/config/env-pre-c1d5a9a-20260816T070540Z.tar.gz`. Migration 54 can
 roll back while the saved window remains at its default; its down migration refuses
 to discard an administrator-customized schedule.
+
+## 2026-08-16 — Inbox freshness and manual-send quota hardening (local/unreleased)
+
+**Role / Delivery:** Updated the internal-admin inbox to order threads strictly by
+their latest received email with a deterministic timestamp/message-ID tie-breaker
+instead of elevating older unread threads or allowing a later admin reply to replace
+or reorder the received message. Each row now shows Subject, bounded Text preview,
+Received from, Received by, and Received at. Clicking the subject, preview, or Open
+action marks that inbound message read and opens its complete stored text in an
+escaped, pre-wrapped dialog; complete bodies stay out of the frequently polled list
+response. The detail remains open across list refreshes, with keyboard focus entry,
+containment, Escape close, and focus restoration.
+
+Added a visible Refresh action that retains the current inbox page, mailbox, and
+unread filter, keeps the existing 15-second page refresh, ignores stale overlapping
+responses, and displays the latest successful refresh time. The inbound Gmail worker
+default and checked-in environment examples now use 15 seconds instead of 60
+seconds.
+
+Hardened both direct manual paths: template test sends, including their fallback
+pool, use the direct provider path; reloading-pool test sends and same-mailbox inbox
+replies build without the scheduled quota store. They therefore do not reconcile,
+sync, validate, claim, or advance scheduled quota state. Scheduled outreach still
+uses the durable quota path, and Gmail/provider limits plus existing admin and
+send-disable controls remain unchanged. No schema or migration was needed; OpenAPI
+and the existing Sydney-window ADR document the behavior.
+
+**Checks Run:** Initial targeted outreach/provider/config/handler tests passed (211).
+After the inbox-detail contract and final manual-send regressions were added, focused
+inbox/handler tests passed (142), focused outreach/provider tests passed (135), and
+the race-enabled outreach/provider run passed (135). The actual nil-pool template
+fallback was also repeated ten times with an isolated HTTP transport. The full Go
+suite, `go vet`, all backend command builds, admin ESLint, direct nonincremental
+TypeScript checking, the 14-route admin production build, template nonincremental
+TypeScript checking and production build, both Compose render checks, OpenAPI
+validation, agent-context checks, and `git diff --check` passed. OpenAPI retained 11
+pre-existing warnings.
+The helper-form template checks initially failed because this isolated worktree had
+no template dependencies and `npm exec` did not forward the TypeScript arguments;
+locked dependencies were installed and the direct compiler/build commands passed.
+One concurrent admin type-check raced its production build while `.next/types` was
+being replaced; the same direct nonincremental type-check passed immediately after
+the build completed.
+The agent-context check was run from the primary checkout because its script is an
+uncommitted pre-existing file there.
+
+**Business Value / Plan Fit:** Administrators see the newest received email first,
+can identify its subject, text, sender, and receiving mailbox at a glance, open its
+complete stored text without losing their page, and refresh without being returned
+to page one. Inbox ingestion and the mounted page both poll on the requested cadence.
+Manual tests and replies remain usable even when the scheduled daily allowance is
+exhausted or its window is closed.
+
+**Risks / Approval State:** This change is local and unreleased. No deployment,
+protected environment mutation, database write, provider health probe, or email send
+was performed. Inbound polling is four times more frequent than the former default;
+an existing QA/production `OUTREACH_INBOUND_POLL_SECONDS` override will remain in
+force until approved configuration/deployment work recreates the worker. Complete
+text means the stored body only; attachments are not persisted and HTML fallback is
+shown literally as text. QA has no admin-web service, so authenticated browser detail
+QA remains a production-promotion smoke rather than a QA-canary capability.

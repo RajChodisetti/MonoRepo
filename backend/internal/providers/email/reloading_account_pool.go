@@ -65,7 +65,7 @@ func (pool *ReloadingAccountPool) Send(ctx context.Context, request SendRequest)
 }
 
 func (pool *ReloadingAccountPool) SendDirect(ctx context.Context, request SendRequest) (SendResult, error) {
-	current, err := pool.current(ctx)
+	current, err := pool.currentDirect(ctx)
 	if err != nil {
 		return SendResult{}, err
 	}
@@ -73,7 +73,7 @@ func (pool *ReloadingAccountPool) SendDirect(ctx context.Context, request SendRe
 }
 
 func (pool *ReloadingAccountPool) SendDirectFrom(ctx context.Context, accountKey string, request SendRequest) (SendResult, error) {
-	current, err := pool.current(ctx)
+	current, err := pool.currentDirect(ctx)
 	if err != nil {
 		return SendResult{}, err
 	}
@@ -89,6 +89,20 @@ func (pool *ReloadingAccountPool) current(ctx context.Context) (*AccountPool, er
 		return nil, fmt.Errorf("load outreach email accounts: %w", err)
 	}
 	return buildAccountPool(ctx, pool.emailCfg, outreachCfg, pool.quota)
+}
+
+// currentDirect intentionally omits the durable quota store. Manual admin
+// sends must not reconcile, sync, validate, claim, or advance scheduled quota
+// state; the selected provider still enforces its own external service limits.
+func (pool *ReloadingAccountPool) currentDirect(ctx context.Context) (*AccountPool, error) {
+	if pool == nil || pool.loader == nil {
+		return nil, fmt.Errorf("outreach email account pool is not configured")
+	}
+	outreachCfg, err := pool.loader.Load(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load outreach email accounts: %w", err)
+	}
+	return buildAccountPool(ctx, pool.emailCfg, outreachCfg, nil)
 }
 
 var _ AccountPoolProvider = (*ReloadingAccountPool)(nil)

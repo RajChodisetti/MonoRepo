@@ -1,13 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { adminFetch } from "@/lib/client-api";
 import { formatDate } from "@/lib/constants";
-import type { InboxListResponse, InboxThread } from "@/lib/types";
-import { EmptyState, ErrorBanner, StatusBadge } from "@/components/ui";
+import type { EmailMessage, InboxListResponse, InboxThread } from "@/lib/types";
+import { Modal } from "@/components/Modal";
+import { EmptyState, ErrorBanner } from "@/components/ui";
 
 const pageSize = 50;
+const refreshIntervalMs = 15_000;
 
 export function OutreachInbox() {
   const [unreadOnly, setUnreadOnly] = useState(false);
@@ -16,8 +18,19 @@ export function OutreachInbox() {
   const [data, setData] = useState<InboxListResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
+  const [selectedThread, setSelectedThread] = useState<InboxThread | null>(null);
+  const [messageDetail, setMessageDetail] = useState<EmailMessage | null>(null);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const requestSequence = useRef(0);
+  const detailRequestSequence = useRef(0);
+  const inboxHeadingRef = useRef<HTMLHeadingElement>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (manual = false) => {
+    const requestID = ++requestSequence.current;
+    if (manual) setRefreshing(true);
     setError(null);
     try {
       const result = await adminFetch<InboxListResponse>("outreach/inbox", {
@@ -28,20 +41,58 @@ export function OutreachInbox() {
           offset,
         },
       });
+      if (requestID !== requestSequence.current) return;
       setData(result);
+      setLastRefreshedAt(new Date().toISOString());
     } catch (err) {
+      if (requestID !== requestSequence.current) return;
       setError(err instanceof Error ? err.message : "Failed to load inbox");
     } finally {
-      setLoading(false);
+      if (requestID === requestSequence.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, [mailboxKey, offset, unreadOnly]);
 
   useEffect(() => {
     setLoading(true);
-    load();
-    const timer = window.setInterval(load, 15_000);
-    return () => window.clearInterval(timer);
+    void load();
+    const timer = window.setInterval(() => void load(), refreshIntervalMs);
+    return () => {
+      window.clearInterval(timer);
+      requestSequence.current += 1;
+    };
   }, [load]);
+
+  const openMessage = useCallback(async (thread: InboxThread) => {
+    const requestID = ++detailRequestSequence.current;
+    setSelectedThread(thread);
+    setMessageDetail(null);
+    setDetailError(null);
+    setDetailLoading(true);
+    try {
+      const message = await adminFetch<EmailMessage>(`outreach/messages/${thread.reply_message_id}/read`, {
+        method: "POST",
+      });
+      if (requestID !== detailRequestSequence.current) return;
+      setMessageDetail(message);
+      void load();
+    } catch (err) {
+      if (requestID !== detailRequestSequence.current) return;
+      setDetailError(err instanceof Error ? err.message : "Failed to open message");
+    } finally {
+      if (requestID === detailRequestSequence.current) setDetailLoading(false);
+    }
+  }, [load]);
+
+  const closeMessage = useCallback(() => {
+    detailRequestSequence.current += 1;
+    setSelectedThread(null);
+    setMessageDetail(null);
+    setDetailError(null);
+    setDetailLoading(false);
+  }, []);
 
   return (
     <div>
@@ -57,7 +108,9 @@ export function OutreachInbox() {
         }}
       >
         <div>
-          <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Outreach inbox</h2>
+          <h2 ref={inboxHeadingRef} tabIndex={-1} style={{ margin: 0, fontSize: "1.05rem" }}>
+            Outreach inbox
+          </h2>
           <p style={{ color: "var(--muted)", margin: "0.3rem 0 0" }}>
             Sent snapshots and captured owner replies. A reply pauses that restaurant&apos;s campaign.
           </p>
@@ -92,6 +145,18 @@ export function OutreachInbox() {
             />
             Unread only
           </label>
+          <button
+            className="btn btn-secondary"
+            type="button"
+            disabled={loading || refreshing}
+            onClick={() => void load(true)}
+          >
+            {refreshing ? "Refreshing…" : "Refresh"}
+          </button>
+          <span className="field-help">
+            Page {Math.floor(offset / pageSize) + 1} · Auto-refresh every 15 seconds
+            {lastRefreshedAt ? ` · Updated ${formatDate(lastRefreshedAt)}` : ""}
+          </span>
         </div>
       </div>
       <ErrorBanner message={error} />
@@ -112,15 +177,23 @@ export function OutreachInbox() {
             <thead>
               <tr>
                 <th>Restaurant</th>
-                <th>Latest</th>
-                <th>When</th>
+                <th>Subject</th>
+                <th>Text</th>
+                <th>Received from</th>
+                <th>Received by</th>
+                <th>Received at</th>
                 <th>Unread</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {(data?.threads || []).map((thread) => (
-                <InboxRow key={thread.last_message_id} thread={thread} onReplied={load} />
+                <InboxRow
+                  key={thread.reply_message_id}
+                  thread={thread}
+                  onOpen={() => void openMessage(thread)}
+                  onReplied={() => load()}
+                />
               ))}
             </tbody>
           </table>
@@ -144,7 +217,7 @@ export function OutreachInbox() {
             <button
               className="btn btn-secondary"
               type="button"
-              disabled={offset === 0 || loading}
+              disabled={offset === 0 || loading || refreshing}
               onClick={() => setOffset((value) => Math.max(0, value - pageSize))}
             >
               Previous
@@ -152,7 +225,7 @@ export function OutreachInbox() {
             <button
               className="btn btn-secondary"
               type="button"
-              disabled={offset + pageSize >= data.total || loading}
+              disabled={offset + pageSize >= data.total || loading || refreshing}
               onClick={() => setOffset((value) => value + pageSize)}
             >
               Next
@@ -160,11 +233,65 @@ export function OutreachInbox() {
           </div>
         </div>
       ) : null}
+      <Modal
+        open={selectedThread !== null}
+        onClose={closeMessage}
+        title={messageDetail?.subject || selectedThread?.subject || "(no subject)"}
+        width={780}
+        fallbackFocusRef={inboxHeadingRef}
+      >
+        {detailLoading ? (
+          <p role="status" aria-live="polite" style={{ margin: 0, color: "var(--muted)" }}>
+            Loading complete message…
+          </p>
+        ) : null}
+        {detailError ? (
+          <>
+            <ErrorBanner message={detailError} />
+            <div>
+              <button
+                className="btn btn-secondary"
+                type="button"
+                onClick={() => selectedThread && void openMessage(selectedThread)}
+              >
+                Try again
+              </button>
+            </div>
+          </>
+        ) : null}
+        {messageDetail ? (
+          <>
+            <dl className="inbox-message-meta">
+              <div>
+                <dt>Received from</dt>
+                <dd>{messageDetail.from_email || "—"}</dd>
+              </div>
+              <div>
+                <dt>Received by</dt>
+                <dd>{messageDetail.to_email || messageDetail.mailbox_key || "—"}</dd>
+              </div>
+              <div>
+                <dt>Received at</dt>
+                <dd>{formatDate(messageDetail.received_at)}</dd>
+              </div>
+            </dl>
+            <pre className="inbox-message-body">{messageDetail.body_text || "No text content."}</pre>
+          </>
+        ) : null}
+      </Modal>
     </div>
   );
 }
 
-function InboxRow({ thread, onReplied }: { thread: InboxThread; onReplied: () => Promise<void> }) {
+function InboxRow({
+  thread,
+  onOpen,
+  onReplied,
+}: {
+  thread: InboxThread;
+  onOpen: () => void;
+  onReplied: () => Promise<void>;
+}) {
   const [replying, setReplying] = useState(false);
   const [subject, setSubject] = useState("");
   const [bodyText, setBodyText] = useState("");
@@ -181,7 +308,7 @@ function InboxRow({ thread, onReplied }: { thread: InboxThread; onReplied: () =>
     if (!bodyText.trim()) return;
     if (
       !window.confirm(
-        `Send this reply to ${thread.email || "the inbound sender"} from ${thread.mailbox_email || thread.mailbox_key}?`,
+        `Send this reply to ${thread.from_email || thread.email || "the inbound sender"} from ${thread.to_email || thread.mailbox_email || thread.mailbox_key}?`,
       )
     ) return;
     setBusy(true);
@@ -207,20 +334,23 @@ function InboxRow({ thread, onReplied }: { thread: InboxThread; onReplied: () =>
     <tr>
       <td>
         {title}
-        <div style={{ color: "var(--muted)", fontSize: "0.8rem" }}>{thread.email || "—"}</div>
-        <div style={{ color: "var(--muted)", fontSize: "0.8rem" }}>
-          Received by {thread.mailbox_email || thread.mailbox_key}
-        </div>
       </td>
-      <td>
-        <StatusBadge status={thread.last_direction} />
-        <div style={{ color: "var(--muted)", fontSize: "0.85rem", marginTop: "0.25rem" }}>
-          {thread.last_snippet || "—"}
-        </div>
+      <td className="inbox-subject-cell">
+        <button className="inbox-message-open inbox-message-subject" type="button" onClick={onOpen}>
+          {thread.subject || "(no subject)"}
+        </button>
       </td>
-      <td>{formatDate(thread.last_at)}</td>
+      <td className="inbox-text-cell">
+        <div className="inbox-message-preview">{thread.text_snippet || "—"}</div>
+      </td>
+      <td>{thread.from_email || thread.email || "—"}</td>
+      <td>{thread.to_email || thread.mailbox_email || thread.mailbox_key}</td>
+      <td>{formatDate(thread.received_at)}</td>
       <td>{thread.unread_count}</td>
       <td>
+        <button className="btn btn-secondary" type="button" onClick={onOpen}>
+          Open
+        </button>{" "}
         <button className="btn btn-secondary" type="button" onClick={() => setReplying((value) => !value)}>
           {replying ? "Cancel" : "Reply"}
         </button>
@@ -228,9 +358,9 @@ function InboxRow({ thread, onReplied }: { thread: InboxThread; onReplied: () =>
     </tr>
     {replying ? (
       <tr>
-        <td colSpan={5}>
+        <td colSpan={8}>
           <form onSubmit={sendReply} className="card" style={{ display: "grid", gap: "0.65rem", margin: "0.5rem 0" }}>
-            <strong>Reply from {thread.mailbox_email || thread.mailbox_key}</strong>
+            <strong>Reply from {thread.to_email || thread.mailbox_email || thread.mailbox_key}</strong>
             <label style={{ display: "grid", gap: "0.3rem" }}>
               <span>Subject / title (optional)</span>
               <input
