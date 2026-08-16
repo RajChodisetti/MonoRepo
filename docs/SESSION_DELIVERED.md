@@ -3919,3 +3919,83 @@ mode-`0600` backups
 `/opt/tuvi/backups/postgres/monorepo-pre-4d6ea73-20260816T201756Z.dump`,
 `/opt/tuvi/backups/config/env-pre-4d6ea73-20260816T201756Z.tar.gz`, and
 `/opt/tuvi/backups/config/stack.env-pre-4d6ea73-20260816T201756Z`.
+
+## 2026-08-16 — Outreach confirmed-send phase counts deployed
+
+**Role / Delivery:** Implemented and published commit `6305910` (`feat(outreach):
+show confirmed sends by phase`) to canonical `master` and
+`codex/outreach-phase-send-counts-20260816`. The outreach status API now computes one
+durable aggregate from `email_delivery_attempts` rows whose status is `sent`, exposing
+`total`, `phase_1`, `phase_2`, `phase_3`, and `other`. The admin Operations view shows
+those four requested counters and explains that phases map to sequence steps while
+template tests, inbox replies, health checks, and failed attempts are excluded. The
+frontend treats the field as optional so a rolling old-API/new-UI state shows dashes
+instead of false zeroes. OpenAPI, runtime JSON, and TypeScript use the same contract.
+
+Production inspection established why this ledger is authoritative: 11 attempts
+covered 8 restaurants, but only 9 were confirmed sends; the two failed credential
+attempts later succeeded through another sender. The 9 confirmed deliveries covered
+8 restaurants and 7 recipient addresses, so the UI deliberately labels message
+deliveries rather than unique restaurants or inboxes. Restaurant counters contained
+two older unattributed increments, and outbound snapshots had one historic omission
+plus one reply, so neither alternative source can produce correct phase totals.
+
+**Checks Run:** `go test ./backend/...` passed 602 tests; the race-enabled outreach
+and handler suite passed 153; `go vet ./backend/...` and
+`go build ./backend/cmd/...` passed. Admin ESLint, nonincremental TypeScript, and the
+14-route Next.js production build passed. OpenAPI validated with the same 11
+pre-existing warnings, and `git diff --check` passed. Independent review found no
+blocking code, contract, rolling-deploy, or count-source issue.
+
+Built immutable backend image
+`sha256:87dd99d847996ba930ebc73b65c1188294e416ecaa8ac6975ff30d1345ec8ab8`
+and admin image
+`sha256:9e49ee7fdf81699796bc9ebaa2a9555a0f3ad9cb559addcc17ba268ba6c4a65a`,
+both labelled with the full `6305910` revision. The exact release archive matched
+SHA-256 `06433f22cc685491e2cc05686fa9b314416a491c825a84a4abfe5abbf0794c26`.
+Fresh QA/production custom-format database and protected-environment backups passed
+format/list validation. Both no-op migrators left schema `54|54`.
+
+QA first passed an isolated canary, then the fixed QA API passed health, loopback
+public `200`, protected `401`, expected public allowlist `404`, QA-site `200`, zero
+attempts/sends, disabled control, and zero active jobs. Production API and admin-web
+then passed public API/admin login `200`, protected API `401`, unauthenticated outreach
+`307`, corporate/demo `200`, fake unsubscribe `404`, zero restarts, matching
+revision/version labels, and zero fatal-log signals. A signed-in read-only browser
+check confirmed the live UI displayed Total `9`, Phase 1 `8`, Phase 2 `1`, and Phase 3
+`0`. The database independently confirmed `9 = 8 + 1 + 0 + 0`, zero duplicate sent
+campaign steps, zero sending/unknown attempts, and zero due health checks.
+
+The initial QA migration attempt failed closed before mutation because the static QA
+env omitted runtime-derived database/Redis values; a root-only environment copied
+from the running QA API corrected it. Subsequent safety scripts stopped before the
+affected replacement or pointer mutation because of a quoted schema assertion, an
+outdated protected-route spelling, and a display-only Docker template; each state was
+inspected before the corrected command continued. No production promotion occurred
+until QA fully passed.
+
+**Business Value / Plan Fit:** Operators can now see cumulative confirmed outreach
+delivery volume and the Phase 1/2/3 progression directly on the existing Sending &
+health screen. Counts remain auditable from the durable provider-confirmed ledger and
+do not inflate from retries, direct tests, replies, or health probes.
+
+**Risks / Approval State:** Production outreach was already enabled with one active
+bulk job, so the release deliberately recreated only production API and admin-web.
+`tuvi-worker-1` remains byte-for-byte the original container/image/start time on
+revision `4d6ea73`, with zero restarts; deployment did not trigger a send, probe, or
+provider call. The active job may legitimately increase the displayed counts after
+this snapshot. The current source release is
+`/opt/tuvi/releases/monorepo-6305910-phase-counts-20260816T222000Z`, and all current,
+QA API, revision, image, detail, and deployment-time pointers were reconciled to it
+while explicitly recording the preserved worker revision.
+
+Rollback retains stopped QA container
+`tuvi-qa-api-api-rollback-4d6ea73-20260816T222000Z`, explicit
+`rollback-6305910-20260816T222000Z` API/backend/migrator/admin image tags, and
+mode-`0600` backups
+`/opt/tuvi/backups/qa-postgres/qa-pre-6305910-20260816T222000Z.dump`,
+`/opt/tuvi/backups/postgres/monorepo-pre-6305910-20260816T222000Z.dump`,
+`/opt/tuvi/backups/config/env-pre-6305910-20260816T222000Z.tar.gz`, and
+`/opt/tuvi/backups/config/stack.env-pre-6305910-20260816T222000Z`. Rollback recreates
+only QA API or production API/admin; it must leave the active worker untouched and
+requires no migration down or default database restore.
