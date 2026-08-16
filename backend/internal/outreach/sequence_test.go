@@ -47,6 +47,35 @@ func TestValidateSequenceTemplateAllowsAdminManagedLinks(t *testing.T) {
 	}
 }
 
+func TestRenderSquareBracketPlaceholders(t *testing.T) {
+	rating := 4.8
+	reviews := 426
+	step := validTestStep()
+	step.SubjectTemplate = "A digital idea for [RESTAURANT_NAME]"
+	step.BodyTextTemplate = "[GREETING]\n\nOwner: [FIRST_NAME]\nCuisine: [CUISINE]\nCity: [CITY]\nRating: [RATING]\nReviews: [TOTAL_REVIEWS]\n[WEBSITE_URL]"
+	facts := GreetingFacts{
+		RestaurantName: "Spice Garden", OwnerFirstName: "Maya",
+		GooglePlaceID: "place-1", ScrapeStatus: "success", City: "Plano",
+		Cuisines: []byte(`["Indian Restaurant"]`), Rating: &rating, ReviewCount: &reviews,
+	}
+
+	if err := validateSequenceSteps([]SequenceStep{step}); err != nil {
+		t.Fatalf("validateSequenceSteps() error = %v", err)
+	}
+	rendered, err := renderSequenceStep(step, facts)
+	if err != nil {
+		t.Fatalf("renderSequenceStep() error = %v", err)
+	}
+	for _, expected := range []string{
+		"Morning Maya,", "Spice Garden", "Owner: Maya", "Cuisine: Indian",
+		"City: Plano", "Rating: 4.8", "Reviews: 426", websiteURL,
+	} {
+		if !strings.Contains(rendered.Subject+"\n"+rendered.BodyText, expected) {
+			t.Fatalf("rendered template missing %q: %#v", expected, rendered)
+		}
+	}
+}
+
 func TestRenderPreservesDatabaseManagedUnsubscribeCopy(t *testing.T) {
 	step := validTestStep()
 	const databaseCopy = "Unsubscribe: https://email-provider.example/preferences"
@@ -132,6 +161,7 @@ func TestValidateAndRenderRejectsUnresolvedOrNonPlainTextTags(t *testing.T) {
 		{Position: 1, Enabled: true, SubjectTemplate: "Hello", BodyTextTemplate: "{{greeting-01}}"},
 		{Position: 1, Enabled: true, SubjectTemplate: "{{ greeting01 }}", BodyTextTemplate: "Plain"},
 		{Position: 1, Enabled: true, SubjectTemplate: "Hello", BodyTextTemplate: "<strong>not plain</strong>"},
+		{Position: 1, Enabled: true, SubjectTemplate: "Hello", BodyTextTemplate: "[UNKNOWN_FIELD]"},
 	}
 	for _, step := range tests {
 		if err := validateSequenceSteps([]SequenceStep{step}); !errors.Is(err, ErrSequenceInvalid) {

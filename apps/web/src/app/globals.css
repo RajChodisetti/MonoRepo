@@ -434,6 +434,8 @@ textarea:focus-visible {
 }
 
 .sequence-name-card h2,
+.sequence-signature-editor h2,
+.placeholder-reference h2,
 .sequence-preview h2,
 .sequence-empty h2 {
   margin: 0;
@@ -441,6 +443,8 @@ textarea:focus-visible {
 }
 
 .sequence-name-card p,
+.sequence-signature-editor p,
+.placeholder-reference p,
 .sequence-preview p,
 .sequence-empty p {
   margin: 0.25rem 0 0;
@@ -621,17 +625,82 @@ textarea:focus-visible {
   background: color-mix(in srgb, var(--bg-elevated) 95%, transparent);
 }
 
+.sequence-signature-editor {
+  display: grid;
+  gap: 0.85rem;
+  margin: 0;
+}
+
+.sequence-signature-editor legend {
+  padding: 0 0.4rem;
+  font-weight: 800;
+}
+
+.sequence-signature-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: start;
+  flex-wrap: wrap;
+}
+
+.signature-details-input {
+  min-height: 6.5rem;
+  resize: vertical;
+}
+
 .sequence-save-state {
   margin-right: auto;
   color: var(--muted);
   font-size: 0.82rem;
 }
 
-.sequence-preview {
+.sequence-sidebar {
   position: sticky;
   top: 1rem;
   display: grid;
+  gap: 1rem;
+}
+
+.sequence-preview,
+.placeholder-reference {
+  display: grid;
   gap: 0.8rem;
+}
+
+.placeholder-reference dl {
+  display: grid;
+  gap: 0;
+  margin: 0;
+}
+
+.placeholder-reference dl > div {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.placeholder-reference dl > div:last-child {
+  border-bottom: 0;
+}
+
+.placeholder-reference dt,
+.placeholder-reference dd {
+  margin: 0;
+}
+
+.placeholder-reference dd {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.placeholder-reference summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
 }
 
 .email-preview {
@@ -691,6 +760,11 @@ textarea:focus-visible {
   margin-top: 0.1rem;
 }
 
+.email-signature-details {
+  margin-top: 0.25rem;
+  white-space: pre-line;
+}
+
 .email-signature-preview .email-signature-company {
   margin-top: 0.25rem;
   color: #d71920;
@@ -700,6 +774,26 @@ textarea:focus-visible {
   margin-top: 0.25rem;
   color: #1a5fb4;
   text-decoration: underline;
+}
+
+.template-test-form {
+  display: grid;
+  gap: 0.7rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--line);
+}
+
+.template-test-form h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.template-test-result {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.5;
 }
 
 .recipient-filters {
@@ -750,7 +844,7 @@ textarea:focus-visible {
     grid-template-columns: 1fr;
   }
 
-  .sequence-preview {
+  .sequence-sidebar {
     position: static;
   }
 }

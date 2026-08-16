@@ -160,6 +160,11 @@ func (store *Store) VerifyEmailCampaigns(ctx context.Context) error {
 	if err := store.verifyTableExists(ctx, "outreach_email_credentials", "outreach email credential migration not applied: run make migrate-up"); err != nil {
 		return err
 	}
+	for _, column := range []string{"signature_name", "signature_title", "signature_details"} {
+		if err := store.verifyColumnExists(ctx, "outreach_email_sequences", column); err != nil {
+			return err
+		}
+	}
 	return store.verifyColumnExists(ctx, "outreach_email_accounts", "ramp_day")
 }
 

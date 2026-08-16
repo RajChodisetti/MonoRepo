@@ -74,6 +74,7 @@ func NewService(
 
 type TemplateTestSendInput struct {
 	RecipientEmail string     `json:"recipient_email"`
+	SequenceID     *uuid.UUID `json:"sequence_id,omitempty"`
 	RestaurantID   *uuid.UUID `json:"restaurant_id,omitempty"`
 	RestaurantName string     `json:"restaurant_name,omitempty"`
 	OwnerFirstName string     `json:"owner_first_name,omitempty"`
@@ -81,6 +82,7 @@ type TemplateTestSendInput struct {
 
 type TemplateTestSendResult struct {
 	RecipientEmail string                    `json:"recipient_email"`
+	SequenceID     uuid.UUID                 `json:"sequence_id"`
 	RestaurantID   *uuid.UUID                `json:"restaurant_id,omitempty"`
 	RestaurantName string                    `json:"restaurant_name"`
 	Greeting01     string                    `json:"greeting01"`
@@ -106,12 +108,34 @@ func (service *Service) SendTemplateTest(ctx context.Context, principal auth.Pri
 	if err != nil {
 		return TemplateTestSendResult{}, err
 	}
-	steps, err := service.activeSequenceSteps(ctx)
+	var steps []SequenceStep
+	if input.SequenceID != nil {
+		steps, err = service.listSequenceSteps(ctx, *input.SequenceID)
+		if err == nil {
+			err = validateSequenceSteps(steps)
+		}
+		if err == nil {
+			enabled := make([]SequenceStep, 0, len(steps))
+			for _, step := range steps {
+				if step.Enabled {
+					enabled = append(enabled, step)
+				}
+			}
+			steps = enabled
+		}
+	} else {
+		steps, err = service.activeSequenceSteps(ctx)
+	}
 	if err != nil {
 		return TemplateTestSendResult{}, err
 	}
 	if len(steps) == 0 {
-		return TemplateTestSendResult{}, fmt.Errorf("%w: active outreach sequence has no enabled steps", ErrSequenceInvalid)
+		return TemplateTestSendResult{}, fmt.Errorf("%w: selected outreach sequence has no enabled steps", ErrSequenceInvalid)
+	}
+	sequenceID := steps[0].SequenceID
+	signature, err := service.sequenceSignature(ctx, sequenceID)
+	if err != nil {
+		return TemplateTestSendResult{}, err
 	}
 	var provider emailprovider.Provider
 	if service.emailPool != nil {
@@ -136,7 +160,7 @@ func (service *Service) SendTemplateTest(ctx context.Context, principal auth.Pri
 	if err != nil {
 		return TemplateTestSendResult{}, err
 	}
-	return service.sendTemplateTestEmails(ctx, provider, recipient, restaurantID, facts, steps)
+	return service.sendTemplateTestEmails(ctx, provider, recipient, restaurantID, facts, signature, steps)
 }
 
 type directPoolProvider struct {
@@ -153,11 +177,13 @@ func (service *Service) sendTemplateTestEmails(
 	recipientEmail string,
 	restaurantID *uuid.UUID,
 	facts GreetingFacts,
+	signature SequenceSignature,
 	steps []SequenceStep,
 ) (TemplateTestSendResult, error) {
 	greeting01 := RenderGreeting01(facts)
 	result := TemplateTestSendResult{
 		RecipientEmail: recipientEmail,
+		SequenceID:     steps[0].SequenceID,
 		RestaurantID:   restaurantID,
 		RestaurantName: cleanSingleLine(facts.RestaurantName),
 		Greeting01:     greeting01.Greeting01,
@@ -174,6 +200,10 @@ func (service *Service) sendTemplateTestEmails(
 			To:       recipientEmail,
 			Subject:  rendered.Subject,
 			TextBody: rendered.BodyText,
+			Signature: &emailprovider.SignatureDetails{
+				Name: signature.Name, Title: signature.Title,
+				AdditionalDetails: signature.AdditionalDetails,
+			},
 			Metadata: map[string]string{
 				"purpose":       "outreach_template_test",
 				"template":      "sequence",
@@ -638,6 +668,10 @@ func (service *Service) sendLead(ctx context.Context, lead EligibleLead, bulkJob
 		To:       delivery.RecipientEmail,
 		Subject:  rendered.Subject,
 		TextBody: rendered.BodyText,
+		Signature: &emailprovider.SignatureDetails{
+			Name: delivery.Signature.Name, Title: delivery.Signature.Title,
+			AdditionalDetails: delivery.Signature.AdditionalDetails,
+		},
 		Metadata: map[string]string{
 			"campaign_id":   delivery.CampaignID.String(),
 			"restaurant_id": delivery.RestaurantID.String(),

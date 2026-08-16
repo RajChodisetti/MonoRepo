@@ -1,7 +1,7 @@
 # Session Summary
 
-Branch `codex/reconcile-outbound-inboxes-ramp-20260813` deploys credential overrides at commit `7e72df6` from `/opt/tuvi/releases/monorepo-7e72df6-db-precedence-20260814T200818Z`.
-QA API and production API/worker/admin use the new release; all other QA and production services retained their prior start times and zero restart counts.
-Every existing account can replace credentials from the UI, and exact database identities take precedence over environment values across sending, health, replies, and inbox polling.
-QA and production remain at schema 52 with zero database credentials; both email jobs remain disabled and the deployment created no delivery attempts, outbound snapshots, health checks, or provider email.
-Verified database/config backups and explicit `6f1a4da` rollback images are retained; authenticated production browser QA showed all three replace actions with no console errors.
+Local branch `codex/email-template-placeholders-signature-test-send-20260815` adds an inactive Template 1 draft with canonical square-bracket placeholders and verified-fact fallbacks.
+The admin sequence editor now documents placeholders beside the template, persists an editable Praveen Maurya signature, and keeps Tuvi branding fixed.
+Template tests now send the exact selected saved sequence instead of silently using the active version; unsaved edits and the existing confirmation/sending gates remain enforced.
+Backend, provider, migration-53 isolated up/down/up, OpenAPI, lint, type-check, and production-build checks passed; the full historical migration chain still has its pre-existing migration-15 syntax failure.
+Nothing was deployed or activated, no shared database was migrated, and no real email was sent; QA and production remain at schema 52.

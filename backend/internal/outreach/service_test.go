@@ -23,6 +23,7 @@ type mockRepo struct {
 	leads         []outreach.EligibleLead
 	activeSteps   []outreach.SequenceStep
 	sequenceSteps []outreach.SequenceStep
+	signatures    map[uuid.UUID]outreach.SequenceSignature
 	greetingFacts map[uuid.UUID]outreach.GreetingFacts
 	greetingErr   error
 	delivery      outreach.SequenceDelivery
@@ -47,6 +48,13 @@ func (repo *mockRepo) ListSequenceSteps(context.Context, uuid.UUID) ([]outreach.
 		return repo.sequenceSteps, nil
 	}
 	return repo.activeSteps, nil
+}
+
+func (repo *mockRepo) GetSequenceSignature(_ context.Context, sequenceID uuid.UUID) (outreach.SequenceSignature, error) {
+	if signature, ok := repo.signatures[sequenceID]; ok {
+		return signature, nil
+	}
+	return outreach.DefaultSequenceSignature(), nil
 }
 
 func (repo *mockRepo) GetGreetingFacts(_ context.Context, restaurantID uuid.UUID) (outreach.GreetingFacts, error) {
@@ -148,6 +156,7 @@ func eligibleSequenceRepo() *mockRepo {
 			ConsentBasis:    "inferred_business", ConsentSource: "business_contact_import",
 			ConsentRecordedAt: &consentAt, ConsentEvidence: []byte(`{"policy":"inferred_business"}`),
 			SequenceStatus: outreach.SequenceStatusApproved, Step: step,
+			Signature:     outreach.DefaultSequenceSignature(),
 			GreetingFacts: outreach.GreetingFacts{RestaurantName: "Test Cafe"},
 		},
 	}
@@ -258,7 +267,7 @@ func TestGreetingRestaurantLookupAuthorizationMissingAndSyntheticCompatibility(t
 	if err != nil {
 		t.Fatalf("synthetic PreviewSequence() error = %v", err)
 	}
-	if preview.RestaurantID != nil || !strings.HasPrefix(preview.Greeting01, "Hi Sam,\n\nI came across Synthetic Cafe while looking at local restaurants.") {
+	if preview.RestaurantID != nil || !strings.HasPrefix(preview.Greeting01, "Morning Sam,\n\nI noticed Synthetic Cafe has been building a local following.") {
 		t.Fatalf("synthetic preview = %#v, want backward-compatible name/owner rendering", preview)
 	}
 }
@@ -276,13 +285,13 @@ func TestRunBulkSendFinalizesAcceptedSequenceWithSharedSignature(t *testing.T) {
 		t.Fatalf("summary = %#v, want one sent attempt", summary)
 	}
 	if !strings.Contains(provider.request.HTMLBody, "tuvi-solutions-logo-transparent.png") ||
-		!strings.Contains(provider.request.HTMLBody, "Team Tuvi") {
+		!strings.Contains(provider.request.HTMLBody, "Praveen Maurya") {
 		t.Fatalf("HTMLBody missing shared logo signature: %q", provider.request.HTMLBody)
 	}
 	if got := len(strings.FieldsFunc(provider.request.TextBody, func(r rune) bool { return r == '\n' })); got == 0 {
 		t.Fatal("TextBody is empty")
 	}
-	for _, token := range []string{"Thanks & Regards,", "Team Tuvi", "Tuvi Solutions", "https://tuvisolutions.com"} {
+	for _, token := range []string{"Thanks & Regards,", "Praveen Maurya", "Business Development Manager", "Tuvi Solutions", "https://tuvisolutions.com"} {
 		if !strings.Contains(provider.request.TextBody, token) {
 			t.Fatalf("TextBody missing signature token %q", token)
 		}
@@ -295,6 +304,25 @@ func TestRunBulkSendFinalizesAcceptedSequenceWithSharedSignature(t *testing.T) {
 	}
 	if len(repo.finalizations) != 1 || repo.finalizations[0].Outcome != "sent" || repo.finalizations[0].Step != 1 {
 		t.Fatalf("finalizations = %#v, want confirmed step 1", repo.finalizations)
+	}
+}
+
+func TestRunBulkSendUsesSavedSequenceSignature(t *testing.T) {
+	repo := eligibleSequenceRepo()
+	repo.delivery.Signature = outreach.SequenceSignature{
+		Name: "Alex Morgan", Title: "Partnerships Manager",
+		AdditionalDetails: "Phone: +61 400 000 000",
+	}
+	provider := &mockEmailProvider{result: emailprovider.SendResult{ProviderMessageID: "mock"}}
+	service := newSequenceService(t, repo, provider)
+
+	if _, err := service.RunBulkSend(context.Background(), uuid.New()); err != nil {
+		t.Fatalf("RunBulkSend() error = %v", err)
+	}
+	for _, token := range []string{"Alex Morgan", "Partnerships Manager", "Phone: +61 400 000 000"} {
+		if !strings.Contains(provider.request.TextBody, token) || !strings.Contains(provider.request.HTMLBody, token) {
+			t.Fatalf("saved sequence signature missing %q: %#v", token, provider.request)
+		}
 	}
 }
 
@@ -349,11 +377,52 @@ func TestSendTemplateTestEmailsSendsSavedSequenceExactlyWithSignature(t *testing
 		t.Fatalf("Subject = %q, want the rendered saved subject without a test prefix", provider.request.Subject)
 	}
 	if !strings.Contains(provider.request.HTMLBody, "tuvi-solutions-logo-transparent.png") ||
-		!strings.Contains(provider.request.HTMLBody, "Team Tuvi") {
+		!strings.Contains(provider.request.HTMLBody, "Praveen Maurya") {
 		t.Fatalf("HTMLBody missing shared logo signature: %q", provider.request.HTMLBody)
 	}
-	if !strings.Contains(provider.request.TextBody, "Team Tuvi") ||
+	if !strings.Contains(provider.request.TextBody, "Praveen Maurya") ||
 		!strings.Contains(provider.request.TextBody, "https://tuvisolutions.com") {
 		t.Fatalf("last request missing text signature: %q", provider.request.TextBody)
+	}
+}
+
+func TestSendTemplateTestTargetsSelectedSavedDraftAndSignature(t *testing.T) {
+	activeSequenceID := uuid.New()
+	draftSequenceID := uuid.New()
+	activeStep := outreach.SequenceStep{
+		ID: uuid.New(), SequenceID: activeSequenceID, Position: 1, Enabled: true,
+		SubjectTemplate: "Active subject", BodyTextTemplate: "{{greeting}}\n\nActive body",
+	}
+	draftStep := outreach.SequenceStep{
+		ID: uuid.New(), SequenceID: draftSequenceID, Position: 1, Enabled: true,
+		SubjectTemplate: "Draft for [RESTAURANT_NAME]", BodyTextTemplate: "[GREETING]\n\nDraft body",
+	}
+	repo := &mockRepo{
+		activeSteps:   []outreach.SequenceStep{activeStep},
+		sequenceSteps: []outreach.SequenceStep{draftStep},
+		signatures: map[uuid.UUID]outreach.SequenceSignature{
+			draftSequenceID: {
+				Name: "Alex Morgan", Title: "Partnerships Manager",
+				AdditionalDetails: "Phone: +61 400 000 000",
+			},
+		},
+	}
+	provider := &mockEmailProvider{result: emailprovider.SendResult{ProviderMessageID: "draft-test"}}
+	service := newSequenceService(t, repo, provider)
+
+	result, err := service.SendTemplateTest(context.Background(), internalAdminPrincipal(), outreach.TemplateTestSendInput{
+		RecipientEmail: "test@example.com", SequenceID: &draftSequenceID,
+		RestaurantName: "Signature Cafe", OwnerFirstName: "Casey",
+	})
+	if err != nil {
+		t.Fatalf("SendTemplateTest() error = %v", err)
+	}
+	if result.SequenceID != draftSequenceID || provider.request.Subject != "Draft for Signature Cafe" || strings.Contains(provider.request.TextBody, "Active body") {
+		t.Fatalf("selected draft was not rendered exactly: result=%#v request=%#v", result, provider.request)
+	}
+	for _, token := range []string{"Alex Morgan", "Partnerships Manager", "Phone: +61 400 000 000"} {
+		if !strings.Contains(provider.request.TextBody, token) || !strings.Contains(provider.request.HTMLBody, token) {
+			t.Fatalf("selected signature missing %q: %#v", token, provider.request)
+		}
 	}
 }

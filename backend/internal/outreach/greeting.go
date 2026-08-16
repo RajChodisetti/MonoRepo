@@ -35,9 +35,9 @@ type GreetingRender struct {
 	FactsUsed  []string `json:"facts_used"`
 }
 
-// RenderGreeting01 returns exactly one salutation, one blank separator, and
-// two deterministic greeting lines. Optional or unsafe facts select a fallback
-// and never make delivery ineligible.
+// RenderGreeting01 returns the complete first-email greeting requested by the
+// outreach template. Optional or unsafe facts select an honest fallback and
+// never make delivery ineligible.
 func RenderGreeting01(facts GreetingFacts) GreetingRender {
 	restaurantName := safeGreetingValue(facts.RestaurantName, maxGreetingRestaurantNameLength)
 	factsUsed := make([]string, 0, 6)
@@ -48,9 +48,9 @@ func RenderGreeting01(facts GreetingFacts) GreetingRender {
 	}
 
 	ownerFirstName := safeOwnerFirstName(facts.OwnerFirstName)
-	salutation := "Hi " + restaurantName + " team,"
+	salutation := "Morning " + restaurantName + " team,"
 	if ownerFirstName != "" {
-		salutation = "Hi " + ownerFirstName + ","
+		salutation = "Morning " + ownerFirstName + ","
 		factsUsed = append([]string{"owner_first_name"}, factsUsed...)
 	}
 
@@ -63,31 +63,36 @@ func RenderGreeting01(facts GreetingFacts) GreetingRender {
 		cuisine = firstSafeRestaurantCuisine(facts.Cuisines)
 	}
 
-	firstLine := "I came across " + restaurantName + " while looking at local restaurants."
+	greetingLine := "I noticed " + restaurantName + " has been building a local following."
 	switch {
 	case cuisine != "" && city != "":
-		firstLine = "I came across " + restaurantName + " while looking at " + cuisine + " restaurants in " + city + "."
+		greetingLine = "I noticed " + restaurantName + " serves popular " + cuisine + " dishes in " + city + "."
 		factsUsed = append(factsUsed, "cuisine", "city")
 	case city != "":
-		firstLine = "I came across " + restaurantName + " while looking at restaurants in " + city + "."
+		greetingLine = "I noticed " + restaurantName + " is serving guests in " + city + "."
 		factsUsed = append(factsUsed, "city")
 	case cuisine != "":
-		firstLine = "I came across " + restaurantName + " while looking at " + cuisine + " restaurants."
+		greetingLine = "I noticed " + restaurantName + " serves popular " + cuisine + " dishes."
 		factsUsed = append(factsUsed, "cuisine")
 	}
 
-	secondLine := "I thought it was worth reaching out directly to your team."
 	if verifiedListing && facts.Rating != nil && facts.ReviewCount != nil &&
 		!math.IsNaN(*facts.Rating) && !math.IsInf(*facts.Rating, 0) &&
 		*facts.Rating >= 4.0 && *facts.Rating <= 5.0 && *facts.ReviewCount >= 10 {
-		secondLine = "Your Google listing currently shows a " +
-			strconv.FormatFloat(*facts.Rating, 'f', 1, 64) +
-			"-star rating across " + strconv.Itoa(*facts.ReviewCount) + " reviews."
+		ratingCopy := strconv.FormatFloat(*facts.Rating, 'f', 1, 64) +
+			"-star rating across over " + strconv.Itoa(*facts.ReviewCount) + " reviews."
+		switch {
+		case cuisine != "" && city != "":
+			greetingLine = "I noticed " + restaurantName + " serves some of the most popular " + cuisine +
+				" dishes in " + city + " with a " + ratingCopy
+		default:
+			greetingLine = strings.TrimSuffix(greetingLine, ".") + ", with a " + ratingCopy
+		}
 		factsUsed = append(factsUsed, "rating", "review_count")
 	}
 
 	return GreetingRender{
-		Greeting01: salutation + "\n\n" + firstLine + "\n" + secondLine,
+		Greeting01: salutation + "\n\n" + greetingLine,
 		FactsUsed:  factsUsed,
 	}
 }

@@ -152,6 +152,7 @@ Current migrations:
 - `000049_outreach_email_ramp` — durable 5-to-40 per-mailbox warm-up cycles
 - `000050` through `000051` — reconciled outreach enrollment and unified multi-mailbox inbox
 - `000052_outreach_email_credentials` — encrypted admin-managed Gmail account registry
+- `000053_outreach_placeholders_signature` — inactive personalized template draft and editable sender signature
 
 **Rollback notes:**
 

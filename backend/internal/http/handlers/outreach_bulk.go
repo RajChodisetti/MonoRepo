@@ -330,6 +330,8 @@ func (handler *OutreachBulkHandler) writeTemplateTestError(w http.ResponseWriter
 		handler.writeError(w, http.StatusBadRequest, "invalid_recipient_email", "recipient_email must be a single valid email address.")
 	case errors.Is(err, outreach.ErrGreetingRestaurantNotFound):
 		handler.writeError(w, http.StatusNotFound, "restaurant_not_found", "Restaurant was not found.")
+	case errors.Is(err, repository.ErrNotFound):
+		handler.writeError(w, http.StatusNotFound, "sequence_not_found", "Outreach sequence was not found.")
 	case errors.Is(err, outreach.ErrSequenceInvalid):
 		handler.writeError(w, http.StatusBadRequest, "invalid_sequence", err.Error())
 	default:

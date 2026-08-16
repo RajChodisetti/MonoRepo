@@ -1616,8 +1616,10 @@ paths:
         - bearerAuth: []
       description: |
         Steps are contiguous and 1-based. The first enabled step must use `delay_hours=0`.
-        Bodies are plain text. Supported merge tags are `{{greeting}}`,
-        `{{restaurant_name}}`, and `{{website_url}}`.
+        Bodies and editable signature fields are plain text. Supported placeholders are
+        `[GREETING]`, `[FIRST_NAME]`, `[RESTAURANT_NAME]`, `[CUISINE]`, `[CITY]`,
+        `[RATING]`, `[TOTAL_REVIEWS]`, and `[WEBSITE_URL]`. Existing `{{greeting}}`,
+        `{{greeting01}}`, `{{restaurant_name}}`, and `{{website_url}}` aliases remain valid.
       requestBody:
         required: true
         content:
@@ -1998,12 +2000,14 @@ paths:
       security:
         - bearerAuth: []
       description: |
-        Requires role `internal_admin`. Sends every enabled step from the same active saved
-        sequence used by live outreach to `recipient_email`, with no extra base message or
+        Requires role `internal_admin`. When `sequence_id` is supplied, sends every enabled
+        step from that exact saved draft, approved, or archived sequence. Otherwise it uses
+        the active sequence used by live outreach. There is no extra base message or
         test-only subject prefix. This is a
         custom-recipient test path: it does not mutate lead/campaign delivery state,
         does not enroll recipients, and does not send to restaurant leads. Messages use
-        the shared Tuvi logo signature. Any unsubscribe copy is supplied by the
+        the saved sequence's editable sender signature with the fixed Tuvi logo, company,
+        website, and brand colours. Any unsubscribe copy is supplied by the
         saved database template; this endpoint does not add or validate it.
         When `restaurant_id` is supplied, authoritative server-side greeting facts
         replace any synthetic restaurant name or owner fields. The response returns
@@ -4643,13 +4647,14 @@ components:
         subject_template:
           type: string
           maxLength: 200
-          description: Plain-text subject. `{{greeting01}}` is never allowed here.
+          description: Plain-text subject. `[GREETING]` and `{{greeting01}}` are never allowed here.
         body_text_template:
           type: string
           maxLength: 10000
           description: |
-            Plain-text template body. `{{greeting01}}` may appear exactly once and
-            only in the first enabled email. Legacy `{{greeting}}` remains valid.
+            Plain-text template body. `[GREETING]` (or legacy `{{greeting01}}`) may appear
+            exactly once and only in the first enabled email. Other supported square-bracket
+            placeholders are replaced from saved restaurant/verified Google facts at render time.
         created_at:
           type: string
           format: date-time
@@ -4657,9 +4662,27 @@ components:
           type: string
           format: date-time
 
+    OutreachEmailSignature:
+      type: object
+      required: [name, title, additional_details]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+          description: Editable sender name; defaults to Praveen Maurya.
+        title:
+          type: string
+          maxLength: 160
+          description: Editable sender title; defaults to Business Development Manager.
+        additional_details:
+          type: string
+          maxLength: 1000
+          description: Optional plain-text lines such as a phone number, email, or availability. Tuvi branding remains fixed.
+
     OutreachSequence:
       type: object
-      required: [id, name, version, status, is_active, created_at, updated_at, steps]
+      required: [id, name, version, status, is_active, created_at, updated_at, signature, steps]
       properties:
         id:
           type: string
@@ -4687,6 +4710,8 @@ components:
         updated_at:
           type: string
           format: date-time
+        signature:
+          $ref: '#/components/schemas/OutreachEmailSignature'
         steps:
           type: array
           items:
@@ -4718,7 +4743,7 @@ components:
 
     UpdateOutreachSequenceRequest:
       type: object
-      required: [name, expected_updated_at, steps]
+      required: [name, expected_updated_at, signature, steps]
       properties:
         name:
           type: string
@@ -4726,6 +4751,8 @@ components:
         expected_updated_at:
           type: string
           format: date-time
+        signature:
+          $ref: '#/components/schemas/OutreachEmailSignature'
         steps:
           type: array
           minItems: 1
@@ -4784,7 +4811,7 @@ components:
           description: Legacy salutation rendered for {{greeting}} compatibility.
         greeting01:
           type: string
-          description: Deterministic salutation, blank separator, and exactly two greeting lines.
+          description: Deterministic Morning salutation, blank separator, and personalized restaurant observation.
         facts_used:
           type: array
           items:
@@ -4809,7 +4836,7 @@ components:
           description: Legacy salutation for the greeting placeholder.
         greeting01:
           type: string
-          description: Deterministic salutation, blank separator, and exactly two greeting lines.
+          description: Deterministic Morning salutation, blank separator, and personalized restaurant observation.
         facts_used:
           type: array
           items:
@@ -5178,6 +5205,10 @@ components:
           type: string
           format: email
           description: Single custom recipient that receives every rendered outreach template.
+        sequence_id:
+          type: string
+          format: uuid
+          description: Optional exact saved sequence to test. When omitted, the active approved sequence is used.
         restaurant_id:
           type: string
           format: uuid
@@ -5193,11 +5224,14 @@ components:
 
     OutreachTemplateTestSendResponse:
       type: object
-      required: [recipient_email, restaurant_name, greeting01, facts_used, items]
+      required: [recipient_email, sequence_id, restaurant_name, greeting01, facts_used, items]
       properties:
         recipient_email:
           type: string
           format: email
+        sequence_id:
+          type: string
+          format: uuid
         restaurant_name:
           type: string
         restaurant_id:

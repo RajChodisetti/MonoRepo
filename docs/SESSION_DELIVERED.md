@@ -3505,3 +3505,33 @@ the prior release
 `/opt/tuvi/releases/monorepo-6f1a4da-mailbox-ui-20260814T165047Z`, explicit
 `rollback-6f1a4da-20260814T200818Z` API/worker/admin images, and the retained
 stopped QA API container.
+
+## 2026-08-15 — Personalized outreach template, signature editor, and exact saved test sends
+
+**Role / Delivery:** Added an inactive Template 1 sequence draft with the requested
+Morning greeting and canonical `[FIRST_NAME]`, `[RESTAURANT_NAME]`, `[CUISINE]`,
+`[CITY]`, `[RATING]`, and `[TOTAL_REVIEWS]` personalization. The admin editor now
+shows every supported placeholder and explanation beside the template, validates
+unknown tokens, and edits the sender name, title, and optional plain-text details.
+Praveen Maurya / Business Development Manager is the default; the Tuvi logo,
+company name, website, and brand colours remain fixed at the provider boundary.
+Template tests now target the exact selected saved sequence rather than always
+falling back to the active sequence, and the UI blocks tests while edits are unsaved.
+
+**Checks Run:** Focused and full backend tests, `go vet`, API/worker/migrator builds,
+OpenAPI validation, admin ESLint, nonincremental TypeScript checking, the 14-route
+production build, and `git diff --check` passed. Migration 53 passed an isolated
+up/down/up PostgreSQL cycle with its exact schema dependencies. The complete
+historical migration chain remains blocked earlier by the pre-existing migration
+15 `city_scrape_jobs` syntax problem; migration 53 itself was reached and verified
+through the isolated contract fixture. All email-provider calls remained mocked.
+
+**Business Value / Plan Fit:** Outreach copy can now be personalized from reviewed
+restaurant facts, sender details can be maintained without changing fixed branding,
+and administrators can verify the actual saved draft before approval or activation.
+
+**Risks / Approval State:** This is local, unreleased work. Migration 53 creates an
+inactive draft and fail-closes any running email job during application; it does not
+activate the new copy. No shared database was migrated, no sequence was activated,
+no deployment occurred, and no real email was sent. Production and QA remain at
+schema 52 with their existing approval and sending gates unchanged.

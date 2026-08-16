@@ -330,6 +330,12 @@ export type OutreachSequenceStep = {
   body_text_template: string;
 };
 
+export type OutreachEmailSignature = {
+  name: string;
+  title: string;
+  additional_details: string;
+};
+
 export type OutreachSequence = {
   id: string;
   name: string;
@@ -340,6 +346,7 @@ export type OutreachSequence = {
   approved_by?: string;
   created_at: string;
   updated_at: string;
+  signature: OutreachEmailSignature;
   steps: OutreachSequenceStep[];
 };
 
@@ -375,6 +382,7 @@ export type RestaurantGreetingPreview = {
 
 export type OutreachTemplateTestSendResponse = {
   recipient_email: string;
+  sequence_id: string;
   restaurant_id?: string;
   restaurant_name: string;
   greeting01: string;

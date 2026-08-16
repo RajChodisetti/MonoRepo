@@ -1,11 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import type { FormEvent } from "react";
 import { adminFetch } from "@/lib/client-api";
 import { formatDate } from "@/lib/constants";
 import {
   createBlankStep,
+  DEFAULT_EMAIL_SIGNATURE,
+  LEGACY_PLACEHOLDERS,
+  PLACEHOLDERS,
   renderLocalTemplate,
+  validateEmailSignature,
   validateSequence,
   validateSequenceStep,
 } from "@/lib/outreach-sequence";
@@ -13,6 +18,8 @@ import type {
   OutreachSequence,
   OutreachSequencePreview,
   OutreachSequenceStep,
+  OutreachEmailSignature,
+  OutreachTemplateTestSendResponse,
 } from "@/lib/types";
 import { EmptyState, ErrorBanner, StatusBadge } from "@/components/ui";
 import { RestaurantSearch } from "@/components/RestaurantSearch";
@@ -39,9 +46,9 @@ function normalizeSequence(value: unknown): OutreachSequence | null {
   return value as OutreachSequence;
 }
 
-function TuviEmailSignaturePreview() {
+function TuviEmailSignaturePreview({ signature }: { signature: OutreachEmailSignature }) {
   return (
-    <div className="email-signature-preview" aria-label="Default Tuvi email signature">
+    <div className="email-signature-preview" aria-label="Tuvi email signature preview">
       {/* Use the exact public asset that inboxes load instead of a Next.js rewrite. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
@@ -51,7 +58,11 @@ function TuviEmailSignaturePreview() {
         height={160}
       />
       <strong>Thanks &amp; Regards,</strong>
-      <strong>Team Tuvi</strong>
+      <strong>{signature.name}</strong>
+      {signature.title ? <span>{signature.title}</span> : null}
+      {signature.additional_details ? (
+        <span className="email-signature-details">{signature.additional_details}</span>
+      ) : null}
       <strong className="email-signature-company">Tuvi Solutions</strong>
       <a href="https://tuvisolutions.com" target="_blank" rel="noreferrer">
         www.tuvisolutions.com
@@ -69,6 +80,7 @@ export function OutreachSequenceEditor({
   const [selectedId, setSelectedId] = useState("");
   const [pendingSelectionId, setPendingSelectionId] = useState("");
   const [name, setName] = useState("");
+  const [signature, setSignature] = useState<OutreachEmailSignature>(DEFAULT_EMAIL_SIGNATURE);
   const [steps, setSteps] = useState<OutreachSequenceStep[]>([]);
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -81,6 +93,9 @@ export function OutreachSequenceEditor({
   const [previewPosition, setPreviewPosition] = useState(1);
   const [serverPreview, setServerPreview] =
     useState<OutreachSequencePreview | null>(null);
+  const [testRecipientEmail, setTestRecipientEmail] = useState("");
+  const [sendingTest, setSendingTest] = useState(false);
+  const [testResult, setTestResult] = useState<OutreachTemplateTestSendResponse | null>(null);
 
   const selected = useMemo(
     () => sequences.find((sequence) => sequence.id === selectedId) || null,
@@ -88,6 +103,7 @@ export function OutreachSequenceEditor({
   );
   const editable = selected?.status === "draft";
   const issues = useMemo(() => validateSequence(steps), [steps]);
+  const signatureIssues = useMemo(() => validateEmailSignature(signature), [signature]);
   const selectedPreviewStep =
     steps.find((step) => step.position === previewPosition) || steps[0];
   const serverPreviewStep = serverPreview?.steps.find(
@@ -104,6 +120,7 @@ export function OutreachSequenceEditor({
     if (sequences.length === 0) {
       setSelectedId("");
       setName("");
+      setSignature(DEFAULT_EMAIL_SIGNATURE);
       setSteps([]);
       return;
     }
@@ -122,12 +139,22 @@ export function OutreachSequenceEditor({
   useEffect(() => {
     if (!selected) return;
     setName(selected.name);
+    setSignature(selected.signature || DEFAULT_EMAIL_SIGNATURE);
     setSteps(cloneSteps(selected.steps || []));
     setPreviewPosition(selected.steps?.[0]?.position || 1);
     setDirty(false);
     setServerPreview(null);
     setError(null);
+    setTestResult(null);
   }, [selected]);
+
+  function updateSignature(patch: Partial<OutreachEmailSignature>) {
+    setSignature((current) => ({ ...current, ...patch }));
+    setDirty(true);
+    setServerPreview(null);
+    setTestResult(null);
+    setMessage(null);
+  }
 
   function updateStep(
     index: number,
@@ -140,6 +167,7 @@ export function OutreachSequenceEditor({
     );
     setDirty(true);
     setServerPreview(null);
+    setTestResult(null);
     setMessage(null);
   }
 
@@ -157,6 +185,7 @@ export function OutreachSequenceEditor({
     setPreviewPosition(target + 1);
     setDirty(true);
     setServerPreview(null);
+    setTestResult(null);
   }
 
   function removeStep(index: number) {
@@ -169,6 +198,7 @@ export function OutreachSequenceEditor({
     setPreviewPosition(Math.min(previewPosition, next.length));
     setDirty(true);
     setServerPreview(null);
+    setTestResult(null);
   }
 
   function addStep() {
@@ -177,6 +207,7 @@ export function OutreachSequenceEditor({
     setPreviewPosition(position);
     setDirty(true);
     setServerPreview(null);
+    setTestResult(null);
   }
 
   async function createDraft() {
@@ -211,7 +242,7 @@ export function OutreachSequenceEditor({
 
   async function saveDraft() {
     if (!selected || !editable) return;
-    if (issues.length > 0) {
+    if (issues.length > 0 || signatureIssues.length > 0) {
       setError("Resolve the validation issues before saving this template.");
       return;
     }
@@ -224,6 +255,11 @@ export function OutreachSequenceEditor({
         body: {
           name: name.trim(),
           expected_updated_at: selected.updated_at,
+          signature: {
+            name: signature.name.trim(),
+            title: signature.title.trim(),
+            additional_details: signature.additional_details.trim(),
+          },
           steps: steps.map((step, index) => ({
             ...step,
             position: index + 1,
@@ -241,7 +277,7 @@ export function OutreachSequenceEditor({
   }
 
   async function approveDraft() {
-    if (!selected || !editable || dirty || issues.length > 0) return;
+    if (!selected || !editable || dirty || issues.length > 0 || signatureIssues.length > 0) return;
     if (
       !confirm(
         "Make this template active for outreach?",
@@ -298,6 +334,48 @@ export function OutreachSequenceEditor({
       setError(reason instanceof Error ? reason.message : "Could not render preview");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function sendSavedTest(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const recipient = testRecipientEmail.trim();
+    if (!selected || !recipient) {
+      setError("Enter a recipient email for the template test.");
+      return;
+    }
+    if (dirty) {
+      setError("Save this template before sending a test.");
+      return;
+    }
+    if (!confirm(`Send every enabled email from “${selected.name}” to ${recipient}? This uses a real configured sender account.`)) {
+      return;
+    }
+    setSendingTest(true);
+    setError(null);
+    setMessage(null);
+    setTestResult(null);
+    try {
+      const result = await adminFetch<OutreachTemplateTestSendResponse>("outreach/test-send", {
+        method: "POST",
+        body: {
+          recipient_email: recipient,
+          sequence_id: selected.id,
+          restaurant_id: selectedPreviewRestaurant?.id,
+          restaurant_name: selectedPreviewRestaurant
+            ? undefined
+            : sampleRestaurant.trim() || "Sample Restaurant",
+          owner_first_name: selectedPreviewRestaurant
+            ? undefined
+            : sampleOwner.trim() || undefined,
+        },
+      });
+      setTestResult(result);
+      setMessage(`Sent ${result.items.length} saved template email${result.items.length === 1 ? "" : "s"} to ${result.recipient_email}.`);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not send the saved template test.");
+    } finally {
+      setSendingTest(false);
     }
   }
 
@@ -467,8 +545,8 @@ export function OutreachSequenceEditor({
                       spellCheck
                     />
                     <span className="field-help">
-                      This is the subject recipients see for this email. Template variables such as{" "}
-                      <code>{"{{restaurant_name}}"}</code> are supported.
+                      This is the subject recipients see for this email. Placeholders such as{" "}
+                      <code>[RESTAURANT_NAME]</code> are supported.
                     </span>
                   </label>
 
@@ -496,6 +574,57 @@ export function OutreachSequenceEditor({
             })}
           </div>
 
+          <fieldset className="card sequence-signature-editor" disabled={!editable}>
+            <legend>Email signature</legend>
+            <div className="sequence-signature-heading">
+              <div>
+                <h2>Sender details</h2>
+                <p>Edit the sender information appended to every email in this template.</p>
+              </div>
+              <span className="field-help">Tuvi logo, company name, website, and brand colours stay fixed.</span>
+            </div>
+            <div className="form-grid">
+              <label className="field-label" htmlFor="signature-name">
+                Name
+                <input
+                  id="signature-name"
+                  className="input"
+                  value={signature.name}
+                  onChange={(event) => updateSignature({ name: event.target.value })}
+                  maxLength={120}
+                  required
+                />
+              </label>
+              <label className="field-label" htmlFor="signature-title">
+                Job title
+                <input
+                  id="signature-title"
+                  className="input"
+                  value={signature.title}
+                  onChange={(event) => updateSignature({ title: event.target.value })}
+                  maxLength={160}
+                />
+              </label>
+            </div>
+            <label className="field-label" htmlFor="signature-details">
+              Additional details (optional)
+              <textarea
+                id="signature-details"
+                className="textarea signature-details-input"
+                value={signature.additional_details}
+                onChange={(event) => updateSignature({ additional_details: event.target.value })}
+                placeholder={"Phone: +61 …\nEmail: …\nAvailability or other details"}
+                maxLength={1000}
+                rows={4}
+              />
+            </label>
+            {signatureIssues.length > 0 ? (
+              <ul className="sequence-issues" aria-label="Signature validation issues">
+                {signatureIssues.map((issue) => <li key={issue}>{issue}</li>)}
+              </ul>
+            ) : null}
+          </fieldset>
+
           <div className="sequence-draft-actions">
             <button className="btn btn-secondary" type="button" onClick={addStep} disabled={!editable || busy}>
               Add template
@@ -507,7 +636,7 @@ export function OutreachSequenceEditor({
               className="btn btn-primary"
               type="button"
               onClick={saveDraft}
-              disabled={!editable || busy || !dirty || issues.length > 0 || !name.trim()}
+              disabled={!editable || busy || !dirty || issues.length > 0 || signatureIssues.length > 0 || !name.trim()}
             >
               {busy ? "Working…" : "Save template"}
             </button>
@@ -515,16 +644,16 @@ export function OutreachSequenceEditor({
               className="btn btn-primary"
               type="button"
               onClick={approveDraft}
-              disabled={!editable || busy || dirty || issues.length > 0}
+              disabled={!editable || busy || dirty || issues.length > 0 || signatureIssues.length > 0}
             >
               Make active
             </button>
           </div>
-          {issues.length > 0 ? (
+          {issues.length > 0 || signatureIssues.length > 0 ? (
             <div className="alert alert-error" role="alert">
-              <strong>{issues.length} issue{issues.length === 1 ? "" : "s"} to resolve</strong>
+              <strong>{issues.length + signatureIssues.length} issue{issues.length + signatureIssues.length === 1 ? "" : "s"} to resolve</strong>
               <ul className="sequence-issues">
-                {issues.map((issue) => (
+                {[...issues, ...signatureIssues].map((issue) => (
                   <li key={issue}>{issue}</li>
                 ))}
               </ul>
@@ -532,7 +661,34 @@ export function OutreachSequenceEditor({
           ) : null}
         </section>
 
-        <aside className="card sequence-preview" aria-labelledby="sequence-preview-title">
+        <aside className="sequence-sidebar">
+          <section className="card placeholder-reference" aria-labelledby="placeholder-reference-title">
+            <div>
+              <h2 id="placeholder-reference-title">Available placeholders</h2>
+              <p>Use these anywhere in a subject or message unless the note says otherwise. The server replaces them when previewing or sending.</p>
+            </div>
+            <dl>
+              {PLACEHOLDERS.map(({ token, description }) => (
+                <div key={token}>
+                  <dt><code>{token}</code></dt>
+                  <dd>{description}</dd>
+                </div>
+              ))}
+            </dl>
+            <details>
+              <summary>Existing placeholder aliases</summary>
+              <dl>
+                {LEGACY_PLACEHOLDERS.map(({ token, description }) => (
+                  <div key={token}>
+                    <dt><code>{token}</code></dt>
+                    <dd>{description}</dd>
+                  </div>
+                ))}
+              </dl>
+            </details>
+          </section>
+
+          <section className="card sequence-preview" aria-labelledby="sequence-preview-title">
           <div>
             <h2 id="sequence-preview-title">Personalized preview</h2>
             <p>Owner first name is used when available; otherwise the restaurant team is addressed.</p>
@@ -547,6 +703,7 @@ export function OutreachSequenceEditor({
                 setSampleOwner("");
               }
               setServerPreview(null);
+              setTestResult(null);
             }}
             help="Select a saved restaurant for authoritative server facts; Google fields are used only from a verified successful profile."
           />
@@ -559,6 +716,7 @@ export function OutreachSequenceEditor({
               onChange={(event) => {
                 setSampleRestaurant(event.target.value);
                 setServerPreview(null);
+                setTestResult(null);
               }}
               disabled={selectedPreviewRestaurant !== null}
             />
@@ -572,6 +730,7 @@ export function OutreachSequenceEditor({
               onChange={(event) => {
                 setSampleOwner(event.target.value);
                 setServerPreview(null);
+                setTestResult(null);
               }}
               disabled={selectedPreviewRestaurant !== null}
             />
@@ -636,11 +795,45 @@ export function OutreachSequenceEditor({
                     sampleOwner,
                   )}
               </pre>
-              <TuviEmailSignaturePreview />
+              <TuviEmailSignaturePreview signature={signature} />
             </div>
           ) : (
             <EmptyState message="Add an email to preview it." />
           )}
+
+          <form className="template-test-form" onSubmit={sendSavedTest}>
+            <div>
+              <h3>Send saved template test</h3>
+              <p>This sends the selected saved version—not whichever version happens to be active.</p>
+            </div>
+            <label className="field-label" htmlFor="template-test-recipient">
+              Recipient email
+              <input
+                id="template-test-recipient"
+                className="input"
+                type="email"
+                value={testRecipientEmail}
+                onChange={(event) => {
+                  setTestRecipientEmail(event.target.value);
+                  setTestResult(null);
+                }}
+                placeholder="name@example.com"
+                required
+              />
+            </label>
+            <button className="btn btn-primary" type="submit" disabled={!selected || dirty || sendingTest}>
+              {sendingTest ? "Sending…" : "Send saved test"}
+            </button>
+            {dirty ? <span className="field-help">Save the template before sending a test.</span> : null}
+            {testResult ? (
+              <ul className="template-test-result" aria-live="polite">
+                {testResult.items.map((item) => (
+                  <li key={`${item.step}-${item.subject}`}>Template {item.step}: {item.subject}</li>
+                ))}
+              </ul>
+            ) : null}
+          </form>
+          </section>
         </aside>
       </div>
     </div>

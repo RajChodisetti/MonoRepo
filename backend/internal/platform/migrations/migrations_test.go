@@ -320,6 +320,23 @@ func TestRepositoryMigrationsIncludeLatestOutreachChanges(t *testing.T) {
 				"DROP TABLE outreach_email_credentials",
 			},
 		},
+		53: {
+			name: "outreach_placeholders_signature",
+			upFragments: []string{
+				"VALUES ('email_job', false, NULL, NULL, now())",
+				"ADD COLUMN signature_name",
+				"Praveen Maurya",
+				"Business Development Manager",
+				"[GREETING]",
+				"[RESTAURANT_NAME]",
+				"migration 53 draft activation guard failed",
+			},
+			downFragments: []string{
+				"refusing to remove migration 53 draft because it was activated or changed",
+				"refusing to drop migration 53 signature fields because signature details were customized",
+				"DROP COLUMN signature_name",
+			},
+		},
 	}
 
 	for _, migration := range migrations {

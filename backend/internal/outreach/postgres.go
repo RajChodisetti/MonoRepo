@@ -280,6 +280,24 @@ func (repo *Postgres) ListSequenceSteps(ctx context.Context, sequenceID uuid.UUI
 	return steps, nil
 }
 
+func (repo *Postgres) GetSequenceSignature(ctx context.Context, sequenceID uuid.UUID) (SequenceSignature, error) {
+	if repo.pool == nil {
+		return SequenceSignature{}, fmt.Errorf("database pool is not configured")
+	}
+	var signature SequenceSignature
+	if err := repo.pool.QueryRow(ctx, `
+		SELECT signature_name, signature_title, signature_details
+		FROM outreach_email_sequences
+		WHERE id = $1`, sequenceID).Scan(
+		&signature.Name, &signature.Title, &signature.AdditionalDetails,
+	); errors.Is(err, pgx.ErrNoRows) {
+		return SequenceSignature{}, repository.ErrNotFound
+	} else if err != nil {
+		return SequenceSignature{}, fmt.Errorf("load outreach sequence signature: %w", err)
+	}
+	return signature, nil
+}
+
 func (repo *Postgres) GetGreetingFacts(ctx context.Context, restaurantID uuid.UUID) (GreetingFacts, error) {
 	if repo.pool == nil {
 		return GreetingFacts{}, fmt.Errorf("database pool is not configured")
@@ -337,6 +355,9 @@ func (repo *Postgres) GetSequenceDelivery(ctx context.Context, campaignID uuid.U
 		       restaurant.outreach_consent_recorded_at,
 		       restaurant.outreach_consent_evidence,
 		       sequence.status,
+		       sequence.signature_name,
+		       sequence.signature_title,
+		       sequence.signature_details,
 		       step.id,
 		       step.sequence_id,
 		       step.position,
@@ -384,6 +405,9 @@ func (repo *Postgres) GetSequenceDelivery(ctx context.Context, campaignID uuid.U
 		&delivery.ConsentRecordedAt,
 		&delivery.ConsentEvidence,
 		&delivery.SequenceStatus,
+		&delivery.Signature.Name,
+		&delivery.Signature.Title,
+		&delivery.Signature.AdditionalDetails,
 		&delivery.Step.ID,
 		&delivery.Step.SequenceID,
 		&delivery.Step.Position,

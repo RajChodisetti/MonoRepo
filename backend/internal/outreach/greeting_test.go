@@ -25,7 +25,7 @@ func TestRenderGreeting01DeterministicFallbacks(t *testing.T) {
 				Cuisines: json.RawMessage(`["Indian Restaurant"]`),
 				Rating:   float64Pointer(4.7), ReviewCount: intPointer(380),
 			},
-			want:      "Hi Maya,\n\nI came across Spice Garden while looking at Indian restaurants in Plano.\nYour Google listing currently shows a 4.7-star rating across 380 reviews.",
+			want:      "Morning Maya,\n\nI noticed Spice Garden serves some of the most popular Indian dishes in Plano with a 4.7-star rating across over 380 reviews.",
 			factsUsed: []string{"owner_first_name", "restaurant_name", "cuisine", "city", "rating", "review_count"},
 		},
 		{
@@ -35,7 +35,7 @@ func TestRenderGreeting01DeterministicFallbacks(t *testing.T) {
 				ScrapeStatus: "success", City: "Plano",
 				Cuisines: json.RawMessage(`["Indian"]`),
 			},
-			want:      "Hi Spice Garden team,\n\nI came across Spice Garden while looking at restaurants in Plano.\nI thought it was worth reaching out directly to your team.",
+			want:      "Morning Spice Garden team,\n\nI noticed Spice Garden is serving guests in Plano.",
 			factsUsed: []string{"restaurant_name", "city"},
 		},
 		{
@@ -44,7 +44,7 @@ func TestRenderGreeting01DeterministicFallbacks(t *testing.T) {
 				RestaurantName: "Spice Garden", GooglePlaceID: "place-1", ScrapeStatus: "success",
 				City: "unknown", Cuisines: json.RawMessage(`[42, "Indian", "{{bad}} Restaurant", "South Indian Restaurant", "Thai Restaurant"]`),
 			},
-			want:      "Hi Spice Garden team,\n\nI came across Spice Garden while looking at South Indian restaurants.\nI thought it was worth reaching out directly to your team.",
+			want:      "Morning Spice Garden team,\n\nI noticed Spice Garden serves popular South Indian dishes.",
 			factsUsed: []string{"restaurant_name", "cuisine"},
 		},
 		{
@@ -53,7 +53,7 @@ func TestRenderGreeting01DeterministicFallbacks(t *testing.T) {
 				RestaurantName: "Corner Cafe", GooglePlaceID: "place-2", ScrapeStatus: "success",
 				City: "Austin", Rating: float64Pointer(3.9), ReviewCount: intPointer(500),
 			},
-			want:      "Hi Corner Cafe team,\n\nI came across Corner Cafe while looking at restaurants in Austin.\nI thought it was worth reaching out directly to your team.",
+			want:      "Morning Corner Cafe team,\n\nI noticed Corner Cafe is serving guests in Austin.",
 			factsUsed: []string{"restaurant_name", "city"},
 		},
 		{
@@ -62,7 +62,7 @@ func TestRenderGreeting01DeterministicFallbacks(t *testing.T) {
 				RestaurantName: "Corner Cafe", GooglePlaceID: "place-2", ScrapeStatus: "success",
 				Rating: float64Pointer(4.9), ReviewCount: intPointer(9),
 			},
-			want:      "Hi Corner Cafe team,\n\nI came across Corner Cafe while looking at local restaurants.\nI thought it was worth reaching out directly to your team.",
+			want:      "Morning Corner Cafe team,\n\nI noticed Corner Cafe has been building a local following.",
 			factsUsed: []string{"restaurant_name"},
 		},
 		{
@@ -72,7 +72,7 @@ func TestRenderGreeting01DeterministicFallbacks(t *testing.T) {
 				Cuisines: json.RawMessage(`["Cafe Restaurant"]`),
 				Rating:   float64Pointer(5.0), ReviewCount: intPointer(100),
 			},
-			want:      "Hi Corner Cafe team,\n\nI came across Corner Cafe while looking at local restaurants.\nI thought it was worth reaching out directly to your team.",
+			want:      "Morning Corner Cafe team,\n\nI noticed Corner Cafe has been building a local following.",
 			factsUsed: []string{"restaurant_name"},
 		},
 		{
@@ -82,7 +82,7 @@ func TestRenderGreeting01DeterministicFallbacks(t *testing.T) {
 				City: "Austin", Cuisines: json.RawMessage(`["Cafe Restaurant"]`),
 				Rating: float64Pointer(5.0), ReviewCount: intPointer(100),
 			},
-			want:      "Hi Corner Cafe team,\n\nI came across Corner Cafe while looking at local restaurants.\nI thought it was worth reaching out directly to your team.",
+			want:      "Morning Corner Cafe team,\n\nI noticed Corner Cafe has been building a local following.",
 			factsUsed: []string{"restaurant_name"},
 		},
 		{
@@ -92,7 +92,7 @@ func TestRenderGreeting01DeterministicFallbacks(t *testing.T) {
 				GooglePlaceID: "place-3", ScrapeStatus: "success", City: "Plano\nTexas",
 				Cuisines: json.RawMessage(`["` + strings.Repeat("A", 101) + ` Restaurant"]`),
 			},
-			want:      "Hi restaurant team,\n\nI came across restaurant while looking at local restaurants.\nI thought it was worth reaching out directly to your team.",
+			want:      "Morning restaurant team,\n\nI noticed restaurant has been building a local following.",
 			factsUsed: []string{},
 		},
 	}
@@ -107,10 +107,10 @@ func TestRenderGreeting01DeterministicFallbacks(t *testing.T) {
 				t.Fatalf("FactsUsed = %#v, want %#v", got.FactsUsed, test.factsUsed)
 			}
 			lines := strings.Split(got.Greeting01, "\n")
-			if len(lines) != 4 || lines[0] == "" || lines[1] != "" || lines[2] == "" || lines[3] == "" {
-				t.Fatalf("Greeting01 must contain one salutation and exactly two greeting lines: %#v", lines)
+			if len(lines) != 3 || lines[0] == "" || lines[1] != "" || lines[2] == "" {
+				t.Fatalf("Greeting01 must contain one salutation and one personalized line: %#v", lines)
 			}
-			if !strings.HasPrefix(lines[0], "Hi ") || !strings.HasSuffix(lines[0], ",") || strings.Contains(got.Greeting01, "{{") {
+			if !strings.HasPrefix(lines[0], "Morning ") || !strings.HasSuffix(lines[0], ",") || strings.Contains(got.Greeting01, "{{") {
 				t.Fatalf("Greeting01 contains an unsafe salutation or unresolved tag: %q", got.Greeting01)
 			}
 		})
@@ -142,10 +142,10 @@ func TestRenderGreeting01EveryOwnerCityCuisineRatingCombination(t *testing.T) {
 			}
 
 			got := RenderGreeting01(facts)
-			if combination&1 != 0 && !strings.HasPrefix(got.Greeting01, "Hi Maya,") {
+			if combination&1 != 0 && !strings.HasPrefix(got.Greeting01, "Morning Maya,") {
 				t.Fatalf("owner combination did not use owner salutation: %q", got.Greeting01)
 			}
-			if combination&1 == 0 && !strings.HasPrefix(got.Greeting01, "Hi Spice Garden team,") {
+			if combination&1 == 0 && !strings.HasPrefix(got.Greeting01, "Morning Spice Garden team,") {
 				t.Fatalf("owner fallback did not use restaurant team: %q", got.Greeting01)
 			}
 			if combination&2 != 0 && !strings.Contains(got.Greeting01, "Plano") {
@@ -154,13 +154,13 @@ func TestRenderGreeting01EveryOwnerCityCuisineRatingCombination(t *testing.T) {
 			if combination&2 == 0 && strings.Contains(got.Greeting01, "Plano") {
 				t.Fatalf("city appeared without a city fact: %q", got.Greeting01)
 			}
-			if combination&4 != 0 && !strings.Contains(got.Greeting01, "Indian restaurants") {
+			if combination&4 != 0 && !strings.Contains(got.Greeting01, "Indian dishes") {
 				t.Fatalf("cuisine combination did not use cuisine: %q", got.Greeting01)
 			}
 			if combination&4 == 0 && strings.Contains(got.Greeting01, "Indian") {
 				t.Fatalf("cuisine appeared without a cuisine fact: %q", got.Greeting01)
 			}
-			if combination&8 != 0 && !strings.Contains(got.Greeting01, "4.7-star rating across 380 reviews") {
+			if combination&8 != 0 && !strings.Contains(got.Greeting01, "4.7-star rating across over 380 reviews") {
 				t.Fatalf("rating combination did not use rating/review count: %q", got.Greeting01)
 			}
 			if combination&8 == 0 && strings.Contains(got.Greeting01, "star rating") {

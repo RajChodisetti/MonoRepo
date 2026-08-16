@@ -133,6 +133,10 @@ export default function OutreachPage() {
       setOperationsError("Enter a recipient email for the template test.");
       return;
     }
+    if (!activeSequence) {
+      setOperationsError("Make an outreach template active before sending an active-template test.");
+      return;
+    }
     if (
       !confirm(
         `Send every enabled email from the active template to ${recipient}? This uses the real configured sender account.`,
@@ -149,6 +153,7 @@ export default function OutreachPage() {
         method: "POST",
         body: {
           recipient_email: recipient,
+          sequence_id: activeSequence.id,
           restaurant_id: selectedTestRestaurant?.id,
           restaurant_name: selectedTestRestaurant ? undefined : restaurantName,
           owner_first_name: selectedTestRestaurant
@@ -338,7 +343,10 @@ export default function OutreachPage() {
                   className="input"
                   type="email"
                   value={testRecipientEmail}
-                  onChange={(event) => setTestRecipientEmail(event.target.value)}
+                  onChange={(event) => {
+                    setTestRecipientEmail(event.target.value);
+                    setTestSendResult(null);
+                  }}
                   placeholder="name@example.com"
                   required
                 />
@@ -348,7 +356,10 @@ export default function OutreachPage() {
                 <input
                   className="input"
                   value={testRestaurantName}
-                  onChange={(event) => setTestRestaurantName(event.target.value)}
+                  onChange={(event) => {
+                    setTestRestaurantName(event.target.value);
+                    setTestSendResult(null);
+                  }}
                   placeholder="Tuvi Test Restaurant"
                   disabled={selectedTestRestaurant !== null}
                 />
@@ -358,14 +369,17 @@ export default function OutreachPage() {
                 <input
                   className="input"
                   value={testOwnerFirstName}
-                  onChange={(event) => setTestOwnerFirstName(event.target.value)}
+                  onChange={(event) => {
+                    setTestOwnerFirstName(event.target.value);
+                    setTestSendResult(null);
+                  }}
                   placeholder="Optional"
                   disabled={selectedTestRestaurant !== null}
                 />
               </label>
             </div>
             <div style={{ marginTop: "0.85rem", display: "flex", gap: "0.65rem", alignItems: "center", flexWrap: "wrap" }}>
-              <button className="btn btn-primary" type="submit" disabled={sendingTest}>
+              <button className="btn btn-primary" type="submit" disabled={sendingTest || !activeSequence}>
                 {sendingTest ? "Sending..." : "Send test emails"}
               </button>
               <span className="field-help">

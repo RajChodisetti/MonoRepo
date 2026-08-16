@@ -68,7 +68,7 @@ func TestHealthServiceSendsDueGmailCheck(t *testing.T) {
 		t.Fatalf("requests = %+v, want one health check to configured recipient", provider.requests)
 	}
 	if !strings.Contains(provider.requests[0].HTMLBody, tuviLogoURL) ||
-		!strings.Contains(provider.requests[0].TextBody, "Team Tuvi") {
+		!strings.Contains(provider.requests[0].TextBody, "Praveen Maurya") {
 		t.Fatalf("health message missing shared Tuvi signature: %+v", provider.requests[0])
 	}
 	if !store.recorded || !store.healthy || store.messageID != "gmail-health-message" {

@@ -20,6 +20,7 @@ type SendRequest struct {
 	Subject    string
 	HTMLBody   string
 	TextBody   string
+	Signature  *SignatureDetails
 	ReplyTo    string
 	ThreadID   string
 	InReplyTo  string

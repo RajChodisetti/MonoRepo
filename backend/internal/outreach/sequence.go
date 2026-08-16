@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -30,6 +32,7 @@ const (
 
 var (
 	templatePlaceholderPattern = regexp.MustCompile(`\{\{[^{}\r\n]+\}\}`)
+	bracketPlaceholderPattern  = regexp.MustCompile(`\[[A-Za-z][A-Za-z0-9_ ]*\]`)
 	rawURLPattern              = regexp.MustCompile(`(?i)https?://[^\s<>"']+`)
 	bareDomainPattern          = regexp.MustCompile(`(?i)(?:www\.)?(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}(?::[0-9]{1,5})?(?:/[^\s<>"']*)?`)
 	htmlElementPattern         = regexp.MustCompile(`(?i)<[a-z][^>]*>`)
@@ -41,16 +44,23 @@ var (
 )
 
 type Sequence struct {
-	ID         uuid.UUID      `json:"id"`
-	Name       string         `json:"name"`
-	Version    int            `json:"version"`
-	Status     string         `json:"status"`
-	IsActive   bool           `json:"is_active"`
-	ApprovedAt *time.Time     `json:"approved_at,omitempty"`
-	ApprovedBy *uuid.UUID     `json:"approved_by,omitempty"`
-	CreatedAt  time.Time      `json:"created_at"`
-	UpdatedAt  time.Time      `json:"updated_at"`
-	Steps      []SequenceStep `json:"steps"`
+	ID         uuid.UUID         `json:"id"`
+	Name       string            `json:"name"`
+	Version    int               `json:"version"`
+	Status     string            `json:"status"`
+	IsActive   bool              `json:"is_active"`
+	ApprovedAt *time.Time        `json:"approved_at,omitempty"`
+	ApprovedBy *uuid.UUID        `json:"approved_by,omitempty"`
+	CreatedAt  time.Time         `json:"created_at"`
+	UpdatedAt  time.Time         `json:"updated_at"`
+	Signature  SequenceSignature `json:"signature"`
+	Steps      []SequenceStep    `json:"steps"`
+}
+
+type SequenceSignature struct {
+	Name              string `json:"name"`
+	Title             string `json:"title"`
+	AdditionalDetails string `json:"additional_details"`
 }
 
 type SequenceStep struct {
@@ -76,9 +86,10 @@ type CreateSequenceInput struct {
 }
 
 type UpdateSequenceInput struct {
-	Name              string         `json:"name"`
-	ExpectedUpdatedAt time.Time      `json:"expected_updated_at"`
-	Steps             []SequenceStep `json:"steps"`
+	Name              string            `json:"name"`
+	ExpectedUpdatedAt time.Time         `json:"expected_updated_at"`
+	Signature         SequenceSignature `json:"signature"`
+	Steps             []SequenceStep    `json:"steps"`
 }
 
 type PreviewSequenceInput struct {
@@ -148,6 +159,7 @@ type SequenceDelivery struct {
 	ConsentRecordedAt *time.Time
 	ConsentEvidence   json.RawMessage
 	SequenceStatus    string
+	Signature         SequenceSignature
 	Step              SequenceStep
 	GreetingFacts     GreetingFacts
 }
@@ -158,6 +170,17 @@ type activeSequenceStepsRepository interface {
 
 type sequenceStepsRepository interface {
 	ListSequenceSteps(ctx context.Context, sequenceID uuid.UUID) ([]SequenceStep, error)
+}
+
+type sequenceSignatureRepository interface {
+	GetSequenceSignature(ctx context.Context, sequenceID uuid.UUID) (SequenceSignature, error)
+}
+
+func DefaultSequenceSignature() SequenceSignature {
+	return SequenceSignature{
+		Name:  "Praveen Maurya",
+		Title: "Business Development Manager",
+	}
 }
 
 type greetingFactsRepository interface {
@@ -205,7 +228,9 @@ func (service *Service) ListSequences(ctx context.Context, principal auth.Princi
 		return SequenceList{}, fmt.Errorf("database pool is not configured")
 	}
 	rows, err := service.pool.Query(ctx, `
-		SELECT id, name, version, status, is_active, approved_at, approved_by, created_at, updated_at
+		SELECT id, name, version, status, is_active,
+		       signature_name, signature_title, signature_details,
+		       approved_at, approved_by, created_at, updated_at
 		FROM outreach_email_sequences
 		ORDER BY created_at DESC, version DESC`)
 	if err != nil {
@@ -217,7 +242,9 @@ func (service *Service) ListSequences(ctx context.Context, principal auth.Princi
 		var sequence Sequence
 		if err := rows.Scan(
 			&sequence.ID, &sequence.Name, &sequence.Version, &sequence.Status,
-			&sequence.IsActive, &sequence.ApprovedAt, &sequence.ApprovedBy,
+			&sequence.IsActive,
+			&sequence.Signature.Name, &sequence.Signature.Title, &sequence.Signature.AdditionalDetails,
+			&sequence.ApprovedAt, &sequence.ApprovedBy,
 			&sequence.CreatedAt, &sequence.UpdatedAt,
 		); err != nil {
 			return SequenceList{}, fmt.Errorf("scan outreach sequence: %w", err)
@@ -281,15 +308,28 @@ func (service *Service) CreateSequenceDraft(ctx context.Context, principal auth.
 		  'draft',
 		  false
 		)
-		RETURNING id, name, version, status, is_active, approved_at, approved_by, created_at, updated_at`, name).Scan(
+		RETURNING id, name, version, status, is_active,
+		          signature_name, signature_title, signature_details,
+		          approved_at, approved_by, created_at, updated_at`, name).Scan(
 		&sequence.ID, &sequence.Name, &sequence.Version, &sequence.Status,
-		&sequence.IsActive, &sequence.ApprovedAt, &sequence.ApprovedBy,
+		&sequence.IsActive,
+		&sequence.Signature.Name, &sequence.Signature.Title, &sequence.Signature.AdditionalDetails,
+		&sequence.ApprovedAt, &sequence.ApprovedBy,
 		&sequence.CreatedAt, &sequence.UpdatedAt,
 	)
 	if err != nil {
 		return Sequence{}, fmt.Errorf("create outreach sequence draft: %w", err)
 	}
 	if baseID != nil {
+		if _, err := tx.Exec(ctx, `
+			UPDATE outreach_email_sequences draft
+			SET signature_name = source.signature_name,
+			    signature_title = source.signature_title,
+			    signature_details = source.signature_details
+			FROM outreach_email_sequences source
+			WHERE draft.id = $1 AND source.id = $2`, sequence.ID, *baseID); err != nil {
+			return Sequence{}, fmt.Errorf("copy outreach sequence signature: %w", err)
+		}
 		result, err := tx.Exec(ctx, `
 			INSERT INTO outreach_email_sequence_steps (
 			  sequence_id, position, enabled, delay_hours, subject_template, body_text_template
@@ -303,6 +343,13 @@ func (service *Service) CreateSequenceDraft(ctx context.Context, principal auth.
 		}
 		if result.RowsAffected() == 0 {
 			return Sequence{}, fmt.Errorf("%w: base sequence was not found or has no steps", ErrSequenceInvalid)
+		}
+		if err := tx.QueryRow(ctx, `
+			SELECT signature_name, signature_title, signature_details
+			FROM outreach_email_sequences WHERE id = $1`, sequence.ID).Scan(
+			&sequence.Signature.Name, &sequence.Signature.Title, &sequence.Signature.AdditionalDetails,
+		); err != nil {
+			return Sequence{}, fmt.Errorf("load copied outreach sequence signature: %w", err)
 		}
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -325,6 +372,10 @@ func (service *Service) UpdateSequenceDraft(ctx context.Context, principal auth.
 	}
 	steps := append([]SequenceStep(nil), input.Steps...)
 	if err := validateSequenceSteps(steps); err != nil {
+		return Sequence{}, err
+	}
+	signature, err := normalizeSequenceSignature(input.Signature)
+	if err != nil {
 		return Sequence{}, err
 	}
 	tx, err := service.pool.Begin(ctx)
@@ -367,11 +418,20 @@ func (service *Service) UpdateSequenceDraft(ctx context.Context, principal auth.
 	var sequence Sequence
 	if err := tx.QueryRow(ctx, `
 		UPDATE outreach_email_sequences
-		SET name = $2, updated_at = now()
+		SET name = $2,
+		    signature_name = $3,
+		    signature_title = $4,
+		    signature_details = $5,
+		    updated_at = now()
 		WHERE id = $1
-		RETURNING id, name, version, status, is_active, approved_at, approved_by, created_at, updated_at`, sequenceID, name).Scan(
+		RETURNING id, name, version, status, is_active,
+		          signature_name, signature_title, signature_details,
+		          approved_at, approved_by, created_at, updated_at`,
+		sequenceID, name, signature.Name, signature.Title, signature.AdditionalDetails).Scan(
 		&sequence.ID, &sequence.Name, &sequence.Version, &sequence.Status,
-		&sequence.IsActive, &sequence.ApprovedAt, &sequence.ApprovedBy,
+		&sequence.IsActive,
+		&sequence.Signature.Name, &sequence.Signature.Title, &sequence.Signature.AdditionalDetails,
+		&sequence.ApprovedAt, &sequence.ApprovedBy,
 		&sequence.CreatedAt, &sequence.UpdatedAt,
 	); err != nil {
 		return Sequence{}, fmt.Errorf("update outreach sequence: %w", err)
@@ -427,9 +487,13 @@ func (service *Service) ApproveSequence(ctx context.Context, principal auth.Prin
 		UPDATE outreach_email_sequences
 		SET status = 'approved', is_active = true, approved_at = now(), approved_by = $2, updated_at = now()
 		WHERE id = $1
-		RETURNING id, name, version, status, is_active, approved_at, approved_by, created_at, updated_at`, sequenceID, principal.UserID).Scan(
+		RETURNING id, name, version, status, is_active,
+		          signature_name, signature_title, signature_details,
+		          approved_at, approved_by, created_at, updated_at`, sequenceID, principal.UserID).Scan(
 		&sequence.ID, &sequence.Name, &sequence.Version, &sequence.Status,
-		&sequence.IsActive, &sequence.ApprovedAt, &sequence.ApprovedBy,
+		&sequence.IsActive,
+		&sequence.Signature.Name, &sequence.Signature.Title, &sequence.Signature.AdditionalDetails,
+		&sequence.ApprovedAt, &sequence.ApprovedBy,
 		&sequence.CreatedAt, &sequence.UpdatedAt,
 	); err != nil {
 		return Sequence{}, fmt.Errorf("approve outreach sequence: %w", err)
@@ -676,6 +740,27 @@ func (service *Service) activeSequenceSteps(ctx context.Context) ([]SequenceStep
 	return steps, nil
 }
 
+func (service *Service) sequenceSignature(ctx context.Context, sequenceID uuid.UUID) (SequenceSignature, error) {
+	if repo, ok := service.repo.(sequenceSignatureRepository); ok {
+		return repo.GetSequenceSignature(ctx, sequenceID)
+	}
+	if service.pool == nil {
+		return DefaultSequenceSignature(), nil
+	}
+	var signature SequenceSignature
+	if err := service.pool.QueryRow(ctx, `
+		SELECT signature_name, signature_title, signature_details
+		FROM outreach_email_sequences
+		WHERE id = $1`, sequenceID).Scan(
+		&signature.Name, &signature.Title, &signature.AdditionalDetails,
+	); errors.Is(err, pgx.ErrNoRows) {
+		return SequenceSignature{}, repository.ErrNotFound
+	} else if err != nil {
+		return SequenceSignature{}, fmt.Errorf("load outreach sequence signature: %w", err)
+	}
+	return signature, nil
+}
+
 func validateSequenceSteps(steps []SequenceStep) error {
 	if len(steps) == 0 {
 		return fmt.Errorf("%w: at least one step is required", ErrSequenceInvalid)
@@ -734,19 +819,30 @@ func validateSequenceTemplate(step SequenceStep, firstEnabled bool) error {
 			return fmt.Errorf("%w: step %d contains unsupported placeholder %s", ErrSequenceInvalid, step.Position, value)
 		}
 	}
-	greeting01SubjectCount := strings.Count(subject, "{{greeting01}}")
-	greeting01BodyCount := strings.Count(body, "{{greeting01}}")
+	allowedBracket := map[string]bool{
+		"[GREETING]": true, "[FIRST_NAME]": true,
+		"[RESTAURANT_NAME]": true, "[CUISINE]": true,
+		"[CITY]": true, "[RATING]": true,
+		"[TOTAL_REVIEWS]": true, "[WEBSITE_URL]": true,
+	}
+	for _, value := range append(bracketPlaceholderPattern.FindAllString(subject, -1), bracketPlaceholderPattern.FindAllString(body, -1)...) {
+		if !allowedBracket[value] {
+			return fmt.Errorf("%w: step %d contains unsupported placeholder %s", ErrSequenceInvalid, step.Position, value)
+		}
+	}
+	greeting01SubjectCount := strings.Count(subject, "{{greeting01}}") + strings.Count(subject, "[GREETING]")
+	greeting01BodyCount := strings.Count(body, "{{greeting01}}") + strings.Count(body, "[GREETING]")
 	if greeting01SubjectCount > 0 {
-		return fmt.Errorf("%w: step %d cannot use {{greeting01}} in the subject", ErrSequenceInvalid, step.Position)
+		return fmt.Errorf("%w: step %d cannot use [GREETING] or {{greeting01}} in the subject", ErrSequenceInvalid, step.Position)
 	}
 	if greeting01BodyCount > 0 && !firstEnabled {
-		return fmt.Errorf("%w: step %d can use {{greeting01}} only in the first enabled email body", ErrSequenceInvalid, step.Position)
+		return fmt.Errorf("%w: step %d can use the complete greeting only in the first enabled email body", ErrSequenceInvalid, step.Position)
 	}
 	if greeting01BodyCount > 1 {
-		return fmt.Errorf("%w: step %d can use {{greeting01}} exactly once", ErrSequenceInvalid, step.Position)
+		return fmt.Errorf("%w: step %d can use the complete greeting exactly once", ErrSequenceInvalid, step.Position)
 	}
 	if greeting01BodyCount == 1 && strings.Contains(body, "{{greeting}}") {
-		return fmt.Errorf("%w: step %d must replace {{greeting}} when using {{greeting01}}", ErrSequenceInvalid, step.Position)
+		return fmt.Errorf("%w: step %d must replace {{greeting}} when using the complete greeting", ErrSequenceInvalid, step.Position)
 	}
 	return nil
 }
@@ -763,15 +859,24 @@ func renderSequenceStep(step SequenceStep, facts GreetingFacts) (RenderedSequenc
 	facts.RestaurantName = name
 	greeting := outreachGreeting(facts.OwnerFirstName, name)
 	greeting01 := RenderGreeting01(facts).Greeting01
+	values := templatePlaceholderValues(facts)
 	replacer := strings.NewReplacer(
 		"{{greeting}}", greeting,
 		"{{greeting01}}", greeting01,
 		"{{restaurant_name}}", name,
 		"{{website_url}}", websiteURL,
+		"[GREETING]", greeting01,
+		"[FIRST_NAME]", values.FirstName,
+		"[RESTAURANT_NAME]", name,
+		"[CUISINE]", values.Cuisine,
+		"[CITY]", values.City,
+		"[RATING]", values.Rating,
+		"[TOTAL_REVIEWS]", values.TotalReviews,
+		"[WEBSITE_URL]", websiteURL,
 	)
 	subject := replacer.Replace(strings.TrimSpace(step.SubjectTemplate))
 	body := replacer.Replace(strings.TrimSpace(step.BodyTextTemplate))
-	if templatePlaceholderPattern.MatchString(subject + "\n" + body) {
+	if templatePlaceholderPattern.MatchString(subject+"\n"+body) || bracketPlaceholderPattern.MatchString(subject+"\n"+body) {
 		return RenderedSequenceStep{}, fmt.Errorf("%w: rendered step contains an unresolved placeholder", ErrSequenceInvalid)
 	}
 	urls := rawURLPattern.FindAllString(body, -1)
@@ -779,6 +884,69 @@ func renderSequenceStep(step SequenceStep, facts GreetingFacts) (RenderedSequenc
 		Position: step.Position, DelayHours: step.DelayHours,
 		Subject: subject, BodyText: body, URLCount: len(urls),
 	}, nil
+}
+
+type templateValues struct {
+	FirstName    string
+	Cuisine      string
+	City         string
+	Rating       string
+	TotalReviews string
+}
+
+func templatePlaceholderValues(facts GreetingFacts) templateValues {
+	restaurantName := safeGreetingValue(facts.RestaurantName, maxGreetingRestaurantNameLength)
+	if restaurantName == "" {
+		restaurantName = "restaurant"
+	}
+	firstName := safeOwnerFirstName(facts.OwnerFirstName)
+	if firstName == "" {
+		firstName = restaurantName + " team"
+	}
+	values := templateValues{
+		FirstName: firstName, Cuisine: "N/A", City: "N/A",
+		Rating: "N/A", TotalReviews: "N/A",
+	}
+	verifiedListing := strings.TrimSpace(facts.GooglePlaceID) != "" && strings.TrimSpace(facts.ScrapeStatus) == "success"
+	if !verifiedListing {
+		return values
+	}
+	if cuisine := firstSafeRestaurantCuisine(facts.Cuisines); cuisine != "" {
+		values.Cuisine = cuisine
+	}
+	if city := safeGreetingValue(facts.City, maxGreetingCityLength); city != "" {
+		values.City = city
+	}
+	if facts.Rating != nil && !math.IsNaN(*facts.Rating) && !math.IsInf(*facts.Rating, 0) && *facts.Rating >= 0 && *facts.Rating <= 5 {
+		values.Rating = strconv.FormatFloat(*facts.Rating, 'f', 1, 64)
+	}
+	if facts.ReviewCount != nil && *facts.ReviewCount >= 0 {
+		values.TotalReviews = strconv.Itoa(*facts.ReviewCount)
+	}
+	return values
+}
+
+func normalizeSequenceSignature(signature SequenceSignature) (SequenceSignature, error) {
+	if strings.TrimSpace(signature.Name) == "" && strings.TrimSpace(signature.Title) == "" && strings.TrimSpace(signature.AdditionalDetails) == "" {
+		return DefaultSequenceSignature(), nil
+	}
+	if strings.ContainsAny(signature.Name, "\r\n") || strings.ContainsAny(signature.Title, "\r\n") {
+		return SequenceSignature{}, fmt.Errorf("%w: signature name and title must each be one line", ErrSequenceInvalid)
+	}
+	signature.Name = cleanSingleLine(signature.Name)
+	signature.Title = cleanSingleLine(signature.Title)
+	signature.AdditionalDetails = strings.TrimSpace(strings.ReplaceAll(signature.AdditionalDetails, "\r\n", "\n"))
+	signature.AdditionalDetails = strings.ReplaceAll(signature.AdditionalDetails, "\r", "\n")
+	if signature.Name == "" || len(signature.Name) > 120 {
+		return SequenceSignature{}, fmt.Errorf("%w: signature name must be between 1 and 120 characters", ErrSequenceInvalid)
+	}
+	if len(signature.Title) > 160 {
+		return SequenceSignature{}, fmt.Errorf("%w: signature title must be 160 characters or fewer", ErrSequenceInvalid)
+	}
+	if len(signature.AdditionalDetails) > 1000 || htmlElementPattern.MatchString(signature.AdditionalDetails) {
+		return SequenceSignature{}, fmt.Errorf("%w: signature details must be plain text and 1000 characters or fewer", ErrSequenceInvalid)
+	}
+	return signature, nil
 }
 
 func (service *Service) resolveGreetingFacts(
