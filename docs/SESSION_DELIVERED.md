@@ -3535,3 +3535,57 @@ inactive draft and fail-closes any running email job during application; it does
 activate the new copy. No shared database was migrated, no sequence was activated,
 no deployment occurred, and no real email was sent. Production and QA remain at
 schema 52 with their existing approval and sending gates unchanged.
+
+## 2026-08-15 — Personalized template and signature release deployed to QA and production
+
+**Role / Delivery:** With explicit user approval for QA and production, committed and
+published release `99bbe69` from branch
+`codex/email-template-placeholders-signature-test-send-20260815`. Applied migration
+`000053_outreach_placeholders_signature` to QA first, canaried the exact backend
+image, and then promoted the same backend digest to production API/worker and the
+reviewed admin digest to production admin. QA runs backend image
+`5af817c2cff2`; production API/worker run that same digest and admin runs
+`00df3ed6dfa9`. Both databases are at schema 53. The deterministic migration draft
+`00000000-0000-4000-8000-000000000053` is present, inactive, and defaults to
+Praveen Maurya / Business Development Manager. Existing active sequence counts are
+unchanged and both email-job controls remain disabled.
+
+**Checks Run:** Reused the completed full backend test/vet/build, OpenAPI, admin
+lint/type-check/build, migration isolated up/down/up, and diff checks from the release
+review. On the host, verified Compose rendering, immutable archive checksum, image
+digests, QA canary health, migration rows, signature columns, inactive draft counts,
+and email-job controls. QA loopback returned 200, its public API retained the expected
+allowlisted 404, and its website returned 200. Production public API, admin login,
+and website returned 200; protected sequence access returned 401 and unauthenticated
+admin outreach redirected with 307. A browser check loaded the production login
+screen, but the prior authenticated session had expired, so database/API evidence
+was used for the protected template state. All affected containers show zero
+restarts and zero matching panic/fatal/traceback/error signals. No retired OCR
+container or cron exists.
+
+The first versioned-image check and first QA migrator invocation failed closed before
+database or live-service mutation: legacy Docker builds continued after their SSH
+output window, and QA injects its Redis URL separately from the protected env file.
+The duplicate build client was identified precisely and stopped, final image digests
+were verified, and the migrator was rerun with the existing non-secret Redis network
+value before the healthy QA canary.
+
+**Business Value / Plan Fit:** Administrators can author reviewed restaurant-fact
+personalization, maintain sender details while preserving Tuvi branding, and test the
+exact saved sequence instead of unknowingly testing another active version. The new
+copy remains human-reviewable and inactive until a separate deliberate activation.
+
+**Risks / Approval State:** No template was activated, no email job was enabled, and
+no provider email was sent. Production's only delivery attempt remains dated August
+12; there is no new outbound message snapshot, and the latest actual sender health
+check predates deployment. QA and production each retain one active approved
+sequence; migration 53 added one inactive draft. The current release is
+`/opt/tuvi/releases/monorepo-99bbe69-placeholder-signature-20260816T011206Z` and
+rollback points to
+`/opt/tuvi/releases/monorepo-7e72df6-db-precedence-20260814T200818Z`, stopped QA
+container `tuvi-qa-api-api-rollback-7e72df6-20260816T011206Z`, and explicit
+`rollback-7e72df6-20260816T011206Z` API/worker/admin/migrator image tags. Verified
+mode-`0600` backups are
+`/opt/tuvi/backups/qa-postgres/qa-pre-99bbe69-20260816T011206Z.dump`,
+`/opt/tuvi/backups/postgres/monorepo-pre-99bbe69-20260816T011206Z.dump`, and
+`/opt/tuvi/backups/config/env-pre-99bbe69-20260816T011206Z.tar.gz`.
