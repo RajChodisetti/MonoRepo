@@ -1,4 +1,4 @@
-Release `a07fffc` remains deployed to QA and production at schema 54; scheduled outreach is disabled and the saved Australia/Sydney window remains 07:00-12:00.
-Local/unreleased inbox hardening orders by the latest received email, shows subject/text/from/by, opens the complete stored text, and adds page/detail-preserving refresh plus 15-second UI and inbound-worker polling.
-Local/unreleased manual-send hardening keeps template tests and same-mailbox replies entirely outside scheduled quota reconciliation, synchronization, claims, and pacing; provider limits still apply.
-Backend, race, web, template, OpenAPI, Compose, and agent-context checks pass; no deployment, protected configuration mutation, provider call, or email send was performed.
+Release `2ffc134` is deployed to the QA API and production API/worker/admin at schema 54; `master` and the feature branch are reconciled to that commit.
+The inbox is newest-received first, shows subject/text/from/by, opens complete stored text, and preserves page/detail state across manual and 15-second refreshes.
+Template tests and same-mailbox replies bypass scheduled quota state while scheduled outreach still claims durable quota; the Sydney window remains 07:00-12:00.
+Outreach remains disabled with zero active jobs/due health checks/send changes; production polling is 15 seconds and the `a07fffc` release plus explicit images/backups remain available for rollback.

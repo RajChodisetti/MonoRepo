@@ -3745,3 +3745,77 @@ force until approved configuration/deployment work recreates the worker. Complet
 text means the stored body only; attachments are not persisted and HTML fallback is
 shown literally as text. QA has no admin-web service, so authenticated browser detail
 QA remains a production-promotion smoke rather than a QA-canary capability.
+
+## 2026-08-16 — Inbox detail, freshness, and manual-quota release deployed
+
+**Role / Delivery:** With explicit staging, commit, push, branch-reconciliation, QA,
+and production approval, published commit `2ffc134` (`feat(outreach): harden inbox
+and manual sends`) atomically to both
+`codex/sydney-send-window-inbox-reply-20260815` and canonical `master`. The update
+was a non-force fast-forward; every fetched local/remote branch tip was already in
+the release ancestry, so no historical branch pointer, personal mirror, or branch
+deletion was needed.
+
+Built immutable backend image `cd2eff49326d` and admin image `0c8f035c688a`, both
+labelled with the full reviewed commit. Ran the schema-54 no-op migrator and canaried
+that exact backend in the isolated QA API while retaining the prior QA container
+stopped. Promoted the same backend digest to production API/worker and the reviewed
+admin image to production, atomically changed the protected inbound-poll override
+from 60 to 15 seconds, and recreated only API, admin-web, and worker. The active
+release is
+`/opt/tuvi/releases/monorepo-2ffc134-inbox-hardening-20260816T164156Z`; immediate
+rollback points to
+`/opt/tuvi/releases/monorepo-a07fffc-sydney-window-hotfix-20260816T072034Z`.
+
+**Checks Run:** Local release checks passed the full Go suite, `go vet`, all backend
+command builds, 135 race-enabled outreach/provider tests, admin ESLint/direct
+TypeScript/14-route production build, template TypeScript/production build, both
+Compose renders, valid OpenAPI with 11 pre-existing warnings, and `git diff --check`.
+QA returned 200 on loopback public API, 401 on protected API, the expected public
+allowlist 404, and 200 on its site; schema remained 54, sending remained disabled,
+delivery/outbound counts stayed 0/0, and the retained prior container exited cleanly.
+
+Production public API, admin login, and corporate site returned 200; protected API
+returned 401 and unauthenticated admin outreach redirected with 307. Authenticated
+bulk status returned 200 with disabled sending, no active run, and the saved
+07:00-12:00 Australia/Sydney window. Authenticated backend and admin-BFF inbox reads
+returned 200, exposed every new summary field, showed 50 of 351 threads on page one,
+and verified received timestamps in descending order without exposing message data.
+API, worker, admin, and QA API have zero restarts and zero fatal signals; production
+worker logs have zero inbound-poll/capture failures and its runtime environment is
+15 seconds. Both databases remain schema 54 with no active bulk job. Production's
+six enabled health rows remain zero-due with `last_checked_at` unchanged, the sole
+historical delivery attempt remains unchanged, outbound message snapshots remain
+zero, and inbound sync succeeds with zero mailbox errors. No provider send occurred.
+
+Several read-only smoke probes failed closed before correction and made no state
+change: an initially misquoted timestamp expression, a guessed QA database role, the
+stale protected bootstrap admin password (401), and admin URLs first checked on the
+corporate rather than API host (404). The database checks were rerun through the
+containers' actual roles; authenticated checks used a short-lived in-memory JWT made
+from the existing protected token secret and internal-admin row without printing,
+persisting, or changing either. Canonical admin URLs then returned 200/307.
+
+**Business Value / Plan Fit:** Administrators now see the newest received email
+first, its subject/text/sender/receiving mailbox at a glance, and the complete stored
+text on demand while refreshes preserve their page and open detail. Manual tests and
+same-mailbox replies remain available independently of scheduled quota exhaustion,
+while scheduled outreach retains durable quota enforcement and the UI-managed Sydney
+window.
+
+**Risks / Approval State:** Outreach remains disabled and no real test, reply,
+health, or scheduled email was sent during this release. Production detail opening
+was intentionally not invoked because it marks a real inbound message read; its
+read-and-return path is covered by the reviewed code/tests and the live list/BFF
+contract. QA has no admin-web or durable worker, so its canary covered the backend
+only; production covered the admin and worker runtime. Complete text means the stored
+body, not attachments or faithful rich MIME, and HTML fallback remains escaped text.
+
+Rollback retains stopped QA container
+`tuvi-qa-api-api-rollback-a07fffc-20260816T164156Z`, explicit
+`rollback-2ffc134-20260816T164156Z` API/worker/migrator/admin/backend image tags, and
+mode-`0600` backups
+`/opt/tuvi/backups/qa-postgres/qa-pre-2ffc134-20260816T164156Z.dump`,
+`/opt/tuvi/backups/postgres/monorepo-pre-2ffc134-20260816T164156Z.dump`,
+`/opt/tuvi/backups/config/env-pre-2ffc134-20260816T164156Z.tar.gz`, and
+`/opt/tuvi/backups/config/stack.env-pre-2ffc134-20260816T164156Z`.

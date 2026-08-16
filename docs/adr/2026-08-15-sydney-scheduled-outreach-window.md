@@ -1,7 +1,7 @@
 # ADR: Sydney scheduled outreach window
 
 Date: 2026-08-15
-Status: Accepted (deployed; inbox freshness/detail hardening local/unreleased)
+Status: Accepted (deployed)
 
 ## Context
 
@@ -90,6 +90,8 @@ mailbox.
 - Inbound Gmail polling runs four times as often as the previous 60-second
   default. Existing deployments with an explicit interval retain that override
   until their protected configuration is changed and the worker is recreated.
+  Production was updated to the 15-second interval and its worker recreated as
+  part of release `2ffc134` on 2026-08-16.
 - Production deployment, configuration mutation, and enabling real outreach
   remain explicit approval gates. This decision does not authorize any send.
 
