@@ -92,14 +92,23 @@ func validateEmailSendSchedule(input UpdateEmailSendScheduleInput) (int, int, er
 	return startMinute, endMinute, nil
 }
 
-func validateEmailScheduleCapacity(window time.Duration, totalDailyLimit int, minimumDelay time.Duration) error {
-	if window <= 0 || totalDailyLimit < 0 || minimumDelay < 0 {
+func validateEmailScheduleCapacity(
+	window time.Duration,
+	totalDailyLimit int,
+	largestMailboxPacingRequirement time.Duration,
+) error {
+	if window <= 0 || totalDailyLimit < 0 || largestMailboxPacingRequirement < 0 {
 		return fmt.Errorf("%w: scheduled outreach capacity is invalid", ErrInvalidSendSchedule)
 	}
 	if totalDailyLimit == 0 {
 		return nil
 	}
-	if minimumDelay <= 0 || window/time.Duration(totalDailyLimit) < minimumDelay {
+	// Mailboxes are interleaved through the saved window. Each mailbox's fixed
+	// slot anchors preserve its own minimum cadence, while the aggregate gate may
+	// advance more frequently as different mailboxes become due. Keep at least a
+	// one-second provider-boundary gap and ensure the busiest mailbox can still
+	// complete its own allowance at its configured minimum delay.
+	if window/time.Duration(totalDailyLimit) < time.Second || window < largestMailboxPacingRequirement {
 		return fmt.Errorf(
 			"%w: the configured mailbox quota cannot finish inside this window at the minimum pacing interval",
 			ErrInvalidSendSchedule,
@@ -187,16 +196,20 @@ func (service *Service) SetEmailSendSchedule(
 		return EmailSendSchedule{}, err
 	}
 	var totalDailyLimit int
-	var minimumDelaySeconds int
+	var largestMailboxPacingSeconds int
 	if err := tx.QueryRow(ctx, `
 		SELECT COALESCE(sum(send_limit), 0)::int,
-		       COALESCE(max(send_jitter_min_seconds), 0)::int
+		       COALESCE(max(send_limit * send_jitter_min_seconds), 0)::int
 		FROM outreach_email_accounts
-		WHERE enabled = true`).Scan(&totalDailyLimit, &minimumDelaySeconds); err != nil {
+		WHERE enabled = true`).Scan(&totalDailyLimit, &largestMailboxPacingSeconds); err != nil {
 		return EmailSendSchedule{}, fmt.Errorf("load outreach mailbox capacity: %w", err)
 	}
 	window := time.Duration(endMinute-startMinute) * time.Minute
-	if err := validateEmailScheduleCapacity(window, totalDailyLimit, time.Duration(minimumDelaySeconds)*time.Second); err != nil {
+	if err := validateEmailScheduleCapacity(
+		window,
+		totalDailyLimit,
+		time.Duration(largestMailboxPacingSeconds)*time.Second,
+	); err != nil {
 		return EmailSendSchedule{}, err
 	}
 

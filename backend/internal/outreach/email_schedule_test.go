@@ -55,10 +55,13 @@ func TestEmailWindowAtUsesSavedMinutePrecision(t *testing.T) {
 func TestValidateEmailScheduleCapacity(t *testing.T) {
 	t.Parallel()
 
-	if err := validateEmailScheduleCapacity(5*time.Hour, 120, 2*time.Minute); err != nil {
+	if err := validateEmailScheduleCapacity(5*time.Hour, 240, 40*2*time.Minute); err != nil {
 		t.Fatalf("five-hour capacity error = %v", err)
 	}
-	if err := validateEmailScheduleCapacity(3*time.Hour, 120, 2*time.Minute); !errors.Is(err, ErrInvalidSendSchedule) {
-		t.Fatalf("three-hour capacity error = %v, want ErrInvalidSendSchedule", err)
+	if err := validateEmailScheduleCapacity(time.Hour, 240, 40*2*time.Minute); !errors.Is(err, ErrInvalidSendSchedule) {
+		t.Fatalf("one-hour capacity error = %v, want ErrInvalidSendSchedule", err)
+	}
+	if err := validateEmailScheduleCapacity(time.Minute, 120, 40*time.Second); !errors.Is(err, ErrInvalidSendSchedule) {
+		t.Fatalf("sub-second aggregate capacity error = %v, want ErrInvalidSendSchedule", err)
 	}
 }

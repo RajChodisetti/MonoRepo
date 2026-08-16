@@ -383,17 +383,18 @@ func (repo *Postgres) SyncEmailAccounts(
 		return err
 	}
 	totalDailyLimit := 0
-	minimumDelay := time.Duration(0)
+	largestMailboxPacingRequirement := time.Duration(0)
 	for _, account := range accounts {
 		totalDailyLimit += account.SendLimit
-		if account.SendJitterMin > minimumDelay {
-			minimumDelay = account.SendJitterMin
+		mailboxPacingRequirement := time.Duration(account.SendLimit) * account.SendJitterMin
+		if mailboxPacingRequirement > largestMailboxPacingRequirement {
+			largestMailboxPacingRequirement = mailboxPacingRequirement
 		}
 	}
 	if err := validateEmailScheduleCapacity(
 		time.Duration(schedule.endMinute-schedule.startMinute)*time.Minute,
 		totalDailyLimit,
-		minimumDelay,
+		largestMailboxPacingRequirement,
 	); err != nil {
 		return err
 	}
@@ -853,11 +854,25 @@ func randomPacingJitterForDailyCapacity(
 		}
 	}
 	capacityMaximum = capacityMaximum.Truncate(time.Second)
+	if capacityMaximum < time.Second {
+		return 0, fmt.Errorf("configured outreach email daily quota cannot fit within the saved Australia/Sydney send window")
+	}
+	// The configured jitter protects one mailbox. When several mailboxes are
+	// interleaved, their individual slot anchors preserve that cadence, so the
+	// aggregate gate may safely compress below the per-mailbox minimum. A random
+	// half-capacity lower bound avoids bursts while leaving enough headroom for
+	// the full daily allowance to finish before the saved window closes.
 	if capacityMaximum < minimum {
-		return 0, fmt.Errorf("configured outreach email daily quota cannot fit within the saved Australia/Sydney send window at the minimum pacing interval")
+		minimum = (capacityMaximum / 2).Truncate(time.Second)
+		if minimum < time.Second {
+			minimum = time.Second
+		}
 	}
 	if maximum > capacityMaximum {
 		maximum = capacityMaximum
+	}
+	if maximum < minimum {
+		maximum = minimum
 	}
 	return randomPacingJitter(minimum, maximum)
 }

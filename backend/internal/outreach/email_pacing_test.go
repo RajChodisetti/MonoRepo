@@ -171,16 +171,37 @@ func TestRandomPacingJitterForDailyCapacityTightensAfterLateStart(t *testing.T) 
 	}
 }
 
-func TestRandomPacingJitterForDailyCapacityRejectsQuotaThatCannotFit(t *testing.T) {
+func TestRandomPacingJitterForDailyCapacityCompressesAggregateDelayAcrossMailboxes(t *testing.T) {
+	t.Parallel()
+
+	for range 100 {
+		got, err := randomPacingJitterForDailyCapacity(
+			2*time.Minute,
+			5*time.Minute,
+			5*time.Hour,
+			240,
+			5*time.Hour,
+			240,
+		)
+		if err != nil {
+			t.Fatalf("randomPacingJitterForDailyCapacity() error = %v", err)
+		}
+		if got < 37*time.Second || got > 75*time.Second {
+			t.Fatalf("jitter = %s, want 37s..75s", got)
+		}
+	}
+}
+
+func TestRandomPacingJitterForDailyCapacityRejectsSubSecondAggregateCapacity(t *testing.T) {
 	t.Parallel()
 
 	_, err := randomPacingJitterForDailyCapacity(
-		2*time.Minute,
-		5*time.Minute,
-		5*time.Hour,
-		160,
-		5*time.Hour,
-		160,
+		time.Second,
+		2*time.Second,
+		time.Minute,
+		120,
+		time.Minute,
+		120,
 	)
 	if err == nil {
 		t.Fatal("randomPacingJitterForDailyCapacity() error = nil, want capacity error")
