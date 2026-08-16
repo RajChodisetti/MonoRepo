@@ -3630,3 +3630,57 @@ approved QA and production deployment, including migration 54, but not enabling 
 outreach or sending messages. Production still runs release `99bbe69` at schema 53
 with outreach disabled. No protected email configuration needs to change, no real
 email was sent, and no shared database was mutated during implementation.
+
+## 2026-08-16 — Sydney send window and inbox-reply release deployed to QA and production
+
+**Role / Delivery:** With explicit user approval, published implementation commit
+`c1d5a9a` and pacing hotfix `a07fffc` from branch
+`codex/sydney-send-window-inbox-reply-20260815`. Applied migration 54 to QA with a
+full up/down/up exercise, canaried the exact backend image, and then applied the
+migration to production. QA and production API/worker now run backend image
+`6f36bf30b15d`; production admin continues to run the reviewed UI image
+`8b9a6e3eab05`. Both databases are at schema 54 with the saved
+`Australia/Sydney` window at 07:00-12:00, email-job control disabled, and no active
+bulk job. Production's six enabled mailboxes expose an aggregate daily allowance of
+240, interleaved through the window while preserving per-mailbox cadence.
+
+The first production promotion exposed a fail-closed 500 on authenticated outreach
+status: the initial capacity check incorrectly applied a two-minute per-mailbox
+minimum as a global minimum, making six times 40 sends impossible in five hours.
+The hotfix validates the busiest mailbox separately, keeps a one-second aggregate
+floor, and compresses only the cross-mailbox gate when concurrency requires it.
+Production authenticated status then returned 200 with the saved Sydney window,
+disabled email job, and no active run.
+
+**Checks Run:** The hotfix passed targeted outreach/provider tests (128), the full Go
+suite, `go vet`, all backend command builds, and `git diff --check`; the UI release
+had already passed ESLint, nonincremental TypeScript, the 14-route production build,
+OpenAPI validation, and 215 focused tests. QA finished healthy with zero restarts,
+200 loopback public API, 401 protected API, and zero fatal log signals. Production
+public API, admin login, and website returned 200; protected API returned 401 and
+unauthenticated admin outreach redirected with 307. Production API/worker/admin show
+zero restarts and zero panic/fatal/traceback/schema/migration-failure signals. The
+authenticated bulk status probe returned 200. Post-deploy database checks confirm
+schema 54, the 420-720 minute schedule, disabled sending, zero active jobs, the sole
+delivery attempt still dated 2026-08-12, and zero outbound inbox-message records.
+
+**Business Value / Plan Fit:** Administrators can safely set the scheduled-outreach
+window from the Outreach UI; workers consume the change without a restart and can
+finish the full configured daily allowance before the selected Sydney end time.
+Reply remains available throughout an inbox conversation and uses the mailbox that
+received the inbound message.
+
+**Risks / Approval State:** No scheduled outreach was enabled or sent. One routine
+Gmail sender-health check became due at the production worker restart and completed;
+health/test/reply/direct mail is intentionally exempt from the scheduled-outreach
+window. The immutable production release is
+`/opt/tuvi/releases/monorepo-a07fffc-sydney-window-hotfix-20260816T072034Z`.
+Rollback retains release `monorepo-c1d5a9a-sydney-window-20260816T070540Z`, explicit
+`rollback-c1d5a9a-20260816T072034Z` API/worker/migrator image tags, and stopped QA
+container `tuvi-qa-api-api-rollback-c1d5a9a-20260816T072034Z`; earlier release 99bbe69
+targets are also retained. Verified mode-`0600` pre-migration backups are
+`/opt/tuvi/backups/qa-postgres/qa-pre-c1d5a9a-20260816T070540Z.dump`,
+`/opt/tuvi/backups/postgres/monorepo-pre-c1d5a9a-20260816T070540Z.dump`, and
+`/opt/tuvi/backups/config/env-pre-c1d5a9a-20260816T070540Z.tar.gz`. Migration 54 can
+roll back while the saved window remains at its default; its down migration refuses
+to discard an administrator-customized schedule.
