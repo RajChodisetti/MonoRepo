@@ -386,6 +386,15 @@ func (service *Service) GetStatus(ctx context.Context, principal auth.Principal)
 	} else {
 		result.NewRecipientCount = pending
 	}
+	if counter, ok := service.repo.(interface {
+		CountSentDeliveriesByPhase(context.Context) (SentCounts, error)
+	}); ok {
+		counts, countErr := counter.CountSentDeliveriesByPhase(ctx)
+		if countErr != nil {
+			return StatusResult{}, countErr
+		}
+		result.SentCounts = counts
+	}
 	control, err := GetEmailJobControl(ctx, service.pool)
 	if err != nil {
 		return StatusResult{}, err

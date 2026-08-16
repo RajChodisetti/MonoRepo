@@ -57,12 +57,21 @@ type StatusResult struct {
 	NewRecipientCount       int                 `json:"new_recipient_count"`
 	PausedRecipientCount    int                 `json:"paused_recipient_count"`
 	CompletedRecipientCount int                 `json:"completed_recipient_count"`
+	SentCounts              SentCounts          `json:"sent_counts"`
 	MaxSends                int                 `json:"max_sends"`
 	ActiveJob               *ActiveJobStatus    `json:"active_job,omitempty"`
 	LastCompletedJob        *CompletedJobStatus `json:"last_completed_job,omitempty"`
 	NextAvailableAt         *time.Time          `json:"next_available_at,omitempty"`
 	EmailJob                EmailJobControl     `json:"email_job"`
 	SendSchedule            EmailSendSchedule   `json:"send_schedule"`
+}
+
+type SentCounts struct {
+	Total  int `json:"total"`
+	Phase1 int `json:"phase_1"`
+	Phase2 int `json:"phase_2"`
+	Phase3 int `json:"phase_3"`
+	Other  int `json:"other"`
 }
 
 type RecipientStatusCounts struct {

@@ -587,6 +587,28 @@ func (repo *Postgres) CountRecipientStatuses(ctx context.Context) (RecipientStat
 	return counts, nil
 }
 
+const sentDeliveryCountsQuery = `
+		SELECT count(*),
+		       count(*) FILTER (WHERE campaign_step = 1),
+		       count(*) FILTER (WHERE campaign_step = 2),
+		       count(*) FILTER (WHERE campaign_step = 3),
+		       count(*) FILTER (WHERE campaign_step NOT IN (1, 2, 3))
+		FROM email_delivery_attempts
+		WHERE status = 'sent'`
+
+func (repo *Postgres) CountSentDeliveriesByPhase(ctx context.Context) (SentCounts, error) {
+	if repo.pool == nil {
+		return SentCounts{}, fmt.Errorf("database pool is not configured")
+	}
+	var counts SentCounts
+	if err := repo.pool.QueryRow(ctx, sentDeliveryCountsQuery).Scan(
+		&counts.Total, &counts.Phase1, &counts.Phase2, &counts.Phase3, &counts.Other,
+	); err != nil {
+		return SentCounts{}, fmt.Errorf("count sent outreach deliveries by phase: %w", err)
+	}
+	return counts, nil
+}
+
 func HasActiveBulkJob(ctx context.Context, pool *pgxpool.Pool, jobType string) (bool, string, error) {
 	if pool == nil {
 		return false, "", nil

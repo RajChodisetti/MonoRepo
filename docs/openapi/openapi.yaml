@@ -5184,6 +5184,7 @@ components:
 
     BulkOutreachStatusResponse:
       type: object
+      required: [sent_counts]
       properties:
         pending_eligible_count:
           type: integer
@@ -5195,6 +5196,8 @@ components:
           type: integer
         completed_recipient_count:
           type: integer
+        sent_counts:
+          $ref: '#/components/schemas/OutreachSentCounts'
         max_sends:
           type: integer
         email_job:
@@ -5241,6 +5244,29 @@ components:
                   type: string
                   format: date-time
                   nullable: true
+
+    OutreachSentCounts:
+      type: object
+      required: [total, phase_1, phase_2, phase_3, other]
+      description: Confirmed scheduled outreach sends recorded as sent delivery attempts, grouped by campaign step.
+      properties:
+        total:
+          type: integer
+          minimum: 0
+          description: All confirmed sends, including campaign steps outside phases 1, 2, and 3.
+        phase_1:
+          type: integer
+          minimum: 0
+        phase_2:
+          type: integer
+          minimum: 0
+        phase_3:
+          type: integer
+          minimum: 0
+        other:
+          type: integer
+          minimum: 0
+          description: Confirmed sends whose campaign step is not 1, 2, or 3.
 
     EmailJobControl:
       type: object

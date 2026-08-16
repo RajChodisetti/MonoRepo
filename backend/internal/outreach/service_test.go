@@ -36,6 +36,16 @@ type mockRepo struct {
 	nextDue       *time.Time
 }
 
+type statusCountsRepo struct {
+	*mockRepo
+	sentCounts outreach.SentCounts
+	sentErr    error
+}
+
+func (repo *statusCountsRepo) CountSentDeliveriesByPhase(context.Context) (outreach.SentCounts, error) {
+	return repo.sentCounts, repo.sentErr
+}
+
 func (repo *mockRepo) ListEligibleLeads(context.Context, int) ([]outreach.EligibleLead, error) {
 	return repo.leads, nil
 }
@@ -146,6 +156,68 @@ func newSequenceService(t *testing.T, repo *mockRepo, provider *mockEmailProvide
 
 func internalAdminPrincipal() auth.Principal {
 	return auth.Principal{UserID: uuid.New(), Role: auth.RoleInternalAdmin}
+}
+
+func TestGetStatusIncludesConfirmedSentCountsByPhase(t *testing.T) {
+	want := outreach.SentCounts{Total: 14, Phase1: 8, Phase2: 4, Phase3: 1, Other: 1}
+	repo := &statusCountsRepo{
+		mockRepo:   &mockRepo{count: 5},
+		sentCounts: want,
+	}
+	service := outreach.NewService(
+		repo,
+		nil,
+		nil,
+		nil,
+		nil,
+		outreach.DemoTokenResolver{},
+		nil,
+		nil,
+		config.EmailConfig{},
+		config.OutreachConfig{BulkMax: 150},
+		config.AppURLsConfig{},
+		nil,
+		nil,
+	)
+
+	result, err := service.GetStatus(context.Background(), internalAdminPrincipal())
+	if err != nil {
+		t.Fatalf("GetStatus() error = %v", err)
+	}
+	if result.SentCounts != want {
+		t.Fatalf("GetStatus().SentCounts = %#v, want %#v", result.SentCounts, want)
+	}
+	if result.PendingEligibleCount != 5 {
+		t.Fatalf("GetStatus().PendingEligibleCount = %d, want 5", result.PendingEligibleCount)
+	}
+}
+
+func TestGetStatusReturnsSentCountError(t *testing.T) {
+	wantErr := errors.New("sent count unavailable")
+	repo := &statusCountsRepo{
+		mockRepo: &mockRepo{},
+		sentErr:  wantErr,
+	}
+	service := outreach.NewService(
+		repo,
+		nil,
+		nil,
+		nil,
+		nil,
+		outreach.DemoTokenResolver{},
+		nil,
+		nil,
+		config.EmailConfig{},
+		config.OutreachConfig{},
+		config.AppURLsConfig{},
+		nil,
+		nil,
+	)
+
+	_, err := service.GetStatus(context.Background(), internalAdminPrincipal())
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("GetStatus() error = %v, want %v", err, wantErr)
+	}
 }
 
 func eligibleSequenceRepo() *mockRepo {

@@ -78,6 +78,13 @@ export type BulkSendStatus = {
   new_recipient_count?: number;
   paused_recipient_count?: number;
   completed_recipient_count?: number;
+  sent_counts?: {
+    total: number;
+    phase_1: number;
+    phase_2: number;
+    phase_3: number;
+    other: number;
+  };
   max_sends: number;
   next_available_at?: string;
   active_job?: {

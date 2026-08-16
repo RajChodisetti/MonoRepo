@@ -45,6 +45,24 @@ func TestRecipientStatusCountsDoNotHideNewRecipientsBehindFollowups(t *testing.T
 	}
 }
 
+func TestSentDeliveryCountsQueryUsesOneConfirmedAttemptAggregate(t *testing.T) {
+	if strings.Count(strings.ToUpper(sentDeliveryCountsQuery), "SELECT") != 1 {
+		t.Fatalf("sent delivery counts must use one aggregate query: %q", sentDeliveryCountsQuery)
+	}
+	for _, required := range []string{
+		"FROM email_delivery_attempts",
+		"WHERE status = 'sent'",
+		"FILTER (WHERE campaign_step = 1)",
+		"FILTER (WHERE campaign_step = 2)",
+		"FILTER (WHERE campaign_step = 3)",
+		"FILTER (WHERE campaign_step NOT IN (1, 2, 3))",
+	} {
+		if !strings.Contains(sentDeliveryCountsQuery, required) {
+			t.Fatalf("sent delivery counts query missing %q", required)
+		}
+	}
+}
+
 func TestGreetingOwnerPrecedenceRemainsApolloFirstNameThenApolloNameThenOwners(t *testing.T) {
 	wantOrder := []string{
 		"apollo_lead #>> '{contact,first_name}'",

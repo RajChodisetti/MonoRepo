@@ -317,46 +317,88 @@ export default function OutreachPage() {
           {loadingOperations && !status ? <EmptyState message="Loading outreach status…" /> : null}
 
           {status ? (
-            <div className="outreach-metrics">
-              <div className="card">
-                <div className="outreach-metric-label">Email job</div>
-                <div style={{ marginTop: "0.4rem" }}>
-                  <StatusBadge status={status.email_job.enabled ? "enabled" : "disabled"} />
+            <>
+              <section className="card" style={{ marginBottom: "1rem" }} aria-labelledby="sent-counts-heading">
+                <h2 id="sent-counts-heading" style={{ marginTop: 0, fontSize: "1.05rem" }}>
+                  Confirmed scheduled sequence deliveries
+                </h2>
+                <p style={{ color: "var(--muted)", marginTop: 0 }}>
+                  Counts include provider-confirmed scheduled outreach emails. Phase 1, Phase 2, and
+                  Phase 3 map to the first, second, and third sequence step/template. Template tests,
+                  inbox replies, and health checks are excluded.
+                </p>
+                <div className="outreach-metrics" style={{ marginBottom: 0 }}>
+                  <div>
+                    <div className="outreach-metric-label">Confirmed sent · total</div>
+                    <div className="outreach-metric-value">{status.sent_counts?.total ?? "—"}</div>
+                  </div>
+                  <div>
+                    <div className="outreach-metric-label">Phase 1 · Step 1 template</div>
+                    <div className="outreach-metric-value">{status.sent_counts?.phase_1 ?? "—"}</div>
+                  </div>
+                  <div>
+                    <div className="outreach-metric-label">Phase 2 · Step 2 template</div>
+                    <div className="outreach-metric-value">{status.sent_counts?.phase_2 ?? "—"}</div>
+                  </div>
+                  <div>
+                    <div className="outreach-metric-label">Phase 3 · Step 3 template</div>
+                    <div className="outreach-metric-value">{status.sent_counts?.phase_3 ?? "—"}</div>
+                  </div>
                 </div>
-                <div className="field-help" style={{ marginTop: "0.45rem" }}>
-                  {status.email_job.enabled_at
-                    ? `Enabled ${formatDate(status.email_job.enabled_at)}`
-                    : "Sending remains off until explicitly enabled"}
+                {!status.sent_counts ? (
+                  <div className="field-help" style={{ marginTop: "0.75rem" }} role="status">
+                    Confirmed delivery counts will appear when the updated outreach API is available.
+                  </div>
+                ) : status.sent_counts.other > 0 ? (
+                  <div className="field-help" style={{ marginTop: "0.75rem" }}>
+                    {status.sent_counts.other} additional confirmed{" "}
+                    {status.sent_counts.other === 1 ? "delivery is" : "deliveries are"} from a
+                    legacy or later sequence step and included in the total only.
+                  </div>
+                ) : null}
+              </section>
+
+              <div className="outreach-metrics">
+                <div className="card">
+                  <div className="outreach-metric-label">Email job</div>
+                  <div style={{ marginTop: "0.4rem" }}>
+                    <StatusBadge status={status.email_job.enabled ? "enabled" : "disabled"} />
+                  </div>
+                  <div className="field-help" style={{ marginTop: "0.45rem" }}>
+                    {status.email_job.enabled_at
+                      ? `Enabled ${formatDate(status.email_job.enabled_at)}`
+                      : "Sending remains off until explicitly enabled"}
+                  </div>
+                </div>
+                <div className="card">
+                  <div className="outreach-metric-label">Due follow-ups</div>
+                  <div className="outreach-metric-value">{status.due_followup_count ?? "—"}</div>
+                </div>
+                <div className="card">
+                  <div className="outreach-metric-label">New eligible</div>
+                  <div className="outreach-metric-value">
+                    {status.new_recipient_count ?? status.pending_eligible_count}
+                  </div>
+                </div>
+                <div className="card">
+                  <div className="outreach-metric-label">Active job</div>
+                  <div style={{ marginTop: "0.4rem" }}>
+                    <StatusBadge status={status.active_job?.status || "none"} />
+                  </div>
+                </div>
+                <div className="card">
+                  <div className="outreach-metric-label">Last completed run</div>
+                  <div style={{ marginTop: "0.4rem" }}>
+                    <StatusBadge status={status.last_completed_job?.status || "none"} />
+                  </div>
+                  <div className="field-help" style={{ marginTop: "0.45rem" }}>
+                    {status.last_completed_job?.summary
+                      ? `${status.last_completed_job.summary.sent} sent · ${status.last_completed_job.summary.failed} failed`
+                      : "No completed run yet"}
+                  </div>
                 </div>
               </div>
-              <div className="card">
-                <div className="outreach-metric-label">Due follow-ups</div>
-                <div className="outreach-metric-value">{status.due_followup_count ?? "—"}</div>
-              </div>
-              <div className="card">
-                <div className="outreach-metric-label">New eligible</div>
-                <div className="outreach-metric-value">
-                  {status.new_recipient_count ?? status.pending_eligible_count}
-                </div>
-              </div>
-              <div className="card">
-                <div className="outreach-metric-label">Active job</div>
-                <div style={{ marginTop: "0.4rem" }}>
-                  <StatusBadge status={status.active_job?.status || "none"} />
-                </div>
-              </div>
-              <div className="card">
-                <div className="outreach-metric-label">Last completed run</div>
-                <div style={{ marginTop: "0.4rem" }}>
-                  <StatusBadge status={status.last_completed_job?.status || "none"} />
-                </div>
-                <div className="field-help" style={{ marginTop: "0.45rem" }}>
-                  {status.last_completed_job?.summary
-                    ? `${status.last_completed_job.summary.sent} sent · ${status.last_completed_job.summary.failed} failed`
-                    : "No completed run yet"}
-                </div>
-              </div>
-            </div>
+            </>
           ) : null}
 
           <form className="card" style={{ marginBottom: "1rem" }} onSubmit={saveSendSchedule}>
