@@ -21,6 +21,7 @@ func (nullRestaurantInboxRow) Scan(dest ...any) error {
 	*(dest[8].(*string)) = "Hello"
 	*(dest[9].(*time.Time)) = time.Date(2026, 8, 14, 1, 2, 3, 0, time.UTC)
 	*(dest[10].(*uuid.UUID)) = uuid.MustParse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+	*(dest[11].(*uuid.UUID)) = uuid.MustParse("11111111-2222-3333-4444-555555555555")
 	return nil
 }
 
@@ -31,5 +32,8 @@ func TestScanInboxThreadAcceptsUnmatchedMessageWithoutRestaurantName(t *testing.
 	}
 	if thread.RestaurantName != "" || !thread.Unmatched || thread.MailboxKey != "sales-one" || thread.MailboxEmail != "sales@example.com" {
 		t.Fatalf("scanInboxThread() = %#v", thread)
+	}
+	if thread.ReplyMessageID != uuid.MustParse("11111111-2222-3333-4444-555555555555") {
+		t.Fatalf("ReplyMessageID = %s", thread.ReplyMessageID)
 	}
 }

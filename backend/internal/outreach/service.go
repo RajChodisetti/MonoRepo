@@ -393,6 +393,11 @@ func (service *Service) GetStatus(ctx context.Context, principal auth.Principal)
 		return StatusResult{}, err
 	}
 	result.EmailJob = control
+	schedule, err := GetEmailSendSchedule(ctx, service.pool)
+	if err != nil {
+		return StatusResult{}, err
+	}
+	result.SendSchedule = schedule
 	configured := false
 	if service.emailPool != nil {
 		configured, err = service.emailPool.Configured(ctx)

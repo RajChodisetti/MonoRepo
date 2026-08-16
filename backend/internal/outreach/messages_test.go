@@ -13,6 +13,7 @@ func TestPrepareInboxReply(t *testing.T) {
 		ID:            uuid.New(),
 		Direction:     MessageDirectionInbound,
 		FromEmail:     "OWNER@Restaurant.Example",
+		ToEmail:       "Sales@One.Example",
 		Subject:       "Original subject",
 		GmailThreadID: "thread-1",
 		RFCMessageID:  "<original@example.com>",
@@ -23,6 +24,9 @@ func TestPrepareInboxReply(t *testing.T) {
 	}
 	if request.To != "owner@restaurant.example" || request.Subject != "Re: Original subject" {
 		t.Fatalf("reply recipient/subject = %q/%q", request.To, request.Subject)
+	}
+	if request.FromEmail != "sales@one.example" {
+		t.Fatalf("reply FromEmail = %q, want receiving address", request.FromEmail)
 	}
 	if request.TextBody != "Thanks for replying." || request.ThreadID != "thread-1" {
 		t.Fatalf("reply body/thread = %q/%q", request.TextBody, request.ThreadID)

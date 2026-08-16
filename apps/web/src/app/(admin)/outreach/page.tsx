@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { OutreachInbox } from "@/components/OutreachInbox";
 import { OutreachEmailAccounts } from "@/components/OutreachEmailAccounts";
@@ -15,6 +15,7 @@ import type {
   EmailAccountHealthResponse,
   OutreachSequence,
   OutreachSequenceListResponse,
+  OutreachSendSchedule,
   OutreachTemplateTestSendResponse,
   Restaurant,
 } from "@/lib/types";
@@ -35,10 +36,15 @@ export default function OutreachPage() {
   const [testOwnerFirstName, setTestOwnerFirstName] = useState("");
   const [selectedTestRestaurant, setSelectedTestRestaurant] = useState<Restaurant | null>(null);
   const [testSendResult, setTestSendResult] = useState<OutreachTemplateTestSendResponse | null>(null);
+  const [sendWindowStart, setSendWindowStart] = useState("07:00");
+  const [sendWindowEnd, setSendWindowEnd] = useState("12:00");
+  const [scheduleDirty, setScheduleDirty] = useState(false);
+  const scheduleDirtyRef = useRef(false);
   const [loadingOperations, setLoadingOperations] = useState(true);
   const [loadingSequences, setLoadingSequences] = useState(true);
   const [settingJob, setSettingJob] = useState(false);
   const [sendingTest, setSendingTest] = useState(false);
+  const [savingSchedule, setSavingSchedule] = useState(false);
 
   const activeSequence = useMemo(
     () => sequences.find((sequence) => sequence.id === activeSequenceId || sequence.is_active),
@@ -53,6 +59,10 @@ export default function OutreachPage() {
     ]);
     if (bulkResult.status === "fulfilled") {
       setStatus(bulkResult.value);
+      if (!scheduleDirtyRef.current) {
+        setSendWindowStart(bulkResult.value.send_schedule.start_time);
+        setSendWindowEnd(bulkResult.value.send_schedule.end_time);
+      }
     } else {
       setOperationsError(
         bulkResult.reason instanceof Error
@@ -94,7 +104,7 @@ export default function OutreachPage() {
     if (
       !confirm(
         enabled
-          ? `Enable real Gmail outreach using “${activeSequence?.name}”? Due follow-ups will be sent before new restaurants, subject to pacing, lifecycle, and consent checks.`
+          ? `Enable real Gmail outreach using “${activeSequence?.name}”? Scheduled sends run only from ${status?.send_schedule.start_time} to ${status?.send_schedule.end_time} Sydney time. Due follow-ups remain ahead of new restaurants.`
           : "Disable the email job? No new Gmail delivery will begin after the current provider request finishes.",
       )
     ) {
@@ -110,7 +120,7 @@ export default function OutreachPage() {
       }>("outreach/email-job", { method: "PATCH", body: { enabled } });
       setMessage(
         enabled
-          ? `Email job enabled${result.job_id ? ` (job ${result.job_id})` : ""}. Follow-ups remain first in the queue.`
+          ? `Email job enabled${result.job_id ? ` (job ${result.job_id})` : ""}. Scheduled sends will run from ${status?.send_schedule.start_time} to ${status?.send_schedule.end_time} Sydney time.`
           : "Email job disabled. Recipient progress and due dates are preserved.",
       );
       await loadOperations();
@@ -122,6 +132,46 @@ export default function OutreachPage() {
       );
     } finally {
       setSettingJob(false);
+    }
+  }
+
+  function markScheduleDirty() {
+    scheduleDirtyRef.current = true;
+    setScheduleDirty(true);
+  }
+
+  async function saveSendSchedule(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!status || status.email_job.enabled || status.active_job) {
+      setOperationsError("Disable the email job and wait for the active run to finish before changing the window.");
+      return;
+    }
+    if (sendWindowEnd <= sendWindowStart) {
+      setOperationsError("End time must be later than start time on the same Sydney day.");
+      return;
+    }
+    if (!confirm(`Save scheduled outreach from ${sendWindowStart} to ${sendWindowEnd} Australia/Sydney?`)) {
+      return;
+    }
+    setSavingSchedule(true);
+    setOperationsError(null);
+    setMessage(null);
+    try {
+      const schedule = await adminFetch<OutreachSendSchedule>("outreach/send-window", {
+        method: "PATCH",
+        body: { start_time: sendWindowStart, end_time: sendWindowEnd },
+      });
+      scheduleDirtyRef.current = false;
+      setScheduleDirty(false);
+      setSendWindowStart(schedule.start_time);
+      setSendWindowEnd(schedule.end_time);
+      setStatus((current) => (current ? { ...current, send_schedule: schedule } : current));
+      setMessage(`Scheduled outreach window saved: ${schedule.start_time}-${schedule.end_time} ${schedule.timezone}.`);
+      await loadOperations();
+    } catch (reason) {
+      setOperationsError(reason instanceof Error ? reason.message : "Outreach send window update failed.");
+    } finally {
+      setSavingSchedule(false);
     }
   }
 
@@ -259,6 +309,10 @@ export default function OutreachPage() {
 
       {view === "operations" ? (
         <div role="tabpanel" id="outreach-panel-operations" aria-labelledby="outreach-tab-operations">
+          <div className="alert alert-info" style={{ marginBottom: "1rem" }}>
+            Scheduled outreach uses the daily mailbox quota only inside the saved Australia/Sydney window.
+            Template tests, inbox replies, health checks, and other direct emails are outside this schedule.
+          </div>
           {loadingOperations && !status ? <EmptyState message="Loading outreach status…" /> : null}
 
           {status ? (
@@ -303,6 +357,55 @@ export default function OutreachPage() {
               </div>
             </div>
           ) : null}
+
+          <form className="card" style={{ marginBottom: "1rem" }} onSubmit={saveSendSchedule}>
+            <h2 style={{ marginTop: 0, fontSize: "1.05rem" }}>Scheduled outreach window</h2>
+            <p style={{ color: "var(--muted)", marginTop: 0 }}>
+              Times use <strong>Australia/Sydney</strong> and follow daylight-saving changes automatically. The full configured daily mailbox quota must fit before the end time.
+            </p>
+            <div className="form-grid">
+              <label>
+                Start time
+                <input
+                  className="input"
+                  type="time"
+                  value={sendWindowStart}
+                  onChange={(event) => {
+                    setSendWindowStart(event.target.value);
+                    markScheduleDirty();
+                  }}
+                  required
+                />
+              </label>
+              <label>
+                End time
+                <input
+                  className="input"
+                  type="time"
+                  value={sendWindowEnd}
+                  onChange={(event) => {
+                    setSendWindowEnd(event.target.value);
+                    markScheduleDirty();
+                  }}
+                  required
+                />
+              </label>
+            </div>
+            <div style={{ marginTop: "0.85rem", display: "flex", gap: "0.65rem", alignItems: "center", flexWrap: "wrap" }}>
+              <button
+                className="btn btn-primary"
+                type="submit"
+                disabled={savingSchedule || !scheduleDirty || !status || status.email_job.enabled || Boolean(status.active_job)}
+              >
+                {savingSchedule ? "Saving…" : "Save outreach window"}
+              </button>
+              <span className="field-help">
+                {status?.email_job.enabled || status?.active_job
+                  ? "Disable sending and wait for the active run to finish before editing."
+                  : `Current saved window: ${status?.send_schedule.start_time ?? "—"}-${status?.send_schedule.end_time ?? "—"}`}
+              </span>
+            </div>
+          </form>
 
           <div className="card" style={{ marginBottom: "1rem" }}>
             <h2 style={{ marginTop: 0, fontSize: "1.05rem" }}>Active template</h2>

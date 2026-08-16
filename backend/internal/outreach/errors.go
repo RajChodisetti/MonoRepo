@@ -22,6 +22,8 @@ var (
 	ErrInvalidRecipientEmail = errors.New("recipient email is invalid")
 	ErrInvalidInboxReply     = errors.New("inbox reply is invalid")
 	ErrInboxReplyUnavailable = errors.New("inbox reply mailbox is not configured for sending")
+	ErrInvalidSendSchedule   = errors.New("outreach send schedule is invalid")
+	ErrSendScheduleLocked    = errors.New("outreach send schedule cannot change while the email job is enabled or active")
 )
 
 type BulkSendSummary struct {
@@ -60,6 +62,7 @@ type StatusResult struct {
 	LastCompletedJob        *CompletedJobStatus `json:"last_completed_job,omitempty"`
 	NextAvailableAt         *time.Time          `json:"next_available_at,omitempty"`
 	EmailJob                EmailJobControl     `json:"email_job"`
+	SendSchedule            EmailSendSchedule   `json:"send_schedule"`
 }
 
 type RecipientStatusCounts struct {

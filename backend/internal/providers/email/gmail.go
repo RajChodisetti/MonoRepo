@@ -128,9 +128,13 @@ func (provider *gmailProvider) Send(ctx context.Context, req SendRequest) (SendR
 	if err != nil {
 		return SendResult{}, fmt.Errorf("gmail recipient: %w", err)
 	}
+	fromEmail, err := resolveGmailFromEmail(req.FromEmail, provider.cfg.MailboxEmail, provider.cfg.FromEmail)
+	if err != nil {
+		return SendResult{}, err
+	}
 
 	rawMessage, rfcMessageID, err := buildGmailMessage(
-		provider.cfg.FromEmail,
+		fromEmail,
 		provider.email.FromName,
 		to,
 		req.ReplyTo,
@@ -215,13 +219,48 @@ func (provider *gmailProvider) Send(ctx context.Context, req SendRequest) (SendR
 		ProviderMessageID: messageID,
 		ProviderThreadID:  strings.TrimSpace(parsed.ThreadID),
 		RFCMessageID:      rfcMessageID,
-		FromEmail:         provider.cfg.FromEmail,
+		FromEmail:         fromEmail,
 		ReplyTo:           strings.TrimSpace(req.ReplyTo),
 	}
 	if !strings.EqualFold(to, originalTo) {
 		result.RedirectedTo = to
 	}
 	return result, nil
+}
+
+func resolveGmailFromEmail(requested string, mailboxEmail string, configuredFromEmail string) (string, error) {
+	mailboxEmail, err := canonicalMailbox(mailboxEmail)
+	if err != nil {
+		return "", fmt.Errorf("gmail mailbox address: %w", err)
+	}
+	configuredFromEmail, err = canonicalMailbox(configuredFromEmail)
+	if err != nil {
+		return "", fmt.Errorf("gmail configured from address: %w", err)
+	}
+	if strings.TrimSpace(requested) == "" {
+		return configuredFromEmail, nil
+	}
+	requested, err = canonicalMailbox(requested)
+	if err != nil {
+		return "", fmt.Errorf("gmail requested from address: %w", err)
+	}
+	for _, allowed := range []string{mailboxEmail, configuredFromEmail} {
+		if requested == allowed {
+			return requested, nil
+		}
+		if isPlusAddressOf(requested, allowed) {
+			return allowed, nil
+		}
+	}
+	return "", fmt.Errorf("gmail requested from address is not authorized for this mailbox")
+}
+
+func isPlusAddressOf(candidate string, base string) bool {
+	candidateLocal, candidateDomain, candidateOK := strings.Cut(candidate, "@")
+	baseLocal, baseDomain, baseOK := strings.Cut(base, "@")
+	return candidateOK && baseOK &&
+		strings.EqualFold(candidateDomain, baseDomain) &&
+		strings.HasPrefix(strings.ToLower(candidateLocal), strings.ToLower(baseLocal)+"+")
 }
 
 func (provider *gmailProvider) accessToken(ctx context.Context) (string, error) {

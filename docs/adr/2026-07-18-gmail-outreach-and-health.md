@@ -1,7 +1,7 @@
 # ADR: Gmail-only restaurant outreach and daily sender health
 
 Date: 2026-07-18
-Status: Accepted
+Status: Superseded in part by `2026-08-15-sydney-scheduled-outreach-window.md`
 
 ## Context
 

@@ -39,9 +39,11 @@ info:
     one durable `outreach.bulk_send` workflow. Each job activation reserves at most one
     provider attempt, then requeues for its PostgreSQL `available_at`. PostgreSQL
     warms each configured account through durable cycle ceilings of 5, 10, 15, 20,
-    25, 30, 35, and 40 attempts across an 8-hour window. It enforces a 24-hour cooldown
-    after each fully used allowance; once 40 is reached, 40 remains the ceiling. These are
-    attempt ceilings, not guarantees of accepted or delivered messages.
+    25, 30, 35, and 40 attempts. Scheduled attempts are distributed across the fixed
+    admin-saved `Australia/Sydney` send window, with all mailboxes paced concurrently;
+    once 40 is reached, 40 remains the per-mailbox ceiling. These are attempt ceilings,
+    not guarantees of accepted or delivered messages. Template tests, inbox replies,
+    health checks, and other direct messages are outside the scheduled quota/window.
 
     Email transport is HTTP(S)-only (Gmail or Zoho for the quota pool; Zoho or Resend for
     generic sends); SMTP is rejected. In production,
@@ -1846,7 +1848,8 @@ paths:
       description: |
         Requires role internal_admin. Sends from the same configured Gmail mailbox and
         Gmail thread that captured the inbound message, then stores the accepted outbound
-        snapshot. It does not restart a campaign paused by the inbound reply.
+        snapshot. It does not consume scheduled daily quota or wait for the Sydney send
+        window, and it does not restart a campaign paused by the inbound reply.
       requestBody:
         required: true
         content:
@@ -1902,8 +1905,10 @@ paths:
         and schedules the next enabled step. Skipped or failed/ambiguous outcomes never
         advance. Provider quotas and pacing remain PostgreSQL-backed and restart-safe.
         Each mailbox starts at 5 attempts for its first fully used allowance, then rises
-        by 5 after each 24-hour cooldown until it reaches and remains at the configured
-        ceiling (maximum 40).
+        by 5 after each fully used Sydney send day until it reaches and remains at the
+        configured ceiling (maximum 40). Scheduled provider attempts occur only inside
+        the admin-saved, start-inclusive/end-exclusive `Australia/Sydney` window; mailbox
+        allowances run concurrently so the aggregate quota can finish before its end.
       responses:
         '202':
           description: Bulk job queued
@@ -1941,6 +1946,8 @@ paths:
         `enabled=false` cancels any safely deferred queued job and prevents another provider
         attempt; an in-flight request keeps its fenced lease long enough to record the exact
         outcome. Re-enabling can resume that one lease without creating a competing job.
+        Outside the saved `Australia/Sydney` window, the queued job defers without
+        claiming a provider slot.
       requestBody:
         required: true
         content:
@@ -1969,6 +1976,41 @@ paths:
         '503':
           description: Gmail OAuth outreach accounts are not configured
 
+  /api/v1/outreach/send-window:
+    patch:
+      tags: [Email Campaigns]
+      summary: Set the scheduled outreach window from the admin UI
+      operationId: setOutreachSendWindow
+      security:
+        - bearerAuth: []
+      description: |
+        Requires role `internal_admin`. Persists a same-day, start-inclusive and
+        end-exclusive window in `Australia/Sydney`. The email job must be disabled and no
+        bulk outreach run may be queued or active. The server rejects a window that cannot
+        fit the configured mailboxes' full daily quota at the minimum pacing interval.
+        Template tests, inbox replies, health checks, and other direct email are exempt.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OutreachSendScheduleUpdate'
+      responses:
+        '200':
+          description: Saved outreach send window
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutreachSendSchedule'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Email job is enabled or a bulk outreach run is queued/running
+
   /api/v1/outreach/bulk-send/status:
     get:
       tags: [Email Campaigns]
@@ -1979,7 +2021,8 @@ paths:
       description: |
         Requires role `internal_admin`.
         Returns pending eligible lead count, the next durable account availability time,
-        the persisted UI email-job state, and active/last bulk job summary.
+        the persisted UI email-job state, saved Sydney send window, and active/last bulk
+        job summary.
       responses:
         '200':
           description: Bulk outreach status
@@ -2005,7 +2048,8 @@ paths:
         the active sequence used by live outreach. There is no extra base message or
         test-only subject prefix. This is a
         custom-recipient test path: it does not mutate lead/campaign delivery state,
-        does not enroll recipients, and does not send to restaurant leads. Messages use
+        does not enroll recipients, does not consume scheduled daily quota, and is not
+        restricted to the scheduled Sydney send window. It does not send to restaurant leads. Messages use
         the saved sequence's editable sender signature with the fixed Tuvi logo, company,
         website, and brand colours. Any unsubscribe copy is supplied by the
         saved database template; this endpoint does not add or validate it.
@@ -5028,7 +5072,7 @@ components:
 
     OutreachInboxThread:
       type: object
-      required: [mailbox_key, mailbox_email, unmatched, unread_count, last_direction, last_snippet, last_at, last_message_id]
+      required: [mailbox_key, mailbox_email, unmatched, unread_count, last_direction, last_snippet, last_at, last_message_id, reply_message_id]
       properties:
         restaurant_id:
           type: string
@@ -5058,6 +5102,10 @@ components:
         last_message_id:
           type: string
           format: uuid
+        reply_message_id:
+          type: string
+          format: uuid
+          description: Latest inbound message in this thread; replies target this snapshot even after an outbound response.
 
     OutreachInboxMailboxStatus:
       type: object
@@ -5123,6 +5171,8 @@ components:
           type: integer
         email_job:
           $ref: '#/components/schemas/EmailJobControl'
+        send_schedule:
+          $ref: '#/components/schemas/OutreachSendSchedule'
         next_available_at:
           type: string
           format: date-time
@@ -5181,6 +5231,43 @@ components:
         updated_at:
           type: string
           format: date-time
+
+    OutreachSendSchedule:
+      type: object
+      required: [timezone, start_time, end_time, updated_at]
+      properties:
+        timezone:
+          type: string
+          enum: [Australia/Sydney]
+        start_time:
+          type: string
+          pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+          example: '07:00'
+        end_time:
+          type: string
+          pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+          example: '12:00'
+        updated_by:
+          type: string
+          format: uuid
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+
+    OutreachSendScheduleUpdate:
+      type: object
+      additionalProperties: false
+      required: [start_time, end_time]
+      properties:
+        start_time:
+          type: string
+          pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+          example: '07:00'
+        end_time:
+          type: string
+          pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+          example: '12:00'
 
     EmailJobActionResponse:
       type: object

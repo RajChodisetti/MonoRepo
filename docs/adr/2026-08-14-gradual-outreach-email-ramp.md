@@ -1,7 +1,7 @@
 # ADR: Gradual durable outreach email ramp
 
 Date: 2026-08-14
-Status: Accepted (local/unreleased)
+Status: Superseded in part by `2026-08-15-sydney-scheduled-outreach-window.md`
 
 ## Context
 

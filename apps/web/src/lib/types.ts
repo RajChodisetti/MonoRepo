@@ -101,6 +101,15 @@ export type BulkSendStatus = {
     enabled_by?: string;
     updated_at?: string;
   };
+  send_schedule: OutreachSendSchedule;
+};
+
+export type OutreachSendSchedule = {
+  timezone: "Australia/Sydney";
+  start_time: string;
+  end_time: string;
+  updated_by?: string;
+  updated_at?: string;
 };
 
 export type EmailAccountHealth = {
@@ -506,6 +515,7 @@ export type InboxThread = {
   last_snippet: string;
   last_at: string;
   last_message_id: string;
+  reply_message_id: string;
 };
 
 export type InboxMailboxStatus = {

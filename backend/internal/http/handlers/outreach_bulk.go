@@ -99,6 +99,32 @@ func (handler *OutreachBulkHandler) SetEmailJob(w http.ResponseWriter, r *http.R
 	handler.writeJSON(w, http.StatusOK, result)
 }
 
+func (handler *OutreachBulkHandler) SetSendSchedule(w http.ResponseWriter, r *http.Request) {
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		handler.writeError(w, http.StatusUnauthorized, "unauthorized", "Authentication is required.")
+		return
+	}
+	var request outreach.UpdateEmailSendScheduleInput
+	if err := decodeOutreachJSON(r, &request); err != nil {
+		handler.writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+	result, err := handler.service.SetEmailSendSchedule(r.Context(), principal, request)
+	switch {
+	case errors.Is(err, outreach.ErrInvalidSendSchedule):
+		handler.writeError(w, http.StatusBadRequest, "invalid_send_schedule", err.Error())
+		return
+	case errors.Is(err, outreach.ErrSendScheduleLocked):
+		handler.writeError(w, http.StatusConflict, "send_schedule_locked", "Disable the email job and wait for the active outreach run to finish before changing the send window.")
+		return
+	case err != nil:
+		handler.writeError(w, http.StatusInternalServerError, "send_schedule_update_failed", "The outreach send window could not be updated.")
+		return
+	}
+	handler.writeJSON(w, http.StatusOK, result)
+}
+
 func (handler *OutreachBulkHandler) Status(w http.ResponseWriter, r *http.Request) {
 	principal, ok := auth.PrincipalFromContext(r.Context())
 	if !ok {

@@ -337,6 +337,23 @@ func TestRepositoryMigrationsIncludeLatestOutreachChanges(t *testing.T) {
 				"DROP COLUMN signature_name",
 			},
 		},
+		54: {
+			name: "outreach_send_schedule",
+			upFragments: []string{
+				"VALUES ('email_job', false, NULL, NULL, now())",
+				"CREATE TABLE outreach_send_schedule",
+				"timezone text NOT NULL DEFAULT 'Australia/Sydney'",
+				"start_minute smallint NOT NULL DEFAULT 420",
+				"end_minute smallint NOT NULL DEFAULT 720",
+				"end_minute - start_minute >= 60",
+				"status IN ('queued', 'running')",
+			},
+			downFragments: []string{
+				"VALUES ('email_job', false, NULL, NULL, now())",
+				"refusing to remove migration 54 while the outreach send schedule is customized",
+				"DROP TABLE outreach_send_schedule",
+			},
+		},
 	}
 
 	for _, migration := range migrations {

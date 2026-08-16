@@ -67,7 +67,7 @@ func TestGmailProviderSendsViaHTTPSAPIContract(t *testing.T) {
 		config.EmailConfig{FromName: "Tuvi Solutions"},
 		config.GmailMailConfig{
 			MailboxEmail: "sales1@example.com",
-			FromEmail:    "sales1@example.com",
+			FromEmail:    "alias@example.com",
 			ClientID:     "client-id",
 			ClientSecret: "client-secret",
 			RefreshToken: "refresh-token",
@@ -82,6 +82,7 @@ func TestGmailProviderSendsViaHTTPSAPIContract(t *testing.T) {
 
 	result, err := provider.Send(context.Background(), emailprovider.SendRequest{
 		To:         "owner@restaurant.example",
+		FromEmail:  "sales1+reply-token@example.com",
 		Subject:    "Your restaurant demo",
 		TextBody:   "Text version",
 		HTMLBody:   "<p>HTML version</p>",
@@ -98,6 +99,9 @@ func TestGmailProviderSendsViaHTTPSAPIContract(t *testing.T) {
 	}
 	if result.ProviderThreadID != "gmail-thread-id" {
 		t.Fatalf("ProviderThreadID = %q, want gmail-thread-id", result.ProviderThreadID)
+	}
+	if result.FromEmail != "sales1@example.com" {
+		t.Fatalf("FromEmail = %q, want receiving mailbox", result.FromEmail)
 	}
 	if requestThreadID != "original-thread-id" {
 		t.Fatalf("request threadId = %q, want original-thread-id", requestThreadID)
@@ -201,6 +205,16 @@ func TestGmailProviderRejectsHeaderInjection(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "newline") {
 		t.Fatalf("Send() error = %v, want newline rejection", err)
+	}
+
+	_, err = provider.Send(context.Background(), emailprovider.SendRequest{
+		To:        "owner@restaurant.example",
+		FromEmail: "different@example.com",
+		Subject:   "Safe subject",
+		TextBody:  "hello",
+	})
+	if err == nil || !strings.Contains(err.Error(), "not authorized") {
+		t.Fatalf("Send() error = %v, want unauthorized from-address rejection", err)
 	}
 }
 

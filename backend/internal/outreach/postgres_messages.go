@@ -205,7 +205,9 @@ const inboxThreadsCTE = `
 	         (array_agg(left(btrim(regexp_replace(body_text, '\s+', ' ', 'g')), 180)
 	           ORDER BY received_at DESC, created_at DESC))[1] AS last_snippet,
 	         max(received_at) AS last_at,
-	         (array_agg(id ORDER BY received_at DESC, created_at DESC))[1] AS last_message_id
+	         (array_agg(id ORDER BY received_at DESC, created_at DESC))[1] AS last_message_id,
+	         (array_agg(id ORDER BY received_at DESC, created_at DESC)
+	           FILTER (WHERE direction = 'inbound'))[1] AS reply_message_id
 	  FROM messages
 	  GROUP BY mailbox_key, conversation_key
 	  HAVING bool_or(direction = 'inbound')
@@ -231,7 +233,7 @@ func (repo *Postgres) ListInbox(ctx context.Context, unreadOnly bool, mailboxKey
 
 	query := inboxThreadsCTE + `
 		SELECT restaurant_id, restaurant_name, email, mailbox_key, mailbox_email, unmatched, unread_count,
-		       last_direction, last_snippet, last_at, last_message_id
+		       last_direction, last_snippet, last_at, last_message_id, reply_message_id
 		FROM threads
 		WHERE ($1 = '' OR mailbox_key = $1)
 		  AND (NOT $2 OR unread_count > 0)
@@ -276,6 +278,7 @@ func scanInboxThread(row messageScanner) (InboxThread, error) {
 		&thread.LastSnippet,
 		&thread.LastAt,
 		&thread.LastMessageID,
+		&thread.ReplyMessageID,
 	); err != nil {
 		return InboxThread{}, err
 	}

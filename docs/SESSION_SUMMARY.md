@@ -1,7 +1,4 @@
-# Session Summary
-
-Release `99bbe69` deploys personalized Template 1 placeholders, editable Praveen Maurya signature details, fixed Tuvi branding, and exact saved-sequence test sends.
-QA runs the release in its isolated API and production runs the same backend digest in API/worker plus the reviewed admin digest; both databases are at schema 53.
-Migration 53 created only inactive draft `00000000-0000-4000-8000-000000000053`; each environment retains one active approved sequence and outreach sending remains disabled.
-QA and production route, database, image, restart, log, backup, and no-provider-send checks passed; no real email, health send, or outreach attempt occurred.
-Rollback uses the retained 7e72df6 release/containers/images and verified mode-0600 database/config backups created before migration.
+Local branch `codex/sydney-send-window-inbox-reply-20260815` adds migration 54 and an internal-admin UI for a persisted Australia/Sydney scheduled-outreach window, defaulting to 07:00-12:00.
+Workers read the saved window transactionally without restart and reject a window that cannot fit configured daily mailbox quota; direct/test/reply/health email remains exempt.
+Inbox Reply remains available after prior admin responses and sends through the captured receiving mailbox/address, including safe plus-address normalization.
+Backend, admin, migration-discovery, and OpenAPI checks pass; QA-first then production deployment is explicitly approved, while real outreach remains disabled and unauthorized.

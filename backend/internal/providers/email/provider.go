@@ -17,6 +17,7 @@ var ErrSendingDisabled = errors.New("email sending is disabled")
 
 type SendRequest struct {
 	To         string
+	FromEmail  string
 	Subject    string
 	HTMLBody   string
 	TextBody   string

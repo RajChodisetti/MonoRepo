@@ -3589,3 +3589,44 @@ mode-`0600` backups are
 `/opt/tuvi/backups/qa-postgres/qa-pre-99bbe69-20260816T011206Z.dump`,
 `/opt/tuvi/backups/postgres/monorepo-pre-99bbe69-20260816T011206Z.dump`, and
 `/opt/tuvi/backups/config/env-pre-99bbe69-20260816T011206Z.tar.gz`.
+
+## 2026-08-16 — UI-managed Sydney send window and persistent same-inbox replies
+
+**Role / Delivery:** Implemented local, deployment-approved scheduled outreach
+enforcement on branch `codex/sydney-send-window-inbox-reply-20260815`. Migration 54
+persists a 07:00-12:00 default window in `Australia/Sydney`, and the internal-admin
+Outreach UI can change its start/end while sending is disabled and no bulk job is
+active. Quota claims lock and read the saved window transactionally, so workers use
+the new value without a restart. Each mailbox retains its gradual 5-to-40 allowance,
+all mailboxes advance concurrently, and a saved window is rejected if full daily
+quota cannot fit at the minimum pacing interval. Template tests, inbox replies,
+health checks, and other direct/manual emails remain outside this scheduler.
+
+Inbox thread responses now include the latest inbound message ID independently from
+the latest overall snapshot, so the Reply action remains available after an earlier
+admin response. Replies continue to select the provider by the captured mailbox key;
+the Gmail adapter now requests the captured receiving address as From, accepts only
+that mailbox or its configured alias, and normalizes plus-address recipients to the
+authorized base mailbox. The admin confirmation and composer display the receiving
+address. OpenAPI, environment guidance, TypeScript types, startup schema checks, and
+the superseding ADR are aligned. The legacy `OUTREACH_SEND_WINDOW=8h` setting remains
+for pacing-row compatibility and is no longer the scheduled boundary.
+
+**Checks Run:** Focused schedule/outreach, HTTP-handler, migration, store,
+email-provider, and config tests passed (215 across six packages). `rtk make test`,
+`rtk go vet ./backend/...`, `rtk go build ./backend/cmd/...`, admin ESLint, explicit
+nonincremental TypeScript checking, the 14-route admin production build, OpenAPI
+validation (11 pre-existing warnings), and `rtk git diff --check` passed. The local
+Docker daemon did not become available for an isolated SQL up/down run, so migration
+54 still requires the approved QA-first database canary before production promotion.
+
+**Business Value / Plan Fit:** Scheduled restaurant outreach now stays inside the
+requested Sydney morning operating window while preserving the daily warm-up quota,
+and administrators can keep answering an inbox conversation from the address that
+actually received it.
+
+**Risks / Approval State:** This work is local and unreleased. The user explicitly
+approved QA and production deployment, including migration 54, but not enabling real
+outreach or sending messages. Production still runs release `99bbe69` at schema 53
+with outreach disabled. No protected email configuration needs to change, no real
+email was sent, and no shared database was mutated during implementation.

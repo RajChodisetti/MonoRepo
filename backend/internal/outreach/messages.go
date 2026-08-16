@@ -53,6 +53,7 @@ type InboxThread struct {
 	LastSnippet    string     `json:"last_snippet"`
 	LastAt         time.Time  `json:"last_at"`
 	LastMessageID  uuid.UUID  `json:"last_message_id"`
+	ReplyMessageID uuid.UUID  `json:"reply_message_id"`
 }
 
 type InboxMailboxStatus struct {
@@ -102,7 +103,7 @@ func prepareInboxReply(target Message, input ReplyMessageInput) (emailprovider.S
 	if err != nil {
 		return emailprovider.SendRequest{}, fmt.Errorf("%w: inbound sender address is invalid", ErrInvalidInboxReply)
 	}
-	return emailprovider.SendRequest{
+	request := emailprovider.SendRequest{
 		To:         recipient,
 		Subject:    subject,
 		TextBody:   body,
@@ -113,7 +114,11 @@ func prepareInboxReply(target Message, input ReplyMessageInput) (emailprovider.S
 			"purpose":             "outreach_inbox_reply",
 			"in_reply_to_message": target.ID.String(),
 		},
-	}, nil
+	}
+	if receivedAt, err := cleanTestRecipient(target.ToEmail); err == nil {
+		request.FromEmail = receivedAt
+	}
+	return request, nil
 }
 
 func snapshotBody(textBody, htmlBody string) string {

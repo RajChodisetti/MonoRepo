@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"strings"
 	"time"
+	_ "time/tzdata"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -25,6 +26,59 @@ const (
 )
 
 var errDeliveryAttemptNotSending = errors.New("delivery attempt is not in sending state")
+
+var scheduledSendLocation = mustLoadScheduledSendLocation()
+
+type scheduledEmailWindow struct {
+	Start time.Time
+	End   time.Time
+	Open  bool
+}
+
+func mustLoadScheduledSendLocation() *time.Location {
+	location, err := time.LoadLocation(scheduledSendTimezone)
+	if err != nil {
+		return time.FixedZone("AEST", 10*60*60)
+	}
+	return location
+}
+
+func emailWindowAt(now time.Time, schedule storedEmailSendSchedule) scheduledEmailWindow {
+	localNow := now.In(scheduledSendLocation)
+	startHour := schedule.startMinute / 60
+	startMinute := schedule.startMinute % 60
+	endHour := schedule.endMinute / 60
+	endMinute := schedule.endMinute % 60
+	start := time.Date(
+		localNow.Year(), localNow.Month(), localNow.Day(),
+		startHour, startMinute, 0, 0,
+		scheduledSendLocation,
+	)
+	end := time.Date(
+		localNow.Year(), localNow.Month(), localNow.Day(),
+		endHour, endMinute, 0, 0,
+		scheduledSendLocation,
+	)
+	if !localNow.Before(start) && localNow.Before(end) {
+		return scheduledEmailWindow{Start: start.UTC(), End: end.UTC(), Open: true}
+	}
+	if !localNow.Before(end) {
+		start = start.AddDate(0, 0, 1)
+		end = end.AddDate(0, 0, 1)
+	}
+	return scheduledEmailWindow{Start: start.UTC(), End: end.UTC()}
+}
+
+func nextScheduledSendAt(now time.Time, candidate time.Time, schedule storedEmailSendSchedule) time.Time {
+	if candidate.Before(now) {
+		candidate = now
+	}
+	window := emailWindowAt(candidate, schedule)
+	if window.Open {
+		return candidate.UTC()
+	}
+	return window.Start
+}
 
 func rampedSendLimit(maxLimit, rampDay int) int {
 	if maxLimit < 1 {
@@ -324,6 +378,38 @@ func (repo *Postgres) SyncEmailAccounts(
 		}
 	}
 
+	schedule, err := loadEmailSendSchedule(ctx, tx, false)
+	if err != nil {
+		return err
+	}
+	totalDailyLimit := 0
+	minimumDelay := time.Duration(0)
+	for _, account := range accounts {
+		totalDailyLimit += account.SendLimit
+		if account.SendJitterMin > minimumDelay {
+			minimumDelay = account.SendJitterMin
+		}
+	}
+	if err := validateEmailScheduleCapacity(
+		time.Duration(schedule.endMinute-schedule.startMinute)*time.Minute,
+		totalDailyLimit,
+		minimumDelay,
+	); err != nil {
+		return err
+	}
+	// This table is the pacing mirror, not the credential source of truth. Mark
+	// entries absent from the effective provider set inactive so UI schedule
+	// capacity validation does not count removed or disabled mailboxes.
+	accountKeys := make([]string, 0, len(accounts))
+	for _, account := range accounts {
+		accountKeys = append(accountKeys, strings.TrimSpace(account.Key))
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE outreach_email_accounts
+		SET enabled = false, updated_at = now()
+		WHERE enabled = true AND NOT (account_key = ANY($1::text[]))`, accountKeys); err != nil {
+		return fmt.Errorf("disable removed outreach email account pacing rows: %w", err)
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit email account sync: %w", err)
 	}
@@ -491,37 +577,36 @@ func (repo *Postgres) ClaimEmailDelivery(
 	// worker from bypassing the random velocity guard.
 	var globalNextSendAt time.Time
 	var now time.Time
+	var scheduleStartMinute int
+	var scheduleEndMinute int
 	if err := tx.QueryRow(
 		ctx,
-		`SELECT next_send_at, clock_timestamp()
-		 FROM outreach_email_pacing
-		 WHERE singleton = 1
-		 FOR UPDATE`,
-	).Scan(&globalNextSendAt, &now); err != nil {
+		`SELECT pacing.next_send_at, clock_timestamp(), schedule.start_minute, schedule.end_minute
+		 FROM outreach_email_pacing AS pacing
+		 CROSS JOIN outreach_send_schedule AS schedule
+		 WHERE pacing.singleton = 1 AND schedule.singleton = 1
+		 FOR UPDATE OF pacing, schedule`,
+	).Scan(&globalNextSendAt, &now, &scheduleStartMinute, &scheduleEndMinute); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return emailprovider.DeliveryClaim{}, fmt.Errorf("outreach email pacing state is not initialized")
 		}
 		return emailprovider.DeliveryClaim{}, fmt.Errorf("lock global outreach email pacing: %w", err)
 	}
 	now = now.UTC()
+	schedule := newStoredEmailSendSchedule(scheduleStartMinute, scheduleEndMinute, nil, time.Time{})
+	window := emailWindowAt(now, schedule)
+	if !window.Open {
+		return emailprovider.DeliveryClaim{}, emailprovider.ErrAccountsExhausted
+	}
 	if globalNextSendAt.After(now) {
 		return emailprovider.DeliveryClaim{}, emailprovider.ErrAccountsExhausted
 	}
 
-	// Finish a partially used account before moving to the next configured
-	// position. Unlike the legacy predicate, available_at gates every claim,
-	// not only an account that has already reached its limit.
+	// Select the mailbox whose next daily slot is due first. Mailboxes advance
+	// together through the saved Sydney window instead of serializing complete
+	// per-account windows, which lets the aggregate daily allowance finish by
+	// the configured end time while preserving each mailbox's own cadence.
 	const selectAccount = `
-		WITH active_partial AS MATERIALIZED (
-		  SELECT id
-		  FROM outreach_email_accounts
-		  WHERE enabled = true
-		    AND account_key = ANY($1::text[])
-		    AND usage_count > 0
-		    AND usage_count < LEAST(send_limit, ramp_day * 5)
-		  ORDER BY position ASC, created_at ASC
-		  LIMIT 1
-		)
 		SELECT account.id,
 		       account.account_key,
 		       account.cycle_number,
@@ -529,24 +614,40 @@ func (repo *Postgres) ClaimEmailDelivery(
 		       account.send_limit,
 		       account.ramp_day,
 		       account.cycle_started_at,
-		       account.send_window_seconds,
 		       account.send_jitter_min_seconds,
-		       account.send_jitter_max_seconds
+		       account.send_jitter_max_seconds,
+		       quota.total_limit,
+		       quota.remaining_limit
 		FROM outreach_email_accounts AS account
+		CROSS JOIN LATERAL (
+		  SELECT COALESCE(sum(send_limit), 0)::int AS total_limit,
+		         COALESCE(sum(
+		           CASE
+		             WHEN cycle_started_at = $2::timestamptz THEN
+		               GREATEST(LEAST(send_limit, ramp_day * 5) - usage_count, 0)
+		             ELSE
+		               LEAST(
+		                 send_limit,
+		                 CASE
+		                   WHEN cycle_started_at IS NOT NULL
+		                    AND usage_count >= LEAST(send_limit, ramp_day * 5)
+		                   THEN (ramp_day + 1) * 5
+		                   ELSE ramp_day * 5
+		                 END
+		               )
+		           END
+		         ), 0)::int AS remaining_limit
+		  FROM outreach_email_accounts
+		  WHERE enabled = true AND account_key = ANY($1::text[])
+		) AS quota
 		WHERE account.enabled = true
 		  AND account.account_key = ANY($1::text[])
 		  AND account.available_at <= clock_timestamp()
 		  AND (
-		    (
-		      EXISTS (SELECT 1 FROM active_partial)
-		      AND account.id = (SELECT id FROM active_partial)
-		    )
-		    OR NOT EXISTS (SELECT 1 FROM active_partial)
+		    account.cycle_started_at IS DISTINCT FROM $2::timestamptz
+		    OR account.usage_count < LEAST(account.send_limit, account.ramp_day * 5)
 		  )
-		ORDER BY CASE
-		           WHEN account.usage_count < LEAST(account.send_limit, account.ramp_day * 5) THEN 0
-		           ELSE 1
-		         END,
+		ORDER BY account.available_at ASC,
 		         account.position ASC,
 		         account.created_at ASC
 		FOR UPDATE OF account
@@ -558,10 +659,11 @@ func (repo *Postgres) ClaimEmailDelivery(
 	var sendLimit int
 	var rampDay int
 	var cycleStartedAt *time.Time
-	var sendWindowSeconds int
 	var sendJitterMinSeconds int
 	var sendJitterMaxSeconds int
-	if err := tx.QueryRow(ctx, selectAccount, accountKeys).Scan(
+	var totalConfiguredLimit int
+	var remainingDailyLimit int
+	if err := tx.QueryRow(ctx, selectAccount, accountKeys, window.Start).Scan(
 		&accountID,
 		&accountKey,
 		&cycleNumber,
@@ -569,9 +671,10 @@ func (repo *Postgres) ClaimEmailDelivery(
 		&sendLimit,
 		&rampDay,
 		&cycleStartedAt,
-		&sendWindowSeconds,
 		&sendJitterMinSeconds,
 		&sendJitterMaxSeconds,
+		&totalConfiguredLimit,
+		&remainingDailyLimit,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return emailprovider.DeliveryClaim{}, emailprovider.ErrAccountsExhausted
@@ -580,42 +683,49 @@ func (repo *Postgres) ClaimEmailDelivery(
 	}
 
 	currentSendLimit := rampedSendLimit(sendLimit, rampDay)
-	resetCycle := usageCount >= currentSendLimit
-	if resetCycle {
+	newDailyCycle := cycleStartedAt == nil || !cycleStartedAt.Equal(window.Start)
+	if newDailyCycle && cycleStartedAt != nil {
 		cycleNumber++
-		rampDay = nextEmailRampDay(sendLimit, rampDay)
+		if usageCount >= currentSendLimit {
+			rampDay = nextEmailRampDay(sendLimit, rampDay)
+		}
 		usageCount = 0
 	}
-	if resetCycle || cycleStartedAt == nil {
-		started := now
+	if newDailyCycle {
+		started := window.Start
 		cycleStartedAt = &started
 	}
 	usageCount++
 	dailySendLimit := rampedSendLimit(sendLimit, rampDay)
 	reachesLimit := usageCount >= dailySendLimit
-	jitter, err := randomPacingJitter(
+	jitter, err := randomPacingJitterForDailyCapacity(
 		time.Duration(sendJitterMinSeconds)*time.Second,
 		time.Duration(sendJitterMaxSeconds)*time.Second,
+		window.End.Sub(window.Start),
+		totalConfiguredLimit,
+		window.End.Sub(now),
+		remainingDailyLimit,
 	)
 	if err != nil {
 		return emailprovider.DeliveryClaim{}, err
 	}
 	nextGlobalSendAt := now.Add(jitter)
-	nextAccountSendAt := now.Add(cooldown)
+	// Advance by Sydney calendar date rather than adding 24 elapsed hours so the
+	// next cycle still begins at the saved Sydney start time across
+	// daylight-saving transitions.
+	nextAccountSendAt := emailWindowAt(window.End, schedule).Start
 	if !reachesLimit {
-		schedule, scheduleErr := scheduledAccountSendAt(
+		schedule, scheduleErr := scheduledDailyAccountSendAt(
 			now,
 			cycleStartedAt.UTC(),
+			window.End,
 			usageCount,
 			dailySendLimit,
-			time.Duration(sendWindowSeconds)*time.Second,
-			jitter,
 		)
 		if scheduleErr != nil {
 			return emailprovider.DeliveryClaim{}, scheduleErr
 		}
-		cycleStartedAt = &schedule.CycleStartedAt
-		nextAccountSendAt = schedule.NextSendAt
+		nextAccountSendAt = schedule
 	}
 
 	const consumeSlot = `
@@ -724,44 +834,66 @@ func randomPacingJitter(minimum, maximum time.Duration) (time.Duration, error) {
 	return time.Duration(minimumSeconds+offset.Int64()) * time.Second, nil
 }
 
-type accountPacingSchedule struct {
-	CycleStartedAt time.Time
-	NextSendAt     time.Time
+func randomPacingJitterForDailyCapacity(
+	minimum time.Duration,
+	maximum time.Duration,
+	window time.Duration,
+	totalDailyLimit int,
+	remainingWindow time.Duration,
+	remainingDailyLimit int,
+) (time.Duration, error) {
+	if window <= 0 || totalDailyLimit < 1 || remainingWindow <= 0 || remainingDailyLimit < 1 {
+		return 0, fmt.Errorf("invalid scheduled outreach email daily capacity")
+	}
+	capacityMaximum := window / time.Duration(totalDailyLimit)
+	if remainingDailyLimit > 1 {
+		remainingMaximum := remainingWindow / time.Duration(remainingDailyLimit-1)
+		if remainingMaximum < capacityMaximum {
+			capacityMaximum = remainingMaximum
+		}
+	}
+	capacityMaximum = capacityMaximum.Truncate(time.Second)
+	if capacityMaximum < minimum {
+		return 0, fmt.Errorf("configured outreach email daily quota cannot fit within the saved Australia/Sydney send window at the minimum pacing interval")
+	}
+	if maximum > capacityMaximum {
+		maximum = capacityMaximum
+	}
+	return randomPacingJitter(minimum, maximum)
 }
 
-func scheduledAccountSendAt(
+func scheduledDailyAccountSendAt(
 	now time.Time,
-	cycleStartedAt time.Time,
+	windowStart time.Time,
+	windowEnd time.Time,
 	usedSlots int,
 	sendLimit int,
-	sendWindow time.Duration,
-	jitter time.Duration,
-) (accountPacingSchedule, error) {
+) (time.Time, error) {
 	if usedSlots < 1 || sendLimit < 1 || usedSlots >= sendLimit {
-		return accountPacingSchedule{}, fmt.Errorf("invalid outreach email account slot")
+		return time.Time{}, fmt.Errorf("invalid outreach email account slot")
 	}
-	if sendWindow <= 0 || jitter < 0 {
-		return accountPacingSchedule{}, fmt.Errorf("invalid outreach email account pacing policy")
+	if !windowEnd.After(windowStart) {
+		return time.Time{}, fmt.Errorf("invalid scheduled outreach email pacing policy")
 	}
-	slotWidth := sendWindow / time.Duration(sendLimit)
-	if slotWidth <= jitter {
-		return accountPacingSchedule{}, fmt.Errorf("outreach email slot width must be greater than its jitter")
+	if now.Before(windowStart) || !now.Before(windowEnd) {
+		return time.Time{}, fmt.Errorf("scheduled outreach email is outside the Sydney send window")
 	}
+	slotWidth := windowEnd.Sub(windowStart) / time.Duration(sendLimit)
 
-	// The absolute slot anchor spreads the allowance across the full window.
-	// If a delayed/restarted worker missed that anchor, shift the remaining
-	// window forward. This prevents it from compressing missed slots into a
-	// sequence of minimum-delay sends.
-	slotAt := cycleStartedAt.Add(time.Duration(usedSlots)*slotWidth + jitter)
-	guardAt := now.Add(jitter)
-	if slotAt.Before(guardAt) {
-		cycleStartedAt = now.Add(-time.Duration(usedSlots-1) * slotWidth)
-		slotAt = now.Add(slotWidth + jitter)
+	// Use fixed anchors when the worker is on time. If it starts late or is
+	// delayed, divide the remaining time across the remaining sends. The global
+	// jitter gate still supplies the minimum inter-message delay, but missed
+	// anchors are not pushed beyond the saved end time.
+	slotAt := windowStart.Add(time.Duration(usedSlots) * slotWidth)
+	if !slotAt.After(now) {
+		remainingSlots := sendLimit - usedSlots
+		catchUpWidth := windowEnd.Sub(now) / time.Duration(remainingSlots+1)
+		slotAt = now.Add(catchUpWidth)
 	}
-	return accountPacingSchedule{
-		CycleStartedAt: cycleStartedAt,
-		NextSendAt:     slotAt,
-	}, nil
+	if !slotAt.Before(windowEnd) {
+		return time.Time{}, fmt.Errorf("remaining outreach email quota cannot fit before the Sydney send window closes")
+	}
+	return slotAt, nil
 }
 
 // ReconcileStaleEmailDeliveries fails closed when a worker disappears after
@@ -831,27 +963,11 @@ func (repo *Postgres) NextEmailAccountAvailableAt(
 		  SELECT id, position, created_at, usage_count, send_limit, ramp_day, available_at
 		  FROM outreach_email_accounts
 		  WHERE enabled = true AND account_key = ANY($1::text[])
-		), active_partial AS (
-		  SELECT available_at
-		  FROM configured
-		  WHERE usage_count > 0 AND usage_count < LEAST(send_limit, ramp_day * 5)
-		  ORDER BY position ASC, created_at ASC
-		  LIMIT 1
-		), account_gate AS (
-		  SELECT CASE
-		    WHEN EXISTS (SELECT 1 FROM active_partial)
-		      THEN (SELECT available_at FROM active_partial)
-		    WHEN EXISTS (
-		      SELECT 1 FROM configured WHERE available_at <= clock_timestamp()
-		    ) THEN clock_timestamp()
-		    ELSE (SELECT min(available_at) FROM configured)
-		  END AS available_at
 		)
 		SELECT (SELECT count(*) FROM configured),
-		       GREATEST(account_gate.available_at, pacing.next_send_at),
+		       GREATEST((SELECT min(available_at) FROM configured), pacing.next_send_at),
 		       clock_timestamp()
-		FROM account_gate
-		CROSS JOIN outreach_email_pacing AS pacing
+		FROM outreach_email_pacing AS pacing
 		WHERE pacing.singleton = 1`
 	var accountCount int
 	var next *time.Time
@@ -862,10 +978,18 @@ func (repo *Postgres) NextEmailAccountAvailableAt(
 	if accountCount == 0 {
 		return nil, fmt.Errorf("no configured outreach email accounts are enabled")
 	}
-	if next != nil && !next.After(databaseNow) {
+	if next == nil {
 		return nil, nil
 	}
-	return next, nil
+	schedule, err := loadEmailSendSchedule(ctx, repo.pool, false)
+	if err != nil {
+		return nil, err
+	}
+	adjusted := nextScheduledSendAt(databaseNow.UTC(), next.UTC(), schedule)
+	if !adjusted.After(databaseNow) {
+		return nil, nil
+	}
+	return &adjusted, nil
 }
 
 func (repo *Postgres) CompleteEmailDelivery(

@@ -179,11 +179,15 @@ function InboxRow({ thread, onReplied }: { thread: InboxThread; onReplied: () =>
   async function sendReply(event: FormEvent) {
     event.preventDefault();
     if (!bodyText.trim()) return;
-    if (!window.confirm(`Send this reply to ${thread.email || "the inbound sender"}?`)) return;
+    if (
+      !window.confirm(
+        `Send this reply to ${thread.email || "the inbound sender"} from ${thread.mailbox_email || thread.mailbox_key}?`,
+      )
+    ) return;
     setBusy(true);
     setError(null);
     try {
-      await adminFetch(`outreach/messages/${thread.last_message_id}/reply`, {
+      await adminFetch(`outreach/messages/${thread.reply_message_id}/reply`, {
         method: "POST",
         body: { subject: subject.trim() || undefined, body_text: bodyText },
       });
@@ -217,20 +221,16 @@ function InboxRow({ thread, onReplied }: { thread: InboxThread; onReplied: () =>
       <td>{formatDate(thread.last_at)}</td>
       <td>{thread.unread_count}</td>
       <td>
-        {thread.last_direction === "inbound" ? (
-          <button className="btn btn-secondary" type="button" onClick={() => setReplying((value) => !value)}>
-            {replying ? "Cancel" : "Reply"}
-          </button>
-        ) : (
-          <span style={{ color: "var(--muted)" }}>Waiting for reply</span>
-        )}
+        <button className="btn btn-secondary" type="button" onClick={() => setReplying((value) => !value)}>
+          {replying ? "Cancel" : "Reply"}
+        </button>
       </td>
     </tr>
     {replying ? (
       <tr>
         <td colSpan={5}>
           <form onSubmit={sendReply} className="card" style={{ display: "grid", gap: "0.65rem", margin: "0.5rem 0" }}>
-            <strong>Reply from the same outreach mailbox</strong>
+            <strong>Reply from {thread.mailbox_email || thread.mailbox_key}</strong>
             <label style={{ display: "grid", gap: "0.3rem" }}>
               <span>Subject / title (optional)</span>
               <input

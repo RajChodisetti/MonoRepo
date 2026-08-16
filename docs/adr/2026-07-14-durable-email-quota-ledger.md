@@ -1,7 +1,7 @@
 # ADR: Durable outreach email quota and delivery ledger
 
 Date: 2026-07-14
-Status: Accepted
+Status: Superseded in part by `2026-08-15-sydney-scheduled-outreach-window.md`
 
 ## Context
 
