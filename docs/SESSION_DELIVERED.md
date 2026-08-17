@@ -3999,3 +3999,72 @@ mode-`0600` backups
 `/opt/tuvi/backups/config/stack.env-pre-6305910-20260816T222000Z`. Rollback recreates
 only QA API or production API/admin; it must leave the active worker untouched and
 requires no migration down or default database restore.
+
+## 2026-08-17 — Branch reconciliation and Elysian-first release deployed
+
+**Role / Delivery:** Audited canonical and personal-mirror Git history before
+release. No committed branch was ahead of canonical `master`, and no open pull
+request existed. The original dirty worktree was left untouched; intentional
+work was ported as reviewed hunks onto a clean branch instead of copying stale
+files or reviving retired migration/OCR/outbound-call behavior. PR #3 merged as
+`13a0a476955311e25af303616ee2a91ca45bcc26`, and canonical plus personal-mirror
+`master` were synchronized to that revision.
+
+The release makes Elysian (`3`) the default and first generated-site preview,
+keeps Aurora (`2`) and Cinematic (`1`) explicitly selectable, and adds
+invalid/empty-config fallback coverage. It also ships reviewed responsive and
+navigation accessibility fixes, generated-site order tests, and scoped
+repository context/safety tooling. Caller tracing confirmed that the active
+plain-text outreach worker path does not use the legacy campaign tracking URL
+builder, so no send behavior was changed.
+
+**Checks Run:** Backend tests passed 604 tests across 46 packages; Go vet and
+command builds passed. Admin lint, nonincremental TypeScript, and its 14-route
+production build passed. Template unit tests passed 3/3; lint, TypeScript, clean
+Webpack builds for all three variants, and visual/keyboard checks at phone,
+tablet, and desktop widths passed. Corporate web, catalog, Andre admin, inbound
+voice policy tests, scoped-context routing, Compose rendering, OpenAPI
+validation, diff checks, and targeted secret scans passed. Two independent
+code/tooling reviews and a visual accessibility review reported no release
+blocker. Both PR checks passed before merge.
+
+The exact archive SHA-256 was
+`8cf5f02fcca3e68a18131bb1b4a85f4b5fd52ff2461b2219a114c62dd7054244`.
+QA first passed an isolated canary and was promoted with its prior container
+retained as `tuvi-qa-api-api-rollback-6305910-20260817T065543Z`. Production then
+promoted API, admin, and template one service at a time with `--no-deps`,
+immutable full-revision image tags, and rollback overrides. Final image IDs are
+backend `sha256:75b966609ebad39f0e07f5a806bb2391be6601b3ea816070d6b3558b1bdf5bb2`,
+admin `sha256:97460cd0caec3f957c240aaab8402e0b42099bb60a7ef22ee2d60b94c6d92212`,
+and template
+`sha256:09a477cff6c7f7d6192a7e85f2f04339ad159a5e4ca88568227dcaccfcdd12c2`.
+All report revision `13a0a476955311e25af303616ee2a91ca45bcc26`, zero
+restarts, healthy public reads/auth boundaries, and no fatal log signals.
+Default Elysian, explicit `1`/`2`/`3`, and invalid-value fallback rendered
+correctly through the public demo host.
+
+**Business Value / Plan Fit:** Operators now see the preferred Elysian demo
+first while retaining all reviewed template choices. Repository instructions
+are smaller, path-aware, and explicit about high-risk legacy prototypes,
+deployment boundaries, and current outreach consent/control behavior. The
+release procedure now distinguishes a full-stack rollout from a safe
+service-scoped deployment while a deliberately enabled job is present.
+
+**Risks / Approval State:** Production schema remained `54`; no migrator ran.
+The production email control, durable bulk-job count/newest-created tuple, and
+worker fingerprint matched their pre-release hashes. At final verification the
+existing job was still queued, with 21 confirmed sends and 2 failed attempts.
+`tuvi-worker-1` remains the original container/image/start time on revision
+`4d6ea73`, with zero restarts. No outreach endpoint with reconciliation side
+effects was called, and deployment did not trigger a send, health probe, or
+provider mutation. The enabled worker may later make separately authorized
+progress under its existing schedule.
+
+Current source is
+`/opt/tuvi/releases/monorepo-13a0a47-elysian-20260817T065543Z`; protected
+`TEMPLATE` settings are `3` with mode `0600`. Validated mode-`0600` backups are
+`/opt/tuvi/backups/qa-postgres/qa-pre-13a0a47-20260817T065543Z.dump`,
+`/opt/tuvi/backups/postgres/monorepo-pre-13a0a47-20260817T065543Z.dump`, and
+`/opt/tuvi/backups/config/env-pre-13a0a47-20260817T065543Z.tar.gz`. Explicit
+rollback image tags and the prior release remain available; rollback needs no
+migration down or database restore and must leave the worker untouched.

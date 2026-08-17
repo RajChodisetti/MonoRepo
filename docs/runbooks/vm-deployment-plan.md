@@ -50,28 +50,54 @@ history, or logs.
 
 ## Release procedure
 
-1. Keep the persisted outreach email job disabled.
-2. Record the currently running image IDs, commit, migration version, and
-   aggregate health without exposing customer data.
+1. For a full-stack rollout, keep the persisted outreach email job disabled.
+   If an operator-approved job is already enabled, an unrelated service-scoped
+   release must preserve its control tuple, immutable job identity/count and
+   newest-created tuple, and running worker container/image/start/restart
+   fingerprint exactly; deploy only unaffected services with `--no-deps`.
+   Existing-job status, attempts, leases, and delivery progress may advance.
+2. Record the currently running image IDs, commit, migration version, outreach
+   control/job aggregates, and aggregate health without exposing customer data.
 3. Back up PostgreSQL and protected environment files.
 4. Create a new immutable release directory from the reviewed commit.
-5. Validate both Compose files and build the API, worker, scrape worker,
-   admin, corporate website, and template images.
-6. Run the migration container and verify the expected schema version.
-7. Recreate the services from the same release. Do not use a generic command
-   that could start services not present in the reviewed Compose file.
-8. Verify health/readiness, public report partial-fallback behavior, admin
-   sequence endpoints, the absence of application unsubscribe routes, and
-   aggregate enrollment counts.
+5. Validate both Compose files and build only the affected service images. Pin
+   promoted services to immutable revision-labelled image tags.
+6. Run the migration container only when reviewed migration files changed;
+   otherwise verify the exact expected migration lineage and schema version.
+7. Recreate only the reviewed services from the same release. Do not use a
+   generic command that could start dependencies or services outside the
+   release scope.
+8. Use only the read-only production smoke routes listed below. Keep workflow
+   mutations, provider simulations, and report-generation checks in an isolated
+   QA/canary/test environment.
 9. Confirm there is no OCR service/process/cron/config and no running legacy
    image-analysis claim.
-10. Confirm the production email job is still disabled. Enabling it is a
-    separate deliberate admin action after previews and counts are reviewed.
+10. Confirm the production email control tuple, immutable job
+    identity/count/newest-created tuple, and worker fingerprint match the
+    pre-release record. Existing-job lifecycle and delivery progress may
+    advance. Enabling or disabling outreach is a separate deliberate operator
+    action, never a side effect of deployment.
 
-## Required smoke checks
+## Required production read-only smoke checks
 
-- API health and migration version
-- admin authentication and BFF proxy
+- API health/readiness, public restaurant-list read, authentication boundary,
+  exact image revision, and exact expected migration lineage
+- admin login and unauthenticated redirect boundary; use an existing protected
+  session only for a pure identity/BFF read
+- unsigned template renders for the default, explicit `1`/`2`/`3`, and invalid
+  fallback without creating an engagement session
+- unchanged outreach control/job identity and worker fingerprints, allowing
+  normal progress by the already-running job
+- no fatal logs and no restart-count increase outside the promoted services
+- no real provider send or health action during deployment smoke tests
+
+Do not call authenticated `/api/v1/outreach/bulk-send/status` or load
+`/admin/outreach` in a browser during a preservation deployment. That status
+read reconciles stale delivery attempts and can write attempts, events, and
+campaign state.
+
+## Isolated QA/canary behavior checks
+
 - public restaurant search and report with a non-provider fixture or cached hit
 - report completion near the configured deadline; blocked sites return a
   labeled partial result rather than holding the request
@@ -85,7 +111,7 @@ history, or logs.
 - failed/unknown fake-provider attempt does not advance the step
 - confirmed fake-provider attempt advances once and schedules the configured
   delay
-- no real provider send during deployment smoke tests
+- no real provider send; all provider outcomes are fixture-backed
 
 ## Rollback
 
