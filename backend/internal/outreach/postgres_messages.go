@@ -233,17 +233,28 @@ const inboxThreadsCTE = `
 
 const inboxThreadsLatestFirstOrder = `received_at DESC, reply_message_id DESC`
 
+const inboxThreadsFilter = `
+		WHERE ($1 = '' OR mailbox_key = $1)
+		  AND (NOT $2 OR unread_count > 0)
+		  AND (NOT $3 OR (
+		    NOT unmatched
+		    AND restaurant_id IS NOT NULL
+		    AND btrim(restaurant_name) <> ''
+		  ))`
+
+const inboxThreadsCountQuery = inboxThreadsCTE + `
+		SELECT count(*)
+		FROM threads` + inboxThreadsFilter
+
 const inboxThreadsListQuery = inboxThreadsCTE + `
 		SELECT restaurant_id, restaurant_name, email, mailbox_key, mailbox_email, unmatched, unread_count,
 		       subject, text_snippet, from_email, to_email, received_at,
 		       last_direction, last_snippet, last_at, last_message_id, reply_message_id
-		FROM threads
-		WHERE ($1 = '' OR mailbox_key = $1)
-		  AND (NOT $2 OR unread_count > 0)
+		FROM threads` + inboxThreadsFilter + `
 		ORDER BY ` + inboxThreadsLatestFirstOrder + `
-		LIMIT $3 OFFSET $4`
+		LIMIT $4 OFFSET $5`
 
-func (repo *Postgres) ListInbox(ctx context.Context, unreadOnly bool, mailboxKey string, limit, offset int) (InboxList, error) {
+func (repo *Postgres) ListInbox(ctx context.Context, unreadOnly, restaurantOnly bool, mailboxKey string, limit, offset int) (InboxList, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
@@ -251,17 +262,12 @@ func (repo *Postgres) ListInbox(ctx context.Context, unreadOnly bool, mailboxKey
 		offset = 0
 	}
 	mailboxKey = strings.TrimSpace(mailboxKey)
-	countQuery := inboxThreadsCTE + `
-		SELECT count(*)
-		FROM threads
-		WHERE ($1 = '' OR mailbox_key = $1)
-		  AND (NOT $2 OR unread_count > 0)`
 	var total int
-	if err := repo.pool.QueryRow(ctx, countQuery, mailboxKey, unreadOnly).Scan(&total); err != nil {
+	if err := repo.pool.QueryRow(ctx, inboxThreadsCountQuery, mailboxKey, unreadOnly, restaurantOnly).Scan(&total); err != nil {
 		return InboxList{}, fmt.Errorf("count inbox threads: %w", err)
 	}
 
-	rows, err := repo.pool.Query(ctx, inboxThreadsListQuery, mailboxKey, unreadOnly, limit, offset)
+	rows, err := repo.pool.Query(ctx, inboxThreadsListQuery, mailboxKey, unreadOnly, restaurantOnly, limit, offset)
 	if err != nil {
 		return InboxList{}, fmt.Errorf("list inbox threads: %w", err)
 	}

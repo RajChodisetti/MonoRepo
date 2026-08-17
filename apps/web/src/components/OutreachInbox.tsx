@@ -13,9 +13,11 @@ const refreshIntervalMs = 15_000;
 
 export function OutreachInbox() {
   const [unreadOnly, setUnreadOnly] = useState(false);
+  const [restaurantOnly, setRestaurantOnly] = useState(true);
   const [mailboxKey, setMailboxKey] = useState("");
   const [offset, setOffset] = useState(0);
   const [data, setData] = useState<InboxListResponse | null>(null);
+  const [dataRestaurantOnly, setDataRestaurantOnly] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -36,6 +38,7 @@ export function OutreachInbox() {
       const result = await adminFetch<InboxListResponse>("outreach/inbox", {
         query: {
           unread: unreadOnly ? true : undefined,
+          restaurant_only: restaurantOnly ? true : undefined,
           mailbox: mailboxKey || undefined,
           limit: pageSize,
           offset,
@@ -43,6 +46,7 @@ export function OutreachInbox() {
       });
       if (requestID !== requestSequence.current) return;
       setData(result);
+      setDataRestaurantOnly(restaurantOnly);
       setLastRefreshedAt(new Date().toISOString());
     } catch (err) {
       if (requestID !== requestSequence.current) return;
@@ -53,7 +57,7 @@ export function OutreachInbox() {
         setRefreshing(false);
       }
     }
-  }, [mailboxKey, offset, unreadOnly]);
+  }, [mailboxKey, offset, restaurantOnly, unreadOnly]);
 
   useEffect(() => {
     setLoading(true);
@@ -93,6 +97,17 @@ export function OutreachInbox() {
     setDetailError(null);
     setDetailLoading(false);
   }, []);
+
+  const visibleThreads = (data?.threads || []).filter((thread) => (
+    !restaurantOnly || (
+      !thread.unmatched
+      && Boolean(thread.restaurant_id)
+      && Boolean(thread.restaurant_name?.trim())
+    )
+  ));
+  const visibleTotal = data && dataRestaurantOnly === restaurantOnly
+    ? data.total
+    : visibleThreads.length;
 
   return (
     <div>
@@ -137,6 +152,20 @@ export function OutreachInbox() {
           <label style={{ display: "flex", gap: "0.4rem", alignItems: "center", fontSize: "0.9rem" }}>
             <input
               type="checkbox"
+              checked={restaurantOnly}
+              onChange={(event) => {
+                setRestaurantOnly(event.target.checked);
+                setOffset(0);
+              }}
+            />
+            <span>
+              Restaurant emails only
+              <span className="field-help" style={{ display: "block" }}>Hides unmatched emails</span>
+            </span>
+          </label>
+          <label style={{ display: "flex", gap: "0.4rem", alignItems: "center", fontSize: "0.9rem" }}>
+            <input
+              type="checkbox"
               checked={unreadOnly}
               onChange={(event) => {
                 setUnreadOnly(event.target.checked);
@@ -168,10 +197,14 @@ export function OutreachInbox() {
         ) : null,
       )}
       {loading && !data ? <EmptyState message="Loading inbox…" /> : null}
-      {!loading && !error && (data?.threads || []).length === 0 ? (
-        <EmptyState message="No inbox mail received in the last 10 days." />
+      {!loading && !error && visibleThreads.length === 0 ? (
+        <EmptyState
+          message={restaurantOnly
+            ? "No restaurant-linked inbox mail received in the last 10 days. Unmatched emails are hidden."
+            : "No inbox mail received in the last 10 days."}
+        />
       ) : null}
-      {(data?.threads || []).length > 0 ? (
+      {visibleThreads.length > 0 ? (
         <div className="table-wrap">
           <table className="data">
             <thead>
@@ -187,7 +220,7 @@ export function OutreachInbox() {
               </tr>
             </thead>
             <tbody>
-              {(data?.threads || []).map((thread) => (
+              {visibleThreads.map((thread) => (
                 <InboxRow
                   key={thread.reply_message_id}
                   thread={thread}
@@ -199,7 +232,7 @@ export function OutreachInbox() {
           </table>
         </div>
       ) : null}
-      {data && data.total > 0 ? (
+      {data && visibleTotal > 0 ? (
         <div
           style={{
             display: "flex",
@@ -211,7 +244,7 @@ export function OutreachInbox() {
           }}
         >
           <span style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
-            Showing {Math.min(offset + 1, data.total)}–{Math.min(offset + data.threads.length, data.total)} of {data.total}
+            Showing {Math.min(offset + 1, visibleTotal)}–{Math.min(offset + visibleThreads.length, visibleTotal)} of {visibleTotal}
           </span>
           <div style={{ display: "flex", gap: "0.5rem" }}>
             <button
@@ -225,7 +258,7 @@ export function OutreachInbox() {
             <button
               className="btn btn-secondary"
               type="button"
-              disabled={offset + pageSize >= data.total || loading || refreshing}
+              disabled={offset + pageSize >= visibleTotal || loading || refreshing}
               onClick={() => setOffset((value) => value + pageSize)}
             >
               Next

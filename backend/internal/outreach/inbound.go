@@ -146,6 +146,9 @@ func (service *InboundService) capture(ctx context.Context, mailboxKey, gmailMes
 
 	inbound, err := service.reader.GetMessage(ctx, gmailMessageID)
 	if err != nil {
+		if errors.Is(err, emailprovider.ErrInboxMessageNotFound) {
+			return nil
+		}
 		return err
 	}
 	if inbound.ID == "" {

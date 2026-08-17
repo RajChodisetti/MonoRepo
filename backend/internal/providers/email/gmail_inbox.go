@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,6 +16,8 @@ import (
 
 	"github.com/rajchodisetti/restaurant-platform/backend/internal/platform/config"
 )
+
+var ErrInboxMessageNotFound = errors.New("gmail inbox message was not found")
 
 type InboxReader interface {
 	ProfileHistoryID(ctx context.Context) (string, error)
@@ -178,6 +181,10 @@ func (provider *gmailProvider) GetMessage(ctx context.Context, id string) (Inbox
 	query.Set("format", "full")
 	var parsed gmailMessagePayload
 	if err := provider.gmailGet(ctx, "/users/me/messages/"+url.PathEscape(id), query, &parsed); err != nil {
+		var apiErr *gmailInboxAPIError
+		if errors.As(err, &apiErr) && apiErr.statusCode == http.StatusNotFound {
+			return InboxMessage{}, fmt.Errorf("%w: %v", ErrInboxMessageNotFound, err)
+		}
 		return InboxMessage{}, err
 	}
 	headers := parsed.headerMap()
@@ -308,6 +315,15 @@ func headerAddress(value string) string {
 	return strings.ToLower(strings.TrimSpace(parsed.Address))
 }
 
+type gmailInboxAPIError struct {
+	statusCode int
+	message    string
+}
+
+func (err *gmailInboxAPIError) Error() string {
+	return fmt.Sprintf("gmail inbox API error (%d): %s", err.statusCode, err.message)
+}
+
 func (provider *gmailProvider) gmailGet(ctx context.Context, path string, query url.Values, dest any) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -351,7 +367,10 @@ func (provider *gmailProvider) gmailGet(ctx context.Context, path string, query 
 		if message == "" {
 			message = resp.Status
 		}
-		return fmt.Errorf("gmail inbox API error (%d): %s", resp.StatusCode, redactEmailAddresses(message))
+		return &gmailInboxAPIError{
+			statusCode: resp.StatusCode,
+			message:    redactEmailAddresses(message),
+		}
 	}
 	if dest == nil {
 		return nil

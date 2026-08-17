@@ -970,6 +970,7 @@ func (service *Service) ListInbox(
 	ctx context.Context,
 	principal auth.Principal,
 	unreadOnly bool,
+	restaurantOnly bool,
 	mailboxKey string,
 	limit int,
 	offset int,
@@ -981,7 +982,7 @@ func (service *Service) ListInbox(
 	if !ok || store == nil {
 		return InboxList{Threads: []InboxThread{}, Mailboxes: []InboxMailboxStatus{}}, nil
 	}
-	return store.ListInbox(ctx, unreadOnly, mailboxKey, limit, offset)
+	return store.ListInbox(ctx, unreadOnly, restaurantOnly, mailboxKey, limit, offset)
 }
 
 func (service *Service) ListRestaurantMessages(

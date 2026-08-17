@@ -1761,7 +1761,8 @@ paths:
       description: |
         Requires role `internal_admin`. Lists conversations received during the last
         10 days across every configured Google Workspace outreach mailbox. Messages
-        that cannot be matched to a restaurant are retained as unmatched threads.
+        that cannot be matched to a restaurant are retained as unmatched threads and
+        can be excluded with `restaurant_only=true`.
         Each summary's subject, text snippet, sender, recipient, received timestamp,
         and reply message id come from its latest received inbound message. Threads
         are ordered by that received timestamp first; unread count and later outbound
@@ -1778,6 +1779,12 @@ paths:
           schema:
             type: string
             maxLength: 200
+        - name: restaurant_only
+          in: query
+          description: When true, return only matched threads with a restaurant id and non-empty restaurant name.
+          schema:
+            type: boolean
+            default: false
         - name: limit
           in: query
           schema:
