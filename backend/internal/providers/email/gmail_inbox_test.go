@@ -2,6 +2,7 @@ package email
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -93,5 +94,51 @@ func TestGmailInboxPaginatesInboxAndHistoryAndFiltersLabels(t *testing.T) {
 	sentMessage, err := provider.GetMessage(context.Background(), "sent")
 	if err != nil || sentMessage.Inbox {
 		t.Fatalf("GetMessage(sent) = %#v, %v", sentMessage, err)
+	}
+}
+
+func TestGmailInboxClassifiesOnlyMessageGetNotFound(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/token":
+			_, _ = w.Write([]byte(`{"access_token":"access-token","token_type":"Bearer","expires_in":3600}`))
+		case "/gmail/v1/users/me/messages/gone":
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":{"code":404,"message":"Requested entity was not found.","status":"NOT_FOUND"}}`))
+		case "/gmail/v1/users/me/history":
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":{"code":404,"message":"Requested entity was not found.","status":"NOT_FOUND"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	created, err := newGmailProvider(
+		config.EmailConfig{},
+		config.GmailMailConfig{
+			MailboxEmail: "sales@example.com",
+			ClientID:     "client-id",
+			ClientSecret: "client-secret",
+			RefreshToken: "refresh-token",
+		},
+		server.Client(),
+		server.URL+"/gmail/v1",
+		server.URL+"/token",
+		false,
+	)
+	if err != nil {
+		t.Fatalf("newGmailProvider() error = %v", err)
+	}
+	provider := created.(*gmailProvider)
+
+	if _, err := provider.GetMessage(context.Background(), "gone"); !errors.Is(err, ErrInboxMessageNotFound) {
+		t.Fatalf("GetMessage(gone) error = %v, want ErrInboxMessageNotFound", err)
+	}
+	if _, _, err := provider.ListHistoryMessageIDs(context.Background(), "expired"); err == nil || errors.Is(err, ErrInboxMessageNotFound) {
+		t.Fatalf("ListHistoryMessageIDs(expired) error = %v, want an unclassified history error", err)
 	}
 }

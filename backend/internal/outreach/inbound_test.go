@@ -3,6 +3,8 @@ package outreach
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -66,24 +68,37 @@ func (store *inboundStoreStub) InsertMessage(_ context.Context, message Message)
 }
 
 type inboxReaderStub struct {
-	query    string
-	messages map[string]emailprovider.InboxMessage
+	query             string
+	messageIDs        []string
+	historyMessageIDs []string
+	nextHistoryID     string
+	messages          map[string]emailprovider.InboxMessage
+	messageErrors     map[string]error
 }
 
 func (*inboxReaderStub) ProfileHistoryID(context.Context) (string, error) {
 	return "history-10", nil
 }
 
-func (*inboxReaderStub) ListHistoryMessageIDs(context.Context, string) ([]string, string, error) {
+func (reader *inboxReaderStub) ListHistoryMessageIDs(context.Context, string) ([]string, string, error) {
+	if reader.historyMessageIDs != nil || reader.nextHistoryID != "" {
+		return reader.historyMessageIDs, reader.nextHistoryID, nil
+	}
 	return nil, "", errors.New("history should not be used during initial sync")
 }
 
 func (reader *inboxReaderStub) ListRecentMessageIDs(_ context.Context, query string) ([]string, error) {
 	reader.query = query
+	if reader.messageIDs != nil {
+		return reader.messageIDs, nil
+	}
 	return []string{"current", "sent", "old"}, nil
 }
 
 func (reader *inboxReaderStub) GetMessage(_ context.Context, id string) (emailprovider.InboxMessage, error) {
+	if err := reader.messageErrors[id]; err != nil {
+		return emailprovider.InboxMessage{}, err
+	}
 	return reader.messages[id], nil
 }
 
@@ -153,6 +168,74 @@ func TestInboundPollCapturesEveryRecentInboxMessageForItsMailbox(t *testing.T) {
 	message := store.inserted[0]
 	if message.MailboxKey != "sales-one" || !message.Unmatched || message.GmailMessageID != "current" || !message.ReceivedAt.Equal(now) {
 		t.Fatalf("inserted message = %#v", message)
+	}
+}
+
+func TestInboundHistoryPollSkipsMessageDeletedBeforeFetchAndAdvancesCursor(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	store := &inboundStoreStub{historyID: "history-10"}
+	reader := &inboxReaderStub{
+		historyMessageIDs: []string{"gone", "current"},
+		nextHistoryID:     "history-20",
+		messages: map[string]emailprovider.InboxMessage{
+			"current": {
+				ID: "current", ThreadID: "thread-current", Inbox: true,
+				From: "owner@example.com", To: "sales@example.com", Subject: "Question",
+				BodyText: "Hello", ReceivedAt: now,
+			},
+		},
+		messageErrors: map[string]error{
+			"gone": fmt.Errorf("provider fetch: %w", emailprovider.ErrInboxMessageNotFound),
+		},
+	}
+	service := NewInboundService(
+		store,
+		nil,
+		reader,
+		"sales-one",
+		config.OutreachConfig{InboundEnabled: true},
+		nil,
+	)
+
+	if err := service.Poll(context.Background()); err != nil {
+		t.Fatalf("Poll() error = %v", err)
+	}
+	if store.historyID != "history-20" || store.resultErr != nil {
+		t.Fatalf("sync state = %#v, want successful advanced cursor", store)
+	}
+	if len(store.inserted) != 1 || store.inserted[0].GmailMessageID != "current" {
+		t.Fatalf("inserted = %#v, want only the available message", store.inserted)
+	}
+}
+
+func TestInboundPollKeepsCursorOnMessageFetchFailure(t *testing.T) {
+	t.Parallel()
+
+	store := &inboundStoreStub{}
+	reader := &inboxReaderStub{
+		messageIDs: []string{"failed"},
+		messages:   map[string]emailprovider.InboxMessage{},
+		messageErrors: map[string]error{
+			"failed": errors.New("gmail unavailable"),
+		},
+	}
+	service := NewInboundService(
+		store,
+		nil,
+		reader,
+		"sales-one",
+		config.OutreachConfig{InboundEnabled: true},
+		nil,
+	)
+
+	err := service.Poll(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "gmail unavailable") {
+		t.Fatalf("Poll() error = %v, want fetch failure", err)
+	}
+	if store.historyID != "" || store.resultErr == nil {
+		t.Fatalf("sync state = %#v, want unchanged cursor and recorded failure", store)
 	}
 }
 

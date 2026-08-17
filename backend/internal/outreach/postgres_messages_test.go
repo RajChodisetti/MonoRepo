@@ -93,3 +93,23 @@ func TestInboxThreadsUseLatestReceivedMessageAndOrderByItsTimestamp(t *testing.T
 		}
 	}
 }
+
+func TestInboxThreadsRestaurantOnlyFilterKeepsNamedMatchedRestaurants(t *testing.T) {
+	t.Parallel()
+
+	for name, query := range map[string]string{
+		"count": inboxThreadsCountQuery,
+		"list":  inboxThreadsListQuery,
+	} {
+		for _, predicate := range []string{
+			"NOT $3",
+			"NOT unmatched",
+			"restaurant_id IS NOT NULL",
+			"btrim(restaurant_name) <> ''",
+		} {
+			if !strings.Contains(query, predicate) {
+				t.Fatalf("%s query is missing restaurant-only predicate %q: %s", name, predicate, query)
+			}
+		}
+	}
+}
