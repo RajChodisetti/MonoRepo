@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { RestaurantContent } from "@/data/types/restaurant";
 import TemplateSwitchButton from "@/components/TemplateSwitchButton";
@@ -16,6 +16,7 @@ const LINKS = [
 export default function Navigation({ restaurant }: { restaurant: RestaurantContent }) {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 40);
@@ -23,6 +24,17 @@ export default function Navigation({ restaurant }: { restaurant: RestaurantConte
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      menuButtonRef.current?.focus();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [open]);
 
   return (
     <header
@@ -35,12 +47,13 @@ export default function Navigation({ restaurant }: { restaurant: RestaurantConte
       <nav className="mx-auto flex h-[72px] max-w-6xl items-center justify-between px-6">
         <a
           href="#hero"
-          className="font-display text-xl tracking-wide text-[#f7f0e6] drop-shadow-sm"
+          className="font-display min-w-0 max-w-[min(48vw,18rem)] truncate text-xl tracking-wide text-[#f7f0e6] drop-shadow-sm"
+          title={restaurant.name}
         >
           {restaurant.name}
         </a>
 
-        <ul className="hidden items-center gap-8 md:flex">
+        <ul className="hidden items-center gap-8 min-[1100px]:flex">
           {LINKS.map((link) => (
             <li key={link.href}>
               <a
@@ -65,31 +78,35 @@ export default function Navigation({ restaurant }: { restaurant: RestaurantConte
         </ul>
 
         <button
+          ref={menuButtonRef}
           type="button"
-          className="flex flex-col gap-1.5 md:hidden"
-          aria-label="Open menu"
+          className="flex h-11 w-11 flex-col items-center justify-center gap-1.5 min-[1100px]:hidden"
+          aria-label={open ? "Close navigation menu" : "Open navigation menu"}
+          aria-controls="cinematic-mobile-menu"
+          aria-expanded={open}
           onClick={() => setOpen((v) => !v)}
         >
-          <span className="block h-0.5 w-6 bg-cream" />
-          <span className="block h-0.5 w-6 bg-cream" />
-          <span className="block h-0.5 w-6 bg-cream" />
+          <span className="block h-0.5 w-6 bg-[#f7f0e6]" />
+          <span className="block h-0.5 w-6 bg-[#f7f0e6]" />
+          <span className="block h-0.5 w-6 bg-[#f7f0e6]" />
         </button>
       </nav>
 
       <AnimatePresence>
         {open && (
           <motion.div
+            id="cinematic-mobile-menu"
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
-            className="border-t border-cream/10 bg-charcoal/98 px-6 py-4 md:hidden"
+            className="border-t border-[#f7f0e6]/10 bg-[#10100e]/98 px-6 py-4 min-[1100px]:hidden"
           >
             {LINKS.map((link) => (
               <a
                 key={link.href}
                 href={link.href}
                 onClick={() => setOpen(false)}
-                className="block border-b border-cream/10 py-3 text-sm uppercase tracking-widest text-cream/70"
+                className="block border-b border-[#f7f0e6]/10 py-3 text-sm uppercase tracking-widest text-[#f7f0e6]/70"
               >
                 {link.label}
               </a>
@@ -99,7 +116,7 @@ export default function Navigation({ restaurant }: { restaurant: RestaurantConte
             </div>
             <a
               href={restaurant.primaryCTA.href}
-              className="mt-4 block rounded bg-brass py-3 text-center text-sm font-semibold uppercase tracking-widest text-charcoal"
+              className="mt-4 block rounded bg-[#b88a44] py-3 text-center text-sm font-semibold uppercase tracking-widest text-[#10100e]"
             >
               {restaurant.primaryCTA.label}
             </a>

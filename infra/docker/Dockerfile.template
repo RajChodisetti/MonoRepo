@@ -7,7 +7,7 @@ RUN npm ci
 
 COPY template ./
 
-ARG TEMPLATE=2
+ARG TEMPLATE=3
 ARG NEXT_PUBLIC_API_URL=https://api.tuvisolutions.com
 ARG NEXT_PUBLIC_VOICE_AGENT_URL=https://voice.tuvisolutions.com
 ARG NEXT_PUBLIC_MEDIA_BASE_URL=

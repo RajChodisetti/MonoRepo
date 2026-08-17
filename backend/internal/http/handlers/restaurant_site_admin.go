@@ -50,9 +50,9 @@ func (handler *RestaurantSiteAdminHandler) Get(w http.ResponseWriter, r *http.Re
 	}
 
 	templates := []map[string]any{
-		{"id": "1", "name": "Cinematic", "url": generatedSiteURL(handler.publicWebURL, summary.ID.String(), summary.Index, "1")},
-		{"id": "2", "name": "Aurora", "url": generatedSiteURL(handler.publicWebURL, summary.ID.String(), summary.Index, "2")},
 		{"id": "3", "name": "Elysian reservations", "url": generatedSiteURL(handler.publicWebURL, summary.ID.String(), summary.Index, "3")},
+		{"id": "2", "name": "Aurora", "url": generatedSiteURL(handler.publicWebURL, summary.ID.String(), summary.Index, "2")},
+		{"id": "1", "name": "Cinematic", "url": generatedSiteURL(handler.publicWebURL, summary.ID.String(), summary.Index, "1")},
 	}
 	handler.writeJSON(w, http.StatusOK, map[string]any{
 		"restaurant_id":   summary.ID,

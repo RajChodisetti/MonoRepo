@@ -28,8 +28,10 @@ Run commands from the repository root unless noted otherwise.
 | Restaurant template | `cd template && npm run dev` | Public restaurant/demo renderer. |
 | Voice agent | `cd voice-sales-agent && make dev` | Corporate and restaurant browser voice runtime. |
 
-OCR is retired. There is no OCR service, one-shot OCR job, OCR cron, or OCR
-provider configuration.
+Restaurant media/menu OCR is retired from the supported and deployed stack;
+there is no restaurant OCR service, one-shot job, cron, or provider
+configuration. The isolated `ocr-electrical-poc/` Gemini experiment is not a
+production restaurant service.
 
 ## Stack commands
 

@@ -7,7 +7,29 @@ and a public digital-footprint review.
 ## Prerequisites
 
 - Go 1.26 or newer
+- Node.js 22 for the five frontend build units, including the local Andre admin (`.nvmrc`)
+- Python 3.12 for durable ingestion and voice runtime parity (`.python-version`)
 - Docker Desktop (for local PostgreSQL)
+
+## AI-assisted development
+
+Repository instructions are scoped by subsystem. Before changing code, run:
+
+```bash
+rtk git status --short
+rtk make agent-context AGENT_PATHS="backend/internal/demos template/src"
+```
+
+Use `AGENT_PATHS="--changed"` to route existing worktree changes. The command
+prints the applicable `AGENTS.md` files, cross-system consumers, and exact
+checks. See [`docs/ai/README.md`](docs/ai/README.md) for the workflow and
+[`docs/ai/DEPENDENCY_MAP.md`](docs/ai/DEPENDENCY_MAP.md) for contract seams.
+
+Validate the instruction hierarchy itself with:
+
+```bash
+rtk make agent-context-check
+```
 
 ## Local Setup
 
@@ -153,6 +175,7 @@ Current migrations:
 - `000050` through `000051` — reconciled outreach enrollment and unified multi-mailbox inbox
 - `000052_outreach_email_credentials` — encrypted admin-managed Gmail account registry
 - `000053_outreach_placeholders_signature` — inactive personalized template draft and editable sender signature
+- `000054_outreach_send_schedule` — durable administrator-managed Sydney send window
 
 **Rollback notes:**
 
@@ -163,7 +186,7 @@ Current migrations:
 ### App
 
 ```bash
-make api      # run the Go net/http API on HTTP_ADDR
+make api      # run the Go API (Fiber process adapting the net/http router)
 make worker   # run the Go worker with the PostgreSQL-backed job queue
 make test     # run all backend tests
 make fmt      # format backend Go files
@@ -340,7 +363,7 @@ Default fixture credentials:
 The API starts only after:
 
 1. Database connection succeeds (with retry)
-2. Every discovered migration through `000043` is verified (`VerifyStartup`)
+2. Every discovered migration through `000054` is verified (`VerifyStartup`)
 
 On startup you should see logs like `database_connected_successfully`.
 
@@ -405,5 +428,5 @@ or update Google Calendar.
 
 - [Service inventory](docs/SERVICES.md) — ports, start commands, one-shot jobs, and service interlinks
 - [Today's work log (2026-06-22)](docs/work-log/2026-06-22-backend-foundation-session.md) — detailed session notes
-- [Phase 1 technical backlog](PHASE1_TECHNICAL_BACKLOG.md) — tickets and acceptance criteria
+- [Phase 1 technical backlog](docs/phase1/PHASE1_TECHNICAL_BACKLOG.md) — tickets and acceptance criteria
 - [AGENTS.md](AGENTS.md) — coding-agent operating contract

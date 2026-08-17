@@ -22,7 +22,7 @@ export default function CinematicTemplate({
   const jsonLd = buildRestaurantJsonLd(restaurant);
 
   return (
-    <>
+    <div data-template="1">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
@@ -58,6 +58,6 @@ export default function CinematicTemplate({
       </main>
       <Footer restaurant={restaurant} />
       <MobileStickyBar restaurant={restaurant} />
-    </>
+    </div>
   );
 }
