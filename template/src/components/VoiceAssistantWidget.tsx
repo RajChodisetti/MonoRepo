@@ -145,7 +145,9 @@ export default function VoiceAssistantWidget({
       ? "border border-red-400/40 bg-red-500/15 text-red-100"
       : "border border-red-400/35 bg-red-950/50 text-red-100";
   const fabPositionClass =
-    isElysian ? "bottom-24 right-6 md:bottom-24" : "bottom-20 right-4 md:bottom-6 md:right-6";
+    isElysian
+      ? "bottom-5 right-4 sm:right-5 md:bottom-8 md:right-6"
+      : "bottom-20 right-4 md:bottom-6 md:right-6";
 
   useEffect(() => {
     if (open) void prefetchStatus();
@@ -289,7 +291,7 @@ export default function VoiceAssistantWidget({
         {open && (
           <div
             ref={panelRef}
-            className={`pointer-events-auto relative mb-3 w-[min(440px,calc(100vw-2rem))] overflow-hidden rounded-2xl p-5 ${panelClass}`}
+            className={`pointer-events-auto relative mb-3 max-h-[calc(100svh-7rem)] w-[min(440px,calc(100vw-1.5rem))] overflow-y-auto rounded-2xl p-5 ${panelClass}`}
             role="dialog"
             aria-label="AI voice assistant"
           >

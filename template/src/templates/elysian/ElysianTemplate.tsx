@@ -44,49 +44,51 @@ export default function ElysianTemplate({ restaurant }: { restaurant: Restaurant
   useCounterAnimation(rootRef);
 
   return (
-    <div
-      ref={rootRef}
-      className="elysian-root"
-      data-theme={theme}
-      style={{
-        fontFamily: "var(--font-elysian-body), Poppins, sans-serif",
-      }}
-    >
-      <ElysianLoader name={restaurant.name} onDone={() => setHeroLoaded(true)} />
-      <ElysianCursor />
-      <ElysianScrollProgress width={progress} />
-      <ElysianNav
-        name={content.hero.name}
-        nameAccent={content.hero.nameAccent}
-        scrolled={navScrolled}
-        theme={theme}
-        onToggleTheme={toggleTheme}
-        showDishes={content.show.dishes}
-      />
+    <div data-template="3">
+      <div
+        ref={rootRef}
+        className="elysian-root"
+        data-theme={theme}
+        style={{
+          fontFamily: "var(--font-elysian-body), Poppins, sans-serif",
+        }}
+      >
+        <ElysianLoader name={restaurant.name} onDone={() => setHeroLoaded(true)} />
+        <ElysianCursor />
+        <ElysianScrollProgress width={progress} />
+        <ElysianNav
+          name={content.hero.name}
+          nameAccent={content.hero.nameAccent}
+          scrolled={navScrolled}
+          theme={theme}
+          onToggleTheme={toggleTheme}
+          showDishes={content.show.dishes}
+        />
 
-      <main id="home">
-        <ElysianHero hero={content.hero} loaded={heroLoaded} />
-        <ElysianAbout about={content.about} />
-        {content.show.dishes ? <ElysianDishes dishes={content.dishes} /> : null}
-        {content.show.menu ? (
-          <ElysianMenu menuItems={content.menuItems} menuTabs={content.menuTabs} />
-        ) : null}
-        {content.show.testimonials ? <ElysianTestimonials reviews={content.reviews} /> : null}
-        {content.show.gallery ? <ElysianGallery images={content.gallery} /> : null}
-        <ElysianReservation restaurant={restaurant} />
-        {content.show.why ? <ElysianWhy cards={content.experienceCards} /> : null}
-        {content.show.stats ? <ElysianStats stats={content.stats} /> : null}
-        {content.show.faq ? <ElysianFAQ items={content.faq} /> : null}
-        <ElysianContact contact={content.contact} name={restaurant.name} showMap={content.show.map} />
-      </main>
+        <main id="home">
+          <ElysianHero hero={content.hero} loaded={heroLoaded} />
+          <ElysianAbout about={content.about} />
+          {content.show.dishes ? <ElysianDishes dishes={content.dishes} /> : null}
+          {content.show.menu ? (
+            <ElysianMenu menuItems={content.menuItems} menuTabs={content.menuTabs} />
+          ) : null}
+          {content.show.testimonials ? <ElysianTestimonials reviews={content.reviews} /> : null}
+          {content.show.gallery ? <ElysianGallery images={content.gallery} /> : null}
+          <ElysianReservation restaurant={restaurant} />
+          {content.show.why ? <ElysianWhy cards={content.experienceCards} /> : null}
+          {content.show.stats ? <ElysianStats stats={content.stats} /> : null}
+          {content.show.faq ? <ElysianFAQ items={content.faq} /> : null}
+          <ElysianContact contact={content.contact} name={restaurant.name} showMap={content.show.map} />
+        </main>
 
-      <ElysianFooter
-        name={content.hero.name}
-        nameAccent={content.hero.nameAccent}
-        footer={content.footer}
-        showInsta={content.show.insta}
-      />
-      <ElysianScrollTop visible={scrollTopVisible} />
+        <ElysianFooter
+          name={content.hero.name}
+          nameAccent={content.hero.nameAccent}
+          footer={content.footer}
+          showInsta={content.show.insta}
+        />
+        <ElysianScrollTop visible={scrollTopVisible} />
+      </div>
     </div>
   );
 }

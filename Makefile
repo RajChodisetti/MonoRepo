@@ -1,4 +1,4 @@
-.PHONY: api worker test fmt db-up db-down db-reset migrate-up migrate-down setup dev seed-admin seed-demo-fixture seed-restaurants-data import-outreach import-restaurants-outreach ingest-daily openapi swagger up down logs start stop-all voice-up voice-down voice-logs andre-voice-dev andre-voice-install tuvi-website-dev tuvi-website-build restaurant-services-catalog-dev restaurant-services-catalog-build
+.PHONY: api worker test fmt db-up db-down db-reset migrate-up migrate-down setup dev seed-admin seed-demo-fixture seed-restaurants-data import-outreach import-restaurants-outreach ingest-daily openapi swagger up down logs start stop-all voice-up voice-down voice-logs andre-voice-dev andre-voice-install tuvi-website-dev tuvi-website-build restaurant-services-catalog-dev restaurant-services-catalog-build agent-context agent-context-check
 
 GO ?= go
 COMPOSE_FILE ?= infra/docker/docker-compose.yml
@@ -10,6 +10,15 @@ TUVI_WEBSITE_DIR ?= web
 OPENAPI_SPEC ?= docs/openapi/openapi.yaml
 OPENAPI_DIR ?= docs/openapi
 SWAGGER_PORT ?= 8081
+AGENT_PATHS ?=
+
+# AGENT_PATHS is for whitespace-free paths; invoke scripts/agent-context.sh
+# directly when a path contains spaces so shell argument boundaries are kept.
+agent-context:
+	@./scripts/agent-context.sh $(AGENT_PATHS)
+
+agent-context-check:
+	@./scripts/check-agent-context.sh
 
 api:
 	$(GO) run ./backend/cmd/api

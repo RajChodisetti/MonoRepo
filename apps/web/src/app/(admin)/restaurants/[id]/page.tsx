@@ -657,7 +657,7 @@ function RestaurantDetailInner() {
             <ol style={{ margin: 0, paddingLeft: "1.2rem", color: "var(--muted)", lineHeight: 1.65 }}>
               <li>
                 <strong style={{ color: "var(--ink)" }}>View personalized website</strong> opens the
-                selected Cinematic, Aurora, or Elysian restaurant website and starts an admin-preview session clock.
+                selected Elysian, Aurora, or Cinematic restaurant website and starts an admin-preview session clock.
               </li>
               <li>
                 <strong style={{ color: "var(--ink)" }}>Inspect payload</strong> shows the exact

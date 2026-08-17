@@ -28,7 +28,7 @@ const nextConfig: NextConfig = {
     root: path.resolve(process.cwd(), ".."),
   },
   env: {
-    TEMPLATE: process.env.TEMPLATE ?? "1",
+    TEMPLATE: process.env.TEMPLATE ?? "3",
   },
   images: {
     remotePatterns: [

@@ -1,12 +1,13 @@
 export type TemplateId = "1" | "2" | "3";
 
-const TEMPLATE_CYCLE: TemplateId[] = ["1", "2", "3"];
+const TEMPLATE_CYCLE: TemplateId[] = ["3", "2", "1"];
 
 export function getActiveTemplate(): TemplateId {
-  const raw = process.env.TEMPLATE ?? "1";
+  const raw = process.env.TEMPLATE ?? "3";
+  if (raw === "1") return "1";
   if (raw === "2") return "2";
   if (raw === "3") return "3";
-  return "1";
+  return "3";
 }
 
 export function parseTemplateId(value?: string | null): TemplateId | null {
@@ -45,9 +46,9 @@ export function getTemplateSwitchCopy(current: TemplateId) {
     return {
       ...shared,
       eyebrow: "Same restaurant, new look",
-      title: "Preview the Aurora design",
+      title: "Preview the Elysian design",
       description:
-        "Keep the same restaurant details and photos in a futuristic glass design with a bold visual feel.",
+        "Keep the same restaurant details and photos in a premium reservation-focused design.",
       cta: `Preview ${targetLabel}`,
     };
   }
@@ -56,9 +57,9 @@ export function getTemplateSwitchCopy(current: TemplateId) {
     return {
       ...shared,
       eyebrow: "Same restaurant, new look",
-      title: "Preview the Elysian design",
+      title: "Preview the Cinematic design",
       description:
-        "Keep the same restaurant details and photos in a premium gold-and-black dining design.",
+        "Keep the same restaurant details and photos in a warm editorial design with elegant typography.",
       cta: `Preview ${targetLabel}`,
     };
   }
@@ -67,9 +68,9 @@ export function getTemplateSwitchCopy(current: TemplateId) {
     return {
       ...shared,
       eyebrow: "Same restaurant, new look",
-      title: "Preview the Cinematic design",
+      title: "Preview the Aurora design",
       description:
-        "Keep the same restaurant details and photos in a warm editorial design with elegant typography.",
+        "Keep the same restaurant details and photos in a futuristic glass design with a bold visual feel.",
       cta: `Preview ${targetLabel}`,
     };
   }

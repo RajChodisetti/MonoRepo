@@ -28,7 +28,7 @@ export default function AuroraTemplate({
   const jsonLd = buildAuroraJsonLd(restaurant);
 
   return (
-    <>
+    <div data-template="2">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
@@ -52,6 +52,6 @@ export default function AuroraTemplate({
       </main>
       <AuroraFooter restaurant={restaurant} />
       <AuroraMobileBar restaurant={restaurant} />
-    </>
+    </div>
   );
 }

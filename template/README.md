@@ -4,9 +4,9 @@ Premium Next.js templates sharing the same restaurant payload, switched via `TEM
 
 | `TEMPLATE` | Name | Style |
 |------------|------|-------|
-| `1` (default) | **Cinematic** | Warm charcoal/brass, scroll-video storytelling |
+| `1` | **Cinematic** | Warm charcoal/brass, scroll-video storytelling |
 | `2` | **Aurora** | Futuristic navy/purple, glassmorphism, SaaS-tech motion |
-| `3` | **Elysian** | Premium black/gold reservation-led dining |
+| `3` (default) | **Elysian** | Premium black/gold reservation-led dining |
 
 ## Quick start
 
@@ -14,9 +14,14 @@ Premium Next.js templates sharing the same restaurant payload, switched via `TEM
 cd MonoRepo/template
 npm install
 
-# Template 1 — Cinematic
+# Template 3 — Elysian (default)
 npm run dev
 # http://localhost:3000/?id=0
+
+# Template 1 — Cinematic
+npm run dev:cinematic
+# or: TEMPLATE=1 npm run dev
+# http://localhost:3000/?id=0&template=1
 
 # Template 2 — Aurora
 npm run dev:aurora
@@ -35,7 +40,7 @@ Set in **MonoRepo root** `.env` and/or **`template/.env.local`**:
 
 ```bash
 # 1 = Cinematic, 2 = Aurora, 3 = Elysian
-TEMPLATE=1
+TEMPLATE=3
 ```
 
 Copy from [`template/.env.example`](.env.example). MonoRepo [`.env.example`](../.env.example) also documents `TEMPLATE`.
@@ -48,6 +53,10 @@ Templates are API-only. Use `?id=N` for the public API index,
 `restaurant_id=<uuid>` for an admin preview, or the signed `slug` + `token`
 pair for a published demo. An API miss fails closed and never falls back to a
 bundled scrape fixture.
+
+The Elysian-first order applies to public and admin demo previews. Approved
+outreach sequences own their links separately; changing those customer-facing
+destinations requires its own reviewed sequence decision.
 
 | URL | Restaurant |
 |-----|------------|
@@ -82,7 +91,7 @@ template/
 ## Build
 
 ```bash
-npm run build              # uses TEMPLATE from env (default 1)
+npm run build              # uses TEMPLATE from env (default 3)
 npm run build:cinematic    # TEMPLATE=1
 npm run build:aurora       # TEMPLATE=2
 npm run build:elysian      # TEMPLATE=3

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import TemplateSwitchButton from "@/components/TemplateSwitchButton";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 
 const LINKS = [
   { href: "#about", label: "About" },
@@ -28,7 +29,22 @@ export default function ElysianNav({
   showDishes: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const isDrawer = useMediaQuery("(max-width: 980px)");
   const links = showDishes ? LINKS : LINKS.filter((l) => l.href !== "#dishes");
+
+  useEffect(() => {
+    if (!open || !isDrawer) return;
+    closeButtonRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      menuButtonRef.current?.focus();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [isDrawer, open]);
 
   return (
     <header className={`navbar${scrolled ? " scrolled" : ""}`} id="navbar">
@@ -37,7 +53,25 @@ export default function ElysianNav({
           {name}
           {nameAccent ? <span>{nameAccent}</span> : null}
         </a>
-        <nav className={`nav-links${open ? " open" : ""}`} id="navLinks">
+        <nav
+          className={`nav-links${open ? " open" : ""}`}
+          id="navLinks"
+          aria-label="Primary"
+          aria-hidden={isDrawer && !open ? true : undefined}
+          inert={isDrawer && !open ? true : undefined}
+        >
+          <button
+            ref={closeButtonRef}
+            type="button"
+            className="menu-close"
+            aria-label="Close navigation menu"
+            onClick={() => {
+              setOpen(false);
+              menuButtonRef.current?.focus();
+            }}
+          >
+            <span aria-hidden="true">×</span>
+          </button>
           {links.map((l) => (
             <a
               key={l.href}
@@ -84,10 +118,13 @@ export default function ElysianNav({
           </a>
           <TemplateSwitchButton variant="elysian" />
           <button
+            ref={menuButtonRef}
             type="button"
             className={`menu-toggle${open ? " active" : ""}`}
             id="menuToggle"
-            aria-label="Open navigation menu"
+            aria-label={open ? "Close navigation menu" : "Open navigation menu"}
+            aria-controls="navLinks"
+            aria-expanded={open}
             onClick={() => setOpen((v) => !v)}
           >
             <span />

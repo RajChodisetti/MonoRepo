@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { RestaurantContent } from "@/data/types/restaurant";
 import TemplateSwitchButton from "@/components/TemplateSwitchButton";
@@ -15,6 +15,7 @@ const LINKS = [
 export default function AuroraNav({ restaurant }: { restaurant: RestaurantContent }) {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
@@ -22,6 +23,17 @@ export default function AuroraNav({ restaurant }: { restaurant: RestaurantConten
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      menuButtonRef.current?.focus();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [open]);
 
   return (
     <header
@@ -58,9 +70,12 @@ export default function AuroraNav({ restaurant }: { restaurant: RestaurantConten
         </ul>
 
         <button
+          ref={menuButtonRef}
           type="button"
-          className="md:hidden"
-          aria-label="Menu"
+          className="flex h-11 w-11 flex-col items-center justify-center md:hidden"
+          aria-label={open ? "Close navigation menu" : "Open navigation menu"}
+          aria-controls="aurora-mobile-menu"
+          aria-expanded={open}
           onClick={() => setOpen((v) => !v)}
         >
           <span className="block h-0.5 w-6 bg-white" />
@@ -71,6 +86,7 @@ export default function AuroraNav({ restaurant }: { restaurant: RestaurantConten
       <AnimatePresence>
         {open && (
           <motion.div
+            id="aurora-mobile-menu"
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}

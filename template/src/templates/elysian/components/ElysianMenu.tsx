@@ -60,7 +60,11 @@ export default function ElysianMenu({
 
         <div className="menu-grid" id="menuGrid">
           {filtered.map((item, i) => (
-            <div key={`${item.name}-${i}`} className="menu-item" style={{ animationDelay: `${i * 0.05}s` }}>
+            <div
+              key={`${item.name}-${i}`}
+              className={`menu-item ${item.image ? "has-image" : "no-image"}`}
+              style={{ animationDelay: `${i * 0.05}s` }}
+            >
               {item.image ? (
                 <ElysianImage
                   src={item.image}

@@ -29,6 +29,8 @@ type Service struct {
 	demoTokenTTL        time.Duration
 }
 
+const preferredPreviewTemplateID = "3"
+
 func NewService(
 	repo Repository,
 	demosRepo demos.Repository,
@@ -144,7 +146,7 @@ func (service *Service) ListDemoLinks(ctx context.Context, principal auth.Princi
 			UpdatedAt:  site.UpdatedAt,
 		}
 		if token, tokenErr := service.repo.GetLatestDemoTokenByDemoSiteID(ctx, site.ID); tokenErr == nil && token != "" {
-			link.PreviewURL = buildTokenGatedDemoPreviewURL(service.publicWebURL, site.Slug, token, "1")
+			link.PreviewURL = buildTokenGatedDemoPreviewURL(service.publicWebURL, site.Slug, token, preferredPreviewTemplateID)
 		}
 		links = append(links, link)
 	}

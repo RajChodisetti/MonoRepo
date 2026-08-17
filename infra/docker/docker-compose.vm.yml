@@ -171,7 +171,7 @@ services:
       context: ../..
       dockerfile: infra/docker/Dockerfile.template
       args:
-        TEMPLATE: ${TEMPLATE:-2}
+        TEMPLATE: ${TEMPLATE:-3}
         NEXT_PUBLIC_API_URL: ${TEMPLATE_NEXT_PUBLIC_API_URL:-https://api.tuvisolutions.com}
         NEXT_PUBLIC_VOICE_AGENT_URL: ${TEMPLATE_NEXT_PUBLIC_VOICE_AGENT_URL:-https://voice.tuvisolutions.com}
         NEXT_PUBLIC_MEDIA_BASE_URL: ${TEMPLATE_MEDIA_PUBLIC_BASE_URL:-}
@@ -179,7 +179,7 @@ services:
       - path: ${TUVI_ENV_DIR:-/opt/tuvi/env}/template.env
         required: false
     environment:
-      TEMPLATE: ${TEMPLATE:-2}
+      TEMPLATE: ${TEMPLATE:-3}
       NEXT_PUBLIC_API_URL: ${TEMPLATE_NEXT_PUBLIC_API_URL:-https://api.tuvisolutions.com}
       NEXT_PUBLIC_VOICE_AGENT_URL: ${TEMPLATE_NEXT_PUBLIC_VOICE_AGENT_URL:-https://voice.tuvisolutions.com}
       NEXT_PUBLIC_MEDIA_BASE_URL: ${TEMPLATE_MEDIA_PUBLIC_BASE_URL:-}
