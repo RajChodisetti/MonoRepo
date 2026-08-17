@@ -4068,3 +4068,78 @@ Current source is
 `/opt/tuvi/backups/config/env-pre-13a0a47-20260817T065543Z.tar.gz`. Explicit
 rollback image tags and the prior release remain available; rollback needs no
 migration down or database restore and must leave the worker untouched.
+
+## 2026-08-17 — Gmail inbox recovery and restaurant-only filtering deployed
+
+**Role / Delivery:** Diagnosed the production `contact` inbox failure from
+read-only logs and database state. Gmail history listing succeeded, but two
+message IDs disappeared before `users.messages.get`; each 404 failed the whole
+poll, prevented cursor advancement, and retried the same tombstones every 15
+seconds. The provider now classifies only a message-fetch 404 as a missing
+message, the inbound worker skips that tombstone and advances the history
+cursor, and history/auth/rate-limit/server errors remain visible and retryable.
+
+The inbox API now accepts `restaurant_only=true` and applies the named,
+matched-restaurant predicate to both page and count queries. The admin defaults
+that option on, labels it as hiding unmatched emails, and applies the same
+predicate locally so a stale or failed refresh cannot reveal unmatched rows.
+PR #5 merged to canonical `master` as
+`8c34503e72126aefb032d5da067c2e38251ecb8f`; the personal mirror was
+fast-forwarded to the same revision. The original dirty worktree remained
+untouched.
+
+**Checks Run:** Targeted provider/outreach/handler tests passed 211 tests; the
+full backend passed 608 tests across 46 packages. Go vet and command builds,
+admin lint, nonincremental TypeScript, both local and containerized 14-route
+production builds, OpenAPI validation, and diff checks passed. OpenAPI retained
+11 pre-existing warnings. Regression coverage distinguishes message-get 404
+from history-list 404, verifies the exact history-delta tombstone/cursor path,
+keeps non-404 failures retryable, and verifies identical filtered page/count
+predicates. Two independent reviews approved the final implementation and its
+fail-closed UI behavior. Both GitHub checks passed.
+
+QA first ran the exact PR head `ff5f6344f9dc8f17825256bef819b4be8471f8d4`
+from archive SHA-256
+`cca5b3b030719eeb09a5baae2435ec8799bfd71de31c8d32c74df53b13662875`.
+The API canary and fixed QA API passed schema `54`, health, public-read,
+authentication-boundary, revision, restart, and fatal-log checks. The previous
+QA container remains stopped as
+`tuvi-qa-api-api-rollback-13a0a47-20260817T160232Z`. Because QA has no durable
+worker/admin topology, the admin image was tested in an isolated canary and
+then stopped; no Gmail credential or provider probe was added.
+
+Production was rebuilt from merge archive SHA-256
+`cef22341c7bc3a2fcc19b257873396b7a7c767ae26ad2a4d2e1ea3b7524610a3`
+and promoted one service at a time with immutable image tags and `--no-deps`.
+API and worker use
+`sha256:3f2a189caaf517815ee55e33b1629363990f1f8b47f4cef1432dd36a04efa370`;
+admin uses
+`sha256:c8880c576f8f2ecb05bc65a7172d7ed6e3cc3ccf634daad874686ed575cb90e2`.
+All three report the merge revision, run with zero restarts, and have healthy
+HTTP/log boundaries.
+
+**Business Value / Plan Fit:** The persistent `contact` outage cleared on the
+first new worker poll. All six configured inboxes successfully polled after the
+worker start with zero stored errors. The final 10-day snapshot contained 364
+inbound threads: 6 named restaurant-linked threads shown by default and 358
+unmatched/unnamed threads hidden unless an operator deliberately disables the
+filter. Pagination and totals now describe the selected server-side view.
+
+**Risks / Approval State:** The worker rollout was intentionally required for
+this fix. Immediately before stopping it and again while stopped, a read-only
+gate proved one future queued bulk job, no running job, no sending/unknown
+attempt, no sending campaign, and no due/in-flight sender health check. After
+promotion, the control and durable job fingerprints were unchanged; totals
+remained 21 sent and 2 failed. Deployment did not send email, change the job or
+control, run a migration, or invoke a provider health action. Schema remained
+`54`.
+
+Current source is
+`/opt/tuvi/releases/monorepo-8c34503-gmail-inbox-20260817T161057Z`.
+Validated mode-`0600` backups are
+`/opt/tuvi/backups/qa-postgres/qa-pre-ff5f634-20260817T160232Z.dump`,
+`/opt/tuvi/backups/postgres/monorepo-pre-8c34503-20260817T161057Z.dump`, and
+`/opt/tuvi/backups/config/env-pre-8c34503-20260817T161057Z.tar.gz`. Immutable
+rollback tags retain the prior `13a0a47` API/admin and `4d6ea73` worker images;
+the release-local rollback override recreates only the affected service and
+requires no database restore or migration down.
