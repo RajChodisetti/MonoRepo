@@ -4143,3 +4143,8 @@ Validated mode-`0600` backups are
 rollback tags retain the prior `13a0a47` API/admin and `4d6ea73` worker images;
 the release-local rollback override recreates only the affected service and
 requires no database restore or migration down.
+
+
+## 2026-10-01 — Project architecture overviews
+
+Added folder-level READMEs for the real-time voice runtime and restaurant report engine, including Mermaid architecture diagrams and source maps. Clarified default deterministic report summaries and the AI-assisted website-analysis boundary. Documentation only; no runtime or deployment changes. Validated relative source links and whitespace; no paid provider calls or runtime smoke tests were needed.
