@@ -13,16 +13,21 @@ name, the current runtime is **inbound-only**; `POST /call` returns 403.
 
 ```mermaid
 flowchart TD
-    Browser["Browser: PCM16 + JSON events"] --> Runtime["FastAPI / Pipecat session"]
-    Phone["Inbound Twilio stream"] --> Runtime
-    Runtime --> Speech["Deepgram STT / OpenAI LLM / Cartesia TTS"]
-    Speech --> Runtime
-    Runtime --> Tools["Tool dispatcher"]
+    Browser["Browser: PCM16 + JSON events"] --> Transport["FastAPI / Pipecat session"]
+    Phone["Inbound Twilio media stream"] --> Transport
+    Transport --> STT["Deepgram speech recognition"]
+    STT --> LLM["OpenAI conversation and tool selection"]
+    LLM --> Tools["Validated tool dispatcher"]
     Tools --> Restaurant["Restaurant API client"]
     Tools --> Company["Consultation API client"]
     Restaurant --> Go["Go API: booking policy and persistence"]
     Company --> Go
-    Runtime --> Logs["Local SQLite session logs"]
+    Tools --> LLM
+    LLM --> TTS["Cartesia speech synthesis"]
+    TTS --> Transport
+    Transport --> Browser
+    Transport --> Phone
+    Transport --> Logs["Local SQLite session logs"]
 ```
 
 The browser endpoint `/browser-stream` accepts mono PCM16 at 16 kHz and returns
@@ -45,6 +50,21 @@ and interruption handling.
 The browser clients are separate consumers of the voice protocol. See the
 [corporate hook](../web/src/hooks/useVoiceAgentSession.ts) and
 [restaurant voice configuration](../template/src/lib/voiceAgentConfig.ts).
+
+## Start reading
+
+| Source | Responsibility |
+| --- | --- |
+| [bot.py](bot.py) | FastAPI routes, transports, streaming pipeline, tool dispatch |
+| [prompts](prompts/) | Conversation instructions and tool schemas |
+| [api_client.py](api_client.py) | Restaurant backend API integration |
+| [tuvi_api_client.py](tuvi_api_client.py) | Company consultation backend API integration |
+| [browser_serializer.py](browser_serializer.py) | Binary audio and JSON event serialization |
+| [requirements.txt](requirements.txt) | Runtime dependencies |
+| [Architecture and setup guide](voice_sales_agent_architecture_guide.md) | Historical configuration and development details |
+| [Calling guide](CALLING.md) | Telephony behavior and operational constraints |
+
+**Stack:** Python, FastAPI, Pipecat, WebSockets, Deepgram, OpenAI, Cartesia, Twilio, Go APIs.
 
 ## Review without contacting providers
 

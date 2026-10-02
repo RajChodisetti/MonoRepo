@@ -4152,3 +4152,11 @@ requires no database restore or migration down.
 - Limits: Python checks used host 3.14.6, not supported runtime 3.12. Docker build command failed writing buildx activity under the sandbox; the local Docker daemon was also unavailable. No provider calls, live audio test, or production-readiness claim.
 - Value: reviewers can reproduce the stale-intent failure/fencing distinction and inspect voice-system boundaries, trade-offs, and test limitations.
 - State: branch only, PR for review; no deployment. Explicit approval is required before merge to master.
+
+## 2026-10-01 — Project architecture overviews
+
+Added folder-level READMEs for the real-time voice runtime and restaurant report engine, including Mermaid architecture diagrams and source maps. Clarified default deterministic report summaries and the AI-assisted website-analysis boundary. Documentation only; no runtime or deployment changes. Validated relative source links and whitespace; no paid provider calls or runtime smoke tests were needed.
+
+## 2026-10-02 — PR #12 conflict resolution
+
+Role: documentation integration. Resolved the voice README add/add conflict by combining the explicit speech pipeline/source map with current master architecture, inbound-only policy, test limitations, and operational boundaries. Preserved both prior delivery records and the current master stale-worker lab. Checked 26 relative README links, repository context guardrails, staged whitespace, unresolved index entries, and the introduced documentation diff with fully redacted Gitleaks output; all passed. The user authorized merge to master. No runtime tests, provider calls, deployment, visibility change, or privacy-history purge was performed.
