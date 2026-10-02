@@ -1,6 +1,6 @@
-# Session Summary
+# Session summary — 2026-10-02
 
-Added voice and restaurant report folder READMEs with architecture diagrams and source links.
-Documented current implementation boundaries, including deterministic report summaries and AI-assisted website analysis.
-Documentation-only changes; no runtime behavior, provider calls, or deployment changes.
-Prepared on a separate docs branch for review before merging to master.
+Resolved PR #12 documentation conflicts against current master while preserving the stale-worker lab and detailed inbound-only voice documentation.
+Added the restaurant report architecture overview and combined voice pipeline/source-map details from both branches.
+All 26 README source links, context guardrails, staged whitespace, conflict checks, and the introduced-diff secret scan passed.
+The user authorized merge; this documentation-only change includes no runtime, provider, deployment, visibility, or privacy-history change.
