@@ -4143,3 +4143,12 @@ Validated mode-`0600` backups are
 rollback tags retain the prior `13a0a47` API/admin and `4d6ea73` worker images;
 the release-local rollback override recreates only the affected service and
 requires no database restore or migration down.
+
+## 2026-10-02 — Engineering portfolio proof
+- Role: implementation/documentation. Added an independent Go stale-worker lab and a code-grounded voice-agent landing README for portfolio review.
+- Scope: standalone examples plus documentation; no application runtime, provider, prompt, API, schema, or deployment changes.
+- Checks: `rtk gofmt -w main.go main_test.go`; `rtk proxy env GOCACHE=/tmp/linkedin-proof-go-cache go test -race ./...` (5 tests), `go vet ./...` and `go run .` with the same prefix/cache passed from the lab. Initial default-cache Go commands failed on sandbox cache permissions, then passed with the writable cache.
+- Checks: `rtk python3 -m compileall -q voice-sales-agent`, `rtk python3 -m unittest discover -s voice-sales-agent/tests -p 'test_*.py'` (5 tests), `rtk docker compose -f infra/docker/docker-compose.yml --profile voice config --quiet`, `rtk ./scripts/check-agent-context.sh`, and `rtk git diff --check` passed. New README relative links resolve.
+- Limits: Python checks used host 3.14.6, not supported runtime 3.12. Docker build command failed writing buildx activity under the sandbox; the local Docker daemon was also unavailable. No provider calls, live audio test, or production-readiness claim.
+- Value: reviewers can reproduce the stale-intent failure/fencing distinction and inspect voice-system boundaries, trade-offs, and test limitations.
+- State: branch only, PR for review; no deployment. Explicit approval is required before merge to master.

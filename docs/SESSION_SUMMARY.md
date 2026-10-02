@@ -1,5 +1,5 @@
-Release `8c34503` is deployed to production API/admin/worker and PR head `ff5f634` to the existing QA API at schema 54; canonical and personal-mirror `master` are synchronized.
-The `contact` Gmail tombstone loop is fixed: all six mailboxes have successfully polled since rollout, their stored errors are clear, and non-message-404 failures remain retryable.
-The admin now defaults to named restaurant-linked inbox threads; the final 10-day snapshot shows 6 restaurant threads and hides 358 unmatched/unnamed threads unless the filter is disabled.
-Production outreach control and the future queued job are unchanged, with 21 sent, 2 failed, and zero in-flight attempts; deployment triggered no send, migration, or provider health action.
-QA/prod rollback containers, immutable image tags, mode-0600 database/config backups, and the original dirty worktree remain preserved.
+# Session summary — 2026-10-02
+- Added a standalone Go stale-worker/fencing lab and a code-grounded voice-agent README; no application runtime changes.
+- Go 1.26.2 race tests (5), vet and demo passed; voice static tests (5), compile, compose config and context checks passed.
+- Python checks used 3.14.6; supported 3.12/container validation remains unverified because Docker build access/daemon were unavailable.
+- Portfolio branch is ready for PR review; no deployment or merge to master without explicit approval.
